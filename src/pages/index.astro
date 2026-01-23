@@ -1,11 +1,43 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
+let managerId = '';
+let managerData = null;
+let error = null;
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+async function fetchManagerData(e) {
+  e.preventDefault();
+  error = null;
+  managerData = null;
+  try {
+    const res = await fetch(`/api/manager.json?id=${managerId}`);
+    if (!res.ok) throw new Error((await res.json()).error || 'Fetch error');
+    managerData = await res.json();
+  } catch (err) {
+    error = err.message;
+  }
+}
 ---
 
-<Layout>
-	<Welcome />
-</Layout>
+<html>
+  <head>
+    <title>FPL Manager Lookup</title>
+  </head>
+  <body>
+    <h1>FPL Manager Data Lookup</h1>
+    <form on:submit={fetchManagerData}>
+      <label>
+        Manager ID:
+        <input type="text" bind:value={managerId} placeholder="e.g. 717348" required />
+      </label>
+      <button type="submit">Fetch</button>
+    </form>
+    {error && <p style="color:red;">{error}</p>}
+    {managerData && (
+      <div>
+        <h2>{managerData.team_name}</h2>
+        <p>Player: {managerData.player_first_name} {managerData.player_last_name}</p>
+        <h3>Summary</h3>
+        <pre>{JSON.stringify(managerData, null, 2)}</pre>
+      </div>
+    )}
+  </body>
+</html>
