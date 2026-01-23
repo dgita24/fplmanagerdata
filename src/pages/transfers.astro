@@ -4,19 +4,20 @@ import Nav from '../components/Nav.astro';
 
 <Nav />
 <h1>Transfers & Free Transfers (FTs) for Next GW</h1>
-<p>Display calculated FTs for next GW for any set of managers, like your Excel.</p>
+<p>Display calculated FTs for next GW for all managers.</p>
 
-<form id="manager-form">
-  <label for="ids">Manager EntryIDs (one per line):</label><br>
-  <textarea id="ids" rows="6" cols="30" style="font-family:monospace" placeholder="4290&#10;200&#10;1320"></textarea><br>
-  <button type="submit">Load History</button>
-  
-  <div style="margin-top: 1em;">
-    <label for="gw-filter">Filter by Gameweek (leave blank for all):</label><br>
-    <input type="number" id="gw-filter" min="1" max="38" placeholder="e.g. 22" style="width: 100px; padding: 5px;">
-  </div>
-</form>
+<div style="margin-bottom: 1em;">
+  <span id="manager-count" style="font-weight: bold;">Loading managers...</span>
+  <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
+</div>
 
+<div style="margin-bottom: 1em;">
+  <label for="gw-filter">Filter by Gameweek (leave blank for all):</label><br>
+  <input type="number" id="gw-filter" min="1" max="38" placeholder="e.g. 22" style="width: 100px; padding: 5px;">
+  <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">Refresh Data</button>
+</div>
+
+<div id="loading-status" style="margin-bottom: 1em; color: #666;"></div>
 <div id="transfers-table" style="margin-top:1.5em"></div>
 
 <script type="module">
@@ -25,51 +26,37 @@ function calculateFTs(managerHistory) {
   const byGW = new Map();
   managerHistory.forEach(row => byGW.set(row.gw, row));
 
-  // Step 1: Calculate "FTs Start of GW" for all gameweeks
   for (let i = 0; i < managerHistory.length; ++i) {
     const row = managerHistory[i];
-    const E = Number(row.gw);           // Current GW
-    const M = Number(row.transfers);    // Transfers made
-    
-    let Q = 1; // Default: 1 FT
-    
-    // Check if previous GW exists for this manager (mimics column S)
+    const E = Number(row.gw);
+    const M = Number(row.transfers);
+    let Q = 1;
     const prevRow = byGW.get(E - 1);
-    const S = prevRow ? 1 : 0;  // S2 equivalent: does prev GW exist?
+    const S = prevRow ? 1 : 0;
     
     if (E === 16) {
-      // GW16: Winter wildcard refresh
       Q = 5;
     } else if (E === 1) {
-      // GW1: Start with 0 FTs
       Q = 0;
     } else if (S === 0) {
-      // No previous GW data for this manager
       Q = 1;
     } else if (!prevRow) {
-      // Double-check: no previous row found
       Q = 1;
     } else {
-      // Previous GW data exists
       const prevChip = prevRow.chipPlayed || "";
       const prevFTs = Number(prevRow.FTsStartOfGW);
       const prevTransfers = Number(prevRow.transfers);
       
       if (prevChip === "WC" || prevChip === "FH") {
-        // After Wildcard or Free Hit: MAX(1, prevFTs - prevTransfers)
         Q = Math.max(1, prevFTs - prevTransfers);
       } else {
-        // Normal case: MIN(MAX(1, prevFTs - prevTransfers + 1), 5)
         Q = Math.min(Math.max(1, prevFTs - prevTransfers + 1), 5);
       }
     }
-    
     row.FTsStartOfGW = Q;
   }
 
-  // Step 2: Calculate "FTs for Next GW" (only for the most recent GW)
   const maxGW = Math.max(...managerHistory.map(r => r.gw));
-  
   managerHistory.forEach(row => {
     if (row.gw === maxGW) {
       const E = Number(row.gw);
@@ -78,10 +65,8 @@ function calculateFTs(managerHistory) {
       const F = row.chipPlayed || "";
       
       if (E === 15) {
-        // GW15 → GW16 gets winter wildcard refresh
         row.FTsForNextGW = 5;
       } else {
-        // MIN(MAX(1, Q - M + inc), 5) where inc = 0 if WC/FH, else 1
         const inc = (F === "WC" || F === "FH") ? 0 : 1;
         row.FTsForNextGW = Math.min(Math.max(1, Q - M + inc), 5);
       }
@@ -91,33 +76,21 @@ function calculateFTs(managerHistory) {
   });
 }
 
-// Local storage helpers
-function saveEntryIds(ids) {
-  localStorage.setItem("entryIds", JSON.stringify(ids));
-}
-function loadEntryIds() {
+function loadManagerIds() {
   try {
-    return JSON.parse(localStorage.getItem("entryIds")) || [];
+    return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
   } catch {
     return [];
   }
 }
 
-const defaultIds = ["4290","200","1320","1587","6586","260"];
-const form = document.getElementById("manager-form");
-const textarea = document.getElementById("ids");
 const out = document.getElementById("transfers-table");
 const gwFilterInput = document.getElementById("gw-filter");
+const loadingStatus = document.getElementById("loading-status");
+const managerCountEl = document.getElementById("manager-count");
+const refreshBtn = document.getElementById("refresh-btn");
 
-// Try to load IDs from localStorage, else use default:
-const idsFromStorage = loadEntryIds();
-if (idsFromStorage.length > 0) {
-  textarea.value = idsFromStorage.join("\n");
-} else {
-  textarea.value = defaultIds.join("\n");
-}
-
-let allHistories = []; // Store all data for filtering
+let allHistories = [];
 
 async function fetchHistory(id) {
   const url = `/api/fpl/entry/${id}/history`;
@@ -154,7 +127,6 @@ function makeTable(histories, filterGW = null) {
   let rows = histories.flat();
   rows.sort((a,b) => a.entryId-b.entryId || a.gw-b.gw);
 
-  // Apply GW filter if specified
   if (filterGW !== null && filterGW !== "") {
     const gwNum = Number(filterGW);
     rows = rows.filter(r => r.gw === gwNum);
@@ -190,41 +162,57 @@ function makeTable(histories, filterGW = null) {
 }
 
 async function loadManagers(ids) {
-  out.textContent = "Loading...";
-  try {
-    allHistories = [];
-    for (const id of ids) {
+  if (ids.length === 0) {
+    out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
+    return;
+  }
+
+  allHistories = [];
+  out.innerHTML = ""; // Clear table
+  loadingStatus.textContent = `Loading 0 of ${ids.length} managers...`;
+
+  let loaded = 0;
+  for (const id of ids) {
+    try {
       let history = await fetchHistory(id);
       calculateFTs(history);
       allHistories.push(history);
+      loaded++;
+      
+      // Update status
+      loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+      
+      // Progressive render - update table after each manager loads
+      const filterGW = gwFilterInput.value.trim();
+      out.innerHTML = makeTable(allHistories, filterGW);
+    } catch (e) {
+      console.error(`Failed to load manager ${id}:`, e);
+      loaded++;
+      loadingStatus.innerHTML = `<span style='color:orange'>⚠️ Failed to load manager ${id}</span>`;
     }
-    const filterGW = gwFilterInput.value.trim();
-    out.innerHTML = makeTable(allHistories, filterGW);
-    saveEntryIds(ids); // Save to localStorage on success
-  } catch (e) {
-    out.innerHTML = "<span style='color:red'>Error loading history. Check EntryIDs and network connection.</span>";
   }
+  
+  loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
 }
 
-// Filter function
 function filterByGW() {
   const filterGW = gwFilterInput.value.trim();
   out.innerHTML = makeTable(allHistories, filterGW);
 }
 
 // Initial load
-const parsedIds = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/));
-if (parsedIds.length) loadManagers(parsedIds);
+const managerIds = loadManagerIds();
+managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
 
-form.onsubmit = (e) => {
-  e.preventDefault();
-  const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/));
-  if (ids.length === 0) {
-    out.innerHTML = "<span style='color:red'>Enter at least one valid EntryID.</span>";
-    return;
-  }
-  loadManagers(ids);
-};
+if (managerIds.length > 0) {
+  loadManagers(managerIds);
+} else {
+  out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+}
 
 gwFilterInput.addEventListener('input', filterByGW);
+refreshBtn.addEventListener('click', () => {
+  const ids = loadManagerIds();
+  loadManagers(ids);
+});
 </script>

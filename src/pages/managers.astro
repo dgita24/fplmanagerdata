@@ -1,0 +1,132 @@
+---
+import Nav from '../components/Nav.astro';
+---
+
+<Nav />
+<h1>Manager IDs Setup</h1>
+<p>Enter all manager EntryIDs here. These will be used across all pages (Transfers, Chips, Stats, Squads, Live).</p>
+
+<form id="manager-form">
+  <label for="ids"><strong>Manager EntryIDs</strong> (one per line, max 100):</label><br>
+  <textarea id="ids" rows="20" cols="40" style="font-family:monospace; font-size: 14px;" placeholder="4290&#10;200&#10;1320&#10;..."></textarea><br>
+  <div style="margin-top: 0.5em; color: #666;">
+    <span id="count">0</span> managers entered
+  </div>
+  <button type="submit" style="margin-top: 1em; padding: 8px 16px; font-size: 16px;">Save Manager IDs</button>
+</form>
+
+<div id="status" style="margin-top: 1em;"></div>
+
+<div style="margin-top: 2em; padding: 1em; background: #f9f9f9; border-left: 4px solid #38a169;">
+  <h3>Quick Start:</h3>
+  <ol>
+    <li>Enter your league's manager EntryIDs above (one per line)</li>
+    <li>Click "Save Manager IDs"</li>
+    <li>Visit any other page (Transfers, Chips, etc.) - they'll automatically use these IDs</li>
+  </ol>
+  <p><strong>Tip:</strong> You can find a manager's EntryID in their FPL URL:<br>
+  <code>https://fantasy.premierleague.com/entry/<strong>4290</strong>/event/22</code></p>
+</div>
+
+<script type="module">
+const form = document.getElementById("manager-form");
+const textarea = document.getElementById("ids");
+const status = document.getElementById("status");
+const countEl = document.getElementById("count");
+
+// Load existing IDs from localStorage
+function loadManagerIds() {
+  try {
+    return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
+  } catch {
+    return [];
+  }
+}
+
+// Save IDs to localStorage
+function saveManagerIds(ids) {
+  localStorage.setItem("globalManagerIds", JSON.stringify(ids));
+}
+
+// Update count as user types
+textarea.addEventListener('input', () => {
+  const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/));
+  countEl.textContent = ids.length;
+  if (ids.length > 100) {
+    countEl.style.color = "red";
+    countEl.textContent = `${ids.length} (exceeds 100 limit!)`;
+  } else {
+    countEl.style.color = ids.length > 0 ? "#38a169" : "#666";
+  }
+});
+
+// Load saved IDs on page load
+const savedIds = loadManagerIds();
+if (savedIds.length > 0) {
+  textarea.value = savedIds.join("\n");
+  countEl.textContent = savedIds.length;
+  countEl.style.color = "#38a169";
+}
+
+// Save form submission
+form.onsubmit = (e) => {
+  e.preventDefault();
+  const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/));
+  
+  if (ids.length === 0) {
+    status.innerHTML = "<span style='color:red'>⚠️ Please enter at least one valid EntryID.</span>";
+    return;
+  }
+  
+  if (ids.length > 100) {
+    status.innerHTML = "<span style='color:red'>⚠️ Maximum 100 managers allowed. Please remove some entries.</span>";
+    return;
+  }
+  
+  // Remove duplicates
+  const uniqueIds = [...new Set(ids)];
+  
+  saveManagerIds(uniqueIds);
+  
+  status.innerHTML = `<span style='color:#38a169; font-weight:bold'>✅ Successfully saved ${uniqueIds.length} manager IDs!</span><br>
+  <span style='color:#666'>These will now be used across all pages.</span>`;
+  
+  // Update textarea with deduplicated list
+  if (uniqueIds.length !== ids.length) {
+    textarea.value = uniqueIds.join("\n");
+    countEl.textContent = uniqueIds.length;
+    status.innerHTML += `<br><span style='color:#f59e0b'>ℹ️ Removed ${ids.length - uniqueIds.length} duplicate(s).</span>`;
+  }
+};
+</script>
+
+<style>
+  textarea {
+    width: 100%;
+    max-width: 500px;
+    padding: 8px;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+  }
+  textarea:focus {
+    outline: none;
+    border-color: #38a169;
+  }
+  button {
+    background: #38a169;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  button:hover {
+    background: #2f855a;
+  }
+  code {
+    background: #e2e8f0;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+  }
+</style>
