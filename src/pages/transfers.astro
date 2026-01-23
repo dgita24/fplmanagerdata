@@ -20,47 +20,70 @@ import Nav from '../components/Nav.astro';
 <div id="transfers-table" style="margin-top:1.5em"></div>
 
 <script type="module">
-// Inline FT calculation logic
+// Inline FT calculation logic - MATCHES EXCEL EXACTLY
 function calculateFTs(managerHistory) {
   const byGW = new Map();
   managerHistory.forEach(row => byGW.set(row.gw, row));
 
+  // Step 1: Calculate "FTs Start of GW" for all gameweeks
   for (let i = 0; i < managerHistory.length; ++i) {
     const row = managerHistory[i];
-    const E = Number(row.gw);
-    const F = row.chipPlayed || "";
-    const M = Number(row.transfers);
-    let Q = 1;
+    const E = Number(row.gw);           // Current GW
+    const M = Number(row.transfers);    // Transfers made
+    
+    let Q = 1; // Default: 1 FT
+    
+    // Check if previous GW exists for this manager (mimics column S)
+    const prevRow = byGW.get(E - 1);
+    const S = prevRow ? 1 : 0;  // S2 equivalent: does prev GW exist?
+    
     if (E === 16) {
+      // GW16: Winter wildcard refresh
       Q = 5;
     } else if (E === 1) {
+      // GW1: Start with 0 FTs
       Q = 0;
-    } else if (M === 0) {
+    } else if (S === 0) {
+      // No previous GW data for this manager
+      Q = 1;
+    } else if (!prevRow) {
+      // Double-check: no previous row found
       Q = 1;
     } else {
-      const prevRow = byGW.get(E-1);
-      if (!prevRow) {
-        Q = 1;
-      } else if (["WC","FH"].includes(prevRow.chipPlayed)) {
-        Q = Math.max(1, prevRow.FTsStartOfGW - prevRow.transfers);
+      // Previous GW data exists
+      const prevChip = prevRow.chipPlayed || "";
+      const prevFTs = Number(prevRow.FTsStartOfGW);
+      const prevTransfers = Number(prevRow.transfers);
+      
+      if (prevChip === "WC" || prevChip === "FH") {
+        // After Wildcard or Free Hit: MAX(1, prevFTs - prevTransfers)
+        Q = Math.max(1, prevFTs - prevTransfers);
       } else {
-        Q = Math.min(Math.max(1, prevRow.FTsStartOfGW - prevRow.transfers + 1), 5);
+        // Normal case: MIN(MAX(1, prevFTs - prevTransfers + 1), 5)
+        Q = Math.min(Math.max(1, prevFTs - prevTransfers + 1), 5);
       }
     }
+    
     row.FTsStartOfGW = Q;
   }
 
+  // Step 2: Calculate "FTs for Next GW" (only for the most recent GW)
   const maxGW = Math.max(...managerHistory.map(r => r.gw));
+  
   managerHistory.forEach(row => {
     if (row.gw === maxGW) {
-      if (row.gw === 15) {
+      const E = Number(row.gw);
+      const Q = Number(row.FTsStartOfGW);
+      const M = Number(row.transfers);
+      const F = row.chipPlayed || "";
+      
+      if (E === 15) {
+        // GW15 → GW16 gets winter wildcard refresh
         row.FTsForNextGW = 5;
       } else {
-        const Q = row.FTsStartOfGW;
-        const M = row.transfers;
-        const F = row.chipPlayed;
+        // MIN(MAX(1, Q - M + inc), 5) where inc = 0 if WC/FH, else 1
         const inc = (F === "WC" || F === "FH") ? 0 : 1;
-        row.FTsForNextGW = Math.min(Math.max(1, Q-M+inc), 5);
+        row.FTsForNextGW = Math.min(Math.max(1, Q - M + inc), 5);
       }
     } else {
       row.FTsForNextGW = "";
