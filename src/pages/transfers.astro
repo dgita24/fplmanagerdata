@@ -1,11 +1,5 @@
 ---
 import Nav from '../components/Nav.astro';
-import { calculateFTs } from '../components/fts.js';
-
-// UI: default manager IDs for demo (can auto-fill from input)
-const defaultIds = ['4290','200','1320','1587','6586','260'];
-
-// "Fetch" in browser JS, so provide HTML container
 ---
 
 <Nav />
@@ -16,12 +10,17 @@ const defaultIds = ['4290','200','1320','1587','6586','260'];
   <label for="ids">Manager EntryIDs (one per line):</label><br>
   <textarea id="ids" rows="6" cols="30" style="font-family:monospace" placeholder="4290&#10;200&#10;1320"></textarea><br>
   <button type="submit">Load History</button>
+  
+  <div style="margin-top: 1em;">
+    <label for="gw-filter">Filter by Gameweek (leave blank for all):</label><br>
+    <input type="number" id="gw-filter" min="1" max="38" placeholder="e.g. 22" style="width: 100px; padding: 5px;">
+  </div>
 </form>
 
 <div id="transfers-table" style="margin-top:1.5em"></div>
 
 <script type="module">
-// Inline FT calculation logic (from fts.js, slightly rewritten for browser)
+// Inline FT calculation logic
 function calculateFTs(managerHistory) {
   const byGW = new Map();
   managerHistory.forEach(row => byGW.set(row.gw, row));
@@ -85,6 +84,7 @@ const defaultIds = ["4290","200","1320","1587","6586","260"];
 const form = document.getElementById("manager-form");
 const textarea = document.getElementById("ids");
 const out = document.getElementById("transfers-table");
+const gwFilterInput = document.getElementById("gw-filter");
 
 // Try to load IDs from localStorage, else use default:
 const idsFromStorage = loadEntryIds();
@@ -94,8 +94,10 @@ if (idsFromStorage.length > 0) {
   textarea.value = defaultIds.join("\n");
 }
 
+let allHistories = []; // Store all data for filtering
+
 async function fetchHistory(id) {
-  const url = `/api/fpl/entry/${id}/history/`;
+  const url = `/api/fpl/entry/${id}/history`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Load error");
   const data = await res.json();
@@ -125,9 +127,15 @@ async function fetchHistory(id) {
   return history;
 }
 
-function makeTable(histories) {
+function makeTable(histories, filterGW = null) {
   let rows = histories.flat();
   rows.sort((a,b) => a.entryId-b.entryId || a.gw-b.gw);
+
+  // Apply GW filter if specified
+  if (filterGW !== null && filterGW !== "") {
+    const gwNum = Number(filterGW);
+    rows = rows.filter(r => r.gw === gwNum);
+  }
 
   let html = `<table border="1" cellpadding="4" style="border-collapse:collapse">
     <tr>
@@ -161,17 +169,24 @@ function makeTable(histories) {
 async function loadManagers(ids) {
   out.textContent = "Loading...";
   try {
-    const allHistories = [];
+    allHistories = [];
     for (const id of ids) {
       let history = await fetchHistory(id);
       calculateFTs(history);
       allHistories.push(history);
     }
-    out.innerHTML = makeTable(allHistories);
+    const filterGW = gwFilterInput.value.trim();
+    out.innerHTML = makeTable(allHistories, filterGW);
     saveEntryIds(ids); // Save to localStorage on success
   } catch (e) {
     out.innerHTML = "<span style='color:red'>Error loading history. Check EntryIDs and network connection.</span>";
   }
+}
+
+// Filter function
+function filterByGW() {
+  const filterGW = gwFilterInput.value.trim();
+  out.innerHTML = makeTable(allHistories, filterGW);
 }
 
 // Initial load
@@ -187,4 +202,6 @@ form.onsubmit = (e) => {
   }
   loadManagers(ids);
 };
+
+gwFilterInput.addEventListener('input', filterByGW);
 </script>
