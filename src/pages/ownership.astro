@@ -171,27 +171,25 @@ function makeOwnershipTable(ownership, positionFilterValue = "") {
   for (const player of filtered) {
     const ownershipPct = ((player.count / totalManagers) * 100).toFixed(0);
     
-    // Smart "Owned By" text
+    // Smart "Owned By" text - always show the shorter list
     let ownedByText = "";
+    
     if (player.count === totalManagers) {
+      // 100% ownership
       ownedByText = "All";
-    } else if (player.count >= totalManagers * 0.7) {
-      // 70%+ ownership - show who DOESN'T own them
+    } else if (player.count > totalManagers / 2) {
+      // More than 50% - show who DOESN'T own them (shorter list)
       const missing = allManagerNames.filter(name => {
         return !player.ownedBy.some(owner => `${owner.firstName} ${owner.lastName}` === name);
       });
       
       if (missing.length === 0) {
         ownedByText = "All";
-      } else if (missing.length <= 3) {
-        ownedByText = `All except ${missing.map(n => n.split(' ')[0]).join(", ")}`;
       } else {
-        ownedByText = player.ownedBy
-          .map(m => `${m.firstName} ${m.lastName.substring(0, 2)}`)
-          .join(", ");
+        ownedByText = `All except ${missing.map(n => n.split(' ')[0]).join(", ")}`;
       }
     } else {
-      // Less than 70% - show who owns them (abbreviated)
+      // 50% or less - show who OWNS them (shorter list)
       ownedByText = player.ownedBy
         .map(m => `${m.firstName} ${m.lastName.substring(0, 2)}`)
         .join(", ");
