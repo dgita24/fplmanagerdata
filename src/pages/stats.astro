@@ -1,6 +1,210 @@
 ---
 import Nav from '../components/Nav.astro';
 ---
+
 <Nav />
-<h1>Stats Overview</h1>
-<p>Overall stats will appear here.</p>
+<h1>League Statistics & Manager Summary</h1>
+<p>Overview of all managers' performance, rankings, and chip usage.</p>
+
+<div style="margin-bottom: 1em;">
+  <span id="manager-count" style="font-weight: bold;">Loading managers...</span>
+  <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
+  <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">Refresh Data</button>
+</div>
+
+<div id="loading-status" style="margin-bottom: 1em; color: #666;"></div>
+<div id="stats-output" style="margin-top:1.5em"></div>
+
+<script type="module">
+function loadManagerIds() {
+  try {
+    return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
+  } catch {
+    return [];
+  }
+}
+
+const out = document.getElementById("stats-output");
+const loadingStatus = document.getElementById("loading-status");
+const managerCountEl = document.getElementById("manager-count");
+const refreshBtn = document.getElementById("refresh-btn");
+
+async function fetchManagerSummary(id) {
+  const summaryUrl = `/api/fpl/entry/${id}`;
+  const historyUrl = `/api/fpl/entry/${id}/history`;
+  
+  try {
+    const [summaryRes, historyRes] = await Promise.all([
+      fetch(summaryUrl),
+      fetch(historyUrl)
+    ]);
+    
+    if (!summaryRes.ok || !historyRes.ok) throw new Error("Load error");
+    
+    const summaryData = await summaryRes.json();
+    const historyData = await historyRes.json();
+    
+    const chips = historyData.chips || [];
+    const chipsUsed = chips.length > 0 
+      ? chips.map(c => {
+          const name = c.name === "wildcard" ? "WC" :
+                       c.name === "bboost" ? "BB" :
+                       c.name === "3xc" ? "TC" :
+                       c.name === "freehit" ? "FH" : c.name;
+          return name;
+        }).join(", ")
+      : "None";
+    
+    return {
+      entryId: Number(id),
+      teamName: summaryData.name,
+      firstName: summaryData.player_first_name,
+      lastName: summaryData.player_last_name,
+      managerName: `${summaryData.player_first_name} ${summaryData.player_last_name}`,
+      totalPoints: summaryData.summary_overall_points,
+      overallRank: summaryData.summary_overall_rank,
+      gwPoints: summaryData.summary_event_points,
+      gwRank: summaryData.summary_event_rank,
+      chipsUsed
+    };
+  } catch (e) {
+    console.error(`Error fetching manager ${id}:`, e);
+    return null;
+  }
+}
+
+function makeStatsTable(managersData) {
+  let html = `<h2>League Standings</h2>
+  <table border="1" cellpadding="6" style="border-collapse:collapse; width: 100%; max-width: 1200px;">
+    <tr style="background:#f0f0f0">
+      <th>Rank</th>
+      <th>EntryID</th>
+      <th>Manager</th>
+      <th>Team Name</th>
+      <th>Total Points</th>
+      <th>Overall Rank</th>
+      <th>GW Points</th>
+      <th>GW Rank</th>
+      <th>Chips Used</th>
+    </tr>`;
+  
+  let rank = 1;
+  for (const m of managersData) {
+    html += `<tr>
+      <td style="font-weight: bold; text-align: center;">${rank}</td>
+      <td>${m.entryId}</td>
+      <td style="font-weight: bold;">${m.managerName}</td>
+      <td>${m.teamName}</td>
+      <td style="background:#e6ffe6; font-weight: bold; text-align: center;">${m.totalPoints.toLocaleString()}</td>
+      <td style="text-align: center;">${m.overallRank.toLocaleString()}</td>
+      <td style="text-align: center;">${m.gwPoints}</td>
+      <td style="text-align: center;">${m.gwRank.toLocaleString()}</td>
+      <td>${m.chipsUsed}</td>
+    </tr>`;
+    rank++;
+  }
+  html += "</table>";
+  
+  // Add summary stats
+  const totalManagers = managersData.length;
+  const avgPoints = Math.round(managersData.reduce((sum, m) => sum + m.totalPoints, 0) / totalManagers);
+  const avgGWPoints = Math.round(managersData.reduce((sum, m) => sum + m.gwPoints, 0) / totalManagers);
+  const leader = managersData[0];
+  const lastPlace = managersData[managersData.length - 1];
+  const pointsGap = leader.totalPoints - lastPlace.totalPoints;
+  
+  html += `<div style="margin-top: 2em; padding: 1em; background: #f7fafc; border-left: 4px solid #38a169; max-width: 1200px;">
+    <h3>League Summary</h3>
+    <ul style="line-height: 1.8;">
+      <li><strong>Total Managers:</strong> ${totalManagers}</li>
+      <li><strong>League Leader:</strong> ${leader.managerName} (${leader.totalPoints.toLocaleString()} pts)</li>
+      <li><strong>Last Place:</strong> ${lastPlace.managerName} (${lastPlace.totalPoints.toLocaleString()} pts)</li>
+      <li><strong>Points Gap:</strong> ${pointsGap.toLocaleString()} pts</li>
+      <li><strong>Average Total Points:</strong> ${avgPoints.toLocaleString()}</li>
+      <li><strong>Average GW Points:</strong> ${avgGWPoints}</li>
+    </ul>
+  </div>`;
+  
+  return html;
+}
+
+async function loadStats(ids) {
+  if (ids.length === 0) {
+    out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
+    return;
+  }
+
+  const allData = [];
+  out.innerHTML = "";
+  loadingStatus.textContent = `Loading 0 of ${ids.length} managers...`;
+  
+  let loaded = 0;
+  for (const id of ids) {
+    try {
+      const data = await fetchManagerSummary(id);
+      if (data) {
+        allData.push(data);
+        loaded++;
+        
+        loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+        
+        // Sort by Total Points DESC (best first)
+        allData.sort((a, b) => b.totalPoints - a.totalPoints);
+        
+        // Progressive render
+        out.innerHTML = makeStatsTable(allData);
+      }
+    } catch (e) {
+      console.error(`Failed to load manager ${id}:`, e);
+      loaded++;
+    }
+  }
+  
+  loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
+}
+
+// Initial load
+const managerIds = loadManagerIds();
+managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+
+if (managerIds.length > 0) {
+  loadStats(managerIds);
+} else {
+  out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+}
+
+refreshBtn.addEventListener('click', () => {
+  const ids = loadManagerIds();
+  loadStats(ids);
+});
+</script>
+
+<style>
+  table {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+  }
+  th {
+    font-weight: bold;
+    padding: 8px;
+  }
+  td {
+    padding: 6px;
+  }
+  h2 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+  }
+  button {
+    background: #3182ce;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    padding: 5px 12px;
+  }
+  button:hover {
+    background: #2c5aa0;
+  }
+</style>
