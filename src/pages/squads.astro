@@ -17,15 +17,24 @@ import Nav from '../components/Nav.astro';
   <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">Refresh Data</button>
 </div>
 
-<div style="margin-bottom: 1em;">
-  <label for="position-filter">Filter by Position:</label><br>
-  <select id="position-filter" style="padding: 5px; width: 150px;">
-    <option value="">All Positions</option>
-    <option value="GK">Goalkeepers</option>
-    <option value="DEF">Defenders</option>
-    <option value="MID">Midfielders</option>
-    <option value="FWD">Forwards</option>
-  </select>
+<div style="margin-bottom: 1em; display: flex; gap: 1em; flex-wrap: wrap;">
+  <div>
+    <label for="manager-filter"><strong>Filter by Manager:</strong></label><br>
+    <select id="manager-filter" style="padding: 8px; width: 250px; font-size: 14px;">
+      <option value="">All Managers</option>
+    </select>
+  </div>
+  
+  <div>
+    <label for="position-filter"><strong>Filter by Position:</strong></label><br>
+    <select id="position-filter" style="padding: 8px; width: 200px; font-size: 14px;">
+      <option value="">All Positions</option>
+      <option value="GK">Goalkeepers (GK)</option>
+      <option value="DEF">Defenders (DEF)</option>
+      <option value="MID">Midfielders (MID)</option>
+      <option value="FWD">Forwards (FWD)</option>
+    </select>
+  </div>
 </div>
 
 <div id="loading-status" style="margin-bottom: 1em; color: #666;"></div>
@@ -42,6 +51,7 @@ function loadManagerIds() {
 
 const out = document.getElementById("squads-output");
 const gwFilterInput = document.getElementById("gw-filter");
+const managerFilter = document.getElementById("manager-filter");
 const positionFilter = document.getElementById("position-filter");
 const loadingStatus = document.getElementById("loading-status");
 const managerCountEl = document.getElementById("manager-count");
@@ -49,17 +59,15 @@ const refreshBtn = document.getElementById("refresh-btn");
 
 let allSquadsData = [];
 let latestGW = null;
-let playerCache = new Map(); // Cache for player details
-let teamCache = new Map(); // Cache for team names
+let playerCache = new Map();
+let teamCache = new Map();
 
-// Fetch bootstrap-static data for player and team lookups
 async function fetchBootstrapData() {
   try {
     const res = await fetch('/api/fpl/bootstrap-static');
     if (!res.ok) throw new Error("Failed to fetch bootstrap data");
     const data = await res.json();
     
-    // Build player cache
     data.elements.forEach(player => {
       playerCache.set(player.id, {
         name: player.web_name,
@@ -70,7 +78,6 @@ async function fetchBootstrapData() {
       });
     });
     
-    // Build team cache
     data.teams.forEach(team => {
       teamCache.set(team.id, team.short_name);
     });
@@ -101,7 +108,7 @@ async function fetchSquadForGW(entryId, gw) {
         multiplier: pick.multiplier,
         isCaptain: pick.is_captain,
         isViceCaptain: pick.is_vice_captain,
-        points: 0 // Will be filled if we fetch live data
+        points: 0
       };
     });
   } catch (e) {
@@ -128,7 +135,6 @@ async function fetchManagerData(entryId, gw) {
     const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
     const teamName = summaryData.name;
     
-    // Get chip played in this GW
     const chips = historyData.chips || [];
     const chipThisGW = chips.find(c => c.event === gw);
     const chipPlayed = chipThisGW ? 
@@ -137,7 +143,6 @@ async function fetchManagerData(entryId, gw) {
        chipThisGW.name === "3xc" ? "TC" :
        chipThisGW.name === "freehit" ? "FH" : chipThisGW.name) : "";
     
-    // Get squad for this GW
     const squad = await fetchSquadForGW(entryId, gw);
     
     return {
@@ -153,10 +158,34 @@ async function fetchManagerData(entryId, gw) {
   }
 }
 
-function makeSquadsTable(squadsData, positionFilterValue = "") {
+function populateManagerFilter() {
+  // Clear existing options except "All Managers"
+  managerFilter.innerHTML = '<option value="">All Managers</option>';
+  
+  // Sort managers alphabetically
+  const sortedManagers = [...allSquadsData].sort((a, b) => 
+    a.managerName.localeCompare(b.managerName)
+  );
+  
+  for (const manager of sortedManagers) {
+    const option = document.createElement('option');
+    option.value = manager.entryId;
+    option.textContent = manager.managerName;
+    managerFilter.appendChild(option);
+  }
+}
+
+function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValue = "") {
+  let filteredManagers = squadsData;
+  
+  // Filter by manager if selected
+  if (managerFilterValue) {
+    filteredManagers = squadsData.filter(m => m.entryId.toString() === managerFilterValue);
+  }
+  
   let html = "";
   
-  for (const manager of squadsData) {
+  for (const manager of filteredManagers) {
     html += `<div style="margin-bottom: 3em; border: 2px solid #e2e8f0; padding: 1em; border-radius: 8px; max-width: 900px;">
       <h3 style="margin-top: 0; color: #2d3748;">
         ${manager.managerName} - <span style="color: #718096;">${manager.teamName}</span>
@@ -229,8 +258,9 @@ async function loadSquads(ids, gw) {
         loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
         
         // Progressive render
+        const managerFilterValue = managerFilter.value;
         const posFilter = positionFilter.value;
-        out.innerHTML = makeSquadsTable(allSquadsData, posFilter);
+        out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter);
       }
     } catch (e) {
       console.error(`Failed to load manager ${id}:`, e);
@@ -238,15 +268,16 @@ async function loadSquads(ids, gw) {
     }
   }
   
+  // Populate manager filter dropdown after all loaded
+  populateManagerFilter();
+  
   loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
 }
 
 async function init() {
-  // First, fetch bootstrap data
   loadingStatus.textContent = "Loading player and team data...";
   await fetchBootstrapData();
   
-  // Determine latest GW from bootstrap-static
   try {
     const res = await fetch('/api/fpl/bootstrap-static');
     const data = await res.json();
@@ -269,7 +300,6 @@ async function init() {
   }
 }
 
-// Event listeners
 gwFilterInput.addEventListener('change', () => {
   const ids = loadManagerIds();
   const gw = parseInt(gwFilterInput.value);
@@ -278,9 +308,16 @@ gwFilterInput.addEventListener('change', () => {
   }
 });
 
-positionFilter.addEventListener('change', () => {
+managerFilter.addEventListener('change', () => {
+  const managerFilterValue = managerFilter.value;
   const posFilter = positionFilter.value;
-  out.innerHTML = makeSquadsTable(allSquadsData, posFilter);
+  out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter);
+});
+
+positionFilter.addEventListener('change', () => {
+  const managerFilterValue = managerFilter.value;
+  const posFilter = positionFilter.value;
+  out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter);
 });
 
 refreshBtn.addEventListener('click', () => {
@@ -289,7 +326,6 @@ refreshBtn.addEventListener('click', () => {
   loadSquads(ids, gw);
 });
 
-// Initialize
 init();
 </script>
 
