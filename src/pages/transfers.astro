@@ -95,7 +95,7 @@ if (idsFromStorage.length > 0) {
 }
 
 async function fetchHistory(id) {
-  const url = `https://fantasy.premierleague.com/api/entry/${id}/history/`;
+  const url = `/api/fpl/entry/${id}/history/`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Load error");
   const data = await res.json();
