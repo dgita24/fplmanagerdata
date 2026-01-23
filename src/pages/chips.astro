@@ -1,3 +1,77 @@
+---
+import Nav from '../components/Nav.astro';
+---
+
+<Nav />
+<h1>Chip Usage Tracker</h1>
+<p>Track which managers have used their chips (2x Wildcard, 2x Bench Boost, 2x Triple Captain, 2x Free Hit).</p>
+
+<div style="margin-bottom: 1em;">
+  <span id="manager-count" style="font-weight: bold;">Loading managers...</span>
+  <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
+  <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">Refresh Data</button>
+</div>
+
+<div id="loading-status" style="margin-bottom: 1em; color: #666;"></div>
+<div id="chips-output" style="margin-top:1.5em"></div>
+
+<script type="module">
+function loadManagerIds() {
+  try {
+    return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
+  } catch {
+    return [];
+  }
+}
+
+const out = document.getElementById("chips-output");
+const loadingStatus = document.getElementById("loading-status");
+const managerCountEl = document.getElementById("manager-count");
+const refreshBtn = document.getElementById("refresh-btn");
+
+async function fetchManagerData(id) {
+  const historyUrl = `/api/fpl/entry/${id}/history`;
+  const summaryUrl = `/api/fpl/entry/${id}`;
+  
+  try {
+    const [historyRes, summaryRes] = await Promise.all([
+      fetch(historyUrl),
+      fetch(summaryUrl)
+    ]);
+    
+    if (!historyRes.ok || !summaryRes.ok) throw new Error("Load error");
+    
+    const historyData = await historyRes.json();
+    const summaryData = await summaryRes.json();
+    
+    const chips = historyData.chips || [];
+    const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
+    const teamName = summaryData.name;
+    
+    const chipsFormatted = chips.map(c => ({
+      name: c.name === "wildcard" ? "WC" :
+            c.name === "bboost" ? "BB" :
+            c.name === "3xc" ? "TC" :
+            c.name === "freehit" ? "FH" : c.name,
+      fullName: c.name === "wildcard" ? "Wildcard" :
+                c.name === "bboost" ? "Bench Boost" :
+                c.name === "3xc" ? "Triple Captain" :
+                c.name === "freehit" ? "Free Hit" : c.name,
+      gw: c.event
+    }));
+    
+    return {
+      entryId: Number(id),
+      managerName,
+      teamName,
+      chips: chipsFormatted
+    };
+  } catch (e) {
+    console.error(`Error fetching manager ${id}:`, e);
+    return null;
+  }
+}
+
 function makeChipsTable(managersData) {
   let html = `<h2>Chips Summary</h2>
   <table border="1" cellpadding="6" style="border-collapse:collapse; margin-bottom: 2em;">
@@ -10,7 +84,6 @@ function makeChipsTable(managersData) {
     </tr>`;
   
   for (const m of managersData) {
-    // Just list the chip names, no GW numbers
     const chipsUsed = m.chips.length > 0 
       ? m.chips.map(c => c.name).join(", ")
       : "None";
@@ -77,3 +150,79 @@ function makeChipsTable(managersData) {
   
   return html;
 }
+
+async function loadChips(ids) {
+  if (ids.length === 0) {
+    out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
+    return;
+  }
+
+  const allData = [];
+  out.innerHTML = "";
+  loadingStatus.textContent = `Loading 0 of ${ids.length} managers...`;
+  
+  let loaded = 0;
+  for (const id of ids) {
+    try {
+      const data = await fetchManagerData(id);
+      if (data) {
+        allData.push(data);
+        loaded++;
+        
+        loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+        
+        allData.sort((a, b) => a.entryId - b.entryId);
+        out.innerHTML = makeChipsTable(allData);
+      }
+    } catch (e) {
+      console.error(`Failed to load manager ${id}:`, e);
+      loaded++;
+    }
+  }
+  
+  loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
+}
+
+const managerIds = loadManagerIds();
+managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+
+if (managerIds.length > 0) {
+  loadChips(managerIds);
+} else {
+  out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+}
+
+refreshBtn.addEventListener('click', () => {
+  const ids = loadManagerIds();
+  loadChips(ids);
+});
+</script>
+
+<style>
+  table {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+  }
+  th {
+    font-weight: bold;
+    padding: 8px;
+  }
+  td {
+    padding: 6px;
+  }
+  h2 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+  }
+  button {
+    background: #3182ce;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  button:hover {
+    background: #2c5aa0;
+  }
+</style>
