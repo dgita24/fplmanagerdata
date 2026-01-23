@@ -21,51 +21,173 @@ const defaultIds = ['4290','200','1320','1587','6586','260'];
 <div id="transfers-table" style="margin-top:1.5em"></div>
 
 <script type="module">
-  import { calculateFTs } from '../components/fts.js';
-  const defaultIds = ${JSON.stringify(defaultIds)};
+// Inline FT calculation logic (from fts.js, slightly rewritten for browser)
+function calculateFTs(managerHistory) {
+  const byGW = new Map();
+  managerHistory.forEach(row => byGW.set(row.gw, row));
 
-  const form = document.getElementById("manager-form");
-  const textarea = document.getElementById("ids");
-  const out = document.getElementById("transfers-table");
-
-  // Fill default IDs
-  textarea.value = defaultIds.join("\\n");
-
-  async function fetchHistory(id) {
-    const url = `https://fantasy.premierleague.com/api/entry/${id}/history/`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("Load error");
-    const data = await res.json();
-    // Build row structure compatible with fts.js
-    // We only care about GW (event), chipPlayed (from chips[]), transfers (event_transfers)
-    let history = data.current.map(gw => ({
-      entryId: id*1,
-      gw: gw.event,
-      chipPlayed: "",  // will be filled below
-      transfers: gw.event_transfers,
-      transferCost: gw.event_transfers_cost ?? 0,
-      benchPoints: gw.points_on_bench ?? 0,
-      gwPoints: gw.points,
-      totalPoints: gw.total_points
-    }));
-    // Map chip usage to each GW row
-    if (Array.isArray(data.chips)) {
-      data.chips.forEach(c => {
-        // c.event is GW;
-        // name is 'wildcard', 'bboost', 'freehit', '3xc'
-        const row = history.find(gw => gw.gw === c.event);
-        if (row) {
-          row.chipPlayed = (
-            c.name === "wildcard" ? "WC" :
-            c.name === "bboost" ? "BB" :
-            c.name === "3xc" ? "TC" :
-            c.name === "freehit" ? "FH" : c.name
-          );
-        }
-      });
+  for (let i = 0; i < managerHistory.length; ++i) {
+    const row = managerHistory[i];
+    const E = Number(row.gw);
+    const F = row.chipPlayed || "";
+    const M = Number(row.transfers);
+    let Q = 1;
+    if (E === 16) {
+      Q = 5;
+    } else if (E === 1) {
+      Q = 0;
+    } else if (M === 0) {
+      Q = 1;
+    } else {
+      const prevRow = byGW.get(E-1);
+      if (!prevRow) {
+        Q = 1;
+      } else if (["WC","FH"].includes(prevRow.chipPlayed)) {
+        Q = Math.max(1, prevRow.FTsStartOfGW - prevRow.transfers);
+      } else {
+        Q = Math.min(Math.max(1, prevRow.FTsStartOfGW - prevRow.transfers + 1), 5);
+      }
     }
-    return history;
+    row.FTsStartOfGW = Q;
   }
+
+  const maxGW = Math.max(...managerHistory.map(r => r.gw));
+  managerHistory.forEach(row => {
+    if (row.gw === maxGW) {
+      if (row.gw === 15) {
+        row.FTsForNextGW = 5;
+      } else {
+        const Q = row.FTsStartOfGW;
+        const M = row.transfers;
+        const F = row.chipPlayed;
+        const inc = (F === "WC" || F === "FH") ? 0 : 1;
+        row.FTsForNextGW = Math.min(Math.max(1, Q-M+inc), 5);
+      }
+    } else {
+      row.FTsForNextGW = "";
+    }
+  });
+}
+
+// Local storage helpers
+function saveEntryIds(ids) {
+  localStorage.setItem("entryIds", JSON.stringify(ids));
+}
+function loadEntryIds() {
+  try {
+    return JSON.parse(localStorage.getItem("entryIds")) || [];
+  } catch {
+    return [];
+  }
+}
+
+const defaultIds = ["4290","200","1320","1587","6586","260"];
+const form = document.getElementById("manager-form");
+const textarea = document.getElementById("ids");
+const out = document.getElementById("transfers-table");
+
+// Try to load IDs from localStorage, else use default:
+const idsFromStorage = loadEntryIds();
+if (idsFromStorage.length > 0) {
+  textarea.value = idsFromStorage.join("\n");
+} else {
+  textarea.value = defaultIds.join("\n");
+}
+
+async function fetchHistory(id) {
+  const url = `https://fantasy.premierleague.com/api/entry/${id}/history/`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Load error");
+  const data = await res.json();
+  let history = data.current.map(gw => ({
+    entryId: Number(id),
+    gw: gw.event,
+    chipPlayed: "",
+    transfers: gw.event_transfers,
+    transferCost: gw.event_transfers_cost ?? 0,
+    benchPoints: gw.points_on_bench ?? 0,
+    gwPoints: gw.points,
+    totalPoints: gw.total_points
+  }));
+  if (Array.isArray(data.chips)) {
+    data.chips.forEach(c => {
+      const row = history.find(gw => gw.gw === c.event);
+      if (row) {
+        row.chipPlayed = (
+          c.name === "wildcard" ? "WC" :
+          c.name === "bboost" ? "BB" :
+          c.name === "3xc" ? "TC" :
+          c.name === "freehit" ? "FH" : c.name
+        );
+      }
+    });
+  }
+  return history;
+}
+
+function makeTable(histories) {
+  let rows = histories.flat();
+  rows.sort((a,b) => a.entryId-b.entryId || a.gw-b.gw);
+
+  let html = `<table border="1" cellpadding="4" style="border-collapse:collapse">
+    <tr>
+      <th>EntryID</th>
+      <th>GW</th>
+      <th>ChipPlayed</th>
+      <th>Transfers</th>
+      <th>TransferCost</th>
+      <th>GW Points</th>
+      <th>Total Points</th>
+      <th>FTs Start of GW</th>
+      <th style="background:lightyellow">FTs for next GW</th>
+    </tr>`;
+  for (const r of rows) {
+    html += `<tr>
+      <td>${r.entryId}</td>
+      <td>${r.gw}</td>
+      <td>${r.chipPlayed || ""}</td>
+      <td>${r.transfers ?? ""}</td>
+      <td>${r.transferCost ?? ""}</td>
+      <td>${r.gwPoints ?? ""}</td>
+      <td>${r.totalPoints ?? ""}</td>
+      <td>${r.FTsStartOfGW ?? ""}</td>
+      <td style="background:lightyellow">${r.FTsForNextGW ?? ""}</td>
+    </tr>`;
+  }
+  html += "</table>";
+  return html;
+}
+
+async function loadManagers(ids) {
+  out.textContent = "Loading...";
+  try {
+    const allHistories = [];
+    for (const id of ids) {
+      let history = await fetchHistory(id);
+      calculateFTs(history);
+      allHistories.push(history);
+    }
+    out.innerHTML = makeTable(allHistories);
+    saveEntryIds(ids); // Save to localStorage on success
+  } catch (e) {
+    out.innerHTML = "<span style='color:red'>Error loading history. Check EntryIDs and network connection.</span>";
+  }
+}
+
+// Initial load
+const parsedIds = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/));
+if (parsedIds.length) loadManagers(parsedIds);
+
+form.onsubmit = (e) => {
+  e.preventDefault();
+  const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/));
+  if (ids.length === 0) {
+    out.innerHTML = "<span style='color:red'>Enter at least one valid EntryID.</span>";
+    return;
+  }
+  loadManagers(ids);
+};
+</script>
 
   function makeTable(histories) {
     // Array of arrays, one per manager
