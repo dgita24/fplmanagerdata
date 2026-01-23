@@ -1,6 +1,133 @@
 ---
 import Nav from '../components/Nav.astro';
+import { calculateFTs } from '../components/fts.js';
+
+// UI: default manager IDs for demo (can auto-fill from input)
+const defaultIds = ['4290','200','1320','1587','6586','260'];
+
+// "Fetch" in browser JS, so provide HTML container
 ---
+
 <Nav />
-<h1>Transfer History</h1>
-<p>Transfer data for managers will appear here.</p>
+<h1>Transfers & Free Transfers (FTs) for Next GW</h1>
+<p>Display calculated FTs for next GW for any set of managers, like your Excel.</p>
+
+<form id="manager-form">
+  <label for="ids">Manager EntryIDs (one per line):</label><br>
+  <textarea id="ids" rows="6" cols="30" style="font-family:monospace" placeholder="4290&#10;200&#10;1320"></textarea><br>
+  <button type="submit">Load History</button>
+</form>
+
+<div id="transfers-table" style="margin-top:1.5em"></div>
+
+<script type="module">
+  import { calculateFTs } from '../components/fts.js';
+  const defaultIds = ${JSON.stringify(defaultIds)};
+
+  const form = document.getElementById("manager-form");
+  const textarea = document.getElementById("ids");
+  const out = document.getElementById("transfers-table");
+
+  // Fill default IDs
+  textarea.value = defaultIds.join("\\n");
+
+  async function fetchHistory(id) {
+    const url = `https://fantasy.premierleague.com/api/entry/${id}/history/`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Load error");
+    const data = await res.json();
+    // Build row structure compatible with fts.js
+    // We only care about GW (event), chipPlayed (from chips[]), transfers (event_transfers)
+    let history = data.current.map(gw => ({
+      entryId: id*1,
+      gw: gw.event,
+      chipPlayed: "",  // will be filled below
+      transfers: gw.event_transfers,
+      transferCost: gw.event_transfers_cost ?? 0,
+      benchPoints: gw.points_on_bench ?? 0,
+      gwPoints: gw.points,
+      totalPoints: gw.total_points
+    }));
+    // Map chip usage to each GW row
+    if (Array.isArray(data.chips)) {
+      data.chips.forEach(c => {
+        // c.event is GW;
+        // name is 'wildcard', 'bboost', 'freehit', '3xc'
+        const row = history.find(gw => gw.gw === c.event);
+        if (row) {
+          row.chipPlayed = (
+            c.name === "wildcard" ? "WC" :
+            c.name === "bboost" ? "BB" :
+            c.name === "3xc" ? "TC" :
+            c.name === "freehit" ? "FH" : c.name
+          );
+        }
+      });
+    }
+    return history;
+  }
+
+  function makeTable(histories) {
+    // Array of arrays, one per manager
+    let rows = histories.flat();
+    // Sort: by manager, then by GW ascending
+    rows.sort((a,b) => a.entryId-b.entryId || a.gw-b.gw);
+
+    // Columns to print: EntryID, GW, ChipPlayed, Transfers, TransferCost, GW Points, Total Points, FTs Start of GW, FTs for next GW
+    let html = `<table border="1" cellpadding="4" style="border-collapse:collapse">
+      <tr>
+        <th>EntryID</th>
+        <th>GW</th>
+        <th>ChipPlayed</th>
+        <th>Transfers</th>
+        <th>TransferCost</th>
+        <th>GW Points</th>
+        <th>Total Points</th>
+        <th>FTs Start of GW</th>
+        <th style="background:lightyellow">FTs for next GW</th>
+      </tr>`;
+    for (const r of rows) {
+      html += `<tr>
+        <td>${r.entryId}</td>
+        <td>${r.gw}</td>
+        <td>${r.chipPlayed || ""}</td>
+        <td>${r.transfers ?? ""}</td>
+        <td>${r.transferCost ?? ""}</td>
+        <td>${r.gwPoints ?? ""}</td>
+        <td>${r.totalPoints ?? ""}</td>
+        <td>${r.FTsStartOfGW ?? ""}</td>
+        <td style="background:lightyellow">${r.FTsForNextGW ?? ""}</td>
+      </tr>`;
+    }
+    html += "</table>";
+    return html;
+  }
+
+  async function loadManagers(ids) {
+    out.textContent = "Loading...";
+    try {
+      const allHistories = [];
+      for (const id of ids) {
+        let history = await fetchHistory(id);
+        calculateFTs(history); // run logic from fts.js
+        allHistories.push(history);
+      }
+      out.innerHTML = makeTable(allHistories);
+    } catch (e) {
+      out.innerHTML = "<span style='color:red'>Error loading history. Check EntryIDs and network connection.</span>";
+    }
+  }
+
+  // Initial load
+  loadManagers(defaultIds);
+
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/));
+    if (ids.length === 0) {
+      out.innerHTML = "<span style='color:red'>Enter at least one valid EntryID.</span>";
+      return;
+    }
+    loadManagers(ids);
+  };
+</script>
