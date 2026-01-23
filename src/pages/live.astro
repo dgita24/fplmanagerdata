@@ -329,39 +329,47 @@ function makeLiveTable(managers, compareToId = "") {
   const compareManager = compareToId ? sorted.find(m => m.entryId.toString() === compareToId) : leader;
   
   let html = `<h2>Live League Standings</h2>
-  <table border="1" cellpadding="6" style="border-collapse:collapse; width: 100%; max-width: 1400px;">
+  <table border="1" cellpadding="6" style="border-collapse:collapse; width: 100%; max-width: 1600px;">
     <tr style="background:#f0f0f0">
       <th>Rank</th>
       <th>Manager</th>
       <th>Team Name</th>
-      <th>Live Pts</th>
+      <th style="background:#e6f7ff;">Live GW Pts</th>
       <th>Proj Bonus</th>
       <th>Transfer Hit</th>
-      <th>GW Total</th>
-      <th>Proj Total</th>
-      <th>Diff vs ${compareManager.managerName}</th>
+      <th style="background:#e6f7ff;">GW Total</th>
+      <th style="background:#fff4e6;">Proj Overall</th>
+      <th style="background:#e6f7ff;">Diff GW<br/>(vs ${compareManager.managerName.split(' ')[0]})</th>
+      <th style="background:#fff4e6;">Diff Overall<br/>(vs ${compareManager.managerName.split(' ')[0]})</th>
       <th>Chip</th>
     </tr>`;
   
   let rank = 1;
   for (const m of sorted) {
-    const diffVsCompare = m.livePoints - compareManager.livePoints;
-    const diffColor = diffVsCompare > 0 ? "#c6f6d5" : diffVsCompare < 0 ? "#fed7d7" : "#fff";
-    const diffText = diffVsCompare > 0 ? `+${diffVsCompare}` : diffVsCompare.toString();
+    // GW Difference
+    const diffGW = m.livePoints - compareManager.livePoints;
+    const diffGWColor = diffGW > 0 ? "#c6f6d5" : diffGW < 0 ? "#fed7d7" : "#fff";
+    const diffGWText = diffGW > 0 ? `+${diffGW}` : diffGW === 0 ? "0" : diffGW.toString();
+    
+    // Overall Difference
+    const diffOverall = m.totalPoints - compareManager.totalPoints;
+    const diffOverallColor = diffOverall > 0 ? "#c6f6d5" : diffOverall < 0 ? "#fed7d7" : "#fff";
+    const diffOverallText = diffOverall > 0 ? `+${diffOverall}` : diffOverall === 0 ? "0" : diffOverall.toString();
     
     const isLeader = rank === 1;
     const rowStyle = isLeader ? "background: #fef3c7; font-weight: bold;" : "";
     
     html += `<tr style="${rowStyle}">
       <td style="text-align: center; font-weight: bold;">${rank}</td>
-      <td>${m.managerName}</td>
+      <td style="font-weight: bold;">${m.managerName}</td>
       <td>${m.teamName}</td>
-      <td style="text-align: center; font-weight: bold; font-size: 16px;">${m.livePoints}</td>
+      <td style="text-align: center; font-weight: bold; font-size: 16px; background:#e6f7ff;">${m.livePoints}</td>
       <td style="text-align: center; color: #3182ce;">${m.projectedBonus}</td>
       <td style="text-align: center; color: ${m.transferCost > 0 ? '#e53e3e' : '#666'};">${m.transferCost > 0 ? `-${m.transferCost}` : '0'}</td>
-      <td style="text-align: center;">${m.livePoints}</td>
-      <td style="text-align: center; font-weight: bold;">${m.totalPoints.toLocaleString()}</td>
-      <td style="text-align: center; background: ${diffColor}; font-weight: bold;">${diffText}</td>
+      <td style="text-align: center; background:#e6f7ff;">${m.livePoints}</td>
+      <td style="text-align: center; font-weight: bold; background:#fff4e6;">${m.totalPoints.toLocaleString()}</td>
+      <td style="text-align: center; background: ${diffGWColor}; font-weight: bold;">${diffGWText}</td>
+      <td style="text-align: center; background: ${diffOverallColor}; font-weight: bold;">${diffOverallText}</td>
       <td style="text-align: center;">${m.chipPlayed || "-"}</td>
     </tr>`;
     rank++;
@@ -369,19 +377,28 @@ function makeLiveTable(managers, compareToId = "") {
   
   html += "</table>";
   
+  // Add legend
+  html += `<div style="margin-top: 1em; padding: 0.5em; background: #f0f0f0; border-radius: 4px; max-width: 1600px; font-size: 12px;">
+    <strong>Legend:</strong> 
+    <span style="background:#e6f7ff; padding: 2px 8px; margin: 0 4px; border-radius: 3px;">Blue = Gameweek Points</span>
+    <span style="background:#fff4e6; padding: 2px 8px; margin: 0 4px; border-radius: 3px;">Orange = Overall Points</span>
+    <span style="background:#c6f6d5; padding: 2px 8px; margin: 0 4px; border-radius: 3px;">Green = Ahead</span>
+    <span style="background:#fed7d7; padding: 2px 8px; margin: 0 4px; border-radius: 3px;">Red = Behind</span>
+  </div>`;
+  
   // Add summary stats
   const avgPoints = Math.round(sorted.reduce((sum, m) => sum + m.livePoints, 0) / sorted.length);
   const highestScore = sorted[0].livePoints;
   const lowestScore = sorted[sorted.length - 1].livePoints;
   
-  html += `<div style="margin-top: 2em; padding: 1em; background: #f7fafc; border-left: 4px solid #38a169; max-width: 1400px;">
+  html += `<div style="margin-top: 2em; padding: 1em; background: #f7fafc; border-left: 4px solid #38a169; max-width: 1600px;">
     <h3>Gameweek Summary</h3>
     <ul style="line-height: 1.8;">
-      <li><strong>Leader:</strong> ${leader.managerName} (${leader.livePoints} pts)</li>
-      <li><strong>Average Points:</strong> ${avgPoints}</li>
-      <li><strong>Highest Score:</strong> ${highestScore}</li>
-      <li><strong>Lowest Score:</strong> ${lowestScore}</li>
-      <li><strong>Point Spread:</strong> ${highestScore - lowestScore}</li>
+      <li><strong>GW Leader:</strong> ${leader.managerName} (${leader.livePoints} pts)</li>
+      <li><strong>Average GW Points:</strong> ${avgPoints}</li>
+      <li><strong>Highest GW Score:</strong> ${highestScore}</li>
+      <li><strong>Lowest GW Score:</strong> ${lowestScore}</li>
+      <li><strong>GW Point Spread:</strong> ${highestScore - lowestScore}</li>
     </ul>
   </div>`;
   
