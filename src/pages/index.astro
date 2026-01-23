@@ -1,95 +1,15 @@
-<html>
-  <head>
-    <title>Multi-Manager Lookup</title>
-    <meta http-equiv="Cache-Control" content="no-store" />
-    <style>
-      body { font-family: sans-serif; margin: 2em; }
-      textarea { width: 22em; height: 10em; }
-      #output { margin-top: 1em; }
-      .error { color: red; }
-      table { border-collapse: collapse; }
-      th, td { border: 1px solid #ddd; padding: 0.3em 0.7em; }
-      th { background: #eee; }
-      .loading-row td { color: #888; }
-    </style>
-  </head>
-  <body>
-    <h1>FPL Manager Data Lookup</h1>
-    <form id="lookup-form">
-      <label for="manager-ids">
-        Enter manager IDs (one per line):
-      </label><br>
-      <textarea id="manager-ids" placeholder="44&#10;200&#10;1320"></textarea><br>
-      <button type="submit">Fetch</button>
-    </form>
-    <div id="output"></div>
-    <script>
-      const baseApi = "/api/manager.json";
-      const form = document.getElementById('lookup-form');
-      const textarea = document.getElementById('manager-ids');
-      const output = document.getElementById('output');
+---
+import Nav from '../components/Nav.astro';
+---
+<Nav />
 
-      function renderTable(rows, pendingIds = []) {
-        let html = "<h2>Results</h2>";
-        html += `<table><tr>
-          <th>ID</th>
-          <th>Team</th>
-          <th>Player</th>
-          <th>Overall</th>
-          <th>Error</th>
-        </tr>`;
-        for (const r of rows) {
-          html += `<tr>
-            <td>${r.id}</td>
-            <td>${r.ok ? r.data.team_name || "" : ""}</td>
-            <td>${r.ok ? (r.data.player_first_name || "") + " " + (r.data.player_last_name || "") : ""}</td>
-            <td>${r.ok ? (r.data.summary_overall_points ?? "") + " (" + (r.data.summary_overall_rank ?? "") + ")" : ""}</td>
-            <td class="error">${!r.ok ? (r.data.error || "API error") : ""}</td>
-          </tr>`;
-        }
-        // Add loading rows for pending (not yet fetched)
-        for (const id of pendingIds) {
-          html += `<tr class="loading-row"><td>${id}</td><td colspan="4">Loading...</td></tr>`;
-        }
-        html += "</table>";
-        output.innerHTML = html;
-      }
-
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        output.innerHTML = '';
-        let ids = textarea.value
-          .split(/\s+/)
-          .map(x => x.trim())
-          .filter(x => /^\d+$/.test(x));
-        if (ids.length === 0) {
-          output.innerHTML = '<div class="error">Please enter at least one valid manager ID.</div>';
-          return;
-        }
-        if (ids.length > 100) {
-          output.innerHTML = '<div class="error">Please enter 100 or fewer IDs at a time.</div>';
-          return;
-        }
-        // "Sticky" approach
-        const results = [];
-        let pending = ids.slice();
-        renderTable(results, pending);
-
-        for (const id of ids) {
-          // Insert a loading row, update table
-          renderTable(results, pending);
-
-          try {
-            const resp = await fetch(`${baseApi}?id=${id}`);
-            const data = await resp.json();
-            results.push({ id, ok: resp.ok, data });
-          } catch (err) {
-            results.push({ id, ok: false, data: { error: err.message } });
-          }
-          pending = pending.filter(x => x !== id);
-          renderTable(results, pending);
-        }
-      });
-    </script>
-  </body>
-</html>
+<h1>Welcome to FPL Manager Data</h1>
+<p>
+  Use the navigation above to view: Squads, Transfers, Chips & Rank, or Stats.
+</p>
+<ul>
+  <li><a href="/transfers">Transfers</a> – See transfer histories and FTs calculation</li>
+  <li><a href="/squads">Squads</a> – Lineups for any manager</li>
+  <li><a href="/chips">Chips & Rank</a> – Chip usage and rank histories</li>
+  <li><a href="/stats">Stats</a> – League stats, tables, etc.</li>
+</ul>
