@@ -4,7 +4,7 @@ import Nav from '../components/Nav.astro';
 
 <Nav />
 <h1>Chip Usage Tracker</h1>
-<p>Track which managers have used their chips (Wildcard, Bench Boost, Triple Captain, Free Hit) and which gameweeks they played them.</p>
+<p>Track which managers have used their chips (2x Wildcard, 2x Bench Boost, 2x Triple Captain, 2x Free Hit) and which gameweeks they played them.</p>
 
 <form id="manager-form">
   <label for="ids">Manager EntryIDs (one per line):</label><br>
@@ -102,9 +102,33 @@ function makeChipsTable(managersData) {
       ? m.chips.map(c => `${c.name} (GW${c.gw})`).join(", ")
       : "None";
     
-    const allChips = ["WC", "BB", "TC", "FH"];
-    const usedChipNames = m.chips.map(c => c.name);
-    const remaining = allChips.filter(chip => !usedChipNames.includes(chip));
+    // Count how many of each chip used
+    const usedChips = m.chips.map(c => c.name);
+    const wcCount = usedChips.filter(c => c === "WC").length;
+    const bbCount = usedChips.filter(c => c === "BB").length;
+    const tcCount = usedChips.filter(c => c === "TC").length;
+    const fhCount = usedChips.filter(c => c === "FH").length;
+    
+    // Calculate remaining (ALL chips x2 this season)
+    const remaining = [];
+    const wcRemaining = 2 - wcCount;
+    const bbRemaining = 2 - bbCount;
+    const tcRemaining = 2 - tcCount;
+    const fhRemaining = 2 - fhCount;
+    
+    if (wcRemaining > 0) {
+      remaining.push(wcRemaining === 2 ? "WC x2" : "WC x1");
+    }
+    if (bbRemaining > 0) {
+      remaining.push(bbRemaining === 2 ? "BB x2" : "BB x1");
+    }
+    if (tcRemaining > 0) {
+      remaining.push(tcRemaining === 2 ? "TC x2" : "TC x1");
+    }
+    if (fhRemaining > 0) {
+      remaining.push(fhRemaining === 2 ? "FH x2" : "FH x1");
+    }
+    
     const chipsRemaining = remaining.length > 0 ? remaining.join(", ") : "None";
     
     html += `<tr>
