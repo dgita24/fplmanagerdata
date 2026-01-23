@@ -1,6 +1,329 @@
 ---
 import Nav from '../components/Nav.astro';
 ---
+
 <Nav />
-<h1>Squads & Lineups</h1>
-<p>Team and squad details for managers will appear here.</p>
+<h1>Manager Squads</h1>
+<p>View each manager's squad for any gameweek, including player points, positions, and captain selections.</p>
+
+<div style="margin-bottom: 1em;">
+  <span id="manager-count" style="font-weight: bold;">Loading managers...</span>
+  <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
+</div>
+
+<div style="margin-bottom: 1em;">
+  <label for="gw-filter">Select Gameweek:</label><br>
+  <input type="number" id="gw-filter" min="1" max="38" placeholder="Auto" style="width: 100px; padding: 5px;">
+  <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">Refresh Data</button>
+</div>
+
+<div style="margin-bottom: 1em;">
+  <label for="position-filter">Filter by Position:</label><br>
+  <select id="position-filter" style="padding: 5px; width: 150px;">
+    <option value="">All Positions</option>
+    <option value="GK">Goalkeepers</option>
+    <option value="DEF">Defenders</option>
+    <option value="MID">Midfielders</option>
+    <option value="FWD">Forwards</option>
+  </select>
+</div>
+
+<div id="loading-status" style="margin-bottom: 1em; color: #666;"></div>
+<div id="squads-output" style="margin-top:1.5em"></div>
+
+<script type="module">
+function loadManagerIds() {
+  try {
+    return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
+  } catch {
+    return [];
+  }
+}
+
+const out = document.getElementById("squads-output");
+const gwFilterInput = document.getElementById("gw-filter");
+const positionFilter = document.getElementById("position-filter");
+const loadingStatus = document.getElementById("loading-status");
+const managerCountEl = document.getElementById("manager-count");
+const refreshBtn = document.getElementById("refresh-btn");
+
+let allSquadsData = [];
+let latestGW = null;
+let playerCache = new Map(); // Cache for player details
+let teamCache = new Map(); // Cache for team names
+
+// Fetch bootstrap-static data for player and team lookups
+async function fetchBootstrapData() {
+  try {
+    const res = await fetch('/api/fpl/bootstrap-static');
+    if (!res.ok) throw new Error("Failed to fetch bootstrap data");
+    const data = await res.json();
+    
+    // Build player cache
+    data.elements.forEach(player => {
+      playerCache.set(player.id, {
+        name: player.web_name,
+        position: player.element_type === 1 ? "GK" :
+                  player.element_type === 2 ? "DEF" :
+                  player.element_type === 3 ? "MID" : "FWD",
+        team: player.team
+      });
+    });
+    
+    // Build team cache
+    data.teams.forEach(team => {
+      teamCache.set(team.id, team.short_name);
+    });
+  } catch (e) {
+    console.error("Error fetching bootstrap data:", e);
+  }
+}
+
+async function fetchSquadForGW(entryId, gw) {
+  try {
+    const picksUrl = `/api/fpl/entry/${entryId}/event/${gw}/picks`;
+    const res = await fetch(picksUrl);
+    if (!res.ok) throw new Error("Failed to fetch picks");
+    
+    const data = await res.json();
+    const picks = data.picks || [];
+    
+    return picks.map(pick => {
+      const playerInfo = playerCache.get(pick.element) || { name: "Unknown", position: "?", team: 0 };
+      const teamName = teamCache.get(playerInfo.team) || "Unknown";
+      
+      return {
+        position: pick.position,
+        playerId: pick.element,
+        playerName: playerInfo.name,
+        playerPosition: playerInfo.position,
+        teamName: teamName,
+        multiplier: pick.multiplier,
+        isCaptain: pick.is_captain,
+        isViceCaptain: pick.is_vice_captain,
+        points: 0 // Will be filled if we fetch live data
+      };
+    });
+  } catch (e) {
+    console.error(`Error fetching squad for ${entryId} GW${gw}:`, e);
+    return [];
+  }
+}
+
+async function fetchManagerData(entryId, gw) {
+  try {
+    const summaryUrl = `/api/fpl/entry/${entryId}`;
+    const historyUrl = `/api/fpl/entry/${entryId}/history`;
+    
+    const [summaryRes, historyRes] = await Promise.all([
+      fetch(summaryUrl),
+      fetch(historyUrl)
+    ]);
+    
+    if (!summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch manager data");
+    
+    const summaryData = await summaryRes.json();
+    const historyData = await historyRes.json();
+    
+    const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
+    const teamName = summaryData.name;
+    
+    // Get chip played in this GW
+    const chips = historyData.chips || [];
+    const chipThisGW = chips.find(c => c.event === gw);
+    const chipPlayed = chipThisGW ? 
+      (chipThisGW.name === "wildcard" ? "WC" :
+       chipThisGW.name === "bboost" ? "BB" :
+       chipThisGW.name === "3xc" ? "TC" :
+       chipThisGW.name === "freehit" ? "FH" : chipThisGW.name) : "";
+    
+    // Get squad for this GW
+    const squad = await fetchSquadForGW(entryId, gw);
+    
+    return {
+      entryId,
+      managerName,
+      teamName,
+      chipPlayed,
+      squad
+    };
+  } catch (e) {
+    console.error(`Error fetching manager ${entryId}:`, e);
+    return null;
+  }
+}
+
+function makeSquadsTable(squadsData, positionFilterValue = "") {
+  let html = "";
+  
+  for (const manager of squadsData) {
+    html += `<div style="margin-bottom: 3em; border: 2px solid #e2e8f0; padding: 1em; border-radius: 8px; max-width: 900px;">
+      <h3 style="margin-top: 0; color: #2d3748;">
+        ${manager.managerName} - <span style="color: #718096;">${manager.teamName}</span>
+        ${manager.chipPlayed ? `<span style="background: #fef3c7; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; margin-left: 0.5em;">${manager.chipPlayed}</span>` : ''}
+      </h3>
+      
+      <table border="1" cellpadding="6" style="border-collapse:collapse; width: 100%;">
+        <tr style="background:#f0f0f0">
+          <th>Pos</th>
+          <th>Player</th>
+          <th>Position</th>
+          <th>Team</th>
+          <th>C/VC</th>
+          <th>Multiplier</th>
+        </tr>`;
+    
+    // Filter squad by position if needed
+    let squad = manager.squad;
+    if (positionFilterValue) {
+      squad = squad.filter(p => p.playerPosition === positionFilterValue);
+    }
+    
+    // Sort by position (1-15)
+    squad.sort((a, b) => a.position - b.position);
+    
+    for (const player of squad) {
+      const captainBadge = player.isCaptain ? "C" : player.isViceCaptain ? "VC" : "";
+      const isBench = player.position > 11;
+      const rowStyle = isBench ? "background: #f7fafc;" : "";
+      
+      html += `<tr style="${rowStyle}">
+        <td style="text-align: center; font-weight: bold;">${player.position}</td>
+        <td style="font-weight: ${player.isCaptain ? 'bold' : 'normal'};">${player.playerName}</td>
+        <td style="text-align: center;">${player.playerPosition}</td>
+        <td>${player.teamName}</td>
+        <td style="text-align: center; font-weight: bold; color: ${player.isCaptain ? '#e53e3e' : '#3182ce'};">${captainBadge}</td>
+        <td style="text-align: center;">${player.multiplier}x</td>
+      </tr>`;
+    }
+    
+    html += `</table></div>`;
+  }
+  
+  return html;
+}
+
+async function loadSquads(ids, gw) {
+  if (ids.length === 0) {
+    out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
+    return;
+  }
+  
+  if (!gw) {
+    out.innerHTML = "<span style='color:orange'>Please select a gameweek.</span>";
+    return;
+  }
+
+  allSquadsData = [];
+  out.innerHTML = "";
+  loadingStatus.textContent = `Loading 0 of ${ids.length} managers for GW${gw}...`;
+  
+  let loaded = 0;
+  for (const id of ids) {
+    try {
+      const data = await fetchManagerData(id, gw);
+      if (data) {
+        allSquadsData.push(data);
+        loaded++;
+        
+        loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+        
+        // Progressive render
+        const posFilter = positionFilter.value;
+        out.innerHTML = makeSquadsTable(allSquadsData, posFilter);
+      }
+    } catch (e) {
+      console.error(`Failed to load manager ${id}:`, e);
+      loaded++;
+    }
+  }
+  
+  loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
+}
+
+async function init() {
+  // First, fetch bootstrap data
+  loadingStatus.textContent = "Loading player and team data...";
+  await fetchBootstrapData();
+  
+  // Determine latest GW from bootstrap-static
+  try {
+    const res = await fetch('/api/fpl/bootstrap-static');
+    const data = await res.json();
+    const currentEvent = data.events.find(e => e.is_current);
+    latestGW = currentEvent ? currentEvent.id : 1;
+    gwFilterInput.value = latestGW;
+    gwFilterInput.placeholder = `Latest: GW${latestGW}`;
+  } catch (e) {
+    console.error("Error determining current GW:", e);
+    latestGW = 1;
+  }
+  
+  const managerIds = loadManagerIds();
+  managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+
+  if (managerIds.length > 0) {
+    loadSquads(managerIds, latestGW);
+  } else {
+    out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+  }
+}
+
+// Event listeners
+gwFilterInput.addEventListener('change', () => {
+  const ids = loadManagerIds();
+  const gw = parseInt(gwFilterInput.value);
+  if (gw && gw >= 1 && gw <= 38) {
+    loadSquads(ids, gw);
+  }
+});
+
+positionFilter.addEventListener('change', () => {
+  const posFilter = positionFilter.value;
+  out.innerHTML = makeSquadsTable(allSquadsData, posFilter);
+});
+
+refreshBtn.addEventListener('click', () => {
+  const ids = loadManagerIds();
+  const gw = parseInt(gwFilterInput.value) || latestGW;
+  loadSquads(ids, gw);
+});
+
+// Initialize
+init();
+</script>
+
+<style>
+  table {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+  }
+  th {
+    font-weight: bold;
+    padding: 8px;
+  }
+  td {
+    padding: 6px;
+  }
+  h2, h3 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+  }
+  button, select {
+    background: #3182ce;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  button:hover {
+    background: #2c5aa0;
+  }
+  select {
+    background: white;
+    color: #2d3748;
+    border: 1px solid #cbd5e0;
+    font-weight: normal;
+  }
+</style>
