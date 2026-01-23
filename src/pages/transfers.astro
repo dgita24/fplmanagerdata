@@ -12,8 +12,9 @@ import Nav from '../components/Nav.astro';
 </div>
 
 <div style="margin-bottom: 1em;">
-  <label for="gw-filter">Filter by Gameweek (leave blank for all):</label><br>
-  <input type="number" id="gw-filter" min="1" max="38" placeholder="e.g. 22" style="width: 100px; padding: 5px;">
+  <label for="gw-filter">Filter by Gameweek:</label><br>
+  <input type="number" id="gw-filter" min="1" max="38" placeholder="Auto" style="width: 100px; padding: 5px;">
+  <button id="clear-filter-btn" style="margin-left: 0.5em; padding: 5px 12px;">Show All GWs</button>
   <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">Refresh Data</button>
 </div>
 
@@ -86,11 +87,13 @@ function loadManagerIds() {
 
 const out = document.getElementById("transfers-table");
 const gwFilterInput = document.getElementById("gw-filter");
+const clearFilterBtn = document.getElementById("clear-filter-btn");
 const loadingStatus = document.getElementById("loading-status");
 const managerCountEl = document.getElementById("manager-count");
 const refreshBtn = document.getElementById("refresh-btn");
 
 let allHistories = [];
+let latestGW = null;
 
 async function fetchHistory(id) {
   const url = `/api/fpl/entry/${id}/history`;
@@ -125,11 +128,17 @@ async function fetchHistory(id) {
 
 function makeTable(histories, filterGW = null) {
   let rows = histories.flat();
-  rows.sort((a,b) => a.entryId-b.entryId || a.gw-b.gw);
-
+  
+  // Apply GW filter if specified
   if (filterGW !== null && filterGW !== "") {
     const gwNum = Number(filterGW);
     rows = rows.filter(r => r.gw === gwNum);
+    
+    // When filtering by GW, sort by Total Points DESC (best first)
+    rows.sort((a, b) => b.totalPoints - a.totalPoints);
+  } else {
+    // When showing all GWs, sort by EntryID then GW
+    rows.sort((a,b) => a.entryId-b.entryId || a.gw-b.gw);
   }
 
   let html = `<table border="1" cellpadding="4" style="border-collapse:collapse">
@@ -168,7 +177,8 @@ async function loadManagers(ids) {
   }
 
   allHistories = [];
-  out.innerHTML = ""; // Clear table
+  latestGW = null;
+  out.innerHTML = "";
   loadingStatus.textContent = `Loading 0 of ${ids.length} managers...`;
 
   let loaded = 0;
@@ -177,14 +187,20 @@ async function loadManagers(ids) {
       let history = await fetchHistory(id);
       calculateFTs(history);
       allHistories.push(history);
+      
+      // Track the latest GW across all managers
+      const managerMaxGW = Math.max(...history.map(h => h.gw));
+      if (latestGW === null || managerMaxGW > latestGW) {
+        latestGW = managerMaxGW;
+      }
+      
       loaded++;
       
       // Update status
       loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
       
-      // Progressive render - update table after each manager loads
-      const filterGW = gwFilterInput.value.trim();
-      out.innerHTML = makeTable(allHistories, filterGW);
+      // Progressive render WITHOUT filter during loading
+      out.innerHTML = makeTable(allHistories, "");
     } catch (e) {
       console.error(`Failed to load manager ${id}:`, e);
       loaded++;
@@ -193,6 +209,13 @@ async function loadManagers(ids) {
   }
   
   loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
+  
+  // AFTER all managers loaded, auto-set filter to latest GW
+  if (latestGW) {
+    gwFilterInput.value = latestGW;
+    gwFilterInput.placeholder = `Latest: GW${latestGW}`;
+    filterByGW(); // Apply the filter
+  }
 }
 
 function filterByGW() {
@@ -211,8 +234,29 @@ if (managerIds.length > 0) {
 }
 
 gwFilterInput.addEventListener('input', filterByGW);
+
+clearFilterBtn.addEventListener('click', () => {
+  gwFilterInput.value = "";
+  filterByGW();
+});
+
 refreshBtn.addEventListener('click', () => {
+  gwFilterInput.value = ""; // Clear filter on refresh
   const ids = loadManagerIds();
   loadManagers(ids);
 });
 </script>
+
+<style>
+  button {
+    background: #3182ce;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  button:hover {
+    background: #2c5aa0;
+  }
+</style>
