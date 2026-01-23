@@ -1,49 +1,77 @@
 ---
-let managerData = null;
-let error = null;
+const baseApi = "/api/manager.json";
 ---
 
 <html>
   <head>
-    <title>FPL Manager Lookup</title>
+    <title>FPL Multi-Manager Lookup</title>
+    <style>
+      body { font-family: sans-serif; margin: 2em; }
+      textarea { width: 20em; height: 5em; }
+      table { border-collapse: collapse; margin-top: 2em; }
+      th, td { border: 1px solid #ccc; padding: 0.5em; }
+      th { background: #eee; }
+      .error { color: red; }
+    </style>
   </head>
   <body>
     <h1>FPL Manager Data Lookup</h1>
-    <form id="lookup-form">
-      <label>
-        Manager ID:
-        <input type="text" id="manager-id-input" placeholder="e.g. 717348" required />
-      </label>
+    <form id="multi-form">
+      <label for="manager-ids">Enter manager IDs (comma, space, or newline separated):</label><br>
+      <textarea id="manager-ids" required></textarea><br>
       <button type="submit">Fetch</button>
     </form>
-    <div id="output"></div>
+    <div id="results"></div>
     <script type="module">
-      const form = document.getElementById('lookup-form');
-      const input = document.getElementById('manager-id-input');
-      const output = document.getElementById('output');
+      const form = document.getElementById('multi-form');
+      const textarea = document.getElementById('manager-ids');
+      const results = document.getElementById('results');
+
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        output.innerHTML = '';
-        const id = input.value.trim();
-        if (!id) {
-          output.innerHTML = '<p style="color: red;">Please enter a manager ID.</p>';
+        results.innerHTML = "";
+        let ids = textarea.value
+          .split(/[\s,]+/)
+          .map(x => x.trim())
+          .filter(x => x && /^\d+$/.test(x));
+        if (ids.length === 0) {
+          results.innerHTML = '<p class="error">Please enter at least one valid manager ID.</p>';
           return;
         }
-        output.innerHTML = 'Loading…';
-        try {
-          const res = await fetch(`/api/manager.json?id=${id}`);
-          const data = await res.json();
-          if (!res.ok) {
-            throw new Error(data.error || 'API error');
-          }
-          output.innerHTML = `
-            <h2>${data.team_name}</h2>
-            <p>Player: ${data.player_first_name} ${data.player_last_name}</p>
-            <pre>${JSON.stringify(data, null, 2)}</pre>
-          `;
-        } catch (err) {
-          output.innerHTML = `<p style="color: red;">${err.message}</p>`;
+        results.innerHTML = 'Loading...';
+        // Fetch all in parallel
+        const fetches = ids.map(id =>
+          fetch(`${baseApi}?id=${id}`)
+            .then(resp => resp.json().then(
+                data => ({id, ok: resp.ok, data})
+              ))
+            .catch(err => ({id, ok: false, data: {error: err.message}}))
+        );
+        const allData = await Promise.all(fetches);
+
+        // Show results in a table
+        let html = `<table>
+          <tr>
+            <th>Manager ID</th>
+            <th>Team Name</th>
+            <th>Player</th>
+            <th>Entry (Position)</th>
+            <th>Error</th>
+          </tr>`;
+        for (const r of allData) {
+          html += `<tr>
+            <td>${r.id}</td>
+            <td>${r.ok && r.data.team_name ? r.data.team_name : ""}</td>
+            <td>${r.ok && r.data.player_first_name ? 
+                    r.data.player_first_name + " " + (r.data.player_last_name||"") : ""}</td>
+            <td>${r.ok && r.data.summary_overall_points != undefined && r.data.summary_overall_rank != undefined
+                ? `${r.data.summary_overall_points} pts (${r.data.summary_overall_rank})`
+                : ""}</td>
+            <td class="error">${!r.ok ? (r.data.error || "Invalid ID") : ""}</td>
+          </tr>`;
         }
+        html += "</table>";
+        results.innerHTML = html;
       });
     </script>
   </body>
