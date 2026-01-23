@@ -159,10 +159,8 @@ async function fetchManagerData(entryId, gw) {
 }
 
 function populateManagerFilter() {
-  // Clear existing options except "All Managers"
   managerFilter.innerHTML = '<option value="">All Managers</option>';
   
-  // Sort managers alphabetically
   const sortedManagers = [...allSquadsData].sort((a, b) => 
     a.managerName.localeCompare(b.managerName)
   );
@@ -178,7 +176,6 @@ function populateManagerFilter() {
 function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValue = "") {
   let filteredManagers = squadsData;
   
-  // Filter by manager if selected
   if (managerFilterValue) {
     filteredManagers = squadsData.filter(m => m.entryId.toString() === managerFilterValue);
   }
@@ -199,16 +196,13 @@ function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValu
           <th>Position</th>
           <th>Team</th>
           <th>C/VC</th>
-          <th>Multiplier</th>
         </tr>`;
     
-    // Filter squad by position if needed
     let squad = manager.squad;
     if (positionFilterValue) {
       squad = squad.filter(p => p.playerPosition === positionFilterValue);
     }
     
-    // Sort by position (1-15)
     squad.sort((a, b) => a.position - b.position);
     
     for (const player of squad) {
@@ -222,7 +216,6 @@ function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValu
         <td style="text-align: center;">${player.playerPosition}</td>
         <td>${player.teamName}</td>
         <td style="text-align: center; font-weight: bold; color: ${player.isCaptain ? '#e53e3e' : '#3182ce'};">${captainBadge}</td>
-        <td style="text-align: center;">${player.multiplier}x</td>
       </tr>`;
     }
     
@@ -257,7 +250,6 @@ async function loadSquads(ids, gw) {
         
         loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
         
-        // Progressive render
         const managerFilterValue = managerFilter.value;
         const posFilter = positionFilter.value;
         out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter);
@@ -268,7 +260,6 @@ async function loadSquads(ids, gw) {
     }
   }
   
-  // Populate manager filter dropdown after all loaded
   populateManagerFilter();
   
   loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
