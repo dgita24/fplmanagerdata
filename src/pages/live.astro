@@ -322,8 +322,8 @@ function populateCompareManager() {
 }
 
 function makeLiveTable(managers, compareToId = "") {
-  // Sort by live points DESC
-  const sorted = [...managers].sort((a, b) => b.livePoints - a.livePoints);
+  // Sort by Projected Overall Points DESC (instead of live GW points)
+  const sorted = [...managers].sort((a, b) => b.totalPoints - a.totalPoints);
   
   const leader = sorted[0];
   const compareManager = compareToId ? sorted.find(m => m.entryId.toString() === compareToId) : leader;
@@ -386,19 +386,19 @@ function makeLiveTable(managers, compareToId = "") {
     <span style="background:#fed7d7; padding: 2px 8px; margin: 0 4px; border-radius: 3px;">Red = Behind</span>
   </div>`;
   
-  // Add summary stats
+  // Add summary stats - now based on overall leader
   const avgPoints = Math.round(sorted.reduce((sum, m) => sum + m.livePoints, 0) / sorted.length);
-  const highestScore = sorted[0].livePoints;
-  const lowestScore = sorted[sorted.length - 1].livePoints;
+  const highestGWScore = Math.max(...sorted.map(m => m.livePoints));
+  const lowestGWScore = Math.min(...sorted.map(m => m.livePoints));
   
   html += `<div style="margin-top: 2em; padding: 1em; background: #f7fafc; border-left: 4px solid #38a169; max-width: 1600px;">
     <h3>Gameweek Summary</h3>
     <ul style="line-height: 1.8;">
-      <li><strong>GW Leader:</strong> ${leader.managerName} (${leader.livePoints} pts)</li>
+      <li><strong>Overall Leader:</strong> ${leader.managerName} (${leader.totalPoints.toLocaleString()} pts)</li>
       <li><strong>Average GW Points:</strong> ${avgPoints}</li>
-      <li><strong>Highest GW Score:</strong> ${highestScore}</li>
-      <li><strong>Lowest GW Score:</strong> ${lowestScore}</li>
-      <li><strong>GW Point Spread:</strong> ${highestScore - lowestScore}</li>
+      <li><strong>Highest GW Score:</strong> ${highestGWScore}</li>
+      <li><strong>Lowest GW Score:</strong> ${lowestGWScore}</li>
+      <li><strong>GW Point Spread:</strong> ${highestGWScore - lowestGWScore}</li>
     </ul>
   </div>`;
   
