@@ -4,10 +4,13 @@
     <meta http-equiv="Cache-Control" content="no-store" />
     <style>
       body { font-family: sans-serif; margin: 2em; }
-      textarea { width: 20em; height: 6em; }
+      textarea { width: 22em; height: 10em; }
       #output { margin-top: 1em; }
       .error { color: red; }
-      pre { background: #eee; padding: 0.5em; }
+      table { border-collapse: collapse; }
+      th, td { border: 1px solid #ddd; padding: 0.3em 0.7em; }
+      th { background: #eee; }
+      .loading-row td { color: #888; }
     </style>
   </head>
   <body>
@@ -26,6 +29,32 @@
       const textarea = document.getElementById('manager-ids');
       const output = document.getElementById('output');
 
+      function renderTable(rows, pendingIds = []) {
+        let html = "<h2>Results</h2>";
+        html += `<table><tr>
+          <th>ID</th>
+          <th>Team</th>
+          <th>Player</th>
+          <th>Overall</th>
+          <th>Error</th>
+        </tr>`;
+        for (const r of rows) {
+          html += `<tr>
+            <td>${r.id}</td>
+            <td>${r.ok ? r.data.team_name || "" : ""}</td>
+            <td>${r.ok ? (r.data.player_first_name || "") + " " + (r.data.player_last_name || "") : ""}</td>
+            <td>${r.ok ? (r.data.summary_overall_points ?? "") + " (" + (r.data.summary_overall_rank ?? "") + ")" : ""}</td>
+            <td class="error">${!r.ok ? (r.data.error || "API error") : ""}</td>
+          </tr>`;
+        }
+        // Add loading rows for pending (not yet fetched)
+        for (const id of pendingIds) {
+          html += `<tr class="loading-row"><td>${id}</td><td colspan="4">Loading...</td></tr>`;
+        }
+        html += "</table>";
+        output.innerHTML = html;
+      }
+
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         output.innerHTML = '';
@@ -38,13 +67,18 @@
           return;
         }
         if (ids.length > 100) {
-          output.innerHTML = '<div class="error">Please enter 10 or fewer IDs at a time.</div>';
+          output.innerHTML = '<div class="error">Please enter 100 or fewer IDs at a time.</div>';
           return;
         }
-        output.innerHTML = 'Loading...';
+        // "Sticky" approach
         const results = [];
+        let pending = ids.slice();
+        renderTable(results, pending);
+
         for (const id of ids) {
-          output.innerHTML = `Loading manager ID ${id}... (${results.length+1}/${ids.length})`;
+          // Insert a loading row, update table
+          renderTable(results, pending);
+
           try {
             const resp = await fetch(`${baseApi}?id=${id}`);
             const data = await resp.json();
@@ -52,26 +86,9 @@
           } catch (err) {
             results.push({ id, ok: false, data: { error: err.message } });
           }
+          pending = pending.filter(x => x !== id);
+          renderTable(results, pending);
         }
-        let html = "<h2>Results</h2>";
-        html += `<table><tr>
-          <th>ID</th>
-          <th>Team</th>
-          <th>Player</th>
-          <th>Overall</th>
-          <th>Error</th>
-          </tr>`;
-        for (const r of results) {
-          html += `<tr>
-            <td>${r.id}</td>
-            <td>${r.ok ? r.data.team_name || "" : ""}</td>
-            <td>${r.ok ? (r.data.player_first_name || "") + " " + (r.data.player_last_name || "") : ""}</td>
-            <td>${r.ok ? (r.data.summary_overall_points ?? "") + " (" + (r.data.summary_overall_rank ?? "") + ")" : ""}</td>
-            <td class="error">${!r.ok ? (r.data.error || "API error") : ""}</td>
-          </tr>`;
-        }
-        html += "</table>";
-        output.innerHTML = html;
       });
     </script>
   </body>
