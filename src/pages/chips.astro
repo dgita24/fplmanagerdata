@@ -1,6 +1,206 @@
 ---
 import Nav from '../components/Nav.astro';
 ---
+
 <Nav />
-<h1>Chips & Rank</h1>
-<p>Chip usage and rank history will appear here.</p>
+<h1>Chip Usage Tracker</h1>
+<p>Track which managers have used their chips (Wildcard, Bench Boost, Triple Captain, Free Hit) and which gameweeks they played them.</p>
+
+<form id="manager-form">
+  <label for="ids">Manager EntryIDs (one per line):</label><br>
+  <textarea id="ids" rows="6" cols="30" style="font-family:monospace" placeholder="4290&#10;200&#10;1320"></textarea><br>
+  <button type="submit">Load Chip Data</button>
+</form>
+
+<div id="chips-output" style="margin-top:1.5em"></div>
+
+<script type="module">
+// Local storage helpers
+function saveEntryIds(ids) {
+  localStorage.setItem("chipEntryIds", JSON.stringify(ids));
+}
+function loadEntryIds() {
+  try {
+    return JSON.parse(localStorage.getItem("chipEntryIds")) || [];
+  } catch {
+    return [];
+  }
+}
+
+const defaultIds = ["4290","200","1320","1587","6586","260"];
+const form = document.getElementById("manager-form");
+const textarea = document.getElementById("ids");
+const out = document.getElementById("chips-output");
+
+// Try to load IDs from localStorage, else use default:
+const idsFromStorage = loadEntryIds();
+if (idsFromStorage.length > 0) {
+  textarea.value = idsFromStorage.join("\n");
+} else {
+  textarea.value = defaultIds.join("\n");
+}
+
+async function fetchManagerData(id) {
+  // Fetch both history (for manager name) and chips
+  const historyUrl = `/api/fpl/entry/${id}/history`;
+  const summaryUrl = `/api/fpl/entry/${id}`;
+  
+  try {
+    const [historyRes, summaryRes] = await Promise.all([
+      fetch(historyUrl),
+      fetch(summaryUrl)
+    ]);
+    
+    if (!historyRes.ok || !summaryRes.ok) throw new Error("Load error");
+    
+    const historyData = await historyRes.json();
+    const summaryData = await summaryRes.json();
+    
+    const chips = historyData.chips || [];
+    const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
+    const teamName = summaryData.name;
+    
+    // Convert chip names to abbreviations
+    const chipsFormatted = chips.map(c => ({
+      name: c.name === "wildcard" ? "WC" :
+            c.name === "bboost" ? "BB" :
+            c.name === "3xc" ? "TC" :
+            c.name === "freehit" ? "FH" : c.name,
+      fullName: c.name === "wildcard" ? "Wildcard" :
+                c.name === "bboost" ? "Bench Boost" :
+                c.name === "3xc" ? "Triple Captain" :
+                c.name === "freehit" ? "Free Hit" : c.name,
+      gw: c.event
+    }));
+    
+    return {
+      entryId: Number(id),
+      managerName,
+      teamName,
+      chips: chipsFormatted
+    };
+  } catch (e) {
+    console.error(`Error fetching manager ${id}:`, e);
+    return null;
+  }
+}
+
+function makeChipsTable(managersData) {
+  // Create summary table
+  let html = `<h2>Chips Summary</h2>
+  <table border="1" cellpadding="6" style="border-collapse:collapse; margin-bottom: 2em;">
+    <tr style="background:#f0f0f0">
+      <th>EntryID</th>
+      <th>Manager</th>
+      <th>Team Name</th>
+      <th>Chips Used</th>
+      <th>Chips Remaining</th>
+    </tr>`;
+  
+  for (const m of managersData) {
+    const chipsUsed = m.chips.length > 0 
+      ? m.chips.map(c => `${c.name} (GW${c.gw})`).join(", ")
+      : "None";
+    
+    const allChips = ["WC", "BB", "TC", "FH"];
+    const usedChipNames = m.chips.map(c => c.name);
+    const remaining = allChips.filter(chip => !usedChipNames.includes(chip));
+    const chipsRemaining = remaining.length > 0 ? remaining.join(", ") : "None";
+    
+    html += `<tr>
+      <td>${m.entryId}</td>
+      <td>${m.managerName}</td>
+      <td>${m.teamName}</td>
+      <td>${chipsUsed}</td>
+      <td style="background:#fffacd">${chipsRemaining}</td>
+    </tr>`;
+  }
+  html += "</table>";
+  
+  // Create detailed chip usage table
+  html += `<h2>Detailed Chip Usage by Gameweek</h2>
+  <table border="1" cellpadding="6" style="border-collapse:collapse;">
+    <tr style="background:#f0f0f0">
+      <th>EntryID</th>
+      <th>Manager</th>
+      <th>Chip</th>
+      <th>Chip Name</th>
+      <th>Gameweek</th>
+    </tr>`;
+  
+  for (const m of managersData) {
+    if (m.chips.length === 0) {
+      html += `<tr>
+        <td>${m.entryId}</td>
+        <td>${m.managerName}</td>
+        <td colspan="3" style="color:#999; font-style:italic;">No chips used yet</td>
+      </tr>`;
+    } else {
+      for (const chip of m.chips) {
+        html += `<tr>
+          <td>${m.entryId}</td>
+          <td>${m.managerName}</td>
+          <td style="font-weight:bold; text-align:center;">${chip.name}</td>
+          <td>${chip.fullName}</td>
+          <td style="text-align:center;">${chip.gw}</td>
+        </tr>`;
+      }
+    }
+  }
+  html += "</table>";
+  
+  return html;
+}
+
+async function loadChips(ids) {
+  out.textContent = "Loading chip data...";
+  try {
+    const allData = [];
+    for (const id of ids) {
+      const data = await fetchManagerData(id);
+      if (data) allData.push(data);
+    }
+    
+    // Sort by EntryID
+    allData.sort((a, b) => a.entryId - b.entryId);
+    
+    out.innerHTML = makeChipsTable(allData);
+    saveEntryIds(ids); // Save to localStorage on success
+  } catch (e) {
+    out.innerHTML = "<span style='color:red'>Error loading chip data. Check EntryIDs and network connection.</span>";
+    console.error(e);
+  }
+}
+
+// Initial load
+const parsedIds = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/));
+if (parsedIds.length) loadChips(parsedIds);
+
+form.onsubmit = (e) => {
+  e.preventDefault();
+  const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/));
+  if (ids.length === 0) {
+    out.innerHTML = "<span style='color:red'>Enter at least one valid EntryID.</span>";
+    return;
+  }
+  loadChips(ids);
+};
+</script>
+
+<style>
+  table {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+  }
+  th {
+    font-weight: bold;
+    padding: 8px;
+  }
+  td {
+    padding: 6px;
+  }
+  h2 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+  }
+</style>
