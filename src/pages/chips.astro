@@ -119,28 +119,28 @@ function makeChipsTable(managersData) {
   <table border="1" cellpadding="6" style="border-collapse:collapse;">
     <tr style="background:#f0f0f0">
       <th>Manager</th>
-      <th>Chip</th>
-      <th>Chip Name</th>
-      <th>Gameweek</th>
+      <th>Team Name</th>
+      <th>Chips Played (GW)</th>
     </tr>`;
   
   for (const m of managersData) {
+    let chipsPlayedText = "";
+    
     if (m.chips.length === 0) {
-      html += `<tr>
-        <td style="font-weight: bold;">${m.managerName}</td>
-        <td colspan="3" style="color:#999; font-style:italic;">No chips used yet</td>
-      </tr>`;
+      chipsPlayedText = '<span style="color:#999; font-style:italic;">No chips used yet</span>';
     } else {
-      for (const chip of m.chips) {
-        html += `<tr>
-          <td style="font-weight: bold;">${m.managerName}</td>
-          <td style="font-weight:bold; text-align:center;">${chip.name}</td>
-          <td>${chip.fullName}</td>
-          <td style="text-align:center;">${chip.gw}</td>
-        </tr>`;
-      }
+      // Sort chips by gameweek
+      const sortedChips = [...m.chips].sort((a, b) => a.gw - b.gw);
+      chipsPlayedText = sortedChips.map(chip => `${chip.name} ${chip.gw}`).join(", ");
     }
+    
+    html += `<tr>
+      <td style="font-weight: bold;">${m.managerName}</td>
+      <td>${m.teamName}</td>
+      <td>${chipsPlayedText}</td>
+    </tr>`;
   }
+  
   html += "</table>";
   
   return html;
@@ -166,7 +166,7 @@ async function loadChips(ids) {
         
         loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
         
-        allData.sort((a, b) => a.entryId - b.entryId);
+        allData.sort((a, b) => a.managerName.localeCompare(b.managerName));
         out.innerHTML = makeChipsTable(allData);
       }
     } catch (e) {
@@ -216,6 +216,7 @@ refreshBtn.addEventListener('click', () => {
     border-radius: 4px;
     cursor: pointer;
     font-weight: bold;
+    padding: 5px 12px;
   }
   button:hover {
     background: #2c5aa0;
