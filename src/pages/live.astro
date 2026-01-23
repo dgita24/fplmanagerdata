@@ -1,0 +1,534 @@
+---
+import Nav from '../components/Nav.astro';
+---
+
+<Nav />
+<h1>🔴 Live League Standings</h1>
+<p>Real-time league table with live points, projected bonus, auto-subs, and transfer hits.</p>
+
+<div style="margin-bottom: 1em;">
+  <span id="manager-count" style="font-weight: bold;">Loading managers...</span>
+  <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
+</div>
+
+<div style="margin-bottom: 1em;">
+  <label for="gw-filter">Select Gameweek:</label><br>
+  <input type="number" id="gw-filter" min="1" max="38" placeholder="Auto" style="width: 100px; padding: 5px;">
+  <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">🔄 Refresh Live Data</button>
+  <button id="auto-refresh-btn" style="margin-left: 0.5em; padding: 5px 12px;">⏱️ Auto Refresh: OFF</button>
+</div>
+
+<div style="margin-bottom: 1em;">
+  <label for="compare-manager">Compare to Manager:</label><br>
+  <select id="compare-manager" style="padding: 8px; width: 250px; font-size: 14px;">
+    <option value="">Leader</option>
+  </select>
+</div>
+
+<div id="loading-status" style="margin-bottom: 1em; color: #666;"></div>
+<div id="last-updated" style="margin-bottom: 1em; color: #666; font-size: 12px;"></div>
+<div id="live-output" style="margin-top:1.5em"></div>
+
+<script type="module">
+function loadManagerIds() {
+  try {
+    return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
+  } catch {
+    return [];
+  }
+}
+
+const out = document.getElementById("live-output");
+const gwFilterInput = document.getElementById("gw-filter");
+const compareManagerSelect = document.getElementById("compare-manager");
+const loadingStatus = document.getElementById("loading-status");
+const lastUpdatedEl = document.getElementById("last-updated");
+const managerCountEl = document.getElementById("manager-count");
+const refreshBtn = document.getElementById("refresh-btn");
+const autoRefreshBtn = document.getElementById("auto-refresh-btn");
+
+let liveData = [];
+let latestGW = null;
+let playerCache = new Map();
+let teamCache = new Map();
+let fixturesCache = new Map();
+let livePointsCache = new Map();
+let autoRefreshInterval = null;
+let autoRefreshEnabled = false;
+
+// Fetch bootstrap-static data
+async function fetchBootstrapData() {
+  try {
+    const res = await fetch('/api/fpl/bootstrap-static');
+    if (!res.ok) throw new Error("Failed to fetch bootstrap data");
+    const data = await res.json();
+    
+    data.elements.forEach(player => {
+      playerCache.set(player.id, {
+        name: player.web_name,
+        position: player.element_type,
+        team: player.team
+      });
+    });
+    
+    data.teams.forEach(team => {
+      teamCache.set(team.id, {
+        name: team.name,
+        shortName: team.short_name
+      });
+    });
+    
+    const currentEvent = data.events.find(e => e.is_current);
+    latestGW = currentEvent ? currentEvent.id : 1;
+    
+    return data;
+  } catch (e) {
+    console.error("Error fetching bootstrap data:", e);
+    return null;
+  }
+}
+
+// Fetch fixtures for the gameweek
+async function fetchFixtures(gw) {
+  try {
+    const res = await fetch(`/api/fpl/fixtures?event=${gw}`);
+    if (!res.ok) throw new Error("Failed to fetch fixtures");
+    const fixtures = await res.json();
+    
+    fixtures.forEach(fixture => {
+      fixturesCache.set(`${fixture.team_h}-${gw}`, {
+        opponent: fixture.team_a,
+        isHome: true,
+        finished: fixture.finished,
+        started: fixture.started,
+        kickoffTime: fixture.kickoff_time
+      });
+      fixturesCache.set(`${fixture.team_a}-${gw}`, {
+        opponent: fixture.team_h,
+        isHome: false,
+        finished: fixture.finished,
+        started: fixture.started,
+        kickoffTime: fixture.kickoff_time
+      });
+    });
+    
+    return fixtures;
+  } catch (e) {
+    console.error("Error fetching fixtures:", e);
+    return [];
+  }
+}
+
+// Fetch live gameweek data
+async function fetchLiveGW(gw) {
+  try {
+    const res = await fetch(`/api/fpl/event/${gw}/live`);
+    if (!res.ok) throw new Error("Failed to fetch live data");
+    const data = await res.json();
+    
+    livePointsCache.clear();
+    data.elements.forEach(player => {
+      livePointsCache.set(player.id, {
+        points: player.stats.total_points,
+        bps: player.stats.bps,
+        bonus: player.stats.bonus,
+        minutes: player.stats.minutes
+      });
+    });
+    
+    return data;
+  } catch (e) {
+    console.error("Error fetching live data:", e);
+    return null;
+  }
+}
+
+// Calculate projected bonus from BPS
+function calculateProjectedBonus(playerId, teamId, gw) {
+  const fixture = fixturesCache.get(`${teamId}-${gw}`);
+  if (!fixture || fixture.finished) {
+    // Match finished, use actual bonus
+    const liveData = livePointsCache.get(playerId);
+    return liveData ? liveData.bonus : 0;
+  }
+  
+  if (!fixture.started) {
+    // Match hasn't started
+    return 0;
+  }
+  
+  // Match is live - project bonus from BPS
+  const liveData = livePointsCache.get(playerId);
+  if (!liveData || liveData.minutes === 0) return 0;
+  
+  // Get all players in this match and sort by BPS
+  const allPlayers = Array.from(livePointsCache.entries())
+    .map(([id, data]) => {
+      const player = playerCache.get(id);
+      if (!player) return null;
+      const playerFixture = fixturesCache.get(`${player.team}-${gw}`);
+      if (!playerFixture || playerFixture.opponent !== fixture.opponent) return null;
+      return { id, bps: data.bps, minutes: data.minutes };
+    })
+    .filter(p => p && p.minutes > 0)
+    .sort((a, b) => b.bps - a.bps);
+  
+  // Top 3 get bonus (3, 2, 1)
+  const playerIndex = allPlayers.findIndex(p => p.id === playerId);
+  if (playerIndex === 0) return 3;
+  if (playerIndex === 1) return 2;
+  if (playerIndex === 2) return 1;
+  
+  return 0;
+}
+
+// Fetch manager's live team
+async function fetchManagerLive(entryId, gw) {
+  try {
+    const [picksRes, summaryRes, historyRes] = await Promise.all([
+      fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
+      fetch(`/api/fpl/entry/${entryId}`),
+      fetch(`/api/fpl/entry/${entryId}/history`)
+    ]);
+    
+    if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) {
+      throw new Error("Failed to fetch manager data");
+    }
+    
+    const picksData = await picksRes.json();
+    const summaryData = await summaryRes.json();
+    const historyData = await historyRes.json();
+    
+    const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
+    const teamName = summaryData.name;
+    
+    // Get chip played this GW
+    const chips = historyData.chips || [];
+    const chipThisGW = chips.find(c => c.event === gw);
+    const chipPlayed = chipThisGW ? 
+      (chipThisGW.name === "wildcard" ? "WC" :
+       chipThisGW.name === "bboost" ? "BB" :
+       chipThisGW.name === "3xc" ? "TC" :
+       chipThisGW.name === "freehit" ? "FH" : chipThisGW.name) : "";
+    
+    const isBenchBoost = chipPlayed === "BB";
+    const isTripleCaptain = chipPlayed === "TC";
+    
+    // Get transfer cost for this GW
+    const gwHistory = historyData.current.find(h => h.event === gw);
+    const transferCost = gwHistory ? (gwHistory.event_transfers_cost || 0) : 0;
+    
+    // Calculate live points for each player
+    const picks = picksData.picks.map(pick => {
+      const playerInfo = playerCache.get(pick.element);
+      const liveData = livePointsCache.get(pick.element);
+      const teamId = playerInfo ? playerInfo.team : 0;
+      
+      const basePoints = liveData ? liveData.points : 0;
+      const projectedBonus = calculateProjectedBonus(pick.element, teamId, gw);
+      const totalPoints = basePoints + projectedBonus;
+      
+      // Apply multiplier (captain = 2x, triple captain = 3x)
+      let multiplier = pick.multiplier;
+      if (pick.is_captain && isTripleCaptain) {
+        multiplier = 3;
+      }
+      
+      const pointsWithMultiplier = totalPoints * multiplier;
+      
+      return {
+        position: pick.position,
+        playerId: pick.element,
+        playerName: playerInfo ? playerInfo.name : "Unknown",
+        isCaptain: pick.is_captain,
+        isViceCaptain: pick.is_vice_captain,
+        multiplier: multiplier,
+        basePoints: basePoints,
+        projectedBonus: projectedBonus,
+        totalPoints: pointsWithMultiplier,
+        hasPlayed: liveData ? liveData.minutes > 0 : false
+      };
+    });
+    
+    // Auto-substitution logic
+    let starting11 = picks.filter(p => p.position <= 11);
+    let bench = picks.filter(p => p.position > 11).sort((a, b) => a.position - b.position);
+    
+    // If not bench boost, apply auto-subs
+    if (!isBenchBoost) {
+      // Find non-playing starters
+      const nonPlayingStarters = starting11.filter(p => !p.hasPlayed);
+      
+      for (const nonPlayer of nonPlayingStarters) {
+        // Find first playing bench player who can replace
+        const sub = bench.find(b => b.hasPlayed && !b.subbed);
+        if (sub) {
+          sub.subbed = true;
+          sub.autoSub = true;
+        }
+      }
+    }
+    
+    // Calculate total points
+    let livePoints = 0;
+    
+    if (isBenchBoost) {
+      // All 15 players count
+      livePoints = picks.reduce((sum, p) => sum + p.totalPoints, 0);
+    } else {
+      // Starting 11 + auto subs
+      livePoints = starting11.reduce((sum, p) => p.hasPlayed ? sum + p.totalPoints : sum, 0);
+      livePoints += bench.filter(b => b.autoSub).reduce((sum, p) => sum + p.totalPoints, 0);
+    }
+    
+    // Deduct transfer cost
+    const finalPoints = livePoints - transferCost;
+    
+    // Get total points from history
+    const totalPoints = summaryData.summary_overall_points || 0;
+    const projectedTotal = totalPoints - (gwHistory ? gwHistory.points : 0) + finalPoints;
+    
+    return {
+      entryId,
+      managerName,
+      teamName,
+      chipPlayed,
+      transferCost,
+      livePoints: finalPoints,
+      livePointsBeforeHits: livePoints,
+      projectedBonus: picks.reduce((sum, p) => sum + p.projectedBonus * p.multiplier, 0),
+      totalPoints: projectedTotal,
+      picks: picks
+    };
+  } catch (e) {
+    console.error(`Error fetching live data for manager ${entryId}:`, e);
+    return null;
+  }
+}
+
+function populateCompareManager() {
+  compareManagerSelect.innerHTML = '<option value="">Leader</option>';
+  
+  const sortedManagers = [...liveData].sort((a, b) => 
+    a.managerName.localeCompare(b.managerName)
+  );
+  
+  for (const manager of sortedManagers) {
+    const option = document.createElement('option');
+    option.value = manager.entryId;
+    option.textContent = manager.managerName;
+    compareManagerSelect.appendChild(option);
+  }
+}
+
+function makeLiveTable(managers, compareToId = "") {
+  // Sort by live points DESC
+  const sorted = [...managers].sort((a, b) => b.livePoints - a.livePoints);
+  
+  const leader = sorted[0];
+  const compareManager = compareToId ? sorted.find(m => m.entryId.toString() === compareToId) : leader;
+  
+  let html = `<h2>Live League Standings</h2>
+  <table border="1" cellpadding="6" style="border-collapse:collapse; width: 100%; max-width: 1400px;">
+    <tr style="background:#f0f0f0">
+      <th>Rank</th>
+      <th>Manager</th>
+      <th>Team Name</th>
+      <th>Live Pts</th>
+      <th>Proj Bonus</th>
+      <th>Transfer Hit</th>
+      <th>GW Total</th>
+      <th>Proj Total</th>
+      <th>Diff vs ${compareManager.managerName}</th>
+      <th>Chip</th>
+    </tr>`;
+  
+  let rank = 1;
+  for (const m of sorted) {
+    const diffVsCompare = m.livePoints - compareManager.livePoints;
+    const diffColor = diffVsCompare > 0 ? "#c6f6d5" : diffVsCompare < 0 ? "#fed7d7" : "#fff";
+    const diffText = diffVsCompare > 0 ? `+${diffVsCompare}` : diffVsCompare.toString();
+    
+    const isLeader = rank === 1;
+    const rowStyle = isLeader ? "background: #fef3c7; font-weight: bold;" : "";
+    
+    html += `<tr style="${rowStyle}">
+      <td style="text-align: center; font-weight: bold;">${rank}</td>
+      <td>${m.managerName}</td>
+      <td>${m.teamName}</td>
+      <td style="text-align: center; font-weight: bold; font-size: 16px;">${m.livePoints}</td>
+      <td style="text-align: center; color: #3182ce;">${m.projectedBonus}</td>
+      <td style="text-align: center; color: ${m.transferCost > 0 ? '#e53e3e' : '#666'};">${m.transferCost > 0 ? `-${m.transferCost}` : '0'}</td>
+      <td style="text-align: center;">${m.livePoints}</td>
+      <td style="text-align: center; font-weight: bold;">${m.totalPoints.toLocaleString()}</td>
+      <td style="text-align: center; background: ${diffColor}; font-weight: bold;">${diffText}</td>
+      <td style="text-align: center;">${m.chipPlayed || "-"}</td>
+    </tr>`;
+    rank++;
+  }
+  
+  html += "</table>";
+  
+  // Add summary stats
+  const avgPoints = Math.round(sorted.reduce((sum, m) => sum + m.livePoints, 0) / sorted.length);
+  const highestScore = sorted[0].livePoints;
+  const lowestScore = sorted[sorted.length - 1].livePoints;
+  
+  html += `<div style="margin-top: 2em; padding: 1em; background: #f7fafc; border-left: 4px solid #38a169; max-width: 1400px;">
+    <h3>Gameweek Summary</h3>
+    <ul style="line-height: 1.8;">
+      <li><strong>Leader:</strong> ${leader.managerName} (${leader.livePoints} pts)</li>
+      <li><strong>Average Points:</strong> ${avgPoints}</li>
+      <li><strong>Highest Score:</strong> ${highestScore}</li>
+      <li><strong>Lowest Score:</strong> ${lowestScore}</li>
+      <li><strong>Point Spread:</strong> ${highestScore - lowestScore}</li>
+    </ul>
+  </div>`;
+  
+  return html;
+}
+
+async function loadLive(ids, gw) {
+  if (ids.length === 0) {
+    out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
+    return;
+  }
+  
+  if (!gw) {
+    out.innerHTML = "<span style='color:orange'>Please select a gameweek.</span>";
+    return;
+  }
+
+  liveData = [];
+  out.innerHTML = "";
+  loadingStatus.textContent = `Loading live data for GW${gw}...`;
+  
+  // Fetch fixtures and live data first
+  await Promise.all([
+    fetchFixtures(gw),
+    fetchLiveGW(gw)
+  ]);
+  
+  let loaded = 0;
+  for (const id of ids) {
+    try {
+      const data = await fetchManagerLive(id, gw);
+      if (data) {
+        liveData.push(data);
+        loaded++;
+        
+        loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+        
+        const compareId = compareManagerSelect.value;
+        out.innerHTML = makeLiveTable(liveData, compareId);
+      }
+    } catch (e) {
+      console.error(`Failed to load manager ${id}:`, e);
+      loaded++;
+    }
+  }
+  
+  populateCompareManager();
+  
+  loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
+  lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+}
+
+async function init() {
+  loadingStatus.textContent = "Loading player and fixture data...";
+  await fetchBootstrapData();
+  
+  gwFilterInput.value = latestGW;
+  gwFilterInput.placeholder = `Latest: GW${latestGW}`;
+  
+  const managerIds = loadManagerIds();
+  managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+
+  if (managerIds.length > 0) {
+    loadLive(managerIds, latestGW);
+  } else {
+    out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+  }
+}
+
+gwFilterInput.addEventListener('change', () => {
+  const ids = loadManagerIds();
+  const gw = parseInt(gwFilterInput.value);
+  if (gw && gw >= 1 && gw <= 38) {
+    loadLive(ids, gw);
+  }
+});
+
+compareManagerSelect.addEventListener('change', () => {
+  const compareId = compareManagerSelect.value;
+  out.innerHTML = makeLiveTable(liveData, compareId);
+});
+
+refreshBtn.addEventListener('click', () => {
+  const ids = loadManagerIds();
+  const gw = parseInt(gwFilterInput.value) || latestGW;
+  loadLive(ids, gw);
+});
+
+autoRefreshBtn.addEventListener('click', () => {
+  autoRefreshEnabled = !autoRefreshEnabled;
+  
+  if (autoRefreshEnabled) {
+    autoRefreshBtn.textContent = "⏱️ Auto Refresh: ON";
+    autoRefreshBtn.style.background = "#38a169";
+    
+    // Refresh every 2 minutes
+    autoRefreshInterval = setInterval(() => {
+      const ids = loadManagerIds();
+      const gw = parseInt(gwFilterInput.value) || latestGW;
+      loadLive(ids, gw);
+    }, 120000); // 2 minutes
+  } else {
+    autoRefreshBtn.textContent = "⏱️ Auto Refresh: OFF";
+    autoRefreshBtn.style.background = "#3182ce";
+    
+    if (autoRefreshInterval) {
+      clearInterval(autoRefreshInterval);
+      autoRefreshInterval = null;
+    }
+  }
+});
+
+init();
+</script>
+
+<style>
+  table {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+  }
+  th {
+    font-weight: bold;
+    padding: 8px;
+  }
+  td {
+    padding: 6px;
+  }
+  h2 {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+  }
+  button, select {
+    background: #3182ce;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    padding: 5px 12px;
+  }
+  button:hover {
+    background: #2c5aa0;
+  }
+  select {
+    background: white;
+    color: #2d3748;
+    border: 1px solid #cbd5e0;
+    font-weight: normal;
+  }
+</style>
