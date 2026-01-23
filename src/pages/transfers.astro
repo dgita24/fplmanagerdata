@@ -96,12 +96,24 @@ let allHistories = [];
 let latestGW = null;
 
 async function fetchHistory(id) {
-  const url = `/api/fpl/entry/${id}/history`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Load error");
-  const data = await res.json();
-  let history = data.current.map(gw => ({
+  const historyUrl = `/api/fpl/entry/${id}/history`;
+  const summaryUrl = `/api/fpl/entry/${id}`;
+  
+  const [historyRes, summaryRes] = await Promise.all([
+    fetch(historyUrl),
+    fetch(summaryUrl)
+  ]);
+  
+  if (!historyRes.ok || !summaryRes.ok) throw new Error("Load error");
+  
+  const historyData = await historyRes.json();
+  const summaryData = await summaryRes.json();
+  
+  const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
+  
+  let history = historyData.current.map(gw => ({
     entryId: Number(id),
+    managerName: managerName,
     gw: gw.event,
     chipPlayed: "",
     transfers: gw.event_transfers,
@@ -110,8 +122,9 @@ async function fetchHistory(id) {
     gwPoints: gw.points,
     totalPoints: gw.total_points
   }));
-  if (Array.isArray(data.chips)) {
-    data.chips.forEach(c => {
+  
+  if (Array.isArray(historyData.chips)) {
+    historyData.chips.forEach(c => {
       const row = history.find(gw => gw.gw === c.event);
       if (row) {
         row.chipPlayed = (
@@ -137,13 +150,13 @@ function makeTable(histories, filterGW = null) {
     // When filtering by GW, sort by Total Points DESC (best first)
     rows.sort((a, b) => b.totalPoints - a.totalPoints);
   } else {
-    // When showing all GWs, sort by EntryID then GW
-    rows.sort((a,b) => a.entryId-b.entryId || a.gw-b.gw);
+    // When showing all GWs, sort by Manager name then GW
+    rows.sort((a,b) => a.managerName.localeCompare(b.managerName) || a.gw-b.gw);
   }
 
   let html = `<table border="1" cellpadding="4" style="border-collapse:collapse">
     <tr>
-      <th>EntryID</th>
+      <th>Manager</th>
       <th>GW</th>
       <th>ChipPlayed</th>
       <th>Transfers</th>
@@ -155,7 +168,7 @@ function makeTable(histories, filterGW = null) {
     </tr>`;
   for (const r of rows) {
     html += `<tr>
-      <td>${r.entryId}</td>
+      <td style="font-weight: bold;">${r.managerName}</td>
       <td>${r.gw}</td>
       <td>${r.chipPlayed || ""}</td>
       <td>${r.transfers ?? ""}</td>

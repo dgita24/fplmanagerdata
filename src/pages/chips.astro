@@ -76,7 +76,6 @@ function makeChipsTable(managersData) {
   let html = `<h2>Chips Summary</h2>
   <table border="1" cellpadding="6" style="border-collapse:collapse; margin-bottom: 2em;">
     <tr style="background:#f0f0f0">
-      <th>EntryID</th>
       <th>Manager</th>
       <th>Team Name</th>
       <th>Chips Used</th>
@@ -108,8 +107,7 @@ function makeChipsTable(managersData) {
     const chipsRemaining = remaining.length > 0 ? remaining.join(", ") : "None";
     
     html += `<tr>
-      <td>${m.entryId}</td>
-      <td>${m.managerName}</td>
+      <td style="font-weight: bold;">${m.managerName}</td>
       <td>${m.teamName}</td>
       <td>${chipsUsed}</td>
       <td style="background:#fffacd">${chipsRemaining}</td>
@@ -120,7 +118,6 @@ function makeChipsTable(managersData) {
   html += `<h2>Detailed Chip Usage by Gameweek</h2>
   <table border="1" cellpadding="6" style="border-collapse:collapse;">
     <tr style="background:#f0f0f0">
-      <th>EntryID</th>
       <th>Manager</th>
       <th>Chip</th>
       <th>Chip Name</th>
@@ -130,15 +127,13 @@ function makeChipsTable(managersData) {
   for (const m of managersData) {
     if (m.chips.length === 0) {
       html += `<tr>
-        <td>${m.entryId}</td>
-        <td>${m.managerName}</td>
+        <td style="font-weight: bold;">${m.managerName}</td>
         <td colspan="3" style="color:#999; font-style:italic;">No chips used yet</td>
       </tr>`;
     } else {
       for (const chip of m.chips) {
         html += `<tr>
-          <td>${m.entryId}</td>
-          <td>${m.managerName}</td>
+          <td style="font-weight: bold;">${m.managerName}</td>
           <td style="font-weight:bold; text-align:center;">${chip.name}</td>
           <td>${chip.fullName}</td>
           <td style="text-align:center;">${chip.gw}</td>

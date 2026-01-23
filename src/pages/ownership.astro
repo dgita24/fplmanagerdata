@@ -51,6 +51,7 @@ let ownershipData = [];
 let latestGW = null;
 let playerCache = new Map();
 let teamCache = new Map();
+let allManagerNames = []; // Track all manager names for "All except" logic
 
 async function fetchBootstrapData() {
   try {
@@ -147,7 +148,6 @@ function makeOwnershipTable(ownership, positionFilterValue = "") {
     filtered = ownership.filter(p => p.position === positionFilterValue);
   }
   
-  // Sort by ownership count DESC, then by player name
   filtered.sort((a, b) => {
     if (b.count !== a.count) return b.count - a.count;
     return a.playerName.localeCompare(b.playerName);
@@ -170,9 +170,32 @@ function makeOwnershipTable(ownership, positionFilterValue = "") {
   
   for (const player of filtered) {
     const ownershipPct = ((player.count / totalManagers) * 100).toFixed(0);
-    const ownedByText = player.ownedBy
-      .map(m => `${m.firstName} ${m.lastName.substring(0, 2)}`)
-      .join(", ");
+    
+    // Smart "Owned By" text
+    let ownedByText = "";
+    if (player.count === totalManagers) {
+      ownedByText = "All";
+    } else if (player.count >= totalManagers * 0.7) {
+      // 70%+ ownership - show who DOESN'T own them
+      const missing = allManagerNames.filter(name => {
+        return !player.ownedBy.some(owner => `${owner.firstName} ${owner.lastName}` === name);
+      });
+      
+      if (missing.length === 0) {
+        ownedByText = "All";
+      } else if (missing.length <= 3) {
+        ownedByText = `All except ${missing.map(n => n.split(' ')[0]).join(", ")}`;
+      } else {
+        ownedByText = player.ownedBy
+          .map(m => `${m.firstName} ${m.lastName.substring(0, 2)}`)
+          .join(", ");
+      }
+    } else {
+      // Less than 70% - show who owns them (abbreviated)
+      ownedByText = player.ownedBy
+        .map(m => `${m.firstName} ${m.lastName.substring(0, 2)}`)
+        .join(", ");
+    }
     
     // Color code by ownership level
     let ownershipColor = "#e6ffe6";
@@ -191,7 +214,6 @@ function makeOwnershipTable(ownership, positionFilterValue = "") {
   
   html += "</table>";
   
-  // Add ownership summary
   const highly_owned = filtered.filter(p => p.count >= totalManagers * 0.5).length;
   const moderately_owned = filtered.filter(p => p.count >= totalManagers * 0.3 && p.count < totalManagers * 0.5).length;
   const differential = filtered.filter(p => p.count === 1).length;
@@ -221,6 +243,7 @@ async function loadOwnership(ids, gw) {
   }
 
   const managerSquads = [];
+  allManagerNames = []; // Reset for this load
   out.innerHTML = "";
   loadingStatus.textContent = `Loading 0 of ${ids.length} managers for GW${gw}...`;
   
@@ -230,11 +253,11 @@ async function loadOwnership(ids, gw) {
       const data = await fetchManagerSquad(id, gw);
       if (data) {
         managerSquads.push(data);
+        allManagerNames.push(data.managerName); // Store all manager names
         loaded++;
         
         loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
         
-        // Progressive render
         ownershipData = calculateOwnership(managerSquads);
         const posFilter = positionFilter.value;
         out.innerHTML = makeOwnershipTable(ownershipData, posFilter);

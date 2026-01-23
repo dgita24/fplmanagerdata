@@ -78,7 +78,6 @@ function makeStatsTable(managersData) {
   <table border="1" cellpadding="6" style="border-collapse:collapse; width: 100%; max-width: 1200px;">
     <tr style="background:#f0f0f0">
       <th>Rank</th>
-      <th>EntryID</th>
       <th>Manager</th>
       <th>Team Name</th>
       <th>Total Points</th>
@@ -92,7 +91,6 @@ function makeStatsTable(managersData) {
   for (const m of managersData) {
     html += `<tr>
       <td style="font-weight: bold; text-align: center;">${rank}</td>
-      <td>${m.entryId}</td>
       <td style="font-weight: bold;">${m.managerName}</td>
       <td>${m.teamName}</td>
       <td style="background:#e6ffe6; font-weight: bold; text-align: center;">${m.totalPoints.toLocaleString()}</td>
