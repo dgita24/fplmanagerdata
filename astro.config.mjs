@@ -1,6 +1,7 @@
+import { defineConfig } from 'astro/config';
 import cloudflare from "@astrojs/cloudflare";
 
-export default {
+export default defineConfig({
   output: "server",
   adapter: cloudflare({
     mode: "directory",
@@ -8,6 +9,11 @@ export default {
   vite: {
     build: {
       outDir: 'dist'
+    },
+    server: {
+      fs: {
+        strict: false
+      }
     }
   }
-};
+});

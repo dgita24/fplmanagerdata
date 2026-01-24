@@ -1,0 +1,120 @@
+---
+// Signup page
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up - FPL Manager Data</title>
+</head>
+<body>
+  <div style="max-width: 400px; margin: 100px auto; padding: 2em; border: 1px solid #e2e8f0; border-radius: 8px; background: white;">
+    <h1 style="text-align: center; color: #2d3748;">Sign Up</h1>
+    
+    <form id="signup-form">
+      <div style="margin-bottom: 1em;">
+        <label for="email" style="display: block; margin-bottom: 0.5em; font-weight: bold;">Email:</label>
+        <input type="email" id="email" required style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 14px;">
+      </div>
+      
+      <div style="margin-bottom: 1em;">
+        <label for="password" style="display: block; margin-bottom: 0.5em; font-weight: bold;">Password:</label>
+        <input type="password" id="password" required minlength="6" style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 14px;">
+        <small style="color: #718096;">Minimum 6 characters</small>
+      </div>
+      
+      <div style="margin-bottom: 1em;">
+        <label for="confirm-password" style="display: block; margin-bottom: 0.5em; font-weight: bold;">Confirm Password:</label>
+        <input type="password" id="confirm-password" required minlength="6" style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 14px;">
+      </div>
+      
+      <button type="submit" style="width: 100%; padding: 10px; background: #38a169; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer;">
+        Sign Up
+      </button>
+      
+      <div id="error-message" style="margin-top: 1em; color: #e53e3e; display: none;"></div>
+      <div id="success-message" style="margin-top: 1em; color: #38a169; display: none;"></div>
+    </form>
+    
+    <div style="margin-top: 1.5em; text-align: center;">
+      <a href="/login" style="color: #3182ce; text-decoration: none;">Already have an account? Login</a>
+    </div>
+    
+    <div style="margin-top: 1.5em; text-align: center;">
+      <a href="/" style="color: #718096; text-decoration: none; font-size: 14px;">← Back to Home</a>
+    </div>
+  </div>
+
+  <script>
+    import { createClient } from '@supabase/supabase-js'
+
+    const supabase = createClient(
+      'https://fnehvaoqqmkrhxcqslta.supabase.co',
+      'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
+    )
+
+    const form = document.getElementById('signup-form')
+    const errorMessage = document.getElementById('error-message')
+    const successMessage = document.getElementById('success-message')
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      
+      errorMessage.style.display = 'none'
+      successMessage.style.display = 'none'
+      
+      const email = document.getElementById('email').value
+      const password = document.getElementById('password').value
+      const confirmPassword = document.getElementById('confirm-password').value
+      
+      if (password !== confirmPassword) {
+        errorMessage.textContent = 'Passwords do not match'
+        errorMessage.style.display = 'block'
+        return
+      }
+      
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        }
+      })
+      
+      if (error) {
+        errorMessage.textContent = error.message
+        errorMessage.style.display = 'block'
+      } else {
+        successMessage.textContent = 'Account created! Please check your email to verify your account.'
+        successMessage.style.display = 'block'
+        
+        // Clear form
+        form.reset()
+      }
+    })
+  </script>
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f7fafc;
+      margin: 0;
+      padding: 0;
+    }
+    
+    input:focus {
+      outline: none;
+      border-color: #38a169;
+    }
+    
+    button:hover {
+      background: #2f855a;
+    }
+    
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</body>
+</html>

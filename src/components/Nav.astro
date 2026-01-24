@@ -1,11 +1,64 @@
 <nav style="padding: 1em; background: #f7fafc; border-bottom: 2px solid #e2e8f0; margin-bottom: 1.5em;">
-  <a href="/" style="margin-right: 1em; color: #2d3748; text-decoration: none; font-weight: bold;">Home</a>
-  <a href="/managers" style="margin-right: 1em; color: #2d3748; text-decoration: none; font-weight: bold;">⚙️ Managers</a>
-  <a href="/transfers" style="margin-right: 1em; color: #2d3748; text-decoration: none;">Transfers</a>
-  <a href="/chips" style="margin-right: 1em; color: #2d3748; text-decoration: none;">Chips</a>
-  <a href="/stats" style="margin-right: 1em; color: #2d3748; text-decoration: none;">Stats</a>
-  <a href="/ownership" style="margin-right: 1em; color: #2d3748; text-decoration: none;">Ownership</a>
-  <a href="/squads" style="margin-right: 1em; color: #2d3748; text-decoration: none;">Squads</a>
-  <a href="/live" style="margin-right: 1em; color: #2d3748; text-decoration: none;">🔴 Live</a>
-  <a href="/elite-insights" style="margin-right: 1em; color: #2d3748; text-decoration: none; font-weight: bold;">💎 Elite Insights</a>
+  <div style="display: flex; justify-content: space-between; align-items: center; max-width: 1400px; margin: 0 auto;">
+    <div>
+      <a href="/" style="margin-right: 1em; color: #2d3748; text-decoration: none; font-weight: bold;">Home</a>
+      <a href="/managers" style="margin-right: 1em; color: #2d3748; text-decoration: none; font-weight: bold;">⚙️ Managers</a>
+      <a href="/transfers" style="margin-right: 1em; color: #2d3748; text-decoration: none;">Transfers</a>
+      <a href="/chips" style="margin-right: 1em; color: #2d3748; text-decoration: none;">Chips</a>
+      <a href="/stats" style="margin-right: 1em; color: #2d3748; text-decoration: none;">Stats</a>
+      <a href="/ownership" style="margin-right: 1em; color: #2d3748; text-decoration: none;">Ownership</a>
+      <a href="/squads" style="margin-right: 1em; color: #2d3748; text-decoration: none;">Squads</a>
+      <a href="/live" style="margin-right: 1em; color: #2d3748; text-decoration: none;">🔴 Live</a>
+      <a href="/elite-insights" style="margin-right: 1em; color: #2d3748; text-decoration: none; font-weight: bold;">💎 Elite Insights</a>
+    </div>
+    
+    <div id="auth-section">
+      <span style="color: #718096;">Loading...</span>
+    </div>
+  </div>
 </nav>
+
+<script>
+  import { createClient } from '@supabase/supabase-js'
+
+  const supabase = createClient(
+    'https://fnehvaoqqmkrhxcqslta.supabase.co',
+    'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
+  )
+
+  const authSection = document.getElementById('auth-section')
+
+  async function updateAuthUI() {
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (user) {
+      authSection.innerHTML = `
+        <span style="margin-right: 1em; color: #2d3748;">${user.email}</span>
+        <button id="logout-btn" style="padding: 6px 12px; background: #e53e3e; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+          Logout
+        </button>
+      `
+      
+      document.getElementById('logout-btn').addEventListener('click', async () => {
+        await supabase.auth.signOut()
+        window.location.href = '/login'
+      })
+    } else {
+      authSection.innerHTML = `
+        <a href="/login" style="margin-right: 1em; padding: 6px 12px; background: #3182ce; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">
+          Login
+        </a>
+        <a href="/signup" style="padding: 6px 12px; background: #38a169; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">
+          Sign Up
+        </a>
+      `
+    }
+  }
+
+  updateAuthUI()
+
+  // Listen for auth changes
+  supabase.auth.onAuthStateChange((event, session) => {
+    updateAuthUI()
+  })
+</script>
