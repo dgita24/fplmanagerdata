@@ -13,8 +13,8 @@ import Nav from '../components/Nav.astro';
 
 <div style="margin-bottom: 1em;">
   <label>
-    <input type="checkbox" id="include-top50" checked>
-    <strong>Include World Top 50 Analysis</strong> (This may take 5-10 minutes)
+    <input type="checkbox" id="include-top50">
+    <strong>Include World Top 50 Analysis</strong> (This may take 2-3 minutes)
   </label>
 </div>
 
@@ -62,9 +62,7 @@ async function fetchBootstrapData() {
   }
 }
 
-async function fetchManagerInsights(managerId, allPlayers, allTeams) {
-  loadingStatus.textContent = `Fetching manager ${managerId}...`;
-  
+async function fetchManagerInsights(managerId, allPlayers) {
   const summaryRes = await fetch(`/api/fpl/entry/${managerId}`);
   const historyRes = await fetch(`/api/fpl/entry/${managerId}/history`);
   
@@ -75,29 +73,16 @@ async function fetchManagerInsights(managerId, allPlayers, allTeams) {
   
   const managerName = `${summary.player_first_name} ${summary.player_last_name}`;
   
-  const pointsBreakdown = {
-    goalsByPosition: { GK: 0, DEF: 0, MID: 0, FWD: 0 },
-    assistsByPosition: { GK: 0, DEF: 0, MID: 0, FWD: 0 },
-    cleanSheetsByPosition: { GK: 0, DEF: 0, MID: 0, FWD: 0 },
-    bonus: 0,
-    other: 0,
-  };
+  // Calculate formations from current GW only (much faster)
+  let formations = {};
+  let currentFormation = 'N/A';
   
-  const formations = {};
-  let totalTransfers = 0;
-  let hitsCount = 0;
-  let hitsCost = 0;
-  
-  // Process each gameweek
-  for (let gw = 1; gw <= currentGW; gw++) {
-    try {
-      const picksRes = await fetch(`/api/fpl/entry/${managerId}/event/${gw}/picks`);
-      if (!picksRes.ok) continue;
-      
+  try {
+    const picksRes = await fetch(`/api/fpl/entry/${managerId}/event/${currentGW}/picks`);
+    if (picksRes.ok) {
       const picksData = await picksRes.json();
       const picks = picksData.picks.filter(p => p.position <= 11);
       
-      // Calculate formation
       let defCount = 0, midCount = 0, fwdCount = 0;
       
       for (const pick of picks) {
@@ -109,47 +94,18 @@ async function fetchManagerInsights(managerId, allPlayers, allTeams) {
         else if (player.element_type === 4) fwdCount++;
       }
       
-      const formation = `${defCount}-${midCount}-${fwdCount}`;
-      formations[formation] = (formations[formation] || 0) + 1;
-      
-      // Process points for each player
-      for (const pick of picks) {
-        const player = allPlayers.find(p => p.id === pick.element);
-        if (!player) continue;
-        
-        const position = player.element_type === 1 ? 'GK' :
-                        player.element_type === 2 ? 'DEF' :
-                        player.element_type === 3 ? 'MID' : 'FWD';
-        
-        try {
-          const playerRes = await fetch(`/api/fpl/element-summary/${pick.element}`);
-          if (!playerRes.ok) continue;
-          
-          const playerData = await playerRes.json();
-          const gwHistory = playerData.history.find(h => h.round === gw);
-          
-          if (gwHistory) {
-            const multiplier = pick.is_captain ? (pick.multiplier || 2) : 1;
-            
-            pointsBreakdown.goalsByPosition[position] += (gwHistory.goals_scored || 0) * multiplier;
-            pointsBreakdown.assistsByPosition[position] += (gwHistory.assists || 0) * multiplier;
-            pointsBreakdown.cleanSheetsByPosition[position] += (gwHistory.clean_sheets || 0) * multiplier;
-            pointsBreakdown.bonus += (gwHistory.bonus || 0) * multiplier;
-          }
-        } catch (e) {
-          console.error(`Error fetching player ${pick.element}:`, e);
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 100)); // Rate limit
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 100)); // Rate limit
-    } catch (e) {
-      console.error(`Error processing GW ${gw}:`, e);
+      currentFormation = `${defCount}-${midCount}-${fwdCount}`;
+      formations[currentFormation] = 1;
     }
+  } catch (e) {
+    console.error(`Error fetching current picks:`, e);
   }
   
-  // Calculate transfers and hits
+  // Calculate transfers and hits from history
+  let totalTransfers = 0;
+  let hitsCount = 0;
+  let hitsCost = 0;
+  
   if (history.current) {
     for (const gwHistory of history.current) {
       totalTransfers += gwHistory.event_transfers || 0;
@@ -161,34 +117,24 @@ async function fetchManagerInsights(managerId, allPlayers, allTeams) {
     }
   }
   
-  // Find most used formation
-  const mostUsedFormation = Object.entries(formations)
-    .sort(([, a], [, b]) => b - a)[0]?.[0] || 'N/A';
-  
-  // Calculate "other" points
-  const totalFromBreakdown = 
-    Object.values(pointsBreakdown.goalsByPosition).reduce((a, b) => a + b, 0) +
-    Object.values(pointsBreakdown.assistsByPosition).reduce((a, b) => a + b, 0) +
-    Object.values(pointsBreakdown.cleanSheetsByPosition).reduce((a, b) => a + b, 0) +
-    pointsBreakdown.bonus;
-  
-  pointsBreakdown.other = summary.summary_overall_points - totalFromBreakdown;
-  
+  // Use summary stats (much faster than fetching every GW)
   return {
     managerId,
     managerName,
     totalPoints: summary.summary_overall_points,
-    pointsBreakdown,
+    overallRank: summary.summary_overall_rank,
     transfers: totalTransfers,
     hitsCount,
     hitsCost,
     formations,
-    mostUsedFormation,
+    currentFormation,
+    teamValue: summary.last_deadline_value / 10, // Convert to millions
+    bank: summary.last_deadline_bank / 10,
   };
 }
 
-async function fetchTop50() {
-  loadingStatus.textContent = "Fetching World Top 50... this will take several minutes...";
+async function fetchTop50(allPlayers) {
+  loadingStatus.textContent = "Fetching World Top 50... please wait...";
   
   const standingsRes = await fetch('/api/fpl/leagues-classic/314/standings/?page_standings=1');
   if (!standingsRes.ok) throw new Error("Failed to fetch top 50");
@@ -196,17 +142,13 @@ async function fetchTop50() {
   const standings = await standingsRes.json();
   const top50Ids = standings.standings.results.slice(0, 50).map(m => m.entry);
   
-  const bootstrapData = await fetchBootstrapData();
-  const allPlayers = bootstrapData.elements;
-  const allTeams = bootstrapData.teams;
-  
   const insights = [];
   for (let i = 0; i < top50Ids.length; i++) {
     loadingStatus.textContent = `Fetching Top 50: ${i + 1}/50 managers...`;
     try {
-      const insight = await fetchManagerInsights(top50Ids[i], allPlayers, allTeams);
+      const insight = await fetchManagerInsights(top50Ids[i], allPlayers);
       insights.push(insight);
-      await new Promise(resolve => setTimeout(resolve, 200)); // Rate limit
+      await new Promise(resolve => setTimeout(resolve, 150)); // Rate limit
     } catch (e) {
       console.error(`Error fetching top 50 manager ${top50Ids[i]}:`, e);
     }
@@ -221,28 +163,14 @@ function calculateTop50Aggregate(insights) {
   const count = insights.length;
   const allFormations = {};
   
-  const sumBreakdown = {
-    goalsByPosition: { GK: 0, DEF: 0, MID: 0, FWD: 0 },
-    assistsByPosition: { GK: 0, DEF: 0, MID: 0, FWD: 0 },
-    cleanSheetsByPosition: { GK: 0, DEF: 0, MID: 0, FWD: 0 },
-    bonus: 0,
-    other: 0,
-  };
-  
-  let sumTransfers = 0, sumHitsCount = 0, sumHitsCost = 0;
+  let sumTransfers = 0, sumHitsCount = 0, sumHitsCost = 0, sumTeamValue = 0, sumBank = 0;
   
   for (const insight of insights) {
-    ['GK', 'DEF', 'MID', 'FWD'].forEach(pos => {
-      sumBreakdown.goalsByPosition[pos] += insight.pointsBreakdown.goalsByPosition[pos];
-      sumBreakdown.assistsByPosition[pos] += insight.pointsBreakdown.assistsByPosition[pos];
-      sumBreakdown.cleanSheetsByPosition[pos] += insight.pointsBreakdown.cleanSheetsByPosition[pos];
-    });
-    sumBreakdown.bonus += insight.pointsBreakdown.bonus;
-    sumBreakdown.other += insight.pointsBreakdown.other;
-    
     sumTransfers += insight.transfers;
     sumHitsCount += insight.hitsCount;
     sumHitsCost += insight.hitsCost;
+    sumTeamValue += insight.teamValue;
+    sumBank += insight.bank;
     
     Object.entries(insight.formations).forEach(([formation, count]) => {
       allFormations[formation] = (allFormations[formation] || 0) + count;
@@ -253,76 +181,50 @@ function calculateTop50Aggregate(insights) {
     .sort(([, a], [, b]) => b - a)[0]?.[0] || 'N/A';
   
   return {
-    avgPointsBreakdown: {
-      goalsByPosition: {
-        GK: Math.round(sumBreakdown.goalsByPosition.GK / count),
-        DEF: Math.round(sumBreakdown.goalsByPosition.DEF / count),
-        MID: Math.round(sumBreakdown.goalsByPosition.MID / count),
-        FWD: Math.round(sumBreakdown.goalsByPosition.FWD / count),
-      },
-      assistsByPosition: {
-        GK: Math.round(sumBreakdown.assistsByPosition.GK / count),
-        DEF: Math.round(sumBreakdown.assistsByPosition.DEF / count),
-        MID: Math.round(sumBreakdown.assistsByPosition.MID / count),
-        FWD: Math.round(sumBreakdown.assistsByPosition.FWD / count),
-      },
-      cleanSheetsByPosition: {
-        GK: Math.round(sumBreakdown.cleanSheetsByPosition.GK / count),
-        DEF: Math.round(sumBreakdown.cleanSheetsByPosition.DEF / count),
-        MID: Math.round(sumBreakdown.cleanSheetsByPosition.MID / count),
-        FWD: Math.round(sumBreakdown.cleanSheetsByPosition.FWD / count),
-      },
-      bonus: Math.round(sumBreakdown.bonus / count),
-      other: Math.round(sumBreakdown.other / count),
-    },
     avgTransfers: Math.round(sumTransfers / count),
     avgHitsCount: Math.round(sumHitsCount / count),
     avgHitsCost: Math.round(sumHitsCost / count),
+    avgTeamValue: (sumTeamValue / count).toFixed(1),
+    avgBank: (sumBank / count).toFixed(1),
     mostCommonFormation,
     formationDistribution: allFormations,
   };
 }
 
-function renderPointsTable(breakdown) {
-  const positions = ['GK', 'DEF', 'MID', 'FWD'];
-  
-  return `
-    <table border="1" cellpadding="6" style="border-collapse:collapse; width:100%; max-width:800px;">
+function renderManagerTable(insights) {
+  let html = `
+    <table border="1" cellpadding="8" style="border-collapse:collapse; width:100%; margin-top: 1em;">
       <tr style="background:#f0f0f0">
-        <th>Category</th>
-        <th>GK</th>
-        <th>DEF</th>
-        <th>MID</th>
-        <th>FWD</th>
-        <th>Total</th>
+        <th>Manager</th>
+        <th>Total Points</th>
+        <th>Overall Rank</th>
+        <th>Transfers</th>
+        <th>Hits</th>
+        <th>Hit Cost</th>
+        <th>Current Formation</th>
+        <th>Team Value</th>
+        <th>Bank</th>
       </tr>
-      <tr>
-        <td><strong>Goals</strong></td>
-        ${positions.map(pos => `<td style="text-align:center">${breakdown.goalsByPosition[pos]}</td>`).join('')}
-        <td style="text-align:center"><strong>${Object.values(breakdown.goalsByPosition).reduce((a, b) => a + b, 0)}</strong></td>
-      </tr>
-      <tr style="background:#f9f9f9">
-        <td><strong>Assists</strong></td>
-        ${positions.map(pos => `<td style="text-align:center">${breakdown.assistsByPosition[pos]}</td>`).join('')}
-        <td style="text-align:center"><strong>${Object.values(breakdown.assistsByPosition).reduce((a, b) => a + b, 0)}</strong></td>
-      </tr>
-      <tr>
-        <td><strong>Clean Sheets</strong></td>
-        ${positions.map(pos => `<td style="text-align:center">${breakdown.cleanSheetsByPosition[pos]}</td>`).join('')}
-        <td style="text-align:center"><strong>${Object.values(breakdown.cleanSheetsByPosition).reduce((a, b) => a + b, 0)}</strong></td>
-      </tr>
-      <tr style="background:#f9f9f9">
-        <td><strong>Bonus Points</strong></td>
-        <td colspan="4" style="text-align:center">-</td>
-        <td style="text-align:center"><strong>${breakdown.bonus}</strong></td>
-      </tr>
-      <tr>
-        <td><strong>Other Points</strong></td>
-        <td colspan="4" style="text-align:center">-</td>
-        <td style="text-align:center"><strong>${breakdown.other}</strong></td>
-      </tr>
-    </table>
   `;
+  
+  for (const insight of insights) {
+    html += `
+      <tr>
+        <td><strong>${insight.managerName}</strong></td>
+        <td style="text-align:center">${insight.totalPoints.toLocaleString()}</td>
+        <td style="text-align:center">${insight.overallRank.toLocaleString()}</td>
+        <td style="text-align:center">${insight.transfers}</td>
+        <td style="text-align:center">${insight.hitsCount}</td>
+        <td style="text-align:center">-${insight.hitsCost}</td>
+        <td style="text-align:center"><strong>${insight.currentFormation}</strong></td>
+        <td style="text-align:center">£${insight.teamValue}m</td>
+        <td style="text-align:center">£${insight.bank}m</td>
+      </tr>
+    `;
+  }
+  
+  html += `</table>`;
+  return html;
 }
 
 async function fetchAndDisplayInsights() {
@@ -336,38 +238,59 @@ async function fetchAndDisplayInsights() {
   
   out.innerHTML = "";
   loadingStatus.textContent = "Initializing...";
+  fetchBtn.disabled = true;
+  refreshBtn.disabled = true;
   
   try {
     const bootstrapData = await fetchBootstrapData();
     const allPlayers = bootstrapData.elements;
-    const allTeams = bootstrapData.teams;
     
     let html = "";
     
     // Top 50 Analysis
     if (includeTop50) {
-      const top50Insights = await fetchTop50();
+      const top50Insights = await fetchTop50(allPlayers);
       const aggregate = calculateTop50Aggregate(top50Insights);
       
       if (aggregate) {
         html += `
           <div style="background: linear-gradient(to right, #fef3c7, #fde68a); padding: 1.5em; border-radius: 8px; border: 2px solid #f59e0b; margin-bottom: 2em;">
-            <h2 style="color: #92400e;">🏆 World Top 50 Average (GW ${currentGW})</h2>
-            <h3>Points Distribution</h3>
-            ${renderPointsTable(aggregate.avgPointsBreakdown)}
+            <h2 style="color: #92400e;">🏆 World Top 50 Averages (GW ${currentGW})</h2>
             
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1em; margin-top: 1em;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1em; margin-top: 1em;">
               <div style="background: white; padding: 1em; border-radius: 4px;">
-                <p style="color: #666; font-size: 14px;">Average Transfers</p>
-                <p style="font-size: 24px; font-weight: bold;">${aggregate.avgTransfers}</p>
+                <p style="color: #666; font-size: 14px; margin: 0;">Average Transfers</p>
+                <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">${aggregate.avgTransfers}</p>
               </div>
               <div style="background: white; padding: 1em; border-radius: 4px;">
-                <p style="color: #666; font-size: 14px;">Average Hits Taken</p>
-                <p style="font-size: 24px; font-weight: bold;">${aggregate.avgHitsCount} (-${aggregate.avgHitsCost} pts)</p>
+                <p style="color: #666; font-size: 14px; margin: 0;">Average Hits</p>
+                <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">${aggregate.avgHitsCount} (-${aggregate.avgHitsCost} pts)</p>
               </div>
               <div style="background: white; padding: 1em; border-radius: 4px;">
-                <p style="color: #666; font-size: 14px;">Most Common Formation</p>
-                <p style="font-size: 28px; font-weight: bold; color: #3182ce;">${aggregate.mostCommonFormation}</p>
+                <p style="color: #666; font-size: 14px; margin: 0;">Most Common Formation</p>
+                <p style="font-size: 28px; font-weight: bold; color: #3182ce; margin: 0.5em 0 0 0;">${aggregate.mostCommonFormation}</p>
+              </div>
+              <div style="background: white; padding: 1em; border-radius: 4px;">
+                <p style="color: #666; font-size: 14px; margin: 0;">Avg Team Value</p>
+                <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">£${aggregate.avgTeamValue}m</p>
+              </div>
+              <div style="background: white; padding: 1em; border-radius: 4px;">
+                <p style="color: #666; font-size: 14px; margin: 0;">Avg Bank</p>
+                <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">£${aggregate.avgBank}m</p>
+              </div>
+            </div>
+            
+            <div style="margin-top: 1.5em; background: white; padding: 1em; border-radius: 4px;">
+              <p style="color: #666; font-size: 14px; margin: 0 0 0.5em 0;">Formation Distribution:</p>
+              <div style="display: flex; flex-wrap: wrap; gap: 0.5em;">
+                ${Object.entries(aggregate.formationDistribution)
+                  .sort(([, a], [, b]) => b - a)
+                  .slice(0, 5)
+                  .map(([formation, count]) => 
+                    `<span style="display: inline-block; background: #e6f2ff; padding: 6px 12px; border-radius: 4px; font-size: 14px;">
+                      ${formation}: ${count} managers
+                    </span>`
+                  ).join('')}
               </div>
             </div>
           </div>
@@ -379,58 +302,23 @@ async function fetchAndDisplayInsights() {
     if (managerIds.length > 0) {
       html += `<h2>Your Tracked Managers</h2>`;
       
+      const userInsights = [];
       for (let i = 0; i < managerIds.length; i++) {
         loadingStatus.textContent = `Fetching your managers: ${i + 1}/${managerIds.length}...`;
         
         try {
-          const insight = await fetchManagerInsights(managerIds[i], allPlayers, allTeams);
-          
-          html += `
-            <div style="background: white; padding: 1.5em; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 1.5em;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
-                <h3 style="margin: 0;">${insight.managerName}</h3>
-                <span style="font-size: 24px; font-weight: bold; color: #38a169;">${insight.totalPoints} pts</span>
-              </div>
-              
-              <h4>Points Distribution</h4>
-              ${renderPointsTable(insight.pointsBreakdown)}
-              
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1em; margin-top: 1em;">
-                <div style="background: #f7fafc; padding: 1em; border-radius: 4px;">
-                  <p style="color: #666; font-size: 12px;">Total Transfers</p>
-                  <p style="font-size: 20px; font-weight: bold;">${insight.transfers}</p>
-                </div>
-                <div style="background: #f7fafc; padding: 1em; border-radius: 4px;">
-                  <p style="color: #666; font-size: 12px;">Hits Taken</p>
-                  <p style="font-size: 20px; font-weight: bold;">${insight.hitsCount} (-${insight.hitsCost} pts)</p>
-                </div>
-                <div style="background: #f7fafc; padding: 1em; border-radius: 4px;">
-                  <p style="color: #666; font-size: 12px;">Most Used Formation</p>
-                  <p style="font-size: 20px; font-weight: bold; color: #3182ce;">${insight.mostUsedFormation}</p>
-                </div>
-              </div>
-              
-              <div style="margin-top: 1em;">
-                <p style="color: #666; font-size: 12px; margin-bottom: 0.5em;">Formation Usage:</p>
-                <div>
-                  ${Object.entries(insight.formations)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([formation, count]) => 
-                      `<span style="display: inline-block; background: #e6f2ff; padding: 4px 8px; border-radius: 4px; margin-right: 8px; margin-bottom: 4px; font-size: 12px;">
-                        ${formation}: ${count} GW${count !== 1 ? 's' : ''}
-                      </span>`
-                    ).join('')}
-                </div>
-              </div>
-            </div>
-          `;
-          
-          await new Promise(resolve => setTimeout(resolve, 200)); // Rate limit
+          const insight = await fetchManagerInsights(managerIds[i], allPlayers);
+          userInsights.push(insight);
+          await new Promise(resolve => setTimeout(resolve, 150)); // Rate limit
         } catch (e) {
           console.error(`Error fetching manager ${managerIds[i]}:`, e);
-          html += `<p style="color: red;">Error loading manager ${managerIds[i]}</p>`;
         }
       }
+      
+      // Sort by total points descending
+      userInsights.sort((a, b) => b.totalPoints - a.totalPoints);
+      
+      html += renderManagerTable(userInsights);
     }
     
     out.innerHTML = html;
@@ -439,6 +327,10 @@ async function fetchAndDisplayInsights() {
   } catch (error) {
     console.error("Error:", error);
     loadingStatus.textContent = `❌ Error: ${error.message}`;
+    out.innerHTML = `<p style="color: red;">Error: ${error.message}. Check console for details.</p>`;
+  } finally {
+    fetchBtn.disabled = false;
+    refreshBtn.disabled = false;
   }
 }
 
@@ -456,7 +348,7 @@ async function fetchAndDisplayInsights() {
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     padding: 2em;
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto;
   }
   
@@ -467,5 +359,13 @@ async function fetchAndDisplayInsights() {
   button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+  
+  table {
+    font-size: 14px;
+  }
+  
+  table th {
+    font-weight: 600;
   }
 </style>
