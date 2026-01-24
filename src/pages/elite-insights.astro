@@ -23,13 +23,75 @@ import Nav from '../components/Nav.astro';
 
 <div id="insights-output" style="margin-top:1.5em"></div>
 
-<script type="module">
+<script>
 const SUPABASE_URL = 'https://fnehvaoqqmkrhxcqslta.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK';
 
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+// Simple Supabase client without the library
+function createSupabaseClient(url, key) {
+  return {
+    from: (table) => ({
+      select: (columns = '*') => ({
+        eq: (column, value) => ({
+          single: async () => {
+            const response = await fetch(
+              `${url}/rest/v1/${table}?select=${columns}&${column}=eq.${value}&limit=1`,
+              {
+                headers: {
+                  'apikey': key,
+                  'Authorization': `Bearer ${key}`
+                }
+              }
+            );
+            const data = await response.json();
+            if (!response.ok) return { data: null, error: data };
+            return { data: data[0] || null, error: null };
+          },
+          order: (column, opts) => ({
+            limit: (num) => ({
+              single: async () => {
+                const order = opts.ascending ? 'asc' : 'desc';
+                const response = await fetch(
+                  `${url}/rest/v1/${table}?select=${columns}&order=${column}.${order}&limit=${num}`,
+                  {
+                    headers: {
+                      'apikey': key,
+                      'Authorization': `Bearer ${key}`
+                    }
+                  }
+                );
+                const data = await response.json();
+                if (!response.ok) return { data: null, error: data };
+                return { data: data[0] || null, error: null };
+              }
+            })
+          })
+        }),
+        order: (column, opts) => ({
+          limit: (num) => ({
+            single: async () => {
+              const order = opts.ascending ? 'asc' : 'desc';
+              const response = await fetch(
+                `${url}/rest/v1/${table}?select=${columns}&order=${column}.${order}&limit=${num}`,
+                {
+                  headers: {
+                    'apikey': key,
+                    'Authorization': `Bearer ${key}`
+                  }
+                }
+              );
+              const data = await response.json();
+              if (!response.ok) return { data: null, error: data };
+              return { data: data[0] || null, error: null };
+            }
+          })
+        })
+      })
+    })
+  };
+}
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createSupabaseClient(SUPABASE_URL, SUPABASE_KEY);
 
 function loadManagerIds() {
   try {
@@ -234,7 +296,6 @@ async function displayCustomManagers() {
     </p>
   `;
   
-  // For now, show a message that custom manager fetching needs to be implemented
   out.innerHTML = `
     <div style="background: #fffbeb; padding: 1.5em; border-radius: 8px; border: 2px solid #f59e0b;">
       <h3 style="margin-top: 0;">🚧 Custom Manager Insights - Coming Soon</h3>
@@ -266,7 +327,6 @@ async function updateView() {
     updateView();
   });
   
-  // Load initial view
   await updateView();
 })();
 </script>
