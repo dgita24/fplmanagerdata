@@ -34,15 +34,12 @@ async function fetchLiveData() {
   refreshBtn.textContent = "Loading...";
 
   try {
-    console.log("Fetching bootstrap data...");
     // Get current gameweek
-    const bootstrapRes = await fetch("https://fantasy.premierleague.com/api/bootstrap-static/");
+    const bootstrapRes = await fetch("/api/fpl/bootstrap-static");
     if (!bootstrapRes.ok) throw new Error("Failed to fetch bootstrap data");
     
     const bootstrap = await bootstrapRes.json();
     const currentGW = bootstrap.events.find(e => e.is_current)?.id;
-
-    console.log("Current GW:", currentGW);
 
     if (!currentGW) {
       out.innerHTML = "<p>No active gameweek found.</p>";
@@ -57,19 +54,15 @@ async function fetchLiveData() {
       playerMap[p.id] = p.web_name;
     });
 
-    console.log("Fetching manager data for", ids.length, "managers");
-
     // Fetch all manager data
     const managerData = await Promise.all(
       ids.map(async (id) => {
         try {
-          console.log("Fetching manager", id);
-          
-          const entryRes = await fetch(`https://fantasy.premierleague.com/api/entry/${id}/`);
+          const entryRes = await fetch(`/api/fpl/entry/${id}`);
           if (!entryRes.ok) throw new Error(`Failed to fetch entry for ${id}`);
           const entry = await entryRes.json();
 
-          const picksRes = await fetch(`https://fantasy.premierleague.com/api/entry/${id}/event/${currentGW}/picks/`);
+          const picksRes = await fetch(`/api/fpl/entry/${id}/event/${currentGW}/picks`);
           if (!picksRes.ok) throw new Error(`Failed to fetch picks for ${id}`);
           const picks = await picksRes.json();
 
@@ -92,10 +85,8 @@ async function fetchLiveData() {
 
     const validManagers = managerData.filter(m => m !== null);
 
-    console.log("Valid managers:", validManagers.length);
-
     if (validManagers.length === 0) {
-      out.innerHTML = "<p style='color: red;'>Failed to load any manager data. Check console for errors.</p>";
+      out.innerHTML = "<p style='color: red;'>Failed to load any manager data.</p>";
       refreshBtn.disabled = false;
       refreshBtn.textContent = "🔄 Refresh Data";
       return;
@@ -146,7 +137,7 @@ async function fetchLiveData() {
 
   } catch (error) {
     console.error("Error fetching live data:", error);
-    out.innerHTML = `<p style='color: red;'>Error loading data: ${error.message}. Please try again.</p>`;
+    out.innerHTML = `<p style='color: red;'>Error loading data: ${error.message}</p>`;
   } finally {
     refreshBtn.disabled = false;
     refreshBtn.textContent = "🔄 Refresh Data";
@@ -154,19 +145,11 @@ async function fetchLiveData() {
 }
 
 refreshBtn.addEventListener("click", fetchLiveData);
-
-// Auto-load on page load
 fetchLiveData();
 </script>
 
 <style>
-  table {
-    font-size: 14px;
-  }
-  th {
-    font-weight: 600;
-  }
-  a:hover {
-    text-decoration: underline !important;
-  }
+  table { font-size: 14px; }
+  th { font-weight: 600; }
+  a:hover { text-decoration: underline !important; }
 </style>
