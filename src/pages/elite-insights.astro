@@ -6,31 +6,31 @@ import Nav from '../components/Nav.astro';
 <h1>🏆 Elite Manager Insights</h1>
 <p>Premium statistics: points distribution, transfer patterns, and formations used by top managers vs. your tracked managers.</p>
 
-<div style="margin-bottom: 1em;">
-  <span id="manager-count" style="font-weight: bold;">Loading managers...</span>
+<div style="margin-bottom: 1.5em;">
+  <label for="view-select" style="font-weight: bold; margin-right: 0.5em;">View:</label>
+  <select id="view-select" style="padding: 8px 12px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc;">
+    <option value="top50">World Top 50</option>
+    <option value="custom">My Custom Managers</option>
+  </select>
+  
+  <span id="manager-count" style="margin-left: 1.5em; color: #666;"></span>
   <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
 </div>
 
-<div style="margin-bottom: 1em;">
-  <label>
-    <input type="checkbox" id="include-top50">
-    <strong>Include World Top 50 Analysis</strong> (This may take 2-3 minutes)
-  </label>
+<div id="data-status" style="margin-bottom: 1em; padding: 1em; background: #f0f9ff; border-radius: 4px; border-left: 4px solid #3182ce;">
+  <p style="margin: 0; color: #1e40af;">Loading...</p>
 </div>
 
-<div style="margin-bottom: 1em;">
-  <button id="fetch-btn" style="padding: 8px 16px; font-size: 16px; background: #38a169; color: white; border: none; border-radius: 4px; cursor: pointer;">
-    Fetch Elite Insights
-  </button>
-  <button id="refresh-btn" style="padding: 8px 16px; font-size: 16px; margin-left: 0.5em;">
-    🔄 Refresh
-  </button>
-</div>
-
-<div id="loading-status" style="margin-bottom: 1em; color: #666;"></div>
 <div id="insights-output" style="margin-top:1.5em"></div>
 
 <script type="module">
+const SUPABASE_URL = 'https://fnehvaoqqmkrhxcqslta.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK';
+
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
 function loadManagerIds() {
   try {
     return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
@@ -40,307 +40,234 @@ function loadManagerIds() {
 }
 
 const out = document.getElementById("insights-output");
-const loadingStatus = document.getElementById("loading-status");
+const dataStatus = document.getElementById("data-status");
 const managerCountEl = document.getElementById("manager-count");
-const fetchBtn = document.getElementById("fetch-btn");
-const refreshBtn = document.getElementById("refresh-btn");
-const includeTop50Checkbox = document.getElementById("include-top50");
+const viewSelect = document.getElementById("view-select");
 
-let currentGW = 1;
+let currentView = 'top50';
+let latestGW = null;
 
-async function fetchBootstrapData() {
-  try {
-    const res = await fetch('/api/fpl/bootstrap-static');
-    if (!res.ok) throw new Error("Failed to fetch bootstrap data");
-    const data = await res.json();
-    const currentEvent = data.events.find(e => e.is_current);
-    currentGW = currentEvent ? currentEvent.id : 1;
-    return data;
-  } catch (e) {
-    console.error("Error fetching bootstrap:", e);
+async function fetchLatestGW() {
+  const { data, error } = await supabase
+    .from('top_50_aggregates')
+    .select('gameweek, data_fetched_at')
+    .order('gameweek', { ascending: false })
+    .limit(1)
+    .single();
+  
+  if (error) {
+    console.error('Error fetching latest GW:', error);
     return null;
   }
+  
+  return data;
 }
 
-async function fetchManagerInsights(managerId, allPlayers) {
-  const summaryRes = await fetch(`/api/fpl/entry/${managerId}`);
-  const historyRes = await fetch(`/api/fpl/entry/${managerId}/history`);
+function renderPointsTable(data, isAverage = false) {
+  const positions = ['GK', 'DEF', 'MID', 'FWD'];
+  const prefix = isAverage ? 'avg_' : '';
   
-  if (!summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch manager data");
-  
-  const summary = await summaryRes.json();
-  const history = await historyRes.json();
-  
-  const managerName = `${summary.player_first_name} ${summary.player_last_name}`;
-  
-  // Calculate formations from current GW only (much faster)
-  let formations = {};
-  let currentFormation = 'N/A';
-  
-  try {
-    const picksRes = await fetch(`/api/fpl/entry/${managerId}/event/${currentGW}/picks`);
-    if (picksRes.ok) {
-      const picksData = await picksRes.json();
-      const picks = picksData.picks.filter(p => p.position <= 11);
-      
-      let defCount = 0, midCount = 0, fwdCount = 0;
-      
-      for (const pick of picks) {
-        const player = allPlayers.find(p => p.id === pick.element);
-        if (!player) continue;
-        
-        if (player.element_type === 2) defCount++;
-        else if (player.element_type === 3) midCount++;
-        else if (player.element_type === 4) fwdCount++;
-      }
-      
-      currentFormation = `${defCount}-${midCount}-${fwdCount}`;
-      formations[currentFormation] = 1;
-    }
-  } catch (e) {
-    console.error(`Error fetching current picks:`, e);
-  }
-  
-  // Calculate transfers and hits from history
-  let totalTransfers = 0;
-  let hitsCount = 0;
-  let hitsCost = 0;
-  
-  if (history.current) {
-    for (const gwHistory of history.current) {
-      totalTransfers += gwHistory.event_transfers || 0;
-      const cost = gwHistory.event_transfers_cost || 0;
-      if (cost > 0) {
-        hitsCount += Math.floor(cost / 4);
-        hitsCost += cost;
-      }
-    }
-  }
-  
-  // Use summary stats (much faster than fetching every GW)
-  return {
-    managerId,
-    managerName,
-    totalPoints: summary.summary_overall_points,
-    overallRank: summary.summary_overall_rank,
-    transfers: totalTransfers,
-    hitsCount,
-    hitsCost,
-    formations,
-    currentFormation,
-    teamValue: summary.last_deadline_value / 10, // Convert to millions
-    bank: summary.last_deadline_bank / 10,
+  const goals = {
+    GK: data[`${prefix}goals_gk`] || 0,
+    DEF: data[`${prefix}goals_def`] || 0,
+    MID: data[`${prefix}goals_mid`] || 0,
+    FWD: data[`${prefix}goals_fwd`] || 0,
   };
-}
-
-async function fetchTop50(allPlayers) {
-  loadingStatus.textContent = "Fetching World Top 50... please wait...";
   
-  const standingsRes = await fetch('/api/fpl/leagues-classic/314/standings/?page_standings=1');
-  if (!standingsRes.ok) throw new Error("Failed to fetch top 50");
-  
-  const standings = await standingsRes.json();
-  const top50Ids = standings.standings.results.slice(0, 50).map(m => m.entry);
-  
-  const insights = [];
-  for (let i = 0; i < top50Ids.length; i++) {
-    loadingStatus.textContent = `Fetching Top 50: ${i + 1}/50 managers...`;
-    try {
-      const insight = await fetchManagerInsights(top50Ids[i], allPlayers);
-      insights.push(insight);
-      await new Promise(resolve => setTimeout(resolve, 150)); // Rate limit
-    } catch (e) {
-      console.error(`Error fetching top 50 manager ${top50Ids[i]}:`, e);
-    }
-  }
-  
-  return insights;
-}
-
-function calculateTop50Aggregate(insights) {
-  if (insights.length === 0) return null;
-  
-  const count = insights.length;
-  const allFormations = {};
-  
-  let sumTransfers = 0, sumHitsCount = 0, sumHitsCost = 0, sumTeamValue = 0, sumBank = 0;
-  
-  for (const insight of insights) {
-    sumTransfers += insight.transfers;
-    sumHitsCount += insight.hitsCount;
-    sumHitsCost += insight.hitsCost;
-    sumTeamValue += insight.teamValue;
-    sumBank += insight.bank;
-    
-    Object.entries(insight.formations).forEach(([formation, count]) => {
-      allFormations[formation] = (allFormations[formation] || 0) + count;
-    });
-  }
-  
-  const mostCommonFormation = Object.entries(allFormations)
-    .sort(([, a], [, b]) => b - a)[0]?.[0] || 'N/A';
-  
-  return {
-    avgTransfers: Math.round(sumTransfers / count),
-    avgHitsCount: Math.round(sumHitsCount / count),
-    avgHitsCost: Math.round(sumHitsCost / count),
-    avgTeamValue: (sumTeamValue / count).toFixed(1),
-    avgBank: (sumBank / count).toFixed(1),
-    mostCommonFormation,
-    formationDistribution: allFormations,
+  const assists = {
+    GK: data[`${prefix}assists_gk`] || 0,
+    DEF: data[`${prefix}assists_def`] || 0,
+    MID: data[`${prefix}assists_mid`] || 0,
+    FWD: data[`${prefix}assists_fwd`] || 0,
   };
-}
-
-function renderManagerTable(insights) {
-  let html = `
+  
+  const cleanSheets = {
+    GK: data[`${prefix}cs_gk`] || 0,
+    DEF: data[`${prefix}cs_def`] || 0,
+    MID: data[`${prefix}cs_mid`] || 0,
+    FWD: data[`${prefix}cs_fwd`] || 0,
+  };
+  
+  const bonus = data[`${prefix}bonus_points`] || 0;
+  const other = data[`${prefix}other_points`] || 0;
+  
+  const totalGoals = Object.values(goals).reduce((a, b) => a + b, 0);
+  const totalAssists = Object.values(assists).reduce((a, b) => a + b, 0);
+  const totalCS = Object.values(cleanSheets).reduce((a, b) => a + b, 0);
+  
+  return `
     <table border="1" cellpadding="8" style="border-collapse:collapse; width:100%; margin-top: 1em;">
       <tr style="background:#f0f0f0">
-        <th>Manager</th>
-        <th>Total Points</th>
-        <th>Overall Rank</th>
-        <th>Transfers</th>
-        <th>Hits</th>
-        <th>Hit Cost</th>
-        <th>Current Formation</th>
-        <th>Team Value</th>
-        <th>Bank</th>
+        <th>Category</th>
+        <th>GK</th>
+        <th>DEF</th>
+        <th>MID</th>
+        <th>FWD</th>
+        <th>Total</th>
       </tr>
-  `;
-  
-  for (const insight of insights) {
-    html += `
       <tr>
-        <td><strong>${insight.managerName}</strong></td>
-        <td style="text-align:center">${insight.totalPoints.toLocaleString()}</td>
-        <td style="text-align:center">${insight.overallRank.toLocaleString()}</td>
-        <td style="text-align:center">${insight.transfers}</td>
-        <td style="text-align:center">${insight.hitsCount}</td>
-        <td style="text-align:center">-${insight.hitsCost}</td>
-        <td style="text-align:center"><strong>${insight.currentFormation}</strong></td>
-        <td style="text-align:center">£${insight.teamValue}m</td>
-        <td style="text-align:center">£${insight.bank}m</td>
+        <td><strong>Goals</strong></td>
+        ${positions.map(pos => `<td style="text-align:center">${goals[pos]}</td>`).join('')}
+        <td style="text-align:center"><strong>${totalGoals}</strong></td>
       </tr>
-    `;
-  }
-  
-  html += `</table>`;
-  return html;
+      <tr style="background:#f9f9f9">
+        <td><strong>Assists</strong></td>
+        ${positions.map(pos => `<td style="text-align:center">${assists[pos]}</td>`).join('')}
+        <td style="text-align:center"><strong>${totalAssists}</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Clean Sheets</strong></td>
+        ${positions.map(pos => `<td style="text-align:center">${cleanSheets[pos]}</td>`).join('')}
+        <td style="text-align:center"><strong>${totalCS}</strong></td>
+      </tr>
+      <tr style="background:#f9f9f9">
+        <td><strong>Bonus Points</strong></td>
+        <td colspan="4" style="text-align:center">-</td>
+        <td style="text-align:center"><strong>${bonus}</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Other Points</strong></td>
+        <td colspan="4" style="text-align:center">-</td>
+        <td style="text-align:center"><strong>${other}</strong></td>
+      </tr>
+    </table>
+  `;
 }
 
-async function fetchAndDisplayInsights() {
-  const managerIds = loadManagerIds();
-  const includeTop50 = includeTop50Checkbox.checked;
+async function displayTop50() {
+  out.innerHTML = '<p style="color: #666;">Loading Top 50 data...</p>';
   
-  if (managerIds.length === 0 && !includeTop50) {
-    loadingStatus.textContent = "Please add manager IDs or include Top 50 analysis.";
+  const gwInfo = await fetchLatestGW();
+  if (!gwInfo) {
+    out.innerHTML = '<p style="color: red;">❌ No Top 50 data available yet. The automated job will fetch it after the next gameweek finishes.</p>';
     return;
   }
   
-  out.innerHTML = "";
-  loadingStatus.textContent = "Initializing...";
-  fetchBtn.disabled = true;
-  refreshBtn.disabled = true;
+  latestGW = gwInfo.gameweek;
+  const fetchDate = new Date(gwInfo.data_fetched_at).toLocaleString();
   
-  try {
-    const bootstrapData = await fetchBootstrapData();
-    const allPlayers = bootstrapData.elements;
-    
-    let html = "";
-    
-    // Top 50 Analysis
-    if (includeTop50) {
-      const top50Insights = await fetchTop50(allPlayers);
-      const aggregate = calculateTop50Aggregate(top50Insights);
+  dataStatus.innerHTML = `
+    <p style="margin: 0; color: #1e40af;">
+      📊 Showing data for <strong>GW ${latestGW}</strong> | 
+      Last updated: <strong>${fetchDate}</strong>
+    </p>
+  `;
+  
+  const { data: aggregate, error } = await supabase
+    .from('top_50_aggregates')
+    .select('*')
+    .eq('gameweek', latestGW)
+    .single();
+  
+  if (error) {
+    console.error('Error fetching aggregate:', error);
+    out.innerHTML = '<p style="color: red;">Error loading data.</p>';
+    return;
+  }
+  
+  let html = `
+    <div style="background: linear-gradient(to right, #fef3c7, #fde68a); padding: 1.5em; border-radius: 8px; border: 2px solid #f59e0b; margin-bottom: 2em;">
+      <h2 style="color: #92400e; margin-top: 0;">🏆 World Top 50 Averages (GW ${latestGW})</h2>
+      <p style="color: #92400e; margin-bottom: 1em;">Based on ${aggregate.managers_analyzed} managers</p>
       
-      if (aggregate) {
-        html += `
-          <div style="background: linear-gradient(to right, #fef3c7, #fde68a); padding: 1.5em; border-radius: 8px; border: 2px solid #f59e0b; margin-bottom: 2em;">
-            <h2 style="color: #92400e;">🏆 World Top 50 Averages (GW ${currentGW})</h2>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1em; margin-top: 1em;">
-              <div style="background: white; padding: 1em; border-radius: 4px;">
-                <p style="color: #666; font-size: 14px; margin: 0;">Average Transfers</p>
-                <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">${aggregate.avgTransfers}</p>
-              </div>
-              <div style="background: white; padding: 1em; border-radius: 4px;">
-                <p style="color: #666; font-size: 14px; margin: 0;">Average Hits</p>
-                <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">${aggregate.avgHitsCount} (-${aggregate.avgHitsCost} pts)</p>
-              </div>
-              <div style="background: white; padding: 1em; border-radius: 4px;">
-                <p style="color: #666; font-size: 14px; margin: 0;">Most Common Formation</p>
-                <p style="font-size: 28px; font-weight: bold; color: #3182ce; margin: 0.5em 0 0 0;">${aggregate.mostCommonFormation}</p>
-              </div>
-              <div style="background: white; padding: 1em; border-radius: 4px;">
-                <p style="color: #666; font-size: 14px; margin: 0;">Avg Team Value</p>
-                <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">£${aggregate.avgTeamValue}m</p>
-              </div>
-              <div style="background: white; padding: 1em; border-radius: 4px;">
-                <p style="color: #666; font-size: 14px; margin: 0;">Avg Bank</p>
-                <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">£${aggregate.avgBank}m</p>
-              </div>
-            </div>
-            
-            <div style="margin-top: 1.5em; background: white; padding: 1em; border-radius: 4px;">
-              <p style="color: #666; font-size: 14px; margin: 0 0 0.5em 0;">Formation Distribution:</p>
-              <div style="display: flex; flex-wrap: wrap; gap: 0.5em;">
-                ${Object.entries(aggregate.formationDistribution)
-                  .sort(([, a], [, b]) => b - a)
-                  .slice(0, 5)
-                  .map(([formation, count]) => 
-                    `<span style="display: inline-block; background: #e6f2ff; padding: 6px 12px; border-radius: 4px; font-size: 14px;">
-                      ${formation}: ${count} managers
-                    </span>`
-                  ).join('')}
-              </div>
-            </div>
-          </div>
-        `;
-      }
-    }
-    
-    // User Managers
-    if (managerIds.length > 0) {
-      html += `<h2>Your Tracked Managers</h2>`;
+      <h3 style="color: #92400e;">Points Distribution</h3>
+      ${renderPointsTable(aggregate, true)}
       
-      const userInsights = [];
-      for (let i = 0; i < managerIds.length; i++) {
-        loadingStatus.textContent = `Fetching your managers: ${i + 1}/${managerIds.length}...`;
-        
-        try {
-          const insight = await fetchManagerInsights(managerIds[i], allPlayers);
-          userInsights.push(insight);
-          await new Promise(resolve => setTimeout(resolve, 150)); // Rate limit
-        } catch (e) {
-          console.error(`Error fetching manager ${managerIds[i]}:`, e);
-        }
-      }
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1em; margin-top: 1.5em;">
+        <div style="background: white; padding: 1em; border-radius: 4px;">
+          <p style="color: #666; font-size: 14px; margin: 0;">Average Transfers</p>
+          <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">${aggregate.avg_transfers}</p>
+        </div>
+        <div style="background: white; padding: 1em; border-radius: 4px;">
+          <p style="color: #666; font-size: 14px; margin: 0;">Average Hits</p>
+          <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">${aggregate.avg_hits_count} (-${aggregate.avg_hits_cost} pts)</p>
+        </div>
+        <div style="background: white; padding: 1em; border-radius: 4px;">
+          <p style="color: #666; font-size: 14px; margin: 0;">Most Common Formation</p>
+          <p style="font-size: 28px; font-weight: bold; color: #3182ce; margin: 0.5em 0 0 0;">${aggregate.most_common_formation}</p>
+        </div>
+      </div>
       
-      // Sort by total points descending
-      userInsights.sort((a, b) => b.totalPoints - a.totalPoints);
-      
-      html += renderManagerTable(userInsights);
-    }
-    
-    out.innerHTML = html;
-    loadingStatus.textContent = "✅ Complete!";
-    
-  } catch (error) {
-    console.error("Error:", error);
-    loadingStatus.textContent = `❌ Error: ${error.message}`;
-    out.innerHTML = `<p style="color: red;">Error: ${error.message}. Check console for details.</p>`;
-  } finally {
-    fetchBtn.disabled = false;
-    refreshBtn.disabled = false;
+      <div style="margin-top: 1.5em; background: white; padding: 1em; border-radius: 4px;">
+        <p style="color: #666; font-size: 14px; margin: 0 0 0.5em 0;">Formation Distribution (Top 5):</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5em;">
+          ${Object.entries(aggregate.formation_distribution || {})
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5)
+            .map(([formation, count]) => 
+              `<span style="display: inline-block; background: #e6f2ff; padding: 6px 12px; border-radius: 4px; font-size: 14px;">
+                ${formation}: ${count} uses
+              </span>`
+            ).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+  
+  out.innerHTML = html;
+}
+
+async function displayCustomManagers() {
+  const managerIds = loadManagerIds();
+  
+  if (managerIds.length === 0) {
+    out.innerHTML = '<p style="color: #666;">No custom managers added yet. <a href="/managers">Add manager IDs</a> to see their insights.</p>';
+    return;
+  }
+  
+  out.innerHTML = '<p style="color: #666;">Loading your managers...</p>';
+  
+  const gwInfo = await fetchLatestGW();
+  if (!gwInfo) {
+    out.innerHTML = '<p style="color: red;">❌ No data available yet. Data will be fetched automatically after gameweeks finish.</p>';
+    return;
+  }
+  
+  latestGW = gwInfo.gameweek;
+  const fetchDate = new Date(gwInfo.data_fetched_at).toLocaleString();
+  
+  dataStatus.innerHTML = `
+    <p style="margin: 0; color: #1e40af;">
+      📊 Showing data for <strong>GW ${latestGW}</strong> | 
+      Last updated: <strong>${fetchDate}</strong> |
+      <span style="color: #dc2626;">⚠️ Custom manager data needs to be fetched on-demand (feature coming soon)</span>
+    </p>
+  `;
+  
+  // For now, show a message that custom manager fetching needs to be implemented
+  out.innerHTML = `
+    <div style="background: #fffbeb; padding: 1.5em; border-radius: 8px; border: 2px solid #f59e0b;">
+      <h3 style="margin-top: 0;">🚧 Custom Manager Insights - Coming Soon</h3>
+      <p>Your tracked managers (${managerIds.length} total):</p>
+      <ul>
+        ${managerIds.slice(0, 10).map(id => `<li>Manager ID: ${id}</li>`).join('')}
+        ${managerIds.length > 10 ? `<li><em>...and ${managerIds.length - 10} more</em></li>` : ''}
+      </ul>
+      <p><strong>Next step:</strong> We need to add a feature to fetch your custom managers' data on-demand. This will work similarly to the Top 50 but for your specific list.</p>
+    </div>
+  `;
+}
+
+async function updateView() {
+  if (currentView === 'top50') {
+    await displayTop50();
+  } else {
+    await displayCustomManagers();
   }
 }
 
 // Initialize
 (async function init() {
   const ids = loadManagerIds();
-  managerCountEl.textContent = `${ids.length} manager${ids.length !== 1 ? 's' : ''} loaded`;
+  managerCountEl.textContent = `(${ids.length} manager${ids.length !== 1 ? 's' : ''} tracked)`;
   
-  fetchBtn.onclick = fetchAndDisplayInsights;
-  refreshBtn.onclick = fetchAndDisplayInsights;
+  viewSelect.addEventListener('change', () => {
+    currentView = viewSelect.value;
+    updateView();
+  });
+  
+  // Load initial view
+  await updateView();
 })();
 </script>
 
@@ -350,15 +277,6 @@ async function fetchAndDisplayInsights() {
     padding: 2em;
     max-width: 1400px;
     margin: 0 auto;
-  }
-  
-  button:hover {
-    opacity: 0.9;
-  }
-  
-  button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
   
   table {
