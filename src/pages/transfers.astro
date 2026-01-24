@@ -1,15 +1,25 @@
 ---
 import Nav from '../components/Nav.astro';
 ---
+
 <Nav />
-<h1>🔄 Transfers Tracker</h1>
-<p>Track all manager transfers</p>
+<h1>Transfers & Free Transfers (FTs) for Next GW</h1>
+<p>Display calculated FTs for next GW for all managers.</p>
 
-<button id="fetch-btn" style="padding: 10px 20px; margin-bottom: 1em; background: #3182ce; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
-  Fetch Latest Transfers
-</button>
+<div style="margin-bottom: 1em;">
+  <span id="manager-count" style="font-weight: bold;">Loading managers...</span>
+  <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
+</div>
 
-<div id="output"></div>
+<div style="margin-bottom: 1em;">
+  <label for="gw-filter">Filter by Gameweek:</label><br>
+  <input type="number" id="gw-filter" min="1" max="38" placeholder="Auto" style="width: 100px; padding: 5px;">
+  <button id="clear-filter-btn" style="margin-left: 0.5em; padding: 5px 12px;">Show All GWs</button>
+  <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">Refresh Data</button>
+</div>
+
+<div id="loading-status" style="margin-bottom: 1em; color: #666;"></div>
+<div id="transfers-table" style="margin-top:1.5em"></div>
 
 <!-- Transfer History Modal -->
 <div id="transfer-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto;">
@@ -27,7 +37,62 @@ import Nav from '../components/Nav.astro';
   </div>
 </div>
 
-<script>
+<script type="module">
+// Inline FT calculation logic - MATCHES EXCEL EXACTLY
+function calculateFTs(managerHistory) {
+  const byGW = new Map();
+  managerHistory.forEach(row => byGW.set(row.gw, row));
+
+  for (let i = 0; i < managerHistory.length; ++i) {
+    const row = managerHistory[i];
+    const E = Number(row.gw);
+    const M = Number(row.transfers);
+    let Q = 1;
+    const prevRow = byGW.get(E - 1);
+    const S = prevRow ? 1 : 0;
+    
+    if (E === 16) {
+      Q = 5;
+    } else if (E === 1) {
+      Q = 0;
+    } else if (S === 0) {
+      Q = 1;
+    } else if (!prevRow) {
+      Q = 1;
+    } else {
+      const prevChip = prevRow.chipPlayed || "";
+      const prevFTs = Number(prevRow.FTsStartOfGW);
+      const prevTransfers = Number(prevRow.transfers);
+      
+      if (prevChip === "WC" || prevChip === "FH") {
+        Q = Math.max(1, prevFTs - prevTransfers);
+      } else {
+        Q = Math.min(Math.max(1, prevFTs - prevTransfers + 1), 5);
+      }
+    }
+    row.FTsStartOfGW = Q;
+  }
+
+  const maxGW = Math.max(...managerHistory.map(r => r.gw));
+  managerHistory.forEach(row => {
+    if (row.gw === maxGW) {
+      const E = Number(row.gw);
+      const Q = Number(row.FTsStartOfGW);
+      const M = Number(row.transfers);
+      const F = row.chipPlayed || "";
+      
+      if (E === 15) {
+        row.FTsForNextGW = 5;
+      } else {
+        const inc = (F === "WC" || F === "FH") ? 0 : 1;
+        row.FTsForNextGW = Math.min(Math.max(1, Q - M + inc), 5);
+      }
+    } else {
+      row.FTsForNextGW = "";
+    }
+  });
+}
+
 function loadManagerIds() {
   try {
     return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
@@ -36,8 +101,12 @@ function loadManagerIds() {
   }
 }
 
-const out = document.getElementById("output");
-const fetchBtn = document.getElementById("fetch-btn");
+const out = document.getElementById("transfers-table");
+const gwFilterInput = document.getElementById("gw-filter");
+const clearFilterBtn = document.getElementById("clear-filter-btn");
+const loadingStatus = document.getElementById("loading-status");
+const managerCountEl = document.getElementById("manager-count");
+const refreshBtn = document.getElementById("refresh-btn");
 const transferModal = document.getElementById("transfer-modal");
 const modalContent = document.getElementById("modal-content");
 const closeModal = document.getElementById("close-modal");
@@ -45,8 +114,9 @@ const chipModal = document.getElementById("chip-modal");
 const chipModalContent = document.getElementById("chip-modal-content");
 const closeChipModal = document.getElementById("close-chip-modal");
 
+let allHistories = [];
+let latestGW = null;
 let allPlayersMap = {};
-let currentGW = null;
 
 closeModal.addEventListener("click", () => {
   transferModal.style.display = "none";
@@ -56,18 +126,31 @@ closeChipModal.addEventListener("click", () => {
   chipModal.style.display = "none";
 });
 
+// Fetch player names
+async function fetchPlayers() {
+  try {
+    const res = await fetch('/api/fpl/bootstrap-static');
+    if (!res.ok) return;
+    const data = await res.json();
+    data.elements.forEach(p => {
+      allPlayersMap[p.id] = p.web_name;
+    });
+  } catch (e) {
+    console.error("Error fetching players:", e);
+  }
+}
+
 async function showTransferHistory(managerId, managerName) {
   modalContent.innerHTML = "<p>Loading transfer history...</p>";
   transferModal.style.display = "block";
 
   try {
-    // Fetch manager history
-    const historyRes = await fetch(`https://fantasy.premierleague.com/api/entry/${managerId}/history/`);
-    const history = await historyRes.json();
-
-    // Fetch all transfers
-    const transfersRes = await fetch(`https://fantasy.premierleague.com/api/entry/${managerId}/transfers/`);
+    // Fetch manager transfers
+    const transfersRes = await fetch(`/api/fpl/entry/${managerId}/transfers`);
     const transfers = await transfersRes.json();
+
+    const historyRes = await fetch(`/api/fpl/entry/${managerId}/history`);
+    const history = await historyRes.json();
 
     // Group transfers by GW
     const transfersByGW = {};
@@ -149,14 +232,14 @@ async function showChipTransfers(managerId, gw, chipName) {
 
   try {
     // Get the squad before and after
-    const picksRes = await fetch(`https://fantasy.premierleague.com/api/entry/${managerId}/event/${gw}/picks/`);
+    const picksRes = await fetch(`/api/fpl/entry/${managerId}/event/${gw}/picks`);
     const picks = await picksRes.json();
 
     const prevGW = parseInt(gw) - 1;
     let prevSquad = [];
     if (prevGW > 0) {
       try {
-        const prevPicksRes = await fetch(`https://fantasy.premierleague.com/api/entry/${managerId}/event/${prevGW}/picks/`);
+        const prevPicksRes = await fetch(`/api/fpl/entry/${managerId}/event/${prevGW}/picks`);
         const prevPicks = await prevPicksRes.json();
         prevSquad = prevPicks.picks?.map(p => p.element) || [];
       } catch (e) {
@@ -198,127 +281,198 @@ async function showChipTransfers(managerId, gw, chipName) {
   }
 }
 
-async function fetchTransfers() {
-  const ids = loadManagerIds();
+async function fetchHistory(id) {
+  const historyUrl = `/api/fpl/entry/${id}/history`;
+  const summaryUrl = `/api/fpl/entry/${id}`;
+  
+  const [historyRes, summaryRes] = await Promise.all([
+    fetch(historyUrl),
+    fetch(summaryUrl)
+  ]);
+  
+  if (!historyRes.ok || !summaryRes.ok) throw new Error("Load error");
+  
+  const historyData = await historyRes.json();
+  const summaryData = await summaryRes.json();
+  
+  const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
+  
+  let history = historyData.current.map(gw => ({
+    entryId: Number(id),
+    managerName: managerName,
+    gw: gw.event,
+    chipPlayed: "",
+    transfers: gw.event_transfers,
+    transferCost: gw.event_transfers_cost ?? 0,
+    benchPoints: gw.points_on_bench ?? 0,
+    gwPoints: gw.points,
+    totalPoints: gw.total_points
+  }));
+  
+  if (Array.isArray(historyData.chips)) {
+    historyData.chips.forEach(c => {
+      const row = history.find(gw => gw.gw === c.event);
+      if (row) {
+        row.chipPlayed = (
+          c.name === "wildcard" ? "WC" :
+          c.name === "bboost" ? "BB" :
+          c.name === "3xc" ? "TC" :
+          c.name === "freehit" ? "FH" : c.name
+        );
+      }
+    });
+  }
+  return history;
+}
+
+function makeTable(histories, filterGW = null) {
+  let rows = histories.flat();
+  
+  // Apply GW filter if specified
+  if (filterGW !== null && filterGW !== "") {
+    const gwNum = Number(filterGW);
+    rows = rows.filter(r => r.gw === gwNum);
+    
+    // When filtering by GW, sort by Total Points DESC (best first)
+    rows.sort((a, b) => b.totalPoints - a.totalPoints);
+  } else {
+    // When showing all GWs, sort by Manager name then GW
+    rows.sort((a,b) => a.managerName.localeCompare(b.managerName) || a.gw-b.gw);
+  }
+
+  let html = `<table border="1" cellpadding="4" style="border-collapse:collapse">
+    <tr>
+      <th>Manager</th>
+      <th>GW</th>
+      <th>ChipPlayed</th>
+      <th>Transfers</th>
+      <th>TransferCost</th>
+      <th>GW Points</th>
+      <th>Total Points</th>
+      <th>FTs Start of GW</th>
+      <th style="background:lightyellow">FTs for next GW</th>
+    </tr>`;
+  for (const r of rows) {
+    html += `<tr>
+      <td style="font-weight: bold;"><a href="#" class="manager-link" data-id="${r.entryId}" data-name="${r.managerName}" style="color: #3182ce; text-decoration: none; cursor: pointer;">${r.managerName}</a></td>
+      <td>${r.gw}</td>
+      <td>${r.chipPlayed || ""}</td>
+      <td>${r.transfers ?? ""}</td>
+      <td>${r.transferCost ?? ""}</td>
+      <td>${r.gwPoints ?? ""}</td>
+      <td>${r.totalPoints ?? ""}</td>
+      <td>${r.FTsStartOfGW ?? ""}</td>
+      <td style="background:lightyellow">${r.FTsForNextGW ?? ""}</td>
+    </tr>`;
+  }
+  html += "</table>";
+  return html;
+}
+
+async function loadManagers(ids) {
   if (ids.length === 0) {
-    out.innerHTML = '<p>No managers added yet. <a href="/managers">Add manager IDs</a>.</p>';
+    out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
     return;
   }
 
-  fetchBtn.disabled = true;
-  fetchBtn.textContent = "Loading...";
+  allHistories = [];
+  latestGW = null;
+  out.innerHTML = "";
+  loadingStatus.textContent = `Loading 0 of ${ids.length} managers...`;
 
-  try {
-    // Get current gameweek and players
-    const bootstrapRes = await fetch("https://fantasy.premierleague.com/api/bootstrap-static/");
-    const bootstrap = await bootstrapRes.json();
-    currentGW = bootstrap.events.find(e => e.is_current)?.id || bootstrap.events[bootstrap.events.length - 1].id;
-
-    // Build player map
-    bootstrap.elements.forEach(p => {
-      allPlayersMap[p.id] = p.web_name;
-    });
-
-    // Fetch latest transfer for each manager
-    const managerTransfers = await Promise.all(
-      ids.map(async (id) => {
-        try {
-          const [entryRes, transfersRes] = await Promise.all([
-            fetch(`https://fantasy.premierleague.com/api/entry/${id}/`),
-            fetch(`https://fantasy.premierleague.com/api/entry/${id}/transfers/`)
-          ]);
-
-          const entry = await entryRes.json();
-          const transfers = await transfersRes.json();
-
-          const latestTransfer = transfers[transfers.length - 1];
-
-          return {
-            id,
-            name: `${entry.player_first_name} ${entry.player_last_name}`,
-            teamName: entry.name,
-            latestTransfer: latestTransfer || null,
-            totalTransfers: transfers.length
-          };
-        } catch (e) {
-          console.error(`Error fetching manager ${id}:`, e);
-          return null;
-        }
-      })
-    );
-
-    const validManagers = managerTransfers.filter(m => m !== null);
-
-    let html = `
-      <h2>Latest Transfers</h2>
-      <table border="1" cellpadding="8" style="border-collapse: collapse; width: 100%; margin-top: 1em;">
-        <thead>
-          <tr style="background: #f0f0f0;">
-            <th>Manager</th>
-            <th>Team</th>
-            <th>Total Transfers</th>
-            <th>Latest Transfer</th>
-            <th>GW</th>
-          </tr>
-        </thead>
-        <tbody>
-    `;
-
-    validManagers.forEach(m => {
-      const transferText = m.latestTransfer 
-        ? `${allPlayersMap[m.latestTransfer.element_in]} ← ${allPlayersMap[m.latestTransfer.element_out]}`
-        : 'No transfers yet';
-      const gwText = m.latestTransfer ? `GW ${m.latestTransfer.event}` : '-';
-
-      html += `
-        <tr>
-          <td><a href="#" class="manager-link" data-id="${m.id}" data-name="${m.name}" style="color: #3182ce; text-decoration: none; cursor: pointer;">${m.name}</a></td>
-          <td>${m.teamName}</td>
-          <td style="text-align: center;">${m.totalTransfers}</td>
-          <td>${transferText}</td>
-          <td style="text-align: center;">${gwText}</td>
-        </tr>
-      `;
-    });
-
-    html += `
-        </tbody>
-      </table>
-    `;
-
-    out.innerHTML = html;
-
-    // Add click handlers for manager names
-    document.querySelectorAll('.manager-link').forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const managerId = e.target.dataset.id;
-        const managerName = e.target.dataset.name;
-        showTransferHistory(managerId, managerName);
-      });
-    });
-
-  } catch (error) {
-    console.error("Error fetching transfers:", error);
-    out.innerHTML = "<p style='color: red;'>Error loading transfers. Please try again.</p>";
-  } finally {
-    fetchBtn.disabled = false;
-    fetchBtn.textContent = "Fetch Latest Transfers";
+  let loaded = 0;
+  for (const id of ids) {
+    try {
+      let history = await fetchHistory(id);
+      calculateFTs(history);
+      allHistories.push(history);
+      
+      // Track the latest GW across all managers
+      const managerMaxGW = Math.max(...history.map(h => h.gw));
+      if (latestGW === null || managerMaxGW > latestGW) {
+        latestGW = managerMaxGW;
+      }
+      
+      loaded++;
+      
+      // Update status
+      loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+      
+      // Progressive render WITHOUT filter during loading
+      out.innerHTML = makeTable(allHistories, "");
+      attachManagerLinks();
+    } catch (e) {
+      console.error(`Failed to load manager ${id}:`, e);
+      loaded++;
+      loadingStatus.innerHTML = `<span style='color:orange'>⚠️ Failed to load manager ${id}</span>`;
+    }
+  }
+  
+  loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
+  
+  // AFTER all managers loaded, auto-set filter to latest GW
+  if (latestGW) {
+    gwFilterInput.value = latestGW;
+    gwFilterInput.placeholder = `Latest: GW${latestGW}`;
+    filterByGW(); // Apply the filter
   }
 }
 
-fetchBtn.addEventListener("click", fetchTransfers);
+function attachManagerLinks() {
+  document.querySelectorAll('.manager-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const managerId = e.target.dataset.id;
+      const managerName = e.target.dataset.name;
+      showTransferHistory(managerId, managerName);
+    });
+  });
+}
 
-// Auto-load on page load
-fetchTransfers();
+function filterByGW() {
+  const filterGW = gwFilterInput.value.trim();
+  out.innerHTML = makeTable(allHistories, filterGW);
+  attachManagerLinks();
+}
+
+// Fetch players on init
+fetchPlayers();
+
+// Initial load
+const managerIds = loadManagerIds();
+managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+
+if (managerIds.length > 0) {
+  loadManagers(managerIds);
+} else {
+  out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+}
+
+gwFilterInput.addEventListener('input', filterByGW);
+
+clearFilterBtn.addEventListener('click', () => {
+  gwFilterInput.value = "";
+  filterByGW();
+});
+
+refreshBtn.addEventListener('click', () => {
+  gwFilterInput.value = ""; // Clear filter on refresh
+  const ids = loadManagerIds();
+  loadManagers(ids);
+});
 </script>
 
 <style>
-  table {
-    font-size: 14px;
+  button {
+    background: #3182ce;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
   }
-  th {
-    font-weight: 600;
+  button:hover {
+    background: #2c5aa0;
   }
   a:hover {
     text-decoration: underline !important;
