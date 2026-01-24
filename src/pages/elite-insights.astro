@@ -1,9 +1,9 @@
----
+﻿---
 import Nav from '../components/Nav.astro';
 ---
 
 <Nav />
-<h1>🏆 Elite Manager Insights</h1>
+<h1>ðŸ† Elite Manager Insights</h1>
 <p>Premium statistics: points distribution, transfer patterns, and formations used by top managers vs. your tracked managers.</p>
 
 <div style="margin-bottom: 1.5em;">
@@ -201,7 +201,7 @@ async function displayTop50() {
   
   const gwInfo = await fetchLatestGW();
   if (!gwInfo) {
-    out.innerHTML = '<p style="color: red;">❌ No Top 50 data available yet. The automated job will fetch it after the next gameweek finishes.</p>';
+    out.innerHTML = '<p style="color: red;">âŒ No Top 50 data available yet. The automated job will fetch it after the next gameweek finishes.</p>';
     return;
   }
   
@@ -210,7 +210,7 @@ async function displayTop50() {
   
   dataStatus.innerHTML = `
     <p style="margin: 0; color: #1e40af;">
-      📊 Showing data for <strong>GW ${latestGW}</strong> | 
+      ðŸ“Š Showing data for <strong>GW ${latestGW}</strong> | 
       Last updated: <strong>${fetchDate}</strong>
     </p>
   `;
@@ -229,7 +229,7 @@ async function displayTop50() {
   
   let html = `
     <div style="background: linear-gradient(to right, #fef3c7, #fde68a); padding: 1.5em; border-radius: 8px; border: 2px solid #f59e0b; margin-bottom: 2em;">
-      <h2 style="color: #92400e; margin-top: 0;">🏆 World Top 50 Averages (GW ${latestGW})</h2>
+      <h2 style="color: #92400e; margin-top: 0;">ðŸ† World Top 50 Averages (GW ${latestGW})</h2>
       <p style="color: #92400e; margin-bottom: 1em;">Based on ${aggregate.managers_analyzed} managers</p>
       
       <h3 style="color: #92400e;">Points Distribution</h3>
@@ -281,7 +281,7 @@ async function displayCustomManagers() {
   
   const gwInfo = await fetchLatestGW();
   if (!gwInfo) {
-    out.innerHTML = '<p style="color: red;">❌ No data available yet. Data will be fetched automatically after gameweeks finish.</p>';
+    out.innerHTML = '<p style="color: red;">âŒ No data available yet. Data will be fetched automatically after gameweeks finish.</p>';
     return;
   }
   
@@ -290,15 +290,15 @@ async function displayCustomManagers() {
   
   dataStatus.innerHTML = `
     <p style="margin: 0; color: #1e40af;">
-      📊 Showing data for <strong>GW ${latestGW}</strong> | 
+      ðŸ“Š Showing data for <strong>GW ${latestGW}</strong> | 
       Last updated: <strong>${fetchDate}</strong> |
-      <span style="color: #dc2626;">⚠️ Custom manager data needs to be fetched on-demand (feature coming soon)</span>
+      <span style="color: #dc2626;">âš ï¸ Custom manager data needs to be fetched on-demand (feature coming soon)</span>
     </p>
   `;
   
   out.innerHTML = `
     <div style="background: #fffbeb; padding: 1.5em; border-radius: 8px; border: 2px solid #f59e0b;">
-      <h3 style="margin-top: 0;">🚧 Custom Manager Insights - Coming Soon</h3>
+      <h3 style="margin-top: 0;">ðŸš§ Custom Manager Insights - Coming Soon</h3>
       <p>Your tracked managers (${managerIds.length} total):</p>
       <ul>
         ${managerIds.slice(0, 10).map(id => `<li>Manager ID: ${id}</li>`).join('')}

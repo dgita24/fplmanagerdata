@@ -1,4 +1,4 @@
----
+﻿---
 import Nav from '../components/Nav.astro';
 ---
 
@@ -74,12 +74,12 @@ form.onsubmit = (e) => {
   const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/));
   
   if (ids.length === 0) {
-    status.innerHTML = "<span style='color:red'>⚠️ Please enter at least one valid EntryID.</span>";
+    status.innerHTML = "<span style='color:red'>âš ï¸ Please enter at least one valid EntryID.</span>";
     return;
   }
   
   if (ids.length > 100) {
-    status.innerHTML = "<span style='color:red'>⚠️ Maximum 100 managers allowed. Please remove some entries.</span>";
+    status.innerHTML = "<span style='color:red'>âš ï¸ Maximum 100 managers allowed. Please remove some entries.</span>";
     return;
   }
   
@@ -88,14 +88,14 @@ form.onsubmit = (e) => {
   
   saveManagerIds(uniqueIds);
   
-  status.innerHTML = `<span style='color:#38a169; font-weight:bold'>✅ Successfully saved ${uniqueIds.length} manager IDs!</span><br>
+  status.innerHTML = `<span style='color:#38a169; font-weight:bold'>âœ… Successfully saved ${uniqueIds.length} manager IDs!</span><br>
   <span style='color:#666'>These will now be used across all pages.</span>`;
   
   // Update textarea with deduplicated list
   if (uniqueIds.length !== ids.length) {
     textarea.value = uniqueIds.join("\n");
     countEl.textContent = uniqueIds.length;
-    status.innerHTML += `<br><span style='color:#f59e0b'>ℹ️ Removed ${ids.length - uniqueIds.length} duplicate(s).</span>`;
+    status.innerHTML += `<br><span style='color:#f59e0b'>â„¹ï¸ Removed ${ids.length - uniqueIds.length} duplicate(s).</span>`;
   }
 };
 </script>
