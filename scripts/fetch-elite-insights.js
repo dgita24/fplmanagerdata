@@ -30,17 +30,22 @@ async function getCurrentGW() {
   console.log('Checking current gameweek...');
   const data = await fetchWithRetry('https://fantasy.premierleague.com/api/bootstrap-static/');
   
-  // Find the most recently finished GW
-  const finishedEvents = data.events.filter(e => e.finished === true);
-  if (finishedEvents.length === 0) {
-    console.log('No gameweeks have finished yet.');
+  // Find events where finished === true AND deadline has passed
+  const now = new Date();
+  const completedEvents = data.events.filter(e => {
+    const deadlinePassed = new Date(e.deadline_time) < now;
+    return e.finished === true && deadlinePassed;
+  });
+  
+  if (completedEvents.length === 0) {
+    console.log('No gameweeks have been fully completed yet.');
     return null;
   }
   
-  const lastFinishedGW = Math.max(...finishedEvents.map(e => e.id));
-  console.log(`Last finished gameweek: ${lastFinishedGW}`);
+  const lastCompletedGW = Math.max(...completedEvents.map(e => e.id));
+  console.log(`Last completed gameweek: ${lastCompletedGW}`);
   
-  return { lastFinishedGW, allPlayers: data.elements };
+  return { lastFinishedGW: lastCompletedGW, allPlayers: data.elements };
 }
 
 async function checkIfDataExists(gameweek) {
