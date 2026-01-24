@@ -34,26 +34,43 @@ async function fetchLiveData() {
   refreshBtn.textContent = "Loading...";
 
   try {
+    console.log("Fetching bootstrap data...");
     // Get current gameweek
     const bootstrapRes = await fetch("https://fantasy.premierleague.com/api/bootstrap-static/");
+    if (!bootstrapRes.ok) throw new Error("Failed to fetch bootstrap data");
+    
     const bootstrap = await bootstrapRes.json();
     const currentGW = bootstrap.events.find(e => e.is_current)?.id;
 
+    console.log("Current GW:", currentGW);
+
     if (!currentGW) {
       out.innerHTML = "<p>No active gameweek found.</p>";
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = "🔄 Refresh Data";
       return;
     }
+
+    // Build player map
+    const playerMap = {};
+    bootstrap.elements.forEach(p => {
+      playerMap[p.id] = p.web_name;
+    });
+
+    console.log("Fetching manager data for", ids.length, "managers");
 
     // Fetch all manager data
     const managerData = await Promise.all(
       ids.map(async (id) => {
         try {
-          const [entryRes, picksRes] = await Promise.all([
-            fetch(`https://fantasy.premierleague.com/api/entry/${id}/`),
-            fetch(`https://fantasy.premierleague.com/api/entry/${id}/event/${currentGW}/picks/`)
-          ]);
-
+          console.log("Fetching manager", id);
+          
+          const entryRes = await fetch(`https://fantasy.premierleague.com/api/entry/${id}/`);
+          if (!entryRes.ok) throw new Error(`Failed to fetch entry for ${id}`);
           const entry = await entryRes.json();
+
+          const picksRes = await fetch(`https://fantasy.premierleague.com/api/entry/${id}/event/${currentGW}/picks/`);
+          if (!picksRes.ok) throw new Error(`Failed to fetch picks for ${id}`);
           const picks = await picksRes.json();
 
           return {
@@ -75,11 +92,14 @@ async function fetchLiveData() {
 
     const validManagers = managerData.filter(m => m !== null);
 
-    // Get player names
-    const playerMap = {};
-    bootstrap.elements.forEach(p => {
-      playerMap[p.id] = p.web_name;
-    });
+    console.log("Valid managers:", validManagers.length);
+
+    if (validManagers.length === 0) {
+      out.innerHTML = "<p style='color: red;'>Failed to load any manager data. Check console for errors.</p>";
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = "🔄 Refresh Data";
+      return;
+    }
 
     // Sort by GW points descending
     validManagers.sort((a, b) => b.gwPoints - a.gwPoints);
@@ -126,7 +146,7 @@ async function fetchLiveData() {
 
   } catch (error) {
     console.error("Error fetching live data:", error);
-    out.innerHTML = "<p style='color: red;'>Error loading data. Please try again.</p>";
+    out.innerHTML = `<p style='color: red;'>Error loading data: ${error.message}. Please try again.</p>`;
   } finally {
     refreshBtn.disabled = false;
     refreshBtn.textContent = "🔄 Refresh Data";
