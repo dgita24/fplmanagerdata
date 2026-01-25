@@ -158,18 +158,62 @@ function renderPointsTable(data, isAverage = false) {
   
   const other = data[`${prefix}other_points`] || 0;
   
-  // Calculate points per position (FPL scoring rules)
+  // Get additional stats if available
+  const goalsAgainst = {
+    GK: data[`${prefix}goals_conceded_gk`] || 0,
+    DEF: data[`${prefix}goals_conceded_def`] || 0,
+    MID: 0,
+    FWD: 0,
+  };
+  
+  const yellowCards = {
+    GK: data[`${prefix}yellow_cards_gk`] || 0,
+    DEF: data[`${prefix}yellow_cards_def`] || 0,
+    MID: data[`${prefix}yellow_cards_mid`] || 0,
+    FWD: data[`${prefix}yellow_cards_fwd`] || 0,
+  };
+  
+  const redCards = {
+    GK: data[`${prefix}red_cards_gk`] || 0,
+    DEF: data[`${prefix}red_cards_def`] || 0,
+    MID: data[`${prefix}red_cards_mid`] || 0,
+    FWD: data[`${prefix}red_cards_fwd`] || 0,
+  };
+  
+  const penaltiesMissed = {
+    GK: data[`${prefix}penalties_missed_gk`] || 0,
+    DEF: data[`${prefix}penalties_missed_def`] || 0,
+    MID: data[`${prefix}penalties_missed_mid`] || 0,
+    FWD: data[`${prefix}penalties_missed_fwd`] || 0,
+  };
+  
+  // Calculate points per position (Complete FPL scoring rules)
   const pointsPerPosition = {
-    GK: (goals.GK * 6) + (assists.GK * 3) + (cleanSheets.GK * 4) + bonus.GK,
-    DEF: (goals.DEF * 6) + (assists.DEF * 3) + (cleanSheets.DEF * 4) + bonus.DEF,
-    MID: (goals.MID * 5) + (assists.MID * 3) + (cleanSheets.MID * 1) + bonus.MID,
-    FWD: (goals.FWD * 4) + (assists.FWD * 3) + bonus.FWD,
+    // GK: Goals(6) + Assists(3) + CS(4) + Bonus - GoalsConceded/2 - Yellow - Red(3) - PenMissed(2)
+    GK: (goals.GK * 6) + (assists.GK * 3) + (cleanSheets.GK * 4) + bonus.GK 
+        - Math.floor(goalsAgainst.GK / 2) - yellowCards.GK - (redCards.GK * 3) - (penaltiesMissed.GK * 2),
+    
+    // DEF: Goals(6) + Assists(3) + CS(4) + Bonus - GoalsConceded/2 - Yellow - Red(3) - PenMissed(2) + DEFCONS(2)
+    DEF: (goals.DEF * 6) + (assists.DEF * 3) + (cleanSheets.DEF * 4) + bonus.DEF 
+         - Math.floor(goalsAgainst.DEF / 2) - yellowCards.DEF - (redCards.DEF * 3) - (penaltiesMissed.DEF * 2),
+    
+    // MID: Goals(5) + Assists(3) + CS(1) + Bonus - Yellow - Red(3) - PenMissed(2) + DEFCONS(2)
+    MID: (goals.MID * 5) + (assists.MID * 3) + (cleanSheets.MID * 1) + bonus.MID 
+         - yellowCards.MID - (redCards.MID * 3) - (penaltiesMissed.MID * 2),
+    
+    // FWD: Goals(4) + Assists(3) + Bonus - Yellow - Red(3) - PenMissed(2) + DEFCONS(2)
+    FWD: (goals.FWD * 4) + (assists.FWD * 3) + bonus.FWD 
+         - yellowCards.FWD - (redCards.FWD * 3) - (penaltiesMissed.FWD * 2),
   };
   
   const totalGoals = Object.values(goals).reduce((a, b) => a + b, 0);
   const totalAssists = Object.values(assists).reduce((a, b) => a + b, 0);
   const totalCS = Object.values(cleanSheets).reduce((a, b) => a + b, 0);
   const totalBonus = Object.values(bonus).reduce((a, b) => a + b, 0);
+  const totalGoalsAgainst = goalsAgainst.GK + goalsAgainst.DEF;
+  const totalYellowCards = Object.values(yellowCards).reduce((a, b) => a + b, 0);
+  const totalRedCards = Object.values(redCards).reduce((a, b) => a + b, 0);
+  const totalPenaltiesMissed = Object.values(penaltiesMissed).reduce((a, b) => a + b, 0);
   const totalPoints = Object.values(pointsPerPosition).reduce((a, b) => a + b, 0) + other;
   
   return `
@@ -203,6 +247,29 @@ function renderPointsTable(data, isAverage = false) {
         <td style="text-align:center"><strong>${totalBonus}</strong></td>
       </tr>
       <tr>
+        <td><strong>Goals Conceded</strong></td>
+        <td style="text-align:center">${goalsAgainst.GK}</td>
+        <td style="text-align:center">${goalsAgainst.DEF}</td>
+        <td style="text-align:center">-</td>
+        <td style="text-align:center">-</td>
+        <td style="text-align:center"><strong>${totalGoalsAgainst}</strong></td>
+      </tr>
+      <tr style="background:#f9f9f9">
+        <td><strong>Yellow Cards</strong></td>
+        ${positions.map(pos => `<td style="text-align:center">${yellowCards[pos]}</td>`).join('')}
+        <td style="text-align:center"><strong>${totalYellowCards}</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Red Cards</strong></td>
+        ${positions.map(pos => `<td style="text-align:center">${redCards[pos]}</td>`).join('')}
+        <td style="text-align:center"><strong>${totalRedCards}</strong></td>
+      </tr>
+      <tr style="background:#f9f9f9">
+        <td><strong>Penalties Missed</strong></td>
+        ${positions.map(pos => `<td style="text-align:center">${penaltiesMissed[pos]}</td>`).join('')}
+        <td style="text-align:center"><strong>${totalPenaltiesMissed}</strong></td>
+      </tr>
+      <tr>
         <td><strong>Other Points</strong></td>
         <td colspan="4" style="text-align:center">-</td>
         <td style="text-align:center"><strong>${other}</strong></td>
@@ -213,6 +280,10 @@ function renderPointsTable(data, isAverage = false) {
         <td style="text-align:center"><strong>${Math.round(totalPoints)}</strong></td>
       </tr>
     </table>
+    <p style="margin-top: 0.5em; font-size: 12px; color: #666;">
+      <strong>Note:</strong> Full FPL scoring includes: Goals conceded (-1 per 2 for GK/DEF), Yellow cards (-1), Red cards (-3), Penalties missed (-2), 
+      and DEFCONS (+2 for outfield players with 60+ min appearances). Currently showing available data only.
+    </p>
   `;
 }
 
@@ -355,6 +426,20 @@ function aggregateSeasonData(allGameweeks) {
     avg_bonus_def: 0,
     avg_bonus_mid: 0,
     avg_bonus_fwd: 0,
+    avg_goals_conceded_gk: 0,
+    avg_goals_conceded_def: 0,
+    avg_yellow_cards_gk: 0,
+    avg_yellow_cards_def: 0,
+    avg_yellow_cards_mid: 0,
+    avg_yellow_cards_fwd: 0,
+    avg_red_cards_gk: 0,
+    avg_red_cards_def: 0,
+    avg_red_cards_mid: 0,
+    avg_red_cards_fwd: 0,
+    avg_penalties_missed_gk: 0,
+    avg_penalties_missed_def: 0,
+    avg_penalties_missed_mid: 0,
+    avg_penalties_missed_fwd: 0,
     avg_other_points: 0,
     avg_transfers: 0,
     avg_hits_count: 0,
@@ -382,6 +467,20 @@ function aggregateSeasonData(allGameweeks) {
     result.avg_bonus_def += (gw.avg_bonus_def || 0);
     result.avg_bonus_mid += (gw.avg_bonus_mid || 0);
     result.avg_bonus_fwd += (gw.avg_bonus_fwd || 0);
+    result.avg_goals_conceded_gk += (gw.avg_goals_conceded_gk || 0);
+    result.avg_goals_conceded_def += (gw.avg_goals_conceded_def || 0);
+    result.avg_yellow_cards_gk += (gw.avg_yellow_cards_gk || 0);
+    result.avg_yellow_cards_def += (gw.avg_yellow_cards_def || 0);
+    result.avg_yellow_cards_mid += (gw.avg_yellow_cards_mid || 0);
+    result.avg_yellow_cards_fwd += (gw.avg_yellow_cards_fwd || 0);
+    result.avg_red_cards_gk += (gw.avg_red_cards_gk || 0);
+    result.avg_red_cards_def += (gw.avg_red_cards_def || 0);
+    result.avg_red_cards_mid += (gw.avg_red_cards_mid || 0);
+    result.avg_red_cards_fwd += (gw.avg_red_cards_fwd || 0);
+    result.avg_penalties_missed_gk += (gw.avg_penalties_missed_gk || 0);
+    result.avg_penalties_missed_def += (gw.avg_penalties_missed_def || 0);
+    result.avg_penalties_missed_mid += (gw.avg_penalties_missed_mid || 0);
+    result.avg_penalties_missed_fwd += (gw.avg_penalties_missed_fwd || 0);
     result.avg_other_points += (gw.avg_other_points || 0);
     result.avg_transfers += (gw.avg_transfers || 0);
     result.avg_hits_count += (gw.avg_hits_count || 0);
