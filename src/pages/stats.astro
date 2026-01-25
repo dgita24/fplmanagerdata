@@ -106,16 +106,16 @@ async function fetchManagerSummary(id) {
 
 function makeStatsTable(managersData) {
   let html = `<h2>League Standings</h2>
-  <table border="1" cellpadding="3" style="border-collapse:collapse; width: 100%; max-width: 1200px; font-size: 0.9em;">
+  <table border="1" cellpadding="3" style="border-collapse:collapse; table-layout: auto; font-size: 0.9em;">
     <tr style="background:#f0f0f0">
-      <th>Rank</th>
-      <th>Manager</th>
-      <th>Team Name</th>
-      <th>Total Points</th>
-      <th>Overall Rank</th>
-      <th>GW Points</th>
-      <th>GW Rank</th>
-      <th>Chips Used</th>
+      <th style="width: 40px;">Rank</th>
+      <th style="min-width: 100px;">Manager</th>
+      <th style="min-width: 100px;">Team<br/>Name</th>
+      <th style="width: 60px;">Total<br/>Points</th>
+      <th style="width: 60px;">Overall<br/>Rank</th>
+      <th style="width: 50px;">GW<br/>Points</th>
+      <th style="width: 60px;">GW<br/>Rank</th>
+      <th style="min-width: 80px;">Chips<br/>Used</th>
     </tr>`;
   
   let rank = 1;

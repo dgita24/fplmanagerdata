@@ -371,17 +371,17 @@ function makeTable(histories, filterGW = null) {
     rows.sort((a,b) => a.managerName.localeCompare(b.managerName) || a.gw-b.gw);
   }
 
-  let html = `<table border="1" cellpadding="3" style="border-collapse:collapse; font-size: 0.9em;">
+  let html = `<table border="1" cellpadding="3" style="border-collapse:collapse; table-layout: auto; font-size: 0.9em;">
     <tr>
-      <th>Manager</th>
-      <th style="text-align: center;">GW</th>
-      <th style="text-align: center;">ChipPlayed</th>
-      <th style="text-align: center;">Transfers</th>
-      <th style="text-align: center;">TransferCost</th>
-      <th style="text-align: center;">GW Points</th>
-      <th style="text-align: center;">Total Points</th>
-      <th style="text-align: center;">FTs Start of GW</th>
-      <th style="background:lightyellow; text-align: center;">FTs for next GW</th>
+      <th style="min-width: 100px;">Manager</th>
+      <th style="text-align: center; width: 40px;">GW</th>
+      <th style="text-align: center; width: 60px;">Chip<br/>Played</th>
+      <th style="text-align: center; width: 60px;">Trans-<br/>fers</th>
+      <th style="text-align: center; width: 60px;">Transfer<br/>Cost</th>
+      <th style="text-align: center; width: 60px;">GW<br/>Points</th>
+      <th style="text-align: center; width: 60px;">Total<br/>Points</th>
+      <th style="text-align: center; width: 60px;">FTs Start<br/>of GW</th>
+      <th style="background:lightyellow; text-align: center; width: 60px;">FTs for<br/>next GW</th>
     </tr>`;
   for (const r of rows) {
     html += `<tr>

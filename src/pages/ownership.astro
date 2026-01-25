@@ -189,14 +189,14 @@ function makeOwnershipTable(ownership, positionFilterValue = "") {
   let html = `<h2>Player Ownership ${positionFilterValue ? `- ${positionFilterValue}` : '(All Positions)'}</h2>
   <p style="color: #666; margin-bottom: 1em;">Total managers: ${totalManagers} | Showing ${filtered.length} players</p>
   
-  <table border="1" cellpadding="3" style="border-collapse:collapse; width: 100%; max-width: 1200px; font-size: 0.9em;">
+  <table border="1" cellpadding="3" style="border-collapse:collapse; table-layout: auto; font-size: 0.9em;">
     <tr style="background:#f0f0f0">
-      <th>Player</th>
-      <th>Position</th>
-      <th>Team</th>
-      <th style="background:#fffacd;">Ownership</th>
-      <th style="background:#fffacd;">Count</th>
-      <th style="width: 40%;">Owned By</th>
+      <th style="min-width: 120px;">Player</th>
+      <th style="width: 60px;">Position</th>
+      <th style="width: 50px;">Team</th>
+      <th style="background:#fffacd; width: 60px;">Owner-<br/>ship</th>
+      <th style="background:#fffacd; width: 50px;">Count</th>
+      <th style="min-width: 150px;">Owned By</th>
     </tr>`;
   
   for (const player of filtered) {

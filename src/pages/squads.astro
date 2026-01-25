@@ -489,14 +489,14 @@ function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValu
         ${manager.chipPlayed ? `<span style="background: #fef3c7; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; margin-left: 0.5em;">${manager.chipPlayed}</span>` : ''}
       </h3>
 
-      <table border="1" cellpadding="3" style="border-collapse:collapse; width: 100%; font-size: 0.9em;">
+      <table border="1" cellpadding="3" style="border-collapse:collapse; table-layout: auto; width: 100%; font-size: 0.9em;">
         <tr style="background:#f0f0f0">
-          <th>Pos</th>
-          <th>Player</th>
-          <th>Position</th>
-          <th>Team</th>
-          <th style="background:#e6f7ff;">GW Pts</th>
-          <th>C/VC</th>
+          <th style="width: 40px;">Pos</th>
+          <th style="min-width: 120px;">Player</th>
+          <th style="width: 60px;">Position</th>
+          <th style="width: 50px;">Team</th>
+          <th style="background:#e6f7ff; width: 50px;">GW<br/>Pts</th>
+          <th style="width: 50px;">C/VC</th>
         </tr>`;
 
     let squad = manager.squad;

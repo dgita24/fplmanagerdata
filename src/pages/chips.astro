@@ -105,12 +105,12 @@ async function fetchManagerData(id) {
 
 function makeChipsTable(managersData) {
   let html = `<h2>Chips Summary</h2>
-  <table border="1" cellpadding="3" style="border-collapse:collapse; margin-bottom: 2em; font-size: 0.9em;">
+  <table border="1" cellpadding="3" style="border-collapse:collapse; table-layout: auto; margin-bottom: 2em; font-size: 0.9em;">
     <tr style="background:#f0f0f0">
-      <th>Manager</th>
-      <th>Team Name</th>
-      <th>Chips Used</th>
-      <th>Chips Remaining</th>
+      <th style="min-width: 100px;">Manager</th>
+      <th style="min-width: 100px;">Team Name</th>
+      <th style="min-width: 80px;">Chips Used</th>
+      <th style="min-width: 80px;">Chips<br/>Remaining</th>
     </tr>`;
   
   for (const m of managersData) {
@@ -147,11 +147,11 @@ function makeChipsTable(managersData) {
   html += "</table>";
   
   html += `<h2>Detailed Chip Usage by Gameweek</h2>
-  <table border="1" cellpadding="3" style="border-collapse:collapse; font-size: 0.9em;">
+  <table border="1" cellpadding="3" style="border-collapse:collapse; table-layout: auto; font-size: 0.9em;">
     <tr style="background:#f0f0f0">
-      <th>Manager</th>
-      <th>Team Name</th>
-      <th>Chips Played (GW)</th>
+      <th style="min-width: 100px;">Manager</th>
+      <th style="min-width: 100px;">Team Name</th>
+      <th style="min-width: 120px;">Chips Played (GW)</th>
     </tr>`;
   
   for (const m of managersData) {
