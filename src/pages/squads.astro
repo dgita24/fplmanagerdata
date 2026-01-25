@@ -1,7 +1,15 @@
-﻿---
-import Nav from '../components/Nav.astro';
 ---
 
+import Nav from '../components/Nav.astro';
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manager Squads - FPL Manager Data</title>
+</head>
+<body>
 <Nav />
 <h1>Manager Squads</h1>
 <p>View each manager's squad for any gameweek, including player points, positions, and captain selections.</p>
@@ -35,18 +43,23 @@ import Nav from '../components/Nav.astro';
       <option value="FWD">Forwards (FWD)</option>
     </select>
   </div>
+  
+  <div>
+    <label for="captain-filter"><strong>Filter by Captaincy:</strong></label><br>
+    <select id="captain-filter" style="padding: 8px; width: 200px; font-size: 14px;">
+      <option value="">All Players</option>
+      <option value="captain">Captain Only</option>
+      <option value="vice">Vice Captain Only</option>
+      <option value="both">Captain or Vice</option>
+    </select>
+  </div>
 </div>
 
 <div id="loading-status" style="margin-bottom: 1em; color: #666;"></div>
 <div id="squads-output" style="margin-top:1.5em"></div>
 
 <script>
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  'https://fnehvaoqqmkrhxcqslta.supabase.co',
-  'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
-)
+import { supabase } from '../lib/supabase.ts'
 
 let managerIds = []
 
@@ -80,6 +93,7 @@ const out = document.getElementById("squads-output");
 const gwFilterInput = document.getElementById("gw-filter");
 const managerFilter = document.getElementById("manager-filter");
 const positionFilter = document.getElementById("position-filter");
+const captainFilter = document.getElementById("captain-filter");
 const loadingStatus = document.getElementById("loading-status");
 const managerCountEl = document.getElementById("manager-count");
 const refreshBtn = document.getElementById("refresh-btn");
@@ -200,7 +214,7 @@ function populateManagerFilter() {
   }
 }
 
-function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValue = "") {
+function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValue = "", captainFilterValue = "") {
   let filteredManagers = squadsData;
   
   if (managerFilterValue) {
@@ -226,8 +240,21 @@ function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValu
         </tr>`;
     
     let squad = manager.squad;
+    
+    // Filter by position if specified
     if (positionFilterValue) {
       squad = squad.filter(p => p.playerPosition === positionFilterValue);
+    }
+    
+    // Filter by captaincy if specified
+    if (captainFilterValue) {
+      if (captainFilterValue === 'captain') {
+        squad = squad.filter(p => p.isCaptain);
+      } else if (captainFilterValue === 'vice') {
+        squad = squad.filter(p => p.isViceCaptain);
+      } else if (captainFilterValue === 'both') {
+        squad = squad.filter(p => p.isCaptain || p.isViceCaptain);
+      }
     }
     
     squad.sort((a, b) => a.position - b.position);
@@ -279,7 +306,8 @@ async function loadSquads(ids, gw) {
         
         const managerFilterValue = managerFilter.value;
         const posFilter = positionFilter.value;
-        out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter);
+        const capFilter = captainFilter.value;
+        out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter, capFilter);
       }
     } catch (e) {
       console.error(`Failed to load manager ${id}:`, e);
@@ -289,7 +317,7 @@ async function loadSquads(ids, gw) {
   
   populateManagerFilter();
   
-  loadingStatus.innerHTML = `<span style='color:#38a169'>âœ… Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
+  loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
 }
 
 async function init() {
@@ -312,7 +340,29 @@ async function init() {
   managerIds = ids;
   managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
 
-  if (managerIds.length > 0) {
+  // Check for manager URL parameter
+  const urlParams = new URLSearchParams(window.location.search);
+  const managerParam = urlParams.get('manager');
+  
+  if (managerParam) {
+    // If manager parameter exists, filter to just that manager
+    const managerId = parseInt(managerParam);
+    if (managerIds.includes(managerId)) {
+      loadSquads([managerId], latestGW);
+      // Set the manager filter dropdown after data loads
+      const checkAndSetFilter = () => {
+        if (managerFilter.options.length > 1) {
+          managerFilter.value = managerId.toString();
+        } else {
+          setTimeout(checkAndSetFilter, 50);
+        }
+      };
+      setTimeout(checkAndSetFilter, 50);
+    } else {
+      // Manager not in the list, but still try to load it
+      loadSquads([managerId], latestGW);
+    }
+  } else if (managerIds.length > 0) {
     loadSquads(managerIds, latestGW);
   } else {
     out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
@@ -329,13 +379,22 @@ gwFilterInput.addEventListener('change', async () => {
 managerFilter.addEventListener('change', () => {
   const managerFilterValue = managerFilter.value;
   const posFilter = positionFilter.value;
-  out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter);
+  const capFilter = captainFilter.value;
+  out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter, capFilter);
 });
 
 positionFilter.addEventListener('change', () => {
   const managerFilterValue = managerFilter.value;
   const posFilter = positionFilter.value;
-  out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter);
+  const capFilter = captainFilter.value;
+  out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter, capFilter);
+});
+
+captainFilter.addEventListener('change', () => {
+  const managerFilterValue = managerFilter.value;
+  const posFilter = positionFilter.value;
+  const capFilter = captainFilter.value;
+  out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter, capFilter);
 });
 
 refreshBtn.addEventListener('click', async () => {
@@ -381,4 +440,5 @@ init();
     border: 1px solid #cbd5e0;
     font-weight: normal;
   }
-</style>
+</style></body>
+</html>

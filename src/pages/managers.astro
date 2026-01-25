@@ -1,7 +1,15 @@
-﻿---
-import Nav from '../components/Nav.astro';
 ---
 
+import Nav from '../components/Nav.astro';
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manager IDs Setup - FPL Manager Data</title>
+</head>
+<body>
 <Nav />
 
 <div id="auth-check" style="display: none;">
@@ -45,12 +53,7 @@ import Nav from '../components/Nav.astro';
 </div>
 
 <script>
-  import { createClient } from '@supabase/supabase-js'
-
-  const supabase = createClient(
-    'https://fnehvaoqqmkrhxcqslta.supabase.co',
-    'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
-  )
+  import { supabase } from '../lib/supabase.ts'
 
   const authCheckDiv = document.getElementById('auth-check')
   const loadingDiv = document.getElementById('loading')
@@ -220,4 +223,5 @@ import Nav from '../components/Nav.astro';
     border-radius: 3px;
     font-family: monospace;
   }
-</style>
+</style></body>
+</html>

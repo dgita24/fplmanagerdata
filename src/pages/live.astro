@@ -1,9 +1,17 @@
-﻿---
-import Nav from '../components/Nav.astro';
 ---
 
+import Nav from '../components/Nav.astro';
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live League Standings - FPL Manager Data</title>
+</head>
+<body>
 <Nav />
-<h1>ðŸ”´ Live League Standings</h1>
+<h1>🔴 Live League Standings</h1>
 <p>Real-time league table with live points, projected bonus, auto-subs, and transfer hits.</p>
 
 <div style="margin-bottom: 1em;">
@@ -14,8 +22,8 @@ import Nav from '../components/Nav.astro';
 <div style="margin-bottom: 1em;">
   <label for="gw-filter">Select Gameweek:</label><br>
   <input type="number" id="gw-filter" min="1" max="38" placeholder="Auto" style="width: 100px; padding: 5px;">
-  <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">ðŸ”„ Refresh Live Data</button>
-  <button id="auto-refresh-btn" style="margin-left: 0.5em; padding: 5px 12px;">â±ï¸ Auto Refresh: OFF</button>
+  <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">🔄 Refresh Live Data</button>
+  <button id="auto-refresh-btn" style="margin-left: 0.5em; padding: 5px 12px;">⏱️ Auto Refresh: OFF</button>
 </div>
 
 <div style="margin-bottom: 1em;">
@@ -30,12 +38,7 @@ import Nav from '../components/Nav.astro';
 <div id="live-output" style="margin-top:1.5em"></div>
 
 <script>
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  'https://fnehvaoqqmkrhxcqslta.supabase.co',
-  'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
-)
+import { supabase } from '../lib/supabase.ts'
 
 let managerIds = []
 
@@ -367,7 +370,7 @@ function makeLiveTable(managers, compareToId = "") {
       <th>Manager</th>
       <th>Team Name</th>
       <th style="background:#e6f7ff;">Live GW Pts</th>
-      <th>Proj Bonus</th>
+      <th>Bonus Pts</th>
       <th>Transfer Hit</th>
       <th style="background:#e6f7ff;">GW Total</th>
       <th style="background:#fff4e6;">Proj Overall</th>
@@ -479,7 +482,7 @@ async function loadLive(ids, gw) {
   
   populateCompareManager();
   
-  loadingStatus.innerHTML = `<span style='color:#38a169'>âœ… Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
+  loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
   lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
 }
 
@@ -585,4 +588,5 @@ init();
   a:hover {
     text-decoration: underline !important;
   }
-</style>
+</style></body>
+</html>
