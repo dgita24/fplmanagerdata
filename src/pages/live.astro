@@ -173,11 +173,16 @@ async function fetchLiveGW(gw) {
 
 // Calculate projected bonus from BPS
 function calculateProjectedBonus(playerId, teamId, gw) {
+  // ALWAYS prioritize actual bonus from FPL API when available
+  const liveData = livePointsCache.get(playerId);
+  if (liveData && liveData.bonus > 0) {
+    return liveData.bonus;
+  }
+  
   const fixture = fixturesCache.get(`${teamId}-${gw}`);
   if (!fixture || fixture.finished) {
-    // Match finished, use actual bonus
-    const liveData = livePointsCache.get(playerId);
-    return liveData ? liveData.bonus : 0;
+    // Match finished, no bonus available
+    return 0;
   }
   
   if (!fixture.started) {
@@ -186,7 +191,6 @@ function calculateProjectedBonus(playerId, teamId, gw) {
   }
   
   // Match is live - project bonus from BPS
-  const liveData = livePointsCache.get(playerId);
   if (!liveData || liveData.minutes === 0) return 0;
   
   // Get all players in this match and sort by BPS
@@ -486,7 +490,9 @@ async function init() {
   gwFilterInput.value = latestGW;
   gwFilterInput.placeholder = `Latest: GW${latestGW}`;
   
-  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+  if (!authenticated) return; // Stop if not authenticated (redirect in progress)
+  
   managerIds = ids;
   managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
 

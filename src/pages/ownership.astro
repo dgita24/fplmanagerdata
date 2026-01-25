@@ -304,7 +304,9 @@ async function init() {
   gwFilterInput.value = latestGW;
   gwFilterInput.placeholder = `Latest: GW${latestGW}`;
   
-  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+  if (!authenticated) return; // Stop if not authenticated (redirect in progress)
+  
   managerIds = ids;
   managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
 
