@@ -104,7 +104,8 @@ function aggregateSeasonData(allGameweeks) {
     avg_goals_gk: 0, avg_goals_def: 0, avg_goals_mid: 0, avg_goals_fwd: 0,
     avg_assists_gk: 0, avg_assists_def: 0, avg_assists_mid: 0, avg_assists_fwd: 0,
     avg_cs_gk: 0, avg_cs_def: 0, avg_cs_mid: 0, avg_cs_fwd: 0,
-    avg_bonus_points: 0, avg_other_points: 0,
+    avg_bonus_gk: 0, avg_bonus_def: 0, avg_bonus_mid: 0, avg_bonus_fwd: 0,
+    avg_other_points: 0,
     avg_transfers: 0, avg_hits_count: 0, avg_hits_cost: 0,
     most_common_formation: '', formation_distribution: {}
   };
@@ -122,7 +123,10 @@ function aggregateSeasonData(allGameweeks) {
     result.avg_cs_def += (gw.avg_cs_def || 0);
     result.avg_cs_mid += (gw.avg_cs_mid || 0);
     result.avg_cs_fwd += (gw.avg_cs_fwd || 0);
-    result.avg_bonus_points += (gw.avg_bonus_points || 0);
+    result.avg_bonus_gk += (gw.avg_bonus_gk || 0);
+    result.avg_bonus_def += (gw.avg_bonus_def || 0);
+    result.avg_bonus_mid += (gw.avg_bonus_mid || 0);
+    result.avg_bonus_fwd += (gw.avg_bonus_fwd || 0);
     result.avg_other_points += (gw.avg_other_points || 0);
     result.avg_transfers += (gw.avg_transfers || 0);
     result.avg_hits_count += (gw.avg_hits_count || 0);
@@ -138,7 +142,10 @@ function aggregateSeasonData(allGameweeks) {
   result.avg_transfers = result.avg_transfers / numGWs;
   result.avg_hits_count = result.avg_hits_count / numGWs;
   result.avg_hits_cost = result.avg_hits_cost / numGWs;
-  result.avg_bonus_points = result.avg_bonus_points / numGWs;
+  result.avg_bonus_gk = result.avg_bonus_gk / numGWs;
+  result.avg_bonus_def = result.avg_bonus_def / numGWs;
+  result.avg_bonus_mid = result.avg_bonus_mid / numGWs;
+  result.avg_bonus_fwd = result.avg_bonus_fwd / numGWs;
   result.avg_other_points = result.avg_other_points / numGWs;
   
   if (Object.keys(result.formation_distribution).length > 0) {
@@ -158,7 +165,8 @@ function aggregateCustomManagerData(managersData) {
     avg_goals_gk: 0, avg_goals_def: 0, avg_goals_mid: 0, avg_goals_fwd: 0,
     avg_assists_gk: 0, avg_assists_def: 0, avg_assists_mid: 0, avg_assists_fwd: 0,
     avg_cs_gk: 0, avg_cs_def: 0, avg_cs_mid: 0, avg_cs_fwd: 0,
-    avg_bonus_points: 0, avg_other_points: 0,
+    avg_bonus_gk: 0, avg_bonus_def: 0, avg_bonus_mid: 0, avg_bonus_fwd: 0,
+    avg_other_points: 0,
     avg_transfers: 0, avg_hits_count: 0, avg_hits_cost: 0,
     most_common_formation: '', formation_distribution: {}
   };
@@ -176,7 +184,10 @@ function aggregateCustomManagerData(managersData) {
     aggregate.avg_cs_def += (manager.cs_def || 0);
     aggregate.avg_cs_mid += (manager.cs_mid || 0);
     aggregate.avg_cs_fwd += (manager.cs_fwd || 0);
-    aggregate.avg_bonus_points += (manager.bonus_points || 0);
+    aggregate.avg_bonus_gk += (manager.bonus_gk || 0);
+    aggregate.avg_bonus_def += (manager.bonus_def || 0);
+    aggregate.avg_bonus_mid += (manager.bonus_mid || 0);
+    aggregate.avg_bonus_fwd += (manager.bonus_fwd || 0);
     aggregate.avg_other_points += (manager.other_points || 0);
     aggregate.avg_transfers += (manager.total_transfers || 0);
     aggregate.avg_hits_count += (manager.hits_count || 0);
@@ -201,7 +212,10 @@ function aggregateCustomManagerData(managersData) {
   aggregate.avg_cs_def /= numManagers;
   aggregate.avg_cs_mid /= numManagers;
   aggregate.avg_cs_fwd /= numManagers;
-  aggregate.avg_bonus_points /= numManagers;
+  aggregate.avg_bonus_gk /= numManagers;
+  aggregate.avg_bonus_def /= numManagers;
+  aggregate.avg_bonus_mid /= numManagers;
+  aggregate.avg_bonus_fwd /= numManagers;
   aggregate.avg_other_points /= numManagers;
   aggregate.avg_transfers /= numManagers;
   aggregate.avg_hits_count /= numManagers;
@@ -230,12 +244,20 @@ function renderDataTables(data, gwLabel) {
   const csDEF = (data.avg_cs_def || 0) * 4;
   const csMID = (data.avg_cs_mid || 0) * 1;
   
-  const pointsGK = goalsGK + assistsGK + csGK;
-  const pointsDEF = goalsDEF + assistsDEF + csDEF;
-  const pointsMID = goalsMID + assistsMID + csMID;
-  const pointsFWD = goalsFWD + assistsFWD;
+  const bonusGK = (data.avg_bonus_gk || 0);
+  const bonusDEF = (data.avg_bonus_def || 0);
+  const bonusMID = (data.avg_bonus_mid || 0);
+  const bonusFWD = (data.avg_bonus_fwd || 0);
   
-  const totalPoints = pointsGK + pointsDEF + pointsMID + pointsFWD + (data.avg_bonus_points || 0) + (data.avg_other_points || 0);
+  const pointsGK = goalsGK + assistsGK + csGK + bonusGK;
+  const pointsDEF = goalsDEF + assistsDEF + csDEF + bonusDEF;
+  const pointsMID = goalsMID + assistsMID + csMID + bonusMID;
+  const pointsFWD = goalsFWD + assistsFWD + bonusFWD;
+  
+  // Determine hits cost label based on gwLabel
+  const hitsCostLabel = gwLabel.includes('Season') 
+    ? 'Average Hit Cost per Manager (Season)' 
+    : `Average Hit Cost per Manager (${gwLabel})`;
   
   let html = `
     <h2>📊 ${gwLabel} - ${data.managers_analyzed} Managers</h2>
@@ -255,7 +277,7 @@ function renderDataTables(data, gwLabel) {
         <td style="text-align: center; font-weight: bold;">${data.avg_hits_count.toFixed(2)}</td>
       </tr>
       <tr>
-        <td><strong>Hits Cost (points)</strong></td>
+        <td><strong>${hitsCostLabel}</strong></td>
         <td style="text-align: center; font-weight: bold; color: #e53e3e;">-${data.avg_hits_cost.toFixed(1)}</td>
       </tr>
       <tr style="background:#fffacd">
@@ -271,6 +293,7 @@ function renderDataTables(data, gwLabel) {
         <th>Goals</th>
         <th>Assists</th>
         <th>Clean Sheets</th>
+        <th>Bonus Points</th>
         <th>Total Points</th>
       </tr>
       <tr>
@@ -278,6 +301,7 @@ function renderDataTables(data, gwLabel) {
         <td style="text-align: center;">${data.avg_goals_gk.toFixed(2)} (${goalsGK.toFixed(1)} pts)</td>
         <td style="text-align: center;">${data.avg_assists_gk.toFixed(2)} (${assistsGK.toFixed(1)} pts)</td>
         <td style="text-align: center;">${data.avg_cs_gk.toFixed(2)} (${csGK.toFixed(1)} pts)</td>
+        <td style="text-align: center;">${bonusGK.toFixed(1)}</td>
         <td style="text-align: center; background:#e6ffe6; font-weight: bold;">${pointsGK.toFixed(1)}</td>
       </tr>
       <tr>
@@ -285,6 +309,7 @@ function renderDataTables(data, gwLabel) {
         <td style="text-align: center;">${data.avg_goals_def.toFixed(2)} (${goalsDEF.toFixed(1)} pts)</td>
         <td style="text-align: center;">${data.avg_assists_def.toFixed(2)} (${assistsDEF.toFixed(1)} pts)</td>
         <td style="text-align: center;">${data.avg_cs_def.toFixed(2)} (${csDEF.toFixed(1)} pts)</td>
+        <td style="text-align: center;">${bonusDEF.toFixed(1)}</td>
         <td style="text-align: center; background:#e6ffe6; font-weight: bold;">${pointsDEF.toFixed(1)}</td>
       </tr>
       <tr>
@@ -292,6 +317,7 @@ function renderDataTables(data, gwLabel) {
         <td style="text-align: center;">${data.avg_goals_mid.toFixed(2)} (${goalsMID.toFixed(1)} pts)</td>
         <td style="text-align: center;">${data.avg_assists_mid.toFixed(2)} (${assistsMID.toFixed(1)} pts)</td>
         <td style="text-align: center;">${data.avg_cs_mid.toFixed(2)} (${csMID.toFixed(1)} pts)</td>
+        <td style="text-align: center;">${bonusMID.toFixed(1)}</td>
         <td style="text-align: center; background:#e6ffe6; font-weight: bold;">${pointsMID.toFixed(1)}</td>
       </tr>
       <tr>
@@ -299,18 +325,11 @@ function renderDataTables(data, gwLabel) {
         <td style="text-align: center;">${data.avg_goals_fwd.toFixed(2)} (${goalsFWD.toFixed(1)} pts)</td>
         <td style="text-align: center;">${data.avg_assists_fwd.toFixed(2)} (${assistsFWD.toFixed(1)} pts)</td>
         <td style="text-align: center;">0.00 (0.0 pts)</td>
+        <td style="text-align: center;">${bonusFWD.toFixed(1)}</td>
         <td style="text-align: center; background:#e6ffe6; font-weight: bold;">${pointsFWD.toFixed(1)}</td>
       </tr>
-      <tr style="background:#d4edda">
-        <td colspan="4"><strong>Bonus + Other Points</strong></td>
-        <td style="text-align: center; font-weight: bold;">${((data.avg_bonus_points || 0) + (data.avg_other_points || 0)).toFixed(1)}</td>
-      </tr>
-      <tr style="background:#c3e6cb">
-        <td colspan="4"><strong>TOTAL POINTS</strong></td>
-        <td style="text-align: center; font-weight: bold; font-size: 1.1em;">${totalPoints.toFixed(1)}</td>
-      </tr>
     </table>
-    <p style="font-size: 0.9em; color: #666; max-width: 1000px;"><em>FPL Scoring: Goals (GK/DEF: 6pts, MID: 5pts, FWD: 4pts), Assists (3pts all), Clean Sheets (GK/DEF: 4pts, MID: 1pt)</em></p>
+    <p style="font-size: 0.9em; color: #666; max-width: 1000px;"><em>FPL Scoring: Goals (GK/DEF: 6pts, MID: 5pts, FWD: 4pts), Assists (3pts all), Clean Sheets (GK/DEF: 4pts, MID: 1pt), Bonus Points (as earned)</em></p>
   `;
   
   if (data.formation_distribution && Object.keys(data.formation_distribution).length > 0) {

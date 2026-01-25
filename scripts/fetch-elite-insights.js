@@ -83,7 +83,7 @@ async function fetchManagerInsights(managerId, targetGW, allPlayers) {
     goals: { GK: 0, DEF: 0, MID: 0, FWD: 0 },
     assists: { GK: 0, DEF: 0, MID: 0, FWD: 0 },
     cleanSheets: { GK: 0, DEF: 0, MID: 0, FWD: 0 },
-    bonus: 0,
+    bonus: { GK: 0, DEF: 0, MID: 0, FWD: 0 },
     other: 0,
   };
   
@@ -126,7 +126,7 @@ async function fetchManagerInsights(managerId, targetGW, allPlayers) {
             pointsBreakdown.goals[position] += (gwHistory.goals_scored || 0) * multiplier;
             pointsBreakdown.assists[position] += (gwHistory.assists || 0) * multiplier;
             pointsBreakdown.cleanSheets[position] += (gwHistory.clean_sheets || 0) * multiplier;
-            pointsBreakdown.bonus += (gwHistory.bonus || 0) * multiplier;
+            pointsBreakdown.bonus[position] += (gwHistory.bonus || 0) * multiplier;
           }
           
           await delay(100);
@@ -164,7 +164,7 @@ async function fetchManagerInsights(managerId, targetGW, allPlayers) {
     Object.values(pointsBreakdown.goals).reduce((a, b) => a + b, 0) +
     Object.values(pointsBreakdown.assists).reduce((a, b) => a + b, 0) +
     Object.values(pointsBreakdown.cleanSheets).reduce((a, b) => a + b, 0) +
-    pointsBreakdown.bonus;
+    Object.values(pointsBreakdown.bonus).reduce((a, b) => a + b, 0);
   
   pointsBreakdown.other = summaryRes.summary_overall_points - totalFromBreakdown;
   
@@ -186,7 +186,10 @@ async function fetchManagerInsights(managerId, targetGW, allPlayers) {
     cs_def: pointsBreakdown.cleanSheets.DEF,
     cs_mid: pointsBreakdown.cleanSheets.MID,
     cs_fwd: pointsBreakdown.cleanSheets.FWD,
-    bonus_points: pointsBreakdown.bonus,
+    bonus_gk: pointsBreakdown.bonus.GK,
+    bonus_def: pointsBreakdown.bonus.DEF,
+    bonus_mid: pointsBreakdown.bonus.MID,
+    bonus_fwd: pointsBreakdown.bonus.FWD,
     other_points: pointsBreakdown.other,
     total_transfers: totalTransfers,
     hits_count: hitsCount,
@@ -262,7 +265,10 @@ async function fetchAndStoreTop50() {
     avg_cs_def: Math.round(insights.reduce((sum, i) => sum + i.cs_def, 0) / count),
     avg_cs_mid: Math.round(insights.reduce((sum, i) => sum + i.cs_mid, 0) / count),
     avg_cs_fwd: Math.round(insights.reduce((sum, i) => sum + i.cs_fwd, 0) / count),
-    avg_bonus_points: Math.round(insights.reduce((sum, i) => sum + i.bonus_points, 0) / count),
+    avg_bonus_gk: Math.round(insights.reduce((sum, i) => sum + i.bonus_gk, 0) / count),
+    avg_bonus_def: Math.round(insights.reduce((sum, i) => sum + i.bonus_def, 0) / count),
+    avg_bonus_mid: Math.round(insights.reduce((sum, i) => sum + i.bonus_mid, 0) / count),
+    avg_bonus_fwd: Math.round(insights.reduce((sum, i) => sum + i.bonus_fwd, 0) / count),
     avg_other_points: Math.round(insights.reduce((sum, i) => sum + i.other_points, 0) / count),
     avg_transfers: Math.round(insights.reduce((sum, i) => sum + i.total_transfers, 0) / count),
     avg_hits_count: Math.round(insights.reduce((sum, i) => sum + i.hits_count, 0) / count),
