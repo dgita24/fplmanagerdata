@@ -371,7 +371,7 @@ function makeTable(histories, filterGW = null) {
     rows.sort((a,b) => a.managerName.localeCompare(b.managerName) || a.gw-b.gw);
   }
 
-  let html = `<table border="1" cellpadding="4" style="border-collapse:collapse">
+  let html = `<table border="1" cellpadding="3" style="border-collapse:collapse; font-size: 0.9em;">
     <tr>
       <th>Manager</th>
       <th style="text-align: center;">GW</th>

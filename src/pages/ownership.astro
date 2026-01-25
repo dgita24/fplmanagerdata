@@ -191,7 +191,7 @@ function makeOwnershipTable(ownership, positionFilterValue = "") {
   let html = `<h2>Player Ownership ${positionFilterValue ? `- ${positionFilterValue}` : '(All Positions)'}</h2>
   <p style="color: #666; margin-bottom: 1em;">Total managers: ${totalManagers} | Showing ${filtered.length} players</p>
   
-  <table border="1" cellpadding="6" style="border-collapse:collapse; width: 100%; max-width: 1200px;">
+  <table border="1" cellpadding="3" style="border-collapse:collapse; width: 100%; max-width: 1200px; font-size: 0.9em;">
     <tr style="background:#f0f0f0">
       <th>Player</th>
       <th>Position</th>
@@ -351,14 +351,13 @@ init();
 <style>
   table {
     font-family: Arial, sans-serif;
-    font-size: 14px;
   }
   th {
     font-weight: bold;
-    padding: 8px;
+    padding: 4px;
   }
   td {
-    padding: 6px;
+    padding: 3px;
   }
   h2 {
     margin-top: 1.5em;

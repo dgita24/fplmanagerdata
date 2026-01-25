@@ -107,7 +107,7 @@ async function fetchManagerData(id) {
 
 function makeChipsTable(managersData) {
   let html = `<h2>Chips Summary</h2>
-  <table border="1" cellpadding="6" style="border-collapse:collapse; margin-bottom: 2em;">
+  <table border="1" cellpadding="3" style="border-collapse:collapse; margin-bottom: 2em; font-size: 0.9em;">
     <tr style="background:#f0f0f0">
       <th>Manager</th>
       <th>Team Name</th>
@@ -149,7 +149,7 @@ function makeChipsTable(managersData) {
   html += "</table>";
   
   html += `<h2>Detailed Chip Usage by Gameweek</h2>
-  <table border="1" cellpadding="6" style="border-collapse:collapse;">
+  <table border="1" cellpadding="3" style="border-collapse:collapse; font-size: 0.9em;">
     <tr style="background:#f0f0f0">
       <th>Manager</th>
       <th>Team Name</th>
@@ -238,14 +238,13 @@ refreshBtn.addEventListener('click', async () => {
 <style>
   table {
     font-family: Arial, sans-serif;
-    font-size: 14px;
   }
   th {
     font-weight: bold;
-    padding: 8px;
+    padding: 4px;
   }
   td {
-    padding: 6px;
+    padding: 3px;
   }
   h2 {
     margin-top: 1.5em;
