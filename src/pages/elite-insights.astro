@@ -488,8 +488,7 @@ async function fetchCustomManagerData(managerId, gameweek) {
 }
 
 function calculateCustomManagerAggregates(managersData, gameweek) {
-  // This would aggregate stats from multiple custom managers
-  // For now, return a placeholder structure
+  // Aggregate stats from multiple custom managers
   const numManagers = managersData.length;
   
   // Initialize aggregate structure
@@ -523,7 +522,7 @@ function calculateCustomManagerAggregates(managersData, gameweek) {
     
     const gwData = gameweek === 'season' 
       ? manager.history.current 
-      : manager.history.current.filter(gw => gw.event == gameweek);
+      : manager.history.current.filter(gw => gw.event === Number(gameweek));
     
     // Sum transfers and hits
     gwData.forEach(gw => {
@@ -532,10 +531,19 @@ function calculateCustomManagerAggregates(managersData, gameweek) {
     });
   });
   
-  // Average the values
+  // Average the values correctly
   if (numManagers > 0) {
-    aggregate.avg_transfers = (aggregate.avg_transfers / numManagers).toFixed(1);
-    aggregate.avg_hits_count = (aggregate.avg_hits_count / numManagers).toFixed(1);
+    if (gameweek === 'season') {
+      // For season totals, we've summed all GWs for all managers
+      // So divide by number of managers to get average per manager per GW
+      const totalGWs = managersData[0]?.history?.current?.length || 1;
+      aggregate.avg_transfers = parseFloat((aggregate.avg_transfers / numManagers / totalGWs).toFixed(1));
+      aggregate.avg_hits_count = parseFloat((aggregate.avg_hits_count / numManagers / totalGWs).toFixed(1));
+    } else {
+      // For single GW, just average across managers
+      aggregate.avg_transfers = parseFloat((aggregate.avg_transfers / numManagers).toFixed(1));
+      aggregate.avg_hits_count = parseFloat((aggregate.avg_hits_count / numManagers).toFixed(1));
+    }
   }
   
   return aggregate;
