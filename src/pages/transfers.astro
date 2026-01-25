@@ -374,26 +374,26 @@ function makeTable(histories, filterGW = null) {
   let html = `<table border="1" cellpadding="4" style="border-collapse:collapse">
     <tr>
       <th>Manager</th>
-      <th>GW</th>
-      <th>ChipPlayed</th>
-      <th>Transfers</th>
-      <th>TransferCost</th>
-      <th>GW Points</th>
-      <th>Total Points</th>
-      <th>FTs Start of GW</th>
-      <th style="background:lightyellow">FTs for next GW</th>
+      <th style="text-align: center;">GW</th>
+      <th style="text-align: center;">ChipPlayed</th>
+      <th style="text-align: center;">Transfers</th>
+      <th style="text-align: center;">TransferCost</th>
+      <th style="text-align: center;">GW Points</th>
+      <th style="text-align: center;">Total Points</th>
+      <th style="text-align: center;">FTs Start of GW</th>
+      <th style="background:lightyellow; text-align: center;">FTs for next GW</th>
     </tr>`;
   for (const r of rows) {
     html += `<tr>
       <td style="font-weight: bold;"><a href="#" class="manager-link" data-id="${r.entryId}" data-name="${r.managerName}" style="color: #3182ce; text-decoration: none; cursor: pointer;">${r.managerName}</a></td>
-      <td>${r.gw}</td>
-      <td>${r.chipPlayed || ""}</td>
-      <td>${r.transfers ?? ""}</td>
-      <td>${r.transferCost ?? ""}</td>
-      <td>${r.gwPoints ?? ""}</td>
-      <td>${r.totalPoints ?? ""}</td>
-      <td>${r.FTsStartOfGW ?? ""}</td>
-      <td style="background:lightyellow">${r.FTsForNextGW ?? ""}</td>
+      <td style="text-align: center;">${r.gw}</td>
+      <td style="text-align: center;">${r.chipPlayed || ""}</td>
+      <td style="text-align: center;">${r.transfers ?? ""}</td>
+      <td style="text-align: center;">${r.transferCost ?? ""}</td>
+      <td style="text-align: center;">${r.gwPoints ?? ""}</td>
+      <td style="text-align: center;">${r.totalPoints ?? ""}</td>
+      <td style="text-align: center;">${r.FTsStartOfGW ?? ""}</td>
+      <td style="background:lightyellow; text-align: center;">${r.FTsForNextGW ?? ""}</td>
     </tr>`;
   }
   html += "</table>";
