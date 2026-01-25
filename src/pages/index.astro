@@ -8,6 +8,77 @@ import Nav from '../components/Nav.astro';
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Welcome to FPL Manager Data - FPL Manager Data</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0 1em;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    h1 {
+      font-size: 2em;
+      margin-top: 0.5em;
+    }
+
+    p {
+      font-size: 1em;
+      line-height: 1.6;
+    }
+
+    ul {
+      line-height: 1.8;
+    }
+
+    ul li {
+      margin-bottom: 0.5em;
+    }
+
+    ul li a {
+      color: #3182ce;
+      text-decoration: none;
+      font-weight: 500;
+      padding: 4px 8px;
+      display: inline-block;
+      min-height: 44px;
+      line-height: 36px;
+    }
+
+    ul li a:hover {
+      text-decoration: underline;
+    }
+
+    /* Mobile styles */
+    @media (max-width: 768px) {
+      body {
+        padding: 0.5em;
+        font-size: 14px;
+      }
+
+      h1 {
+        font-size: 1.5em;
+      }
+
+      p {
+        font-size: 1em;
+        line-height: 1.6;
+      }
+
+      ul {
+        padding-left: 1.5em;
+        line-height: 2;
+      }
+
+      ul li {
+        margin-bottom: 0.75em;
+      }
+
+      ul li a {
+        font-size: 16px;
+        padding: 8px 12px;
+        display: inline-block;
+      }
+    }
+  </style>
 </head>
 <body>
 <Nav />
