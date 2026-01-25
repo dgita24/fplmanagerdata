@@ -240,12 +240,20 @@ async function displayTop50() {
     
     if (error || !allData || allData.length === 0) {
       console.error('Error fetching season data:', error);
-      out.innerHTML = '<p style="color: red;">Error loading season data.</p>';
+      if (!allData || allData.length === 0) {
+        out.innerHTML = '<p style="color: orange;">⚠️ No gameweek data available yet for season aggregation.</p>';
+      } else {
+        out.innerHTML = '<p style="color: red;">Error loading season data.</p>';
+      }
       return;
     }
     
     // Aggregate all gameweeks
     aggregateData = aggregateSeasonData(allData);
+    if (!aggregateData) {
+      out.innerHTML = '<p style="color: red;">Error aggregating season data.</p>';
+      return;
+    }
     gwLabel = 'Season Overall';
     
     const fetchDate = new Date(gwInfo.data_fetched_at).toLocaleString();
@@ -324,9 +332,13 @@ async function displayTop50() {
 }
 
 function aggregateSeasonData(allGameweeks) {
+  if (!allGameweeks || allGameweeks.length === 0) {
+    return null;
+  }
+  
   // Aggregate all gameweeks into season totals
   const result = {
-    managers_analyzed: allGameweeks[0].managers_analyzed, // Assuming consistent
+    managers_analyzed: allGameweeks[0]?.managers_analyzed || 50, // Use first GW or default to 50
     avg_goals_gk: 0,
     avg_goals_def: 0,
     avg_goals_mid: 0,

@@ -349,10 +349,15 @@ async function init() {
     const managerId = parseInt(managerParam);
     if (managerIds.includes(managerId)) {
       loadSquads([managerId], latestGW);
-      // Set the manager filter dropdown to this manager after load
-      setTimeout(() => {
-        managerFilter.value = managerId.toString();
-      }, 100);
+      // Set the manager filter dropdown after data loads
+      const checkAndSetFilter = () => {
+        if (managerFilter.options.length > 1) {
+          managerFilter.value = managerId.toString();
+        } else {
+          setTimeout(checkAndSetFilter, 50);
+        }
+      };
+      setTimeout(checkAndSetFilter, 50);
     } else {
       // Manager not in the list, but still try to load it
       loadSquads([managerId], latestGW);
