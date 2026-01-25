@@ -371,29 +371,29 @@ function makeTable(histories, filterGW = null) {
     rows.sort((a,b) => a.managerName.localeCompare(b.managerName) || a.gw-b.gw);
   }
 
-  let html = `<table border="1" cellpadding="4" style="border-collapse:collapse">
+  let html = `<table border="1" cellpadding="3" style="border-collapse:collapse; table-layout: auto; font-size: 0.9em;">
     <tr>
-      <th>Manager</th>
-      <th>GW</th>
-      <th>ChipPlayed</th>
-      <th>Transfers</th>
-      <th>TransferCost</th>
-      <th>GW Points</th>
-      <th>Total Points</th>
-      <th>FTs Start of GW</th>
-      <th style="background:lightyellow">FTs for next GW</th>
+      <th style="min-width: 100px;">Manager</th>
+      <th style="text-align: center; width: 40px;">GW</th>
+      <th style="text-align: center; width: 60px;">Chip<br/>Played</th>
+      <th style="text-align: center; width: 60px;">Trans-<br/>fers</th>
+      <th style="text-align: center; width: 60px;">Transfer<br/>Cost</th>
+      <th style="text-align: center; width: 60px;">GW<br/>Points</th>
+      <th style="text-align: center; width: 60px;">Total<br/>Points</th>
+      <th style="text-align: center; width: 60px;">FTs Start<br/>of GW</th>
+      <th style="background:lightyellow; text-align: center; width: 60px;">FTs for<br/>next GW</th>
     </tr>`;
   for (const r of rows) {
     html += `<tr>
       <td style="font-weight: bold;"><a href="#" class="manager-link" data-id="${r.entryId}" data-name="${r.managerName}" style="color: #3182ce; text-decoration: none; cursor: pointer;">${r.managerName}</a></td>
-      <td>${r.gw}</td>
-      <td>${r.chipPlayed || ""}</td>
-      <td>${r.transfers ?? ""}</td>
-      <td>${r.transferCost ?? ""}</td>
-      <td>${r.gwPoints ?? ""}</td>
-      <td>${r.totalPoints ?? ""}</td>
-      <td>${r.FTsStartOfGW ?? ""}</td>
-      <td style="background:lightyellow">${r.FTsForNextGW ?? ""}</td>
+      <td style="text-align: center;">${r.gw}</td>
+      <td style="text-align: center;">${r.chipPlayed || ""}</td>
+      <td style="text-align: center;">${r.transfers ?? ""}</td>
+      <td style="text-align: center;">${r.transferCost ?? ""}</td>
+      <td style="text-align: center;">${r.gwPoints ?? ""}</td>
+      <td style="text-align: center;">${r.totalPoints ?? ""}</td>
+      <td style="text-align: center;">${r.FTsStartOfGW ?? ""}</td>
+      <td style="background:lightyellow; text-align: center;">${r.FTsForNextGW ?? ""}</td>
     </tr>`;
   }
   html += "</table>";

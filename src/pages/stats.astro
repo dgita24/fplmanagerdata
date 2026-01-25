@@ -15,13 +15,7 @@ import Nav from '../components/Nav.astro';
 <p>Overview of all managers' performance, rankings, and chip usage.</p>
 
 <div style="margin-bottom: 1.5em;">
-  <label for="view-select" style="font-weight: bold; margin-right: 0.5em;">View:</label>
-  <select id="view-select" style="padding: 8px 12px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc;">
-    <option value="custom">My Custom Managers</option>
-    <option value="top50">World Top 50</option>
-  </select>
-  
-  <span id="manager-count" style="margin-left: 1.5em; font-weight: bold;">Loading managers...</span>
+  <span id="manager-count" style="font-weight: bold;">Loading managers...</span>
   <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
   <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">Refresh Data</button>
 </div>
@@ -31,8 +25,6 @@ import Nav from '../components/Nav.astro';
 
 <script>
 import { supabase } from '../lib/supabase.ts'
-
-let managerIds = []
 
 async function loadManagerIdsFromSupabase() {
   const { data: { user } } = await supabase.auth.getUser()
@@ -65,26 +57,8 @@ const out = document.getElementById("stats-output");
 const loadingStatus = document.getElementById("loading-status");
 const managerCountEl = document.getElementById("manager-count");
 const refreshBtn = document.getElementById("refresh-btn");
-const viewSelect = document.getElementById("view-select");
 
-let currentView = 'custom';
-let customManagerIds = [];
-let top50ManagerIds = [];
-
-async function fetchTop50ManagerIds() {
-  try {
-    const response = await fetch('/api/fpl/leagues-classic/314/standings/?page_standings=1');
-    if (!response.ok) return [];
-    
-    const data = await response.json();
-    const standings = data.standings?.results || [];
-    
-    return standings.slice(0, 50).map(s => s.entry);
-  } catch (error) {
-    console.error('Error fetching top 50:', error);
-    return [];
-  }
-}
+let managerIds = [];
 
 async function fetchManagerSummary(id) {
   const summaryUrl = `/api/fpl/entry/${id}`;
@@ -132,23 +106,23 @@ async function fetchManagerSummary(id) {
 
 function makeStatsTable(managersData) {
   let html = `<h2>League Standings</h2>
-  <table border="1" cellpadding="6" style="border-collapse:collapse; width: 100%; max-width: 1200px;">
+  <table border="1" cellpadding="3" style="border-collapse:collapse; table-layout: auto; font-size: 0.9em;">
     <tr style="background:#f0f0f0">
-      <th>Rank</th>
-      <th>Manager</th>
-      <th>Team Name</th>
-      <th>Total Points</th>
-      <th>Overall Rank</th>
-      <th>GW Points</th>
-      <th>GW Rank</th>
-      <th>Chips Used</th>
+      <th style="width: 40px;">Rank</th>
+      <th style="min-width: 100px;">Manager</th>
+      <th style="min-width: 100px;">Team<br/>Name</th>
+      <th style="width: 60px;">Total<br/>Points</th>
+      <th style="width: 60px;">Overall<br/>Rank</th>
+      <th style="width: 50px;">GW<br/>Points</th>
+      <th style="width: 60px;">GW<br/>Rank</th>
+      <th style="min-width: 80px;">Chips<br/>Used</th>
     </tr>`;
   
   let rank = 1;
   for (const m of managersData) {
     html += `<tr>
       <td style="font-weight: bold; text-align: center;">${rank}</td>
-      <td style="font-weight: bold;">${m.managerName}</td>
+      <td style="font-weight: bold;"><a href="/squads?manager=${m.entryId}" style="color: #3182ce; text-decoration: none; cursor: pointer;">${m.managerName}</a></td>
       <td>${m.teamName}</td>
       <td style="background:#e6ffe6; font-weight: bold; text-align: center;">${m.totalPoints.toLocaleString()}</td>
       <td style="text-align: center;">${m.overallRank.toLocaleString()}</td>
@@ -219,49 +193,25 @@ async function loadStats(ids) {
 }
 
 async function updateDisplay() {
-  const ids = currentView === 'custom' ? customManagerIds : top50ManagerIds;
-  
-  if (currentView === 'custom') {
-    managerCountEl.textContent = `${customManagerIds.length} manager(s) configured`;
-    if (customManagerIds.length === 0) {
-      out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
-      return;
-    }
-  } else {
-    managerCountEl.textContent = `Top 50 managers`;
-    if (top50ManagerIds.length === 0) {
-      loadingStatus.textContent = 'Fetching Top 50 managers...';
-      top50ManagerIds = await fetchTop50ManagerIds();
-      if (top50ManagerIds.length === 0) {
-        out.innerHTML = "<span style='color:red'>Failed to fetch Top 50 managers. Please try again later.</span>";
-        loadingStatus.textContent = '';
-        return;
-      }
-    }
+  managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+  if (managerIds.length === 0) {
+    out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+    return;
   }
   
-  await loadStats(ids);
+  await loadStats(managerIds);
 }
 
 (async function init() {
   const { managerIds: ids } = await loadManagerIdsFromSupabase();
-  customManagerIds = ids;
+  managerIds = ids;
   
   await updateDisplay();
-  
-  viewSelect.addEventListener('change', () => {
-    currentView = viewSelect.value;
-    updateDisplay();
-  });
 })();
 
 refreshBtn.addEventListener('click', async () => {
-  if (currentView === 'custom') {
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    customManagerIds = ids;
-  } else {
-    top50ManagerIds = await fetchTop50ManagerIds();
-  }
+  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  managerIds = ids;
   await updateDisplay();
 });
 </script>
@@ -269,14 +219,13 @@ refreshBtn.addEventListener('click', async () => {
 <style>
   table {
     font-family: Arial, sans-serif;
-    font-size: 14px;
   }
   th {
     font-weight: bold;
-    padding: 8px;
+    padding: 4px;
   }
   td {
-    padding: 6px;
+    padding: 3px;
   }
   h2 {
     margin-top: 1.5em;

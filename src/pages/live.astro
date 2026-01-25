@@ -500,18 +500,18 @@ function makeLiveTable(managers, compareToId = "") {
   const compareManager = compareToId ? sorted.find(m => m.entryId.toString() === compareToId) : leader;
 
   let html = `<h2>Live League Standings</h2>
-  <table border="1" cellpadding="6" style="border-collapse:collapse; width: 100%; max-width: 1600px;">
+  <table border="1" cellpadding="3" style="border-collapse:collapse; table-layout: auto; font-size: 0.9em;">
     <tr style="background:#f0f0f0">
-      <th>Rank</th>
-      <th>Manager</th>
-      <th style="background:#e6f7ff;">Live GW Pts</th>
-      <th>Bonus Pts</th>
-      <th>Transfer Hit</th>
-      <th style="background:#e6f7ff;">Live GW Nett</th>
-      <th style="background:#fff4e6;">Proj Overall</th>
-      <th style="background:#e6f7ff;">Diff GW<br/>(vs ${compareManager.managerName.split(' ')[0]})</th>
-      <th style="background:#fff4e6;">Diff Overall<br/>(vs ${compareManager.managerName.split(' ')[0]})</th>
-      <th>Chip</th>
+      <th style="width: 40px;">Rank</th>
+      <th style="min-width: 100px;">Manager</th>
+      <th style="background:#e6f7ff; width: 50px;">Live<br/>GW Pts</th>
+      <th style="width: 50px;">Bonus<br/>Pts</th>
+      <th style="width: 50px;">Transfer<br/>Hit</th>
+      <th style="background:#e6f7ff; width: 50px;">Live GW<br/>Nett</th>
+      <th style="background:#fff4e6; width: 60px;">Proj<br/>Overall</th>
+      <th style="background:#e6f7ff; width: 50px;">Diff GW<br/>(vs ${compareManager.managerName.split(' ')[0]})</th>
+      <th style="background:#fff4e6; width: 60px;">Diff<br/>Overall<br/>(vs ${compareManager.managerName.split(' ')[0]})</th>
+      <th style="width: 50px;">Chip</th>
     </tr>`;
 
   let rank = 1;
@@ -529,7 +529,7 @@ function makeLiveTable(managers, compareToId = "") {
     // Render
     html += `<tr>
       <td style="text-align: center;">${rank}</td>
-      <td><strong>${m.managerName}</strong></td>
+      <td><strong><a href="/squads?manager=${m.entryId}" style="color: #3182ce; text-decoration: none; cursor: pointer;">${m.managerName}</a></strong></td>
       <td style="background:#e6f7ff; font-weight: bold; text-align: center;">${m.livePointsBeforeHits}</td>
       <td style="text-align: center;">${m.projectedBonus}</td>
       <td style="color:#e53e3e; text-align:center;">${m.transferCost === 0 ? "0" : `-${Math.abs(m.transferCost)}`}</td>
@@ -659,14 +659,13 @@ init();
 <style>
   table {
     font-family: Arial, sans-serif;
-    font-size: 14px;
   }
   th {
     font-weight: bold;
-    padding: 8px;
+    padding: 4px;
   }
   td {
-    padding: 6px;
+    padding: 3px;
   }
   h2 {
     margin-top: 1.5em;
