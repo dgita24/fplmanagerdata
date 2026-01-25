@@ -87,10 +87,13 @@ async function populateGWSelector() {
   
   gwSelect.innerHTML = '<option value="season">Season Total</option>';
   
-  data.forEach(row => {
+  // Remove duplicates using Set
+  const uniqueGameweeks = [...new Set(data.map(row => row.gameweek))];
+  
+  uniqueGameweeks.forEach(gameweek => {
     const option = document.createElement('option');
-    option.value = row.gameweek;
-    option.textContent = `GW ${row.gameweek}`;
+    option.value = gameweek;
+    option.textContent = `GW ${gameweek}`;
     gwSelect.appendChild(option);
   });
 }
