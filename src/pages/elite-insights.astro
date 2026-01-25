@@ -93,9 +93,41 @@ function createSupabaseClient(url, key) {
 
 const supabase = createSupabaseClient(SUPABASE_URL, SUPABASE_KEY);
 
-import { loadManagerIdsFromSupabase } from '../lib/authHelper.js'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  'https://fnehvaoqqmkrhxcqslta.supabase.co',
+  'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
+)
 
 let managerIds = []
+
+async function loadManagerIdsFromSupabase() {
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    window.location.replace('/login')
+    return { authenticated: false, managerIds: [] }
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('user_manager_lists')
+      .select('manager_ids')
+      .eq('user_id', user.id)
+      .single()
+    
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error loading manager IDs:', error)
+      return { authenticated: true, managerIds: [] }
+    }
+    
+    return { authenticated: true, managerIds: data?.manager_ids || [] }
+  } catch (e) {
+    console.error('Error:', e)
+    return { authenticated: false, managerIds: [] }
+  }
+}
 
 const out = document.getElementById("insights-output");
 const dataStatus = document.getElementById("data-status");

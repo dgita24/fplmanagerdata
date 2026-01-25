@@ -37,7 +37,7 @@ import Nav from '../components/Nav.astro';
   </div>
 </div>
 
-<script type="module">
+<script>
 // Inline FT calculation logic - MATCHES EXCEL EXACTLY
 function calculateFTs(managerHistory) {
   const byGW = new Map();
@@ -80,7 +80,7 @@ function calculateFTs(managerHistory) {
       const Q = Number(row.FTsStartOfGW);
       const M = Number(row.transfers);
       const F = row.chipPlayed || "";
-      
+      o 
       if (E === 15) {
         row.FTsForNextGW = 5;
       } else {
@@ -93,9 +93,41 @@ function calculateFTs(managerHistory) {
   });
 }
 
-import { loadManagerIdsFromSupabase } from '../lib/authHelper.js'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  'https://fnehvaoqqmkrhxcqslta.supabase.co',
+  'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
+)
 
 let managerIds = []
+
+async function loadManagerIdsFromSupabase() {
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    window.location.replace('/login')
+    return { authenticated: false, managerIds: [] }
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('user_manager_lists')
+      .select('manager_ids')
+      .eq('user_id', user.id)
+      .single()
+    
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error loading manager IDs:', error)
+      return { authenticated: true, managerIds: [] }
+    }
+    
+    return { authenticated: true, managerIds: data?.manager_ids || [] }
+  } catch (e) {
+    console.error('Error:', e)
+    return { authenticated: false, managerIds: [] }
+  }
+}
 
 const out = document.getElementById("transfers-table");
 const gwFilterInput = document.getElementById("gw-filter");
