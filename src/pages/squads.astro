@@ -209,6 +209,32 @@ function getPlayerLiveComputed(playerId, teamId, gw) {
   return { locked, projBonus, liveTotal, status, minutes, dnp };
 }
 
+function applyCaptaincyToSquadDisplay(teamPicks, chipCode) {
+  const capFactor = (chipCode === "TC") ? 3 : 2;
+
+  const cap = teamPicks.find(p => p.isCaptain);
+  const vc  = teamPicks.find(p => p.isViceCaptain);
+
+  const capId = cap ? cap.playerId : null;
+  const vcId  = vc ? vc.playerId : null;
+
+  // Switch ONLY when captain is confirmed no-show (0 mins + finished),
+  // consistent with your dnp flag.
+  const capDnp = cap ? !!cap.dnp : true;
+  const vcDnp  = vc  ? !!vc.dnp  : true;
+
+  const actingCaptainId =
+    (!capDnp && capId !== null) ? capId :
+    (!vcDnp && vcId !== null) ? vcId :
+    null;
+
+  return teamPicks.map(p => {
+    const mult = (actingCaptainId !== null && p.playerId === actingCaptainId) ? capFactor : 1;
+    return { ...p, gwPointsCap: (Number(p.gwPoints) || 0) * mult };
+  });
+}
+
+
 // Only for ON/OFF indicators; does NOT change the points column (we always show raw gwPoints).
 function applyAutoSubsKeepAll(teamPicks, chipCode) {
   const isBB = chipCode === "BB";
@@ -442,9 +468,8 @@ async function fetchManagerData(entryId, gw) {
        chipThisGW.name === "freehit" ? "FH" : chipThisGW.name) : "";
 
     const squadRaw = await fetchSquadForGW(entryId, gw);
-
-    // Only to set ON/OFF indicators; points remain raw gwPoints.
-    const squad = applyAutoSubsKeepAll(squadRaw, chipPlayed || "None");
+    const squadWithIndicators = applyAutoSubsKeepAll(squadRaw, chipPlayed || "None");
+    const squad = applyCaptaincyToSquadDisplay(squadWithIndicators, chipPlayed || "None");
 
     return {
       entryId,
@@ -544,7 +569,7 @@ function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValu
         </td>
         <td style="text-align: center;">${player.playerPosition}</td>
         <td>${player.teamName}</td>
-        <td style="background:#e6f7ff; font-weight: bold; text-align: center;">${player.gwPoints ?? 0}</td>
+        <td style="background:#e6f7ff; font-weight: bold; text-align: center;">${player.gwPointsCap ?? player.gwPoints ?? 0}</td>
         <td style="text-align: center; font-weight: bold; color: ${player.isCaptain ? '#e53e3e' : '#3182ce'};">${captainBadge}</td>
       </tr>`;
     }
