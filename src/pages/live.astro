@@ -84,8 +84,162 @@ let playerCache = new Map();
 let teamCache = new Map();
 let fixturesCache = new Map();
 let livePointsCache = new Map();
+let projectedBonusCache = new Map();
+let teamStatusCache = new Map();
+
 let autoRefreshInterval = null;
 let autoRefreshEnabled = false;
+
+function positionLabel(elementType) {
+  if (elementType === 1) return "GK";
+  if (elementType === 2) return "DEF";
+  if (elementType === 3) return "MID";
+  return "FWD";
+}
+
+function getTeamGwStatus(teamId, gw) {
+  return teamStatusCache.get(`${gw}:${teamId}`) || { started: false, finished: false };
+}
+
+
+function bonusFromBpsRows(bpsRows) {
+  // bpsRows: [{ element: number, value: number }, ...]
+  const rows = (bpsRows || [])
+    .filter(r => r && Number.isFinite(r.value) && Number.isFinite(r.element))
+    .sort((a, b) => b.value - a.value);
+
+  const out = new Map(); // element -> bonus
+  if (rows.length === 0) return out;
+
+  const topVal = rows[0].value;
+  const top = rows.filter(r => r.value === topVal);
+
+  // Tie for 1st
+  if (top.length >= 2) {
+    for (const r of top) out.set(r.element, 3);
+    if (top.length >= 3) return out; // all 3 bonus slots consumed
+    // 2-way tie for first: next distinct gets 1
+    const next = rows.find(r => r.value < topVal);
+    if (next) {
+      const nextVal = next.value;
+      for (const r of rows.filter(r => r.value === nextVal)) out.set(r.element, 1);
+    }
+    return out;
+  }
+
+  // Clear 1st
+  out.set(rows[0].element, 3);
+  const secondRow = rows.find(r => r.value < topVal);
+  if (!secondRow) return out;
+
+  const secondVal = secondRow.value;
+  const second = rows.filter(r => r.value === secondVal);
+
+  // Tie for 2nd
+  if (second.length >= 2) {
+    for (const r of second) out.set(r.element, 2);
+    return out; // no 1-point bonus in this case
+  }
+
+  // Clear 2nd
+  out.set(second[0].element, 2);
+  const thirdRow = rows.find(r => r.value < secondVal);
+  if (!thirdRow) return out;
+
+  const thirdVal = thirdRow.value;
+  const third = rows.filter(r => r.value === thirdVal);
+  for (const r of third) out.set(r.element, 1);
+
+  return out;
+}
+
+function getPlayerLiveComputed(playerId, teamId, gw) {
+  const live = livePointsCache.get(playerId) || { points: 0, bonus: 0, minutes: 0 };
+  const { started, finished } = getTeamGwStatus(teamId, gw);
+
+  const officialTotal = Number(live.points) || 0;
+  const confirmedBonus = Number(live.bonus) || 0;
+  const minutes = Number(live.minutes) || 0;
+
+  const locked = finished ? officialTotal : (officialTotal - confirmedBonus);
+  const projBonus = finished ? 0 : (Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0);
+  const liveTotal = locked + projBonus;
+
+  const status = finished ? "Fin" : (started ? "Live" : "v");
+  return { locked, projBonus, liveTotal, status, minutes };
+}
+
+// Excel-equivalent auto-sub + captain/VC logic (mirrors your Power Query rules)
+function applyAutoSubsAndMultipliers(teamPicks, chipCode) {
+  const isBB = chipCode === "BB";
+  const isTC = chipCode === "TC";
+  const capFactor = isTC ? 3 : 2;
+
+  const sorted = [...teamPicks].sort((a, b) => a.position - b.position);
+  const starters = sorted.slice(0, 11);
+  const bench = sorted.slice(11); // already in bench order
+
+  // Bench boost: no subs, bench counts with multiplier 1
+  if (isBB) {
+    const captain = sorted.find(p => p.is_captain);
+    const capId = captain ? captain.playerId : null;
+
+    return sorted.map(p => ({
+      ...p,
+      multiplier: capId && p.playerId === capId ? capFactor : 1
+    }));
+  }
+
+  // Remove starters who are confirmed DNP (Minutes=0 AND Status="Fin"), like Excel
+  let active = starters.filter(p => !(p.minutes === 0 && p.status === "Fin"));
+  const benchRemaining = [];
+
+  for (const cand of bench) {
+    const needSub = active.length < 11;
+    if (!needSub) {
+      benchRemaining.push(cand);
+      continue;
+    }
+
+    const candViable = !(cand.minutes === 0 && cand.status === "Fin");
+    if (!candViable) {
+      benchRemaining.push(cand);
+      continue;
+    }
+
+    const gkCount = active.filter(p => p.playingPosition === "GK").length;
+    const defCount = active.filter(p => p.playingPosition === "DEF").length;
+
+    const candPos = cand.playingPosition;
+    const validGK = (candPos === "GK" && gkCount === 0);
+    const validDefSave = (candPos === "DEF" && defCount < 3);
+    const validGeneral = (candPos !== "GK" && gkCount > 0 && defCount >= 3);
+
+    if (validGK || validDefSave || validGeneral) {
+      active = [...active, cand];
+    } else {
+      benchRemaining.push(cand);
+    }
+  }
+
+  // Captain/VC promotion after subs
+  const origCap = sorted.find(p => p.is_captain)?.playerId ?? null;
+  const origVC = sorted.find(p => p.is_vice_captain)?.playerId ?? null;
+
+  const capActive = origCap !== null && active.some(p => p.playerId === origCap);
+  const vcActive = origVC !== null && active.some(p => p.playerId === origVC);
+
+  const captainId = capActive ? origCap : (vcActive ? origVC : null);
+
+  const activeWithMult = active.map(p => ({
+    ...p,
+    multiplier: captainId && p.playerId === captainId ? capFactor : 1
+  }));
+
+  const benchWithMult = benchRemaining.map(p => ({ ...p, multiplier: 0 }));
+  return [...activeWithMult, ...benchWithMult];
+}
+
 
 // Fetch bootstrap-static data
 async function fetchBootstrapData() {
@@ -125,24 +279,69 @@ async function fetchFixtures(gw) {
     const res = await fetch(`/api/fpl/fixtures?event=${gw}`);
     if (!res.ok) throw new Error("Failed to fetch fixtures");
     const fixtures = await res.json();
-    
-    fixtures.forEach(fixture => {
-      fixturesCache.set(`${fixture.team_h}-${gw}`, {
-        opponent: fixture.team_a,
+
+    fixturesCache.clear();
+    teamStatusCache.clear();
+    projectedBonusCache.clear();
+
+    // Build per-team status across ALL fixtures in this GW (handles doubles more safely)
+    const perTeam = new Map(); // teamId -> { startedAny, finishedAll }
+    function upsertTeam(teamId, started, finished) {
+      const cur = perTeam.get(teamId) || { startedAny: false, finishedAll: true };
+      cur.startedAny = cur.startedAny || !!started || !!finished;
+      cur.finishedAll = cur.finishedAll && !!finished;
+      perTeam.set(teamId, cur);
+    }
+
+    // Build projected bonus from fixture BPS (per fixture) and SUM per player across unfinished fixtures
+    for (const fx of fixtures) {
+      upsertTeam(fx.team_h, fx.started, fx.finished);
+      upsertTeam(fx.team_a, fx.started, fx.finished);
+
+      // Keep your existing fixturesCache for any other UI logic you might have
+      fixturesCache.set(`${fx.team_h}-${gw}`, {
+        opponent: fx.team_a,
         isHome: true,
-        finished: fixture.finished,
-        started: fixture.started,
-        kickoffTime: fixture.kickoff_time
+        finished: fx.finished,
+        started: fx.started,
+        kickoffTime: fx.kickoff_time
       });
-      fixturesCache.set(`${fixture.team_a}-${gw}`, {
-        opponent: fixture.team_h,
+      fixturesCache.set(`${fx.team_a}-${gw}`, {
+        opponent: fx.team_h,
         isHome: false,
-        finished: fixture.finished,
-        started: fixture.started,
-        kickoffTime: fixture.kickoff_time
+        finished: fx.finished,
+        started: fx.started,
+        kickoffTime: fx.kickoff_time
       });
-    });
-    
+
+      // Only project bonus for live (started) and not finished fixtures
+      if (!fx.started || fx.finished) continue;
+
+      const stats = Array.isArray(fx.stats) ? fx.stats : [];
+      const bpsStat = stats.find(s => s && s.identifier === "bps");
+      if (!bpsStat) continue;
+
+      const h = Array.isArray(bpsStat.h) ? bpsStat.h : [];
+      const a = Array.isArray(bpsStat.a) ? bpsStat.a : [];
+      const all = [...h, ...a]
+        .map(r => ({
+          element: Number(r.element),
+          value: Number(r.value)
+        }))
+        .filter(r => Number.isFinite(r.element) && Number.isFinite(r.value));
+
+      const bonusMap = bonusFromBpsRows(all); // element -> bonus (tie-aware)
+
+      for (const [playerId, bonus] of bonusMap.entries()) {
+        const key = `${gw}:${playerId}`;
+        projectedBonusCache.set(key, (projectedBonusCache.get(key) || 0) + bonus);
+      }
+    }
+
+    for (const [teamId, st] of perTeam.entries()) {
+      teamStatusCache.set(`${gw}:${teamId}`, { started: st.startedAny, finished: st.finishedAll });
+    }
+
     return fixtures;
   } catch (e) {
     console.error("Error fetching fixtures:", e);
@@ -156,17 +355,20 @@ async function fetchLiveGW(gw) {
     const res = await fetch(`/api/fpl/event/${gw}/live`);
     if (!res.ok) throw new Error("Failed to fetch live data");
     const data = await res.json();
-    
+
     livePointsCache.clear();
-    data.elements.forEach(player => {
-      livePointsCache.set(player.id, {
-        points: player.stats.total_points,
-        bps: player.stats.bps,
-        bonus: player.stats.bonus,
-        minutes: player.stats.minutes
+
+    const elements = Array.isArray(data.elements) ? data.elements : [];
+    for (const p of elements) {
+      const stats = p.stats || {};
+      livePointsCache.set(p.id, {
+        points: Number(stats.total_points) || 0,
+        bonus: Number(stats.bonus) || 0,
+        minutes: Number(stats.minutes) || 0,
+        bps: Number(stats.bps) || 0
       });
-    });
-    
+    }
+
     return data;
   } catch (e) {
     console.error("Error fetching live data:", e);
@@ -174,48 +376,14 @@ async function fetchLiveGW(gw) {
   }
 }
 
+
 // Calculate projected bonus from BPS
 function calculateProjectedBonus(playerId, teamId, gw) {
-  // ALWAYS prioritize actual bonus from FPL API when available
-  const liveData = livePointsCache.get(playerId);
-  if (liveData && liveData.bonus > 0) {
-    return liveData.bonus;
-  }
-  
-  const fixture = fixturesCache.get(`${teamId}-${gw}`);
-  if (!fixture || fixture.finished) {
-    // Match finished, no bonus available
-    return 0;
-  }
-  
-  if (!fixture.started) {
-    // Match hasn't started
-    return 0;
-  }
-  
-  // Match is live - project bonus from BPS
-  if (!liveData || liveData.minutes === 0) return 0;
-  
-  // Get all players in this match and sort by BPS
-  const allPlayers = Array.from(livePointsCache.entries())
-    .map(([id, data]) => {
-      const player = playerCache.get(id);
-      if (!player) return null;
-      const playerFixture = fixturesCache.get(`${player.team}-${gw}`);
-      if (!playerFixture || playerFixture.opponent !== fixture.opponent) return null;
-      return { id, bps: data.bps, minutes: data.minutes };
-    })
-    .filter(p => p && p.minutes > 0)
-    .sort((a, b) => b.bps - a.bps);
-  
-  // Top 3 get bonus (3, 2, 1)
-  const playerIndex = allPlayers.findIndex(p => p.id === playerId);
-  if (playerIndex === 0) return 3;
-  if (playerIndex === 1) return 2;
-  if (playerIndex === 2) return 1;
-  
-  return 0;
+  const { finished, started } = getTeamGwStatus(teamId, gw);
+  if (!started || finished) return 0;
+  return Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0;
 }
+
 
 // Fetch manager's live team
 async function fetchManagerLive(entryId, gw) {
@@ -225,98 +393,90 @@ async function fetchManagerLive(entryId, gw) {
       fetch(`/api/fpl/entry/${entryId}`),
       fetch(`/api/fpl/entry/${entryId}/history`)
     ]);
-    if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch manager data");
+
+    if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) {
+      throw new Error("Failed to fetch manager data");
+    }
 
     const picksData = await picksRes.json();
     const summaryData = await summaryRes.json();
     const historyData = await historyRes.json();
 
-    // Get chip played this GW
-    const chipPlayed = (historyData.chips || []).find(c => c.event === gw)?.name || '';
-    const isBenchBoost = chipPlayed === 'bboost';
-    const isTripleCaptain = chipPlayed === '3xc';
+    // Chip mapping to your Excel-style codes
+    const chipName = (historyData.chips || []).find(c => c.event === gw)?.name || "";
+    const chipCode =
+      chipName === "bboost" ? "BB" :
+      chipName === "3xc" ? "TC" :
+      chipName === "wildcard" ? "WC" :
+      chipName === "freehit" ? "FH" :
+      "None";
 
-    // Apply FPL lineup logic:
-    // - 1..11 are starting XI (positions, lowest first), 12..15 are bench
-    // - Get player live points, bonus, minutes etc from livePointsCache
-    // - Build objects for each pick
-    let picks = picksData.picks.map(p => {
-      const player = playerCache.get(p.element);
-      const liveStats = livePointsCache.get(p.element) || { points: 0, bonus: 0, minutes: 0 };
-      const projectedBonus = calculateProjectedBonus(p.element, player ? player.team : 0, gw);
+    const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
+
+    // Build picks with Excel-equivalent per-player live totals
+    const picks = rawPicks.map(p => {
+      const player = playerCache.get(p.element) || {};
+      const teamId = Number(player.team) || 0;
+
+      const computed = getPlayerLiveComputed(p.element, teamId, gw);
+
       return {
-        ...p,
-        ...player,
-        livePoints: liveStats.points,
-        minutes: liveStats.minutes,
-        bonus: liveStats.bonus,
-        projectedBonus,
-        totalPoints: liveStats.points + projectedBonus
-      }
+        // from picks endpoint
+        playerId: Number(p.element),
+        position: Number(p.position),
+        is_captain: !!p.is_captain,
+        is_vice_captain: !!p.is_vice_captain,
+
+        // from bootstrap cache
+        web_name: player.name || "",
+        teamId,
+        playingPosition: positionLabel(player.position),
+
+        // computed live
+        minutes: computed.minutes,
+        status: computed.status,
+        lockedPoints: computed.locked,
+        projBonus: computed.projBonus,
+        liveTotal: computed.liveTotal
+      };
     });
 
-    // Split starters and bench: positions are given as position 1=starting
-    const sorted = [...picks].sort((a,b) => a.position - b.position);
-    const starters = sorted.slice(0, 11);
-    const bench = sorted.slice(11);
+    // Apply Excel-like subs + multipliers
+    const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
 
-    // Figure out auto-subs (if needed): Only necessary if one or more starters played 0 minutes and weren't sent off
-    // For FPL, typically, you follow auto sub rules as per official app
+    // Score
+    const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
+    const projectedBonus = finalTeam.reduce((sum, p) => sum + (p.projBonus * (p.multiplier || 0)), 0);
 
-    // Apply captain/VC multipliers
-    let liveTotal = 0;
-    let bonusPts = 0;
-    let countedPlayers = [];
-    for (const p of starters) {
-      let multiplier = 1;
-      if (p.is_captain) multiplier = isTripleCaptain ? 3 : 2;
-      liveTotal += p.livePoints * multiplier;
-      bonusPts += (p.bonus || p.projectedBonus) * multiplier;
-      countedPlayers.push(`${p.web_name || ''} (starter${multiplier>1 ? ' cap' : ''}): ${p.livePoints} x${multiplier}`);
-    }
+    const transferCost =
+      Number((historyData.current || []).find(h => h.event === gw)?.event_transfers_cost) || 0;
 
-    // Bench boost: add bench points if chip active, no multipliers
-    if (isBenchBoost) {
-      for (const p of bench) {
-        liveTotal += p.livePoints;
-        bonusPts += (p.bonus || p.projectedBonus);
-        countedPlayers.push(`${p.web_name || ''} (bench): ${p.livePoints}`);
-      }
-    }
+    const liveNet = livePointsBeforeHits - transferCost;
 
-    // Proper auto sub logic is complex—implement if needed; this is a basic placeholder
-    // If you want to strictly match FPL, consider more exhaustive auto sub implementation as in your Excel queries
+    // Match Excel: use /entry summary_event_points as "Official GW"
+    const officialTotal = Number(summaryData.summary_overall_points) || 0;
+    const officialGW = Number(summaryData.summary_event_points) || 0;
 
-    const transferCost = (historyData.current.find(h => h.event === gw)?.event_transfers_cost) || 0;
-    const nettPoints = liveTotal - transferCost;
-
-    // Get pre-GW total
-    const totalPoints = summaryData.summary_overall_points || 0;
-    const gwHistory = historyData.current.find(h => h.event === gw);
-    const officialGW = gwHistory ? gwHistory.points : 0;
-    const projectedOverall = totalPoints - officialGW + nettPoints;
-
-    // Debug print
-    console.log(`Manager: ${summaryData.player_first_name} ${summaryData.player_last_name} (ID ${entryId})`);
-    countedPlayers.forEach(str => console.log(str));
-    console.log(`Total: live=${liveTotal}, bench chip=${isBenchBoost}, bonus=${bonusPts}, transferCost=${transferCost}, projectedOverall=${projectedOverall}`);
+    const liveOverall = (officialTotal - officialGW) + liveNet;
 
     return {
       entryId,
-      managerName: `${summaryData.player_first_name} ${summaryData.player_last_name}`,
-      chipPlayed: chipPlayed ? chipPlayed.toUpperCase() : '-',
+      managerName: `${summaryData.player_first_name || ""} ${summaryData.player_last_name || ""}`.trim(),
+      chipPlayed: chipCode === "None" ? "-" : chipCode,
       transferCost,
-      livePoints: nettPoints,
-      livePointsBeforeHits: liveTotal,
-      projectedBonus: bonusPts,
-      totalPoints: projectedOverall,
-      picks: picks
+      livePointsBeforeHits,
+      livePoints: liveNet,
+      projectedBonus,
+      totalPoints: liveOverall,
+      picks: finalTeam
     };
   } catch (e) {
     console.error(`Error fetching live data for manager ${entryId}:`, e);
     return null;
   }
 }
+
+
 function populateCompareManager() {
   compareManagerSelect.innerHTML = '<option value="">Leader</option>';
   
