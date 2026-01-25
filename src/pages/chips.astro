@@ -314,5 +314,37 @@ refreshBtn.addEventListener('click', async () => {
       align-items: center;
     }
   }
+
+  /* Extra small phones (480px and below) */
+  @media (max-width: 480px) {
+    body {
+      padding: 0.25em;
+      font-size: 13px;
+    }
+
+    h1 {
+      font-size: 1.3em;
+    }
+
+    h2 {
+      font-size: 1.15em;
+    }
+
+    table {
+      min-width: 400px;
+      font-size: 0.7em;
+    }
+
+    th, td {
+      padding: 3px 2px !important;
+      font-size: 11px;
+    }
+
+    /* Reduce button padding on very small screens */
+    button {
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+  }
 </style></body>
 </html>

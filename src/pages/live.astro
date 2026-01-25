@@ -753,5 +753,39 @@ init();
       align-items: center;
     }
   }
+
+  /* Extra small phones (480px and below) */
+  @media (max-width: 480px) {
+    body {
+      padding: 0.25em;
+      font-size: 13px;
+    }
+
+    h1 {
+      font-size: 1.3em;
+    }
+
+    h2 {
+      font-size: 1.15em;
+    }
+
+    table {
+      min-width: 550px;
+      font-size: 0.6em;
+    }
+
+    th, td {
+      padding: 3px 2px !important;
+      font-size: 10px;
+    }
+
+    /* Reduce button/input padding on very small screens */
+    button,
+    input[type="number"],
+    select {
+      padding: 8px 12px !important;
+      font-size: 13px;
+    }
+  }
 </style></body>
 </html>
