@@ -187,23 +187,35 @@ function renderPointsTable(data, isAverage = false) {
     FWD: data[`${prefix}penalties_missed_fwd`] || 0,
   };
   
-  // Calculate points per position (Complete FPL scoring rules - minus DEFCONS which requires minutes played data)
+  // DEFCONS: 2 pts per fixture if defensive_contribution >= threshold (10 for DEF, 12 for MID/FWD)
+  // Calculated from /api/event/{gw}/live/ explain array, aggregated across completed fixtures
+  const defcons = {
+    GK: 0, // GK excluded from DEFCONS
+    DEF: data[`${prefix}defcons_def`] || 0,
+    MID: data[`${prefix}defcons_mid`] || 0,
+    FWD: data[`${prefix}defcons_fwd`] || 0,
+  };
+  
+  // Calculate points per position (Complete FPL scoring rules including DEFCONS)
   const pointsPerPosition = {
     // GK: Goals(6) + Assists(3) + CS(4) + Bonus - GoalsConceded/2 - Yellow - Red(3) - PenMissed(2)
     GK: (goals.GK * 6) + (assists.GK * 3) + (cleanSheets.GK * 4) + bonus.GK 
         - Math.floor(goalsAgainst.GK / 2) - yellowCards.GK - (redCards.GK * 3) - (penaltiesMissed.GK * 2),
     
-    // DEF: Goals(6) + Assists(3) + CS(4) + Bonus - GoalsConceded/2 - Yellow - Red(3) - PenMissed(2) [+DEFCONS(2) when data available]
+    // DEF: Goals(6) + Assists(3) + CS(4) + Bonus - GoalsConceded/2 - Yellow - Red(3) - PenMissed(2) + DEFCONS(2)
     DEF: (goals.DEF * 6) + (assists.DEF * 3) + (cleanSheets.DEF * 4) + bonus.DEF 
-         - Math.floor(goalsAgainst.DEF / 2) - yellowCards.DEF - (redCards.DEF * 3) - (penaltiesMissed.DEF * 2),
+         - Math.floor(goalsAgainst.DEF / 2) - yellowCards.DEF - (redCards.DEF * 3) - (penaltiesMissed.DEF * 2)
+         + defcons.DEF,
     
-    // MID: Goals(5) + Assists(3) + CS(1) + Bonus - Yellow - Red(3) - PenMissed(2) [+DEFCONS(2) when data available]
+    // MID: Goals(5) + Assists(3) + CS(1) + Bonus - Yellow - Red(3) - PenMissed(2) + DEFCONS(2)
     MID: (goals.MID * 5) + (assists.MID * 3) + (cleanSheets.MID * 1) + bonus.MID 
-         - yellowCards.MID - (redCards.MID * 3) - (penaltiesMissed.MID * 2),
+         - yellowCards.MID - (redCards.MID * 3) - (penaltiesMissed.MID * 2)
+         + defcons.MID,
     
-    // FWD: Goals(4) + Assists(3) + Bonus - Yellow - Red(3) - PenMissed(2) [+DEFCONS(2) when data available]
+    // FWD: Goals(4) + Assists(3) + Bonus - Yellow - Red(3) - PenMissed(2) + DEFCONS(2)
     FWD: (goals.FWD * 4) + (assists.FWD * 3) + bonus.FWD 
-         - yellowCards.FWD - (redCards.FWD * 3) - (penaltiesMissed.FWD * 2),
+         - yellowCards.FWD - (redCards.FWD * 3) - (penaltiesMissed.FWD * 2)
+         + defcons.FWD,
   };
   
   const totalGoals = Object.values(goals).reduce((a, b) => a + b, 0);
@@ -214,6 +226,7 @@ function renderPointsTable(data, isAverage = false) {
   const totalYellowCards = Object.values(yellowCards).reduce((a, b) => a + b, 0);
   const totalRedCards = Object.values(redCards).reduce((a, b) => a + b, 0);
   const totalPenaltiesMissed = Object.values(penaltiesMissed).reduce((a, b) => a + b, 0);
+  const totalDefcons = defcons.DEF + defcons.MID + defcons.FWD;
   const totalPoints = Object.values(pointsPerPosition).reduce((a, b) => a + b, 0) + other;
   
   return `
@@ -270,6 +283,14 @@ function renderPointsTable(data, isAverage = false) {
         <td style="text-align:center"><strong>${totalPenaltiesMissed}</strong></td>
       </tr>
       <tr>
+        <td><strong>DEFCONS Points</strong></td>
+        <td style="text-align:center">-</td>
+        <td style="text-align:center">${defcons.DEF}</td>
+        <td style="text-align:center">${defcons.MID}</td>
+        <td style="text-align:center">${defcons.FWD}</td>
+        <td style="text-align:center"><strong>${totalDefcons}</strong></td>
+      </tr>
+      <tr style="background:#f9f9f9">
         <td><strong>Other Points</strong></td>
         <td colspan="4" style="text-align:center">-</td>
         <td style="text-align:center"><strong>${other}</strong></td>
@@ -281,8 +302,11 @@ function renderPointsTable(data, isAverage = false) {
       </tr>
     </table>
     <p style="margin-top: 0.5em; font-size: 12px; color: #666;">
-      <strong>Note:</strong> Full FPL scoring includes: Goals conceded (-1 per 2 for GK/DEF), Yellow cards (-1), Red cards (-3), Penalties missed (-2), 
-      and DEFCONS (+2 for outfield players with 60+ min appearances). Currently showing available data only.
+      <strong>DEFCONS:</strong> Defensive Contributions - 2 pts per fixture if defensive_contribution ≥ 10 (DEF) or ≥ 12 (MID/FWD). 
+      Calculated from FPL API live gameweek data. Currently showing 0 until data collection is implemented.
+    </p>
+    <p style="margin-top: 0.5em; font-size: 12px; color: #666;">
+      <strong>Full FPL Scoring:</strong> Includes goals, assists, clean sheets, bonus, goals conceded, yellow/red cards, penalties missed, and DEFCONS.
     </p>
   `;
 }
@@ -440,6 +464,9 @@ function aggregateSeasonData(allGameweeks) {
     avg_penalties_missed_def: 0,
     avg_penalties_missed_mid: 0,
     avg_penalties_missed_fwd: 0,
+    avg_defcons_def: 0,
+    avg_defcons_mid: 0,
+    avg_defcons_fwd: 0,
     avg_other_points: 0,
     avg_transfers: 0,
     avg_hits_count: 0,
@@ -481,6 +508,9 @@ function aggregateSeasonData(allGameweeks) {
     result.avg_penalties_missed_def += (gw.avg_penalties_missed_def || 0);
     result.avg_penalties_missed_mid += (gw.avg_penalties_missed_mid || 0);
     result.avg_penalties_missed_fwd += (gw.avg_penalties_missed_fwd || 0);
+    result.avg_defcons_def += (gw.avg_defcons_def || 0);
+    result.avg_defcons_mid += (gw.avg_defcons_mid || 0);
+    result.avg_defcons_fwd += (gw.avg_defcons_fwd || 0);
     result.avg_other_points += (gw.avg_other_points || 0);
     result.avg_transfers += (gw.avg_transfers || 0);
     result.avg_hits_count += (gw.avg_hits_count || 0);
