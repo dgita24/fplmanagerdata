@@ -1,4 +1,4 @@
-﻿---
+---
 import Nav from '../components/Nav.astro';
 ---
 
@@ -32,12 +32,7 @@ import Nav from '../components/Nav.astro';
 <div id="ownership-output" style="margin-top:1.5em"></div>
 
 <script>
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  'https://fnehvaoqqmkrhxcqslta.supabase.co',
-  'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
-)
+import { supabase } from '../lib/supabase.ts'
 
 let managerIds = []
 
@@ -181,7 +176,7 @@ function makeOwnershipTable(ownership, positionFilterValue = "") {
     return a.playerName.localeCompare(b.playerName);
   });
   
-  const totalManagers = loadManagerIds().length;
+  const totalManagers = allManagerNames.length;
   
   let html = `<h2>Player Ownership ${positionFilterValue ? `- ${positionFilterValue}` : '(All Positions)'}</h2>
   <p style="color: #666; margin-bottom: 1em;">Total managers: ${totalManagers} | Showing ${filtered.length} players</p>
@@ -294,7 +289,7 @@ async function loadOwnership(ids, gw) {
     }
   }
   
-  loadingStatus.innerHTML = `<span style='color:#38a169'>âœ… Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
+  loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
 }
 
 async function init() {

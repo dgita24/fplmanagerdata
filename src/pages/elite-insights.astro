@@ -1,4 +1,4 @@
-﻿---
+---
 import Nav from '../components/Nav.astro';
 ---
 
@@ -24,12 +24,7 @@ import Nav from '../components/Nav.astro';
 <div id="insights-output" style="margin-top:1.5em"></div>
 
 <script>
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  'https://fnehvaoqqmkrhxcqslta.supabase.co',
-  'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
-)
+import { supabase } from '../lib/supabase.ts'
 
 let managerIds = []
 
@@ -201,7 +196,7 @@ async function displayTop50() {
         </div>
         <div style="background: white; padding: 1em; border-radius: 4px;">
           <p style="color: #666; font-size: 14px; margin: 0;">Average Hits</p>
-          <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">${aggregate.avg_hits_count} (-${aggregate.avg_hits_cost} pts)</p>
+          <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">${aggregate.avg_hits_count} (-${aggregate.avg_hits_count * 4} pts)</p>
         </div>
         <div style="background: white; padding: 1em; border-radius: 4px;">
           <p style="color: #666; font-size: 14px; margin: 0;">Most Common Formation</p>

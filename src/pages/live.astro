@@ -1,4 +1,4 @@
-﻿---
+---
 import Nav from '../components/Nav.astro';
 ---
 
@@ -30,12 +30,7 @@ import Nav from '../components/Nav.astro';
 <div id="live-output" style="margin-top:1.5em"></div>
 
 <script>
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  'https://fnehvaoqqmkrhxcqslta.supabase.co',
-  'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
-)
+import { supabase } from '../lib/supabase.ts'
 
 let managerIds = []
 
@@ -479,7 +474,7 @@ async function loadLive(ids, gw) {
   
   populateCompareManager();
   
-  loadingStatus.innerHTML = `<span style='color:#38a169'>âœ… Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
+  loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
   lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
 }
 

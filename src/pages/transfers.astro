@@ -1,4 +1,4 @@
-﻿---
+---
 import Nav from '../components/Nav.astro';
 ---
 
@@ -24,7 +24,7 @@ import Nav from '../components/Nav.astro';
 <!-- Transfer History Modal -->
 <div id="transfer-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto;">
   <div style="background: white; margin: 50px auto; padding: 30px; max-width: 900px; border-radius: 8px; position: relative;">
-    <button id="close-modal" style="position: absolute; top: 15px; right: 15px; background: #e53e3e; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 16px;">âœ• Close</button>
+    <button id="close-modal" style="position: absolute; top: 15px; right: 15px; background: #e53e3e; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 16px;">✕ Close</button>
     <div id="modal-content"></div>
   </div>
 </div>
@@ -32,7 +32,7 @@ import Nav from '../components/Nav.astro';
 <!-- Chip Detail Modal (nested) -->
 <div id="chip-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1001; overflow-y: auto;">
   <div style="background: white; margin: 100px auto; padding: 30px; max-width: 700px; border-radius: 8px; position: relative;">
-    <button id="close-chip-modal" style="position: absolute; top: 15px; right: 15px; background: #e53e3e; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">âœ• Close</button>
+    <button id="close-chip-modal" style="position: absolute; top: 15px; right: 15px; background: #e53e3e; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">✕ Close</button>
     <div id="chip-modal-content"></div>
   </div>
 </div>
@@ -80,7 +80,7 @@ function calculateFTs(managerHistory) {
       const Q = Number(row.FTsStartOfGW);
       const M = Number(row.transfers);
       const F = row.chipPlayed || "";
-      o 
+      
       if (E === 15) {
         row.FTsForNextGW = 5;
       } else {
@@ -93,12 +93,7 @@ function calculateFTs(managerHistory) {
   });
 }
 
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  'https://fnehvaoqqmkrhxcqslta.supabase.co',
-  'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
-)
+import { supabase } from '../lib/supabase.ts'
 
 let managerIds = []
 
@@ -214,14 +209,14 @@ async function showTransferHistory(managerId, managerName) {
       html += `<h3 style="margin-top: 0;">Gameweek ${gw}</h3>`;
 
       if (chip) {
-        const chipBadge = chip === 'wildcard' ? 'ðŸƒ Wildcard' : chip === 'freehit' ? 'ðŸŽ¯ Free Hit' : chip;
+        const chipBadge = chip === 'wildcard' ? '🃏 Wildcard' : chip === 'freehit' ? '🎯 Free Hit' : chip;
         html += `<button class="chip-btn" data-gw="${gw}" data-manager="${managerId}" data-chip="${chip}" style="background: #805ad5; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-bottom: 10px; font-size: 14px;">${chipBadge} (Click to view transfers)</button>`;
       } else if (gwTransfers.length > 0) {
         html += `<div style="font-size: 14px;">`;
         gwTransfers.forEach(t => {
           const playerIn = allPlayersMap[t.element_in] || `Player ${t.element_in}`;
           const playerOut = allPlayersMap[t.element_out] || `Player ${t.element_out}`;
-          html += `<p style="margin: 5px 0;"><span style="color: #38a169;">â–² ${playerIn}</span> â† <span style="color: #e53e3e;">â–¼ ${playerOut}</span></p>`;
+          html += `<p style="margin: 5px 0;"><span style="color: #38a169;">▲ ${playerIn}</span> ← <span style="color: #e53e3e;">▼ ${playerOut}</span></p>`;
         });
         if (cost > 0) {
           html += `<p style="color: #e53e3e; font-weight: bold; margin-top: 10px;">Hit taken: -${cost} pts</p>`;
@@ -280,7 +275,7 @@ async function showChipTransfers(managerId, gw, chipName) {
     const playersIn = currentSquad.filter(p => !prevSquad.includes(p));
     const playersOut = prevSquad.filter(p => !currentSquad.includes(p));
 
-    const chipDisplay = chipName === 'wildcard' ? 'ðŸƒ Wildcard' : 'ðŸŽ¯ Free Hit';
+    const chipDisplay = chipName === 'wildcard' ? '🃏 Wildcard' : '🎯 Free Hit';
 
     let html = `<h2>${chipDisplay} - Gameweek ${gw}</h2>`;
     html += `<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">`;
@@ -288,14 +283,14 @@ async function showChipTransfers(managerId, gw, chipName) {
     html += `<div style="border: 1px solid #fc8181; border-radius: 6px; padding: 15px; background: #fff5f5;">`;
     html += `<h3 style="color: #e53e3e; margin-top: 0;">Players Out (${playersOut.length})</h3>`;
     playersOut.forEach(pid => {
-      html += `<p style="margin: 5px 0;">â–¼ ${allPlayersMap[pid] || `Player ${pid}`}</p>`;
+      html += `<p style="margin: 5px 0;">▼ ${allPlayersMap[pid] || `Player ${pid}`}</p>`;
     });
     html += `</div>`;
 
     html += `<div style="border: 1px solid #68d391; border-radius: 6px; padding: 15px; background: #f0fff4;">`;
     html += `<h3 style="color: #38a169; margin-top: 0;">Players In (${playersIn.length})</h3>`;
     playersIn.forEach(pid => {
-      html += `<p style="margin: 5px 0;">â–² ${allPlayersMap[pid] || `Player ${pid}`}</p>`;
+      html += `<p style="margin: 5px 0;">▲ ${allPlayersMap[pid] || `Player ${pid}`}</p>`;
     });
     html += `</div>`;
 
@@ -436,7 +431,7 @@ async function loadManagers(ids) {
     }
   }
   
-  loadingStatus.innerHTML = `<span style='color:#38a169'>âœ… Loaded ${loaded} of ${ids.length} managers</span>`;
+  loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
   
   // AFTER all managers loaded, auto-set filter to latest GW
   if (latestGW) {

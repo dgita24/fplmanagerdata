@@ -45,12 +45,7 @@
   </div>
 
   <script>
-    import { createClient } from '@supabase/supabase-js'
-
-    const supabase = createClient(
-      'https://fnehvaoqqmkrhxcqslta.supabase.co',
-      'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
-    )
+    import { supabase } from '../lib/supabase.ts'
 
     const form = document.getElementById('login-form')
     const errorMessage = document.getElementById('error-message')
