@@ -85,6 +85,8 @@ async function populateGWSelector() {
     return;
   }
   
+  console.log('Fetched gameweeks:', data);
+  
   gwSelect.innerHTML = '<option value="season">Season Total</option>';
   
   data.forEach(row => {
@@ -215,7 +217,7 @@ function aggregateCustomManagerData(managersData) {
   return aggregate;
 }
 
-function renderDataTables(data, gwLabel) {
+function renderDataTables(data, gwLabel, gameweek) {
   const goalsGK = (data.avg_goals_gk || 0) * 6;
   const goalsDEF = (data.avg_goals_def || 0) * 6;
   const goalsMID = (data.avg_goals_mid || 0) * 5;
@@ -248,15 +250,15 @@ function renderDataTables(data, gwLabel) {
       </tr>
       <tr>
         <td><strong>Average Transfers</strong></td>
-        <td style="text-align: center; font-weight: bold;">${data.avg_transfers.toFixed(2)}</td>
+        <td style="text-align: center; font-weight: bold;">${data.avg_transfers.toFixed(2)}<br/><span style="font-size: 0.85em; color: #666;">Avg per Manager ${gameweek === 'season' ? '(Season)' : '(GW ' + gameweek + ')'}</span></td>
       </tr>
       <tr>
         <td><strong>Transfer Hits</strong></td>
-        <td style="text-align: center; font-weight: bold;">${data.avg_hits_count.toFixed(2)}</td>
+        <td style="text-align: center; font-weight: bold;">${data.avg_hits_count.toFixed(2)}<br/><span style="font-size: 0.85em; color: #666;">Avg per Manager ${gameweek === 'season' ? '(Season)' : '(GW ' + gameweek + ')'}</span></td>
       </tr>
       <tr>
         <td><strong>Hits Cost (points)</strong></td>
-        <td style="text-align: center; font-weight: bold; color: #e53e3e;">-${data.avg_hits_cost.toFixed(1)}</td>
+        <td style="text-align: center; font-weight: bold; color: #e53e3e;">-${data.avg_hits_cost.toFixed(1)}<br/><span style="font-size: 0.85em; color: #666;">Avg per Manager ${gameweek === 'season' ? '(Season)' : '(GW ' + gameweek + ')'}</span></td>
       </tr>
       <tr style="background:#fffacd">
         <td><strong>Most Used Formation</strong></td>
@@ -304,10 +306,6 @@ function renderDataTables(data, gwLabel) {
       <tr style="background:#d4edda">
         <td colspan="4"><strong>Bonus + Other Points</strong></td>
         <td style="text-align: center; font-weight: bold;">${((data.avg_bonus_points || 0) + (data.avg_other_points || 0)).toFixed(1)}</td>
-      </tr>
-      <tr style="background:#c3e6cb">
-        <td colspan="4"><strong>TOTAL POINTS</strong></td>
-        <td style="text-align: center; font-weight: bold; font-size: 1.1em;">${totalPoints.toFixed(1)}</td>
       </tr>
     </table>
     <p style="font-size: 0.9em; color: #666; max-width: 1000px;"><em>FPL Scoring: Goals (GK/DEF: 6pts, MID: 5pts, FWD: 4pts), Assists (3pts all), Clean Sheets (GK/DEF: 4pts, MID: 1pt)</em></p>
@@ -385,7 +383,7 @@ async function displayTop50() {
       loadingStatus.innerHTML = `<span style="color:#38a169">✅ Loaded data for GW ${selectedGW}</span>`;
     }
     
-    out.innerHTML = `<h2 style="color:#667eea">🏆 World Top 50</h2>` + renderDataTables(aggregateData, gwLabel);
+    out.innerHTML = `<h2 style="color:#667eea">🏆 World Top 50</h2>` + renderDataTables(aggregateData, gwLabel, selectedGW);
   } catch (error) {
     console.error('Error displaying Top 50:', error);
     out.innerHTML = '<p style="color: #e53e3e;">❌ Error loading data.</p>';
@@ -441,7 +439,7 @@ async function displayCustomManagers() {
     }
     
     const aggregateData = aggregateCustomManagerData(managersData);
-    out.innerHTML = `<h2 style="color:#667eea">👥 Custom Managers</h2>` + renderDataTables(aggregateData, gwLabel);
+    out.innerHTML = `<h2 style="color:#667eea">👥 Custom Managers</h2>` + renderDataTables(aggregateData, gwLabel, selectedGW);
   } catch (error) {
     console.error('Error displaying custom managers:', error);
     out.innerHTML = '<p style="color: #e53e3e;">❌ Error loading data.</p>';
