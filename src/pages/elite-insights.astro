@@ -21,6 +21,11 @@ import Nav from '../components/Nav.astro';
     <option value="custom">My Custom Managers</option>
   </select>
   
+  <label for="gw-select" style="font-weight: bold; margin-left: 1.5em; margin-right: 0.5em;">Gameweek:</label>
+  <select id="gw-select" style="padding: 8px 12px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc;">
+    <option value="season">Season Overall</option>
+  </select>
+  
   <span id="manager-count" style="margin-left: 1.5em; color: #666;"></span>
   <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
 </div>
@@ -67,9 +72,11 @@ const out = document.getElementById("insights-output");
 const dataStatus = document.getElementById("data-status");
 const managerCountEl = document.getElementById("manager-count");
 const viewSelect = document.getElementById("view-select");
+const gwSelect = document.getElementById("gw-select");
 
 let currentView = 'top50';
 let latestGW = null;
+let selectedGW = 'season';
 
 async function fetchLatestGW() {
   const { data, error } = await supabase
@@ -85,6 +92,36 @@ async function fetchLatestGW() {
   }
   
   return data;
+}
+
+async function populateGWSelector() {
+  // Fetch all available gameweeks
+  const { data, error } = await supabase
+    .from('top_50_aggregates')
+    .select('gameweek')
+    .order('gameweek', { ascending: true });
+  
+  if (error || !data) {
+    console.error('Error fetching gameweeks:', error);
+    return;
+  }
+  
+  // Clear existing options except "Season Overall"
+  gwSelect.innerHTML = '<option value="season">Season Overall</option>';
+  
+  // Add individual gameweek options
+  data.forEach(row => {
+    const option = document.createElement('option');
+    option.value = row.gameweek;
+    option.textContent = `GW ${row.gameweek}`;
+    gwSelect.appendChild(option);
+  });
+  
+  // Set to latest GW by default
+  if (latestGW) {
+    gwSelect.value = latestGW;
+    selectedGW = latestGW;
+  }
 }
 
 function renderPointsTable(data, isAverage = false) {
@@ -112,12 +149,28 @@ function renderPointsTable(data, isAverage = false) {
     FWD: data[`${prefix}cs_fwd`] || 0,
   };
   
-  const bonus = data[`${prefix}bonus_points`] || 0;
+  const bonus = {
+    GK: data[`${prefix}bonus_gk`] || 0,
+    DEF: data[`${prefix}bonus_def`] || 0,
+    MID: data[`${prefix}bonus_mid`] || 0,
+    FWD: data[`${prefix}bonus_fwd`] || 0,
+  };
+  
   const other = data[`${prefix}other_points`] || 0;
+  
+  // Calculate points per position (FPL scoring rules)
+  const pointsPerPosition = {
+    GK: (goals.GK * 6) + (assists.GK * 3) + (cleanSheets.GK * 4) + bonus.GK,
+    DEF: (goals.DEF * 6) + (assists.DEF * 3) + (cleanSheets.DEF * 4) + bonus.DEF,
+    MID: (goals.MID * 5) + (assists.MID * 3) + (cleanSheets.MID * 1) + bonus.MID,
+    FWD: (goals.FWD * 4) + (assists.FWD * 3) + bonus.FWD,
+  };
   
   const totalGoals = Object.values(goals).reduce((a, b) => a + b, 0);
   const totalAssists = Object.values(assists).reduce((a, b) => a + b, 0);
   const totalCS = Object.values(cleanSheets).reduce((a, b) => a + b, 0);
+  const totalBonus = Object.values(bonus).reduce((a, b) => a + b, 0);
+  const totalPoints = Object.values(pointsPerPosition).reduce((a, b) => a + b, 0) + other;
   
   return `
     <table border="1" cellpadding="8" style="border-collapse:collapse; width:100%; margin-top: 1em;">
@@ -146,13 +199,18 @@ function renderPointsTable(data, isAverage = false) {
       </tr>
       <tr style="background:#f9f9f9">
         <td><strong>Bonus Points</strong></td>
-        <td colspan="4" style="text-align:center">-</td>
-        <td style="text-align:center"><strong>${bonus}</strong></td>
+        ${positions.map(pos => `<td style="text-align:center">${bonus[pos]}</td>`).join('')}
+        <td style="text-align:center"><strong>${totalBonus}</strong></td>
       </tr>
       <tr>
         <td><strong>Other Points</strong></td>
         <td colspan="4" style="text-align:center">-</td>
         <td style="text-align:center"><strong>${other}</strong></td>
+      </tr>
+      <tr style="background:#e6f7ff; font-weight:bold;">
+        <td><strong>Points per Position</strong></td>
+        ${positions.map(pos => `<td style="text-align:center">${Math.round(pointsPerPosition[pos])}</td>`).join('')}
+        <td style="text-align:center"><strong>${Math.round(totalPoints)}</strong></td>
       </tr>
     </table>
   `;
@@ -168,54 +226,88 @@ async function displayTop50() {
   }
   
   latestGW = gwInfo.gameweek;
-  const fetchDate = new Date(gwInfo.data_fetched_at).toLocaleString();
   
-  dataStatus.innerHTML = `
-    <p style="margin: 0; color: #1e40af;">
-      📊 Showing data for <strong>GW ${latestGW}</strong> | 
-      Last updated: <strong>${fetchDate}</strong>
-    </p>
-  `;
+  // Determine which gameweek(s) to fetch
+  let aggregateData;
+  let gwLabel;
   
-  const { data: aggregate, error } = await supabase
-    .from('top_50_aggregates')
-    .select('*')
-    .eq('gameweek', latestGW)
-    .single();
-  
-  if (error) {
-    console.error('Error fetching aggregate:', error);
-    out.innerHTML = '<p style="color: red;">Error loading data.</p>';
-    return;
+  if (selectedGW === 'season') {
+    // Fetch all gameweeks and aggregate
+    const { data: allData, error } = await supabase
+      .from('top_50_aggregates')
+      .select('*')
+      .order('gameweek', { ascending: true });
+    
+    if (error || !allData || allData.length === 0) {
+      console.error('Error fetching season data:', error);
+      out.innerHTML = '<p style="color: red;">Error loading season data.</p>';
+      return;
+    }
+    
+    // Aggregate all gameweeks
+    aggregateData = aggregateSeasonData(allData);
+    gwLabel = 'Season Overall';
+    
+    const fetchDate = new Date(gwInfo.data_fetched_at).toLocaleString();
+    dataStatus.innerHTML = `
+      <p style="margin: 0; color: #1e40af;">
+        📊 Showing <strong>Season Overall</strong> data (GW 1-${latestGW}) | 
+        Last updated: <strong>${fetchDate}</strong>
+      </p>
+    `;
+  } else {
+    // Fetch single gameweek
+    const { data, error } = await supabase
+      .from('top_50_aggregates')
+      .select('*')
+      .eq('gameweek', selectedGW)
+      .single();
+    
+    if (error) {
+      console.error('Error fetching aggregate:', error);
+      out.innerHTML = '<p style="color: red;">Error loading data for this gameweek.</p>';
+      return;
+    }
+    
+    aggregateData = data;
+    gwLabel = `GW ${selectedGW}`;
+    
+    const fetchDate = new Date(gwInfo.data_fetched_at).toLocaleString();
+    dataStatus.innerHTML = `
+      <p style="margin: 0; color: #1e40af;">
+        📊 Showing data for <strong>GW ${selectedGW}</strong> | 
+        Last updated: <strong>${fetchDate}</strong>
+      </p>
+    `;
   }
   
   let html = `
     <div style="background: linear-gradient(to right, #fef3c7, #fde68a); padding: 1.5em; border-radius: 8px; border: 2px solid #f59e0b; margin-bottom: 2em;">
-      <h2 style="color: #92400e; margin-top: 0;">🏆 World Top 50 Averages (GW ${latestGW})</h2>
-      <p style="color: #92400e; margin-bottom: 1em;">Based on ${aggregate.managers_analyzed} managers</p>
+      <h2 style="color: #92400e; margin-top: 0;">🏆 World Top 50 Averages (${gwLabel})</h2>
+      <p style="color: #92400e; margin-bottom: 1em;">Based on ${aggregateData.managers_analyzed} managers</p>
       
       <h3 style="color: #92400e;">Points Distribution</h3>
-      ${renderPointsTable(aggregate, true)}
+      ${renderPointsTable(aggregateData, true)}
       
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1em; margin-top: 1.5em;">
         <div style="background: white; padding: 1em; border-radius: 4px;">
           <p style="color: #666; font-size: 14px; margin: 0;">Average Transfers</p>
-          <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">${aggregate.avg_transfers}</p>
+          <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">${aggregateData.avg_transfers}</p>
         </div>
         <div style="background: white; padding: 1em; border-radius: 4px;">
           <p style="color: #666; font-size: 14px; margin: 0;">Average Hits</p>
-          <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">${aggregate.avg_hits_count} (-${aggregate.avg_hits_count * 4} pts)</p>
+          <p style="font-size: 24px; font-weight: bold; margin: 0.5em 0 0 0;">${aggregateData.avg_hits_count} (-${aggregateData.avg_hits_count * 4} pts)</p>
         </div>
         <div style="background: white; padding: 1em; border-radius: 4px;">
           <p style="color: #666; font-size: 14px; margin: 0;">Most Common Formation</p>
-          <p style="font-size: 28px; font-weight: bold; color: #3182ce; margin: 0.5em 0 0 0;">${aggregate.most_common_formation}</p>
+          <p style="font-size: 28px; font-weight: bold; color: #3182ce; margin: 0.5em 0 0 0;">${aggregateData.most_common_formation}</p>
         </div>
       </div>
       
       <div style="margin-top: 1.5em; background: white; padding: 1em; border-radius: 4px;">
         <p style="color: #666; font-size: 14px; margin: 0 0 0.5em 0;">Formation Distribution (Top 5):</p>
         <div style="display: flex; flex-wrap: wrap; gap: 0.5em;">
-          ${Object.entries(aggregate.formation_distribution || {})
+          ${Object.entries(aggregateData.formation_distribution || {})
             .sort(([, a], [, b]) => b - a)
             .slice(0, 5)
             .map(([formation, count]) => 
@@ -229,6 +321,81 @@ async function displayTop50() {
   `;
   
   out.innerHTML = html;
+}
+
+function aggregateSeasonData(allGameweeks) {
+  // Aggregate all gameweeks into season totals
+  const result = {
+    managers_analyzed: allGameweeks[0].managers_analyzed, // Assuming consistent
+    avg_goals_gk: 0,
+    avg_goals_def: 0,
+    avg_goals_mid: 0,
+    avg_goals_fwd: 0,
+    avg_assists_gk: 0,
+    avg_assists_def: 0,
+    avg_assists_mid: 0,
+    avg_assists_fwd: 0,
+    avg_cs_gk: 0,
+    avg_cs_def: 0,
+    avg_cs_mid: 0,
+    avg_cs_fwd: 0,
+    avg_bonus_gk: 0,
+    avg_bonus_def: 0,
+    avg_bonus_mid: 0,
+    avg_bonus_fwd: 0,
+    avg_other_points: 0,
+    avg_transfers: 0,
+    avg_hits_count: 0,
+    most_common_formation: '',
+    formation_distribution: {}
+  };
+  
+  const numGWs = allGameweeks.length;
+  
+  // Sum all values
+  allGameweeks.forEach(gw => {
+    result.avg_goals_gk += (gw.avg_goals_gk || 0);
+    result.avg_goals_def += (gw.avg_goals_def || 0);
+    result.avg_goals_mid += (gw.avg_goals_mid || 0);
+    result.avg_goals_fwd += (gw.avg_goals_fwd || 0);
+    result.avg_assists_gk += (gw.avg_assists_gk || 0);
+    result.avg_assists_def += (gw.avg_assists_def || 0);
+    result.avg_assists_mid += (gw.avg_assists_mid || 0);
+    result.avg_assists_fwd += (gw.avg_assists_fwd || 0);
+    result.avg_cs_gk += (gw.avg_cs_gk || 0);
+    result.avg_cs_def += (gw.avg_cs_def || 0);
+    result.avg_cs_mid += (gw.avg_cs_mid || 0);
+    result.avg_cs_fwd += (gw.avg_cs_fwd || 0);
+    result.avg_bonus_gk += (gw.avg_bonus_gk || 0);
+    result.avg_bonus_def += (gw.avg_bonus_def || 0);
+    result.avg_bonus_mid += (gw.avg_bonus_mid || 0);
+    result.avg_bonus_fwd += (gw.avg_bonus_fwd || 0);
+    result.avg_other_points += (gw.avg_other_points || 0);
+    result.avg_transfers += (gw.avg_transfers || 0);
+    result.avg_hits_count += (gw.avg_hits_count || 0);
+    
+    // Aggregate formation distribution
+    if (gw.formation_distribution) {
+      Object.entries(gw.formation_distribution).forEach(([formation, count]) => {
+        result.formation_distribution[formation] = (result.formation_distribution[formation] || 0) + count;
+      });
+    }
+  });
+  
+  // Round to reasonable precision
+  Object.keys(result).forEach(key => {
+    if (key.startsWith('avg_') && typeof result[key] === 'number') {
+      result[key] = Math.round(result[key] * 10) / 10;
+    }
+  });
+  
+  // Find most common formation
+  if (Object.keys(result.formation_distribution).length > 0) {
+    result.most_common_formation = Object.entries(result.formation_distribution)
+      .sort(([, a], [, b]) => b - a)[0][0];
+  }
+  
+  return result;
 }
 
 async function displayCustomManagers() {
@@ -283,8 +450,16 @@ async function updateView() {
   managerIds = ids;
   managerCountEl.textContent = `(${ids.length} manager${ids.length !== 1 ? 's' : ''} tracked)`;
   
+  // Populate gameweek selector
+  await populateGWSelector();
+  
   viewSelect.addEventListener('change', () => {
     currentView = viewSelect.value;
+    updateView();
+  });
+  
+  gwSelect.addEventListener('change', () => {
+    selectedGW = gwSelect.value;
     updateView();
   });
   
