@@ -32,13 +32,9 @@ import Nav from '../components/Nav.astro';
 <div id="ownership-output" style="margin-top:1.5em"></div>
 
 <script type="module">
-function loadManagerIds() {
-  try {
-    return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
-  } catch {
-    return [];
-  }
-}
+import { loadManagerIdsFromSupabase } from '../lib/authHelper.js'
+
+let managerIds = []
 
 const out = document.getElementById("ownership-output");
 const gwFilterInput = document.getElementById("gw-filter");
@@ -276,7 +272,8 @@ async function init() {
   gwFilterInput.value = latestGW;
   gwFilterInput.placeholder = `Latest: GW${latestGW}`;
   
-  const managerIds = loadManagerIds();
+  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  managerIds = ids;
   managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
 
   if (managerIds.length > 0) {
@@ -286,11 +283,10 @@ async function init() {
   }
 }
 
-gwFilterInput.addEventListener('change', () => {
-  const ids = loadManagerIds();
+gwFilterInput.addEventListener('change', async () => {
   const gw = parseInt(gwFilterInput.value);
   if (gw && gw >= 1 && gw <= 38) {
-    loadOwnership(ids, gw);
+    loadOwnership(managerIds, gw);
   }
 });
 
@@ -299,10 +295,11 @@ positionFilter.addEventListener('change', () => {
   out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
 });
 
-refreshBtn.addEventListener('click', () => {
-  const ids = loadManagerIds();
+refreshBtn.addEventListener('click', async () => {
+  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  managerIds = ids;
   const gw = parseInt(gwFilterInput.value) || latestGW;
-  loadOwnership(ids, gw);
+  loadOwnership(managerIds, gw);
 });
 
 init();

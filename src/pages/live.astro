@@ -30,13 +30,9 @@ import Nav from '../components/Nav.astro';
 <div id="live-output" style="margin-top:1.5em"></div>
 
 <script type="module">
-function loadManagerIds() {
-  try {
-    return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
-  } catch {
-    return [];
-  }
-}
+import { loadManagerIdsFromSupabase } from '../lib/authHelper.js'
+
+let managerIds = []
 
 const out = document.getElementById("live-output");
 const gwFilterInput = document.getElementById("gw-filter");
@@ -458,7 +454,8 @@ async function init() {
   gwFilterInput.value = latestGW;
   gwFilterInput.placeholder = `Latest: GW${latestGW}`;
   
-  const managerIds = loadManagerIds();
+  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  managerIds = ids;
   managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
 
   if (managerIds.length > 0) {
@@ -468,11 +465,10 @@ async function init() {
   }
 }
 
-gwFilterInput.addEventListener('change', () => {
-  const ids = loadManagerIds();
+gwFilterInput.addEventListener('change', async () => {
   const gw = parseInt(gwFilterInput.value);
   if (gw && gw >= 1 && gw <= 38) {
-    loadLive(ids, gw);
+    loadLive(managerIds, gw);
   }
 });
 
@@ -481,27 +477,27 @@ compareManagerSelect.addEventListener('change', () => {
   out.innerHTML = makeLiveTable(liveData, compareId);
 });
 
-refreshBtn.addEventListener('click', () => {
-  const ids = loadManagerIds();
+refreshBtn.addEventListener('click', async () => {
+  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  managerIds = ids;
   const gw = parseInt(gwFilterInput.value) || latestGW;
-  loadLive(ids, gw);
+  loadLive(managerIds, gw);
 });
 
 autoRefreshBtn.addEventListener('click', () => {
   autoRefreshEnabled = !autoRefreshEnabled;
   
   if (autoRefreshEnabled) {
-    autoRefreshBtn.textContent = "â±ï¸ Auto Refresh: ON";
+    autoRefreshBtn.textContent = "⏱️ Auto Refresh: ON";
     autoRefreshBtn.style.background = "#38a169";
     
     // Refresh every 2 minutes
-    autoRefreshInterval = setInterval(() => {
-      const ids = loadManagerIds();
+    autoRefreshInterval = setInterval(async () => {
       const gw = parseInt(gwFilterInput.value) || latestGW;
-      loadLive(ids, gw);
+      loadLive(managerIds, gw);
     }, 120000); // 2 minutes
   } else {
-    autoRefreshBtn.textContent = "â±ï¸ Auto Refresh: OFF";
+    autoRefreshBtn.textContent = "⏱️ Auto Refresh: OFF";
     autoRefreshBtn.style.background = "#3182ce";
     
     if (autoRefreshInterval) {

@@ -16,13 +16,9 @@ import Nav from '../components/Nav.astro';
 <div id="chips-output" style="margin-top:1.5em"></div>
 
 <script type="module">
-function loadManagerIds() {
-  try {
-    return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
-  } catch {
-    return [];
-  }
-}
+import { loadManagerIdsFromSupabase } from '../lib/authHelper.js'
+
+let managerIds = []
 
 const out = document.getElementById("chips-output");
 const loadingStatus = document.getElementById("loading-status");
@@ -178,18 +174,22 @@ async function loadChips(ids) {
   loadingStatus.innerHTML = `<span style='color:#38a169'>âœ… Loaded ${loaded} of ${ids.length} managers</span>`;
 }
 
-const managerIds = loadManagerIds();
-managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+(async function init() {
+  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  managerIds = ids;
+  managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
 
-if (managerIds.length > 0) {
+  if (managerIds.length > 0) {
+    loadChips(managerIds);
+  } else {
+    out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+  }
+})();
+
+refreshBtn.addEventListener('click', async () => {
+  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  managerIds = ids;
   loadChips(managerIds);
-} else {
-  out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
-}
-
-refreshBtn.addEventListener('click', () => {
-  const ids = loadManagerIds();
-  loadChips(ids);
 });
 </script>
 

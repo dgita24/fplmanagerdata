@@ -93,13 +93,9 @@ function createSupabaseClient(url, key) {
 
 const supabase = createSupabaseClient(SUPABASE_URL, SUPABASE_KEY);
 
-function loadManagerIds() {
-  try {
-    return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
-  } catch {
-    return [];
-  }
-}
+import { loadManagerIdsFromSupabase } from '../lib/authHelper.js'
+
+let managerIds = []
 
 const out = document.getElementById("insights-output");
 const dataStatus = document.getElementById("data-status");
@@ -270,7 +266,7 @@ async function displayTop50() {
 }
 
 async function displayCustomManagers() {
-  const managerIds = loadManagerIds();
+  // managerIds is already loaded globally
   
   if (managerIds.length === 0) {
     out.innerHTML = '<p style="color: #666;">No custom managers added yet. <a href="/managers">Add manager IDs</a> to see their insights.</p>';
@@ -319,7 +315,8 @@ async function updateView() {
 
 // Initialize
 (async function init() {
-  const ids = loadManagerIds();
+  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  managerIds = ids;
   managerCountEl.textContent = `(${ids.length} manager${ids.length !== 1 ? 's' : ''} tracked)`;
   
   viewSelect.addEventListener('change', () => {

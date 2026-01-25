@@ -93,13 +93,9 @@ function calculateFTs(managerHistory) {
   });
 }
 
-function loadManagerIds() {
-  try {
-    return JSON.parse(localStorage.getItem("globalManagerIds")) || [];
-  } catch {
-    return [];
-  }
-}
+import { loadManagerIdsFromSupabase } from '../lib/authHelper.js'
+
+let managerIds = []
 
 const out = document.getElementById("transfers-table");
 const gwFilterInput = document.getElementById("gw-filter");
@@ -439,14 +435,19 @@ function filterByGW() {
 fetchPlayers();
 
 // Initial load
-const managerIds = loadManagerIds();
-managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+(async function init() {
+  await fetchPlayers();
+  
+  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  managerIds = ids;
+  managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
 
-if (managerIds.length > 0) {
-  loadManagers(managerIds);
-} else {
-  out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
-}
+  if (managerIds.length > 0) {
+    loadManagers(managerIds);
+  } else {
+    out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+  }
+})();
 
 gwFilterInput.addEventListener('input', filterByGW);
 
@@ -455,10 +456,11 @@ clearFilterBtn.addEventListener('click', () => {
   filterByGW();
 });
 
-refreshBtn.addEventListener('click', () => {
-  gwFilterInput.value = ""; // Clear filter on refresh
-  const ids = loadManagerIds();
-  loadManagers(ids);
+refreshBtn.addEventListener('click', async () => {
+  gwFilterInput.value = "";
+  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  managerIds = ids;
+  loadManagers(managerIds);
 });
 </script>
 
