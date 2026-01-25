@@ -489,10 +489,10 @@ function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValu
         ${manager.chipPlayed ? `<span style="background: #fef3c7; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; margin-left: 0.5em;">${manager.chipPlayed}</span>` : ''}
       </h3>
 
-      <table border="1" cellpadding="3" style="border-collapse:collapse; width: 100%; max-width: 700px; font-size: 0.9em;">
+      <table border="1" cellpadding="3" style="border-collapse:collapse; width: 100%; max-width: 700px; font-size: 0.9em;" class="squads-table">
         <tr style="background:#f0f0f0">
           <th style="width: 40px;">Pos</th>
-          <th>Player</th>
+          <th style="max-width: 150px;">Player</th>
           <th style="width: 60px;">Position</th>
           <th style="width: 50px;">Team</th>
           <th style="background:#e6f7ff; width: 50px;">GW<br/>Pts</th>
@@ -537,12 +537,12 @@ function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValu
 
       html += `<tr style="${rowStyle}">
         <td style="text-align: center; font-weight: bold;">${player.position}</td>
-        <td style="background:${nameBg}; font-weight: ${player.isCaptain ? 'bold' : 'normal'};">
+        <td style="background:${nameBg}; font-weight: ${player.isCaptain ? 'bold' : 'normal'}; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
           ${player.playerName}
           ${indicator ? `<span style="margin-left:6px; font-size:12px; color:#4a5568;">${indicator}</span>` : ""}
         </td>
         <td style="text-align: center;">${player.playerPosition}</td>
-        <td>${player.teamName}</td>
+        <td style="text-align: center;">${player.teamName}</td>
         <td style="background:#e6f7ff; font-weight: bold; text-align: center;">${player.gwPointsCap ?? player.gwPoints ?? 0}</td>
         <td style="text-align: center; font-weight: bold; color: ${player.isCaptain ? '#e53e3e' : '#3182ce'};">${captainBadge}</td>
       </tr>`;
@@ -714,6 +714,120 @@ init();
     color: #2d3748;
     border: 1px solid #cbd5e0;
     font-weight: normal;
+  }
+  
+  /* Squads table specific styles */
+  .squads-table {
+    table-layout: fixed;
+  }
+  
+  /* Mobile responsive styles */
+  @media screen and (max-width: 768px) {
+    body {
+      padding: 0.5em;
+      font-size: 14px;
+    }
+    
+    h1 {
+      font-size: 1.5em;
+    }
+    
+    h3 {
+      font-size: 1.1em;
+    }
+    
+    /* Make filter controls stack vertically on mobile */
+    div[style*="display: flex"] {
+      flex-direction: column !important;
+      gap: 0.5em !important;
+    }
+    
+    /* Full width inputs on mobile */
+    input[type="number"],
+    select {
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+    
+    /* Ensure table scrolls horizontally if needed */
+    .squads-table {
+      font-size: 0.75em;
+      width: 100%;
+      min-width: 500px;
+    }
+    
+    /* Create a scrollable wrapper for tables on mobile */
+    div[style*="border: 2px solid"] {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Optimize column widths for mobile */
+    .squads-table th:nth-child(1),
+    .squads-table td:nth-child(1) {
+      width: 30px !important;
+    }
+    
+    .squads-table th:nth-child(2),
+    .squads-table td:nth-child(2) {
+      max-width: 100px !important;
+      min-width: 80px;
+    }
+    
+    .squads-table th:nth-child(3),
+    .squads-table td:nth-child(3) {
+      width: 50px !important;
+    }
+    
+    .squads-table th:nth-child(4),
+    .squads-table td:nth-child(4) {
+      width: 45px !important;
+    }
+    
+    .squads-table th:nth-child(5),
+    .squads-table td:nth-child(5) {
+      width: 40px !important;
+    }
+    
+    .squads-table th:nth-child(6),
+    .squads-table td:nth-child(6) {
+      width: 40px !important;
+    }
+    
+    /* Ensure all table cells are centered properly on mobile */
+    .squads-table td {
+      text-align: center;
+    }
+    
+    /* Keep player names left-aligned even on mobile */
+    .squads-table td:nth-child(2) {
+      text-align: left;
+    }
+    
+    /* Reduce padding on mobile */
+    .squads-table th,
+    .squads-table td {
+      padding: 2px !important;
+    }
+    
+    /* Make sure manager cards are full width on mobile */
+    div[style*="max-width: 900px"] {
+      max-width: 100% !important;
+      margin-bottom: 1.5em !important;
+    }
+  }
+  
+  /* Very small screens (< 375px) */
+  @media screen and (max-width: 375px) {
+    .squads-table {
+      font-size: 0.7em;
+      min-width: 450px;
+    }
+    
+    .squads-table th,
+    .squads-table td {
+      padding: 1px !important;
+    }
   }
 </style>
 </body>
