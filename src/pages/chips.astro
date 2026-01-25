@@ -26,8 +26,6 @@ import Nav from '../components/Nav.astro';
 <script>
 import { supabase } from '../lib/supabase.ts'
 
-let managerIds = []
-
 async function loadManagerIdsFromSupabase() {
   const { data: { user } } = await supabase.auth.getUser()
   
