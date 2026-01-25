@@ -1,6 +1,7 @@
 ---
 
 import Nav from '../components/Nav.astro';
+
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -20,7 +21,7 @@ import Nav from '../components/Nav.astro';
     <option value="custom">My Custom Managers</option>
     <option value="top50">World Top 50</option>
   </select>
-  
+
   <span id="manager-count" style="margin-left: 1.5em; font-weight: bold;">Loading managers...</span>
   <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
 </div>
@@ -38,7 +39,7 @@ import Nav from '../components/Nav.astro';
       <option value="">All Managers</option>
     </select>
   </div>
-  
+
   <div>
     <label for="position-filter"><strong>Filter by Position:</strong></label><br>
     <select id="position-filter" style="padding: 8px; width: 200px; font-size: 14px;">
@@ -49,7 +50,7 @@ import Nav from '../components/Nav.astro';
       <option value="FWD">Forwards (FWD)</option>
     </select>
   </div>
-  
+
   <div>
     <label for="captain-filter"><strong>Filter by Captaincy:</strong></label><br>
     <select id="captain-filter" style="padding: 8px; width: 200px; font-size: 14px;">
@@ -71,30 +72,31 @@ let managerIds = []
 
 async function loadManagerIdsFromSupabase() {
   const { data: { user } } = await supabase.auth.getUser()
-  
+
   if (!user) {
     window.location.replace('/login')
     return { authenticated: false, managerIds: [] }
   }
-  
+
   try {
     const { data, error } = await supabase
       .from('user_manager_lists')
       .select('manager_ids')
       .eq('user_id', user.id)
       .single()
-    
+
     if (error && error.code !== 'PGRST116') {
       console.error('Error loading manager IDs:', error)
       return { authenticated: true, managerIds: [] }
     }
-    
+
     return { authenticated: true, managerIds: data?.manager_ids || [] }
   } catch (e) {
     console.error('Error:', e)
     return { authenticated: false, managerIds: [] }
   }
 }
+
 const out = document.getElementById("squads-output");
 const gwFilterInput = document.getElementById("gw-filter");
 const managerFilter = document.getElementById("manager-filter");
@@ -113,10 +115,10 @@ async function fetchTop50ManagerIds() {
   try {
     const response = await fetch('/api/fpl/leagues-classic/314/standings/?page_standings=1');
     if (!response.ok) return [];
-    
+
     const data = await response.json();
     const standings = data.standings?.results || [];
-    
+
     return standings.slice(0, 50).map(s => s.entry);
   } catch (error) {
     console.error('Error fetching top 50:', error);
@@ -126,56 +128,288 @@ async function fetchTop50ManagerIds() {
 
 let allSquadsData = [];
 let latestGW = null;
-let playerCache = new Map();
-let teamCache = new Map();
+
+// Bootstrap caches
+let playerCache = new Map(); // playerId -> { name, position, teamId }
+let teamCache = new Map();   // teamId -> short_name
+
+// Live caches
+let fixturesCache = new Map();        // optional, but kept for debugging
+let livePointsCache = new Map();      // playerId -> { points, bonus, minutes }
+let projectedBonusCache = new Map();  // key: `${gw}:${playerId}` -> projected bonus
+let teamStatusCache = new Map();      // key: `${gw}:${teamId}` -> { started, finished }
+
+function getTeamGwStatus(teamId, gw) {
+  return teamStatusCache.get(`${gw}:${teamId}`) || { started: false, finished: false };
+}
+
+function bonusFromBpsRows(bpsRows) {
+  const rows = (bpsRows || [])
+    .filter(r => r && Number.isFinite(r.value) && Number.isFinite(r.element))
+    .sort((a, b) => b.value - a.value);
+
+  const out = new Map();
+  if (rows.length === 0) return out;
+
+  const topVal = rows[0].value;
+  const top = rows.filter(r => r.value === topVal);
+
+  if (top.length >= 2) {
+    for (const r of top) out.set(r.element, 3);
+    if (top.length >= 3) return out;
+    const next = rows.find(r => r.value < topVal);
+    if (next) {
+      const nextVal = next.value;
+      for (const r of rows.filter(r => r.value === nextVal)) out.set(r.element, 1);
+    }
+    return out;
+  }
+
+  out.set(rows[0].element, 3);
+
+  const secondRow = rows.find(r => r.value < topVal);
+  if (!secondRow) return out;
+
+  const secondVal = secondRow.value;
+  const second = rows.filter(r => r.value === secondVal);
+
+  if (second.length >= 2) {
+    for (const r of second) out.set(r.element, 2);
+    return out;
+  }
+
+  out.set(second[0].element, 2);
+
+  const thirdRow = rows.find(r => r.value < secondVal);
+  if (!thirdRow) return out;
+
+  const thirdVal = thirdRow.value;
+  for (const r of rows.filter(r => r.value === thirdVal)) out.set(r.element, 1);
+
+  return out;
+}
+
+function getPlayerLiveComputed(playerId, teamId, gw) {
+  const live = livePointsCache.get(playerId) || { points: 0, bonus: 0, minutes: 0 };
+  const { started, finished } = getTeamGwStatus(teamId, gw);
+
+  const officialTotal = Number(live.points) || 0;
+  const confirmedBonus = Number(live.bonus) || 0;
+  const minutes = Number(live.minutes) || 0;
+
+  // Excel-style: while match not finished, remove confirmed bonus from locked points,
+  // then add projected bonus separately from BPS.
+  const locked = finished ? officialTotal : (officialTotal - confirmedBonus);
+  const projBonus = finished ? 0 : (Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0);
+  const liveTotal = locked + projBonus;
+
+  const status = finished ? "Fin" : (started ? "Live" : "v");
+  const dnp = (minutes === 0 && status === "Fin");
+
+  return { locked, projBonus, liveTotal, status, minutes, dnp };
+}
+
+// Only for ON/OFF indicators; does NOT change the points column (we always show raw gwPoints).
+function applyAutoSubsKeepAll(teamPicks, chipCode) {
+  const isBB = chipCode === "BB";
+
+  const sorted = [...teamPicks].sort((a, b) => a.position - b.position);
+  const starters = sorted.slice(0, 11);
+  const bench = sorted.slice(11);
+
+  if (isBB) {
+    return sorted.map(p => ({
+      ...p,
+      subOn: false,
+      subOff: false
+    }));
+  }
+
+  let active = starters.filter(p => !(p.dnp));
+  const benchRemaining = [];
+  const subbedInIds = new Set();
+
+  for (const cand of bench) {
+    if (active.length >= 11) {
+      benchRemaining.push(cand);
+      continue;
+    }
+
+    if (cand.dnp) {
+      benchRemaining.push(cand);
+      continue;
+    }
+
+    const gkCount = active.filter(p => p.playerPosition === "GK").length;
+    const defCount = active.filter(p => p.playerPosition === "DEF").length;
+
+    const pos = cand.playerPosition;
+    const validGK = (pos === "GK" && gkCount === 0);
+    const validDefSave = (pos === "DEF" && defCount < 3);
+    const validGeneral = (pos !== "GK" && gkCount > 0 && defCount >= 3);
+
+    if (validGK || validDefSave || validGeneral) {
+      active = [...active, cand];
+      subbedInIds.add(cand.playerId);
+    } else {
+      benchRemaining.push(cand);
+    }
+  }
+
+  const activeIds = new Set(active.map(p => p.playerId));
+
+  return sorted.map(p => {
+    const wasStarter = p.position <= 11;
+    const inXI = activeIds.has(p.playerId);
+    return {
+      ...p,
+      subOn: (!wasStarter && inXI),
+      subOff: (wasStarter && !inXI)
+    };
+  });
+}
 
 async function fetchBootstrapData() {
   try {
     const res = await fetch('/api/fpl/bootstrap-static');
     if (!res.ok) throw new Error("Failed to fetch bootstrap data");
     const data = await res.json();
-    
+
+    playerCache.clear();
+    teamCache.clear();
+
     data.elements.forEach(player => {
       playerCache.set(player.id, {
         name: player.web_name,
         position: player.element_type === 1 ? "GK" :
                   player.element_type === 2 ? "DEF" :
                   player.element_type === 3 ? "MID" : "FWD",
-        team: player.team
+        teamId: player.team
       });
     });
-    
+
     data.teams.forEach(team => {
       teamCache.set(team.id, team.short_name);
     });
+
+    const currentEvent = data.events?.find(e => e.is_current);
+    latestGW = currentEvent ? currentEvent.id : 1;
+
+    return data;
   } catch (e) {
     console.error("Error fetching bootstrap data:", e);
+    latestGW = 1;
+    return null;
   }
+}
+
+async function fetchFixtures(gw) {
+  const res = await fetch(`/api/fpl/fixtures?event=${gw}`);
+  if (!res.ok) throw new Error("Failed to fetch fixtures");
+  const fixtures = await res.json();
+
+  fixturesCache.clear();
+  teamStatusCache.clear();
+  projectedBonusCache.clear();
+
+  const perTeam = new Map(); // teamId -> { startedAny, finishedAll }
+  function upsertTeam(teamId, started, finished) {
+    const cur = perTeam.get(teamId) || { startedAny: false, finishedAll: true };
+    cur.startedAny = cur.startedAny || !!started || !!finished;
+    cur.finishedAll = cur.finishedAll && !!finished;
+    perTeam.set(teamId, cur);
+  }
+
+  for (const fx of fixtures) {
+    upsertTeam(fx.team_h, fx.started, fx.finished);
+    upsertTeam(fx.team_a, fx.started, fx.finished);
+
+    fixturesCache.set(`${fx.team_h}-${gw}`, { opponent: fx.team_a, finished: fx.finished, started: fx.started });
+    fixturesCache.set(`${fx.team_a}-${gw}`, { opponent: fx.team_h, finished: fx.finished, started: fx.started });
+
+    // Only project bonus for live fixtures
+    if (!fx.started || fx.finished) continue;
+
+    const stats = Array.isArray(fx.stats) ? fx.stats : [];
+    const bpsStat = stats.find(s => s && s.identifier === "bps");
+    if (!bpsStat) continue;
+
+    const h = Array.isArray(bpsStat.h) ? bpsStat.h : [];
+    const a = Array.isArray(bpsStat.a) ? bpsStat.a : [];
+    const all = [...h, ...a]
+      .map(r => ({ element: Number(r.element), value: Number(r.value) }))
+      .filter(r => Number.isFinite(r.element) && Number.isFinite(r.value));
+
+    const bonusMap = bonusFromBpsRows(all);
+
+    for (const [playerId, bonus] of bonusMap.entries()) {
+      const key = `${gw}:${playerId}`;
+      projectedBonusCache.set(key, (projectedBonusCache.get(key) || 0) + bonus);
+    }
+  }
+
+  for (const [teamId, st] of perTeam.entries()) {
+    teamStatusCache.set(`${gw}:${teamId}`, { started: st.startedAny, finished: st.finishedAll });
+  }
+
+  return fixtures;
+}
+
+async function fetchLiveGW(gw) {
+  const res = await fetch(`/api/fpl/event/${gw}/live`);
+  if (!res.ok) throw new Error("Failed to fetch live data");
+  const data = await res.json();
+
+  livePointsCache.clear();
+  const elements = Array.isArray(data.elements) ? data.elements : [];
+
+  for (const p of elements) {
+    const stats = p.stats || {};
+    livePointsCache.set(p.id, {
+      points: Number(stats.total_points) || 0,
+      bonus: Number(stats.bonus) || 0,
+      minutes: Number(stats.minutes) || 0
+    });
+  }
+
+  return data;
 }
 
 async function fetchSquadForGW(entryId, gw) {
   try {
-    const picksUrl = `/api/fpl/entry/${entryId}/event/${gw}/picks`;
-    const res = await fetch(picksUrl);
+    const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
     if (!res.ok) throw new Error("Failed to fetch picks");
-    
+
     const data = await res.json();
     const picks = data.picks || [];
-    
+
     return picks.map(pick => {
-      const playerInfo = playerCache.get(pick.element) || { name: "Unknown", position: "?", team: 0 };
-      const teamName = teamCache.get(playerInfo.team) || "Unknown";
-      
+      const info = playerCache.get(pick.element) || { name: "Unknown", position: "?", teamId: 0 };
+      const teamName = teamCache.get(info.teamId) || "UNK";
+
+      const computed = getPlayerLiveComputed(pick.element, info.teamId, gw);
+
       return {
-        position: pick.position,
-        playerId: pick.element,
-        playerName: playerInfo.name,
-        playerPosition: playerInfo.position,
-        teamName: teamName,
-        multiplier: pick.multiplier,
-        isCaptain: pick.is_captain,
-        isViceCaptain: pick.is_vice_captain,
-        points: 0
+        position: Number(pick.position),
+        playerId: Number(pick.element),
+        playerName: info.name,
+        playerPosition: info.position,
+        teamId: info.teamId,
+        teamName,
+
+        isCaptain: !!pick.is_captain,
+        isViceCaptain: !!pick.is_vice_captain,
+
+        minutes: computed.minutes,
+        status: computed.status, // "v" | "Live" | "Fin"
+        dnp: computed.dnp,
+
+        // Raw projected points for this player (no multipliers)
+        gwPoints: Math.trunc(Number(computed.liveTotal) || 0),
+        projBonus: Math.trunc(Number(computed.projBonus) || 0),
+
+        subOn: false,
+        subOff: false
       };
     });
   } catch (e) {
@@ -186,32 +420,32 @@ async function fetchSquadForGW(entryId, gw) {
 
 async function fetchManagerData(entryId, gw) {
   try {
-    const summaryUrl = `/api/fpl/entry/${entryId}`;
-    const historyUrl = `/api/fpl/entry/${entryId}/history`;
-    
     const [summaryRes, historyRes] = await Promise.all([
-      fetch(summaryUrl),
-      fetch(historyUrl)
+      fetch(`/api/fpl/entry/${entryId}`),
+      fetch(`/api/fpl/entry/${entryId}/history`)
     ]);
-    
+
     if (!summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch manager data");
-    
+
     const summaryData = await summaryRes.json();
     const historyData = await historyRes.json();
-    
+
     const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
     const teamName = summaryData.name;
-    
+
     const chips = historyData.chips || [];
     const chipThisGW = chips.find(c => c.event === gw);
-    const chipPlayed = chipThisGW ? 
+    const chipPlayed = chipThisGW ?
       (chipThisGW.name === "wildcard" ? "WC" :
        chipThisGW.name === "bboost" ? "BB" :
        chipThisGW.name === "3xc" ? "TC" :
        chipThisGW.name === "freehit" ? "FH" : chipThisGW.name) : "";
-    
-    const squad = await fetchSquadForGW(entryId, gw);
-    
+
+    const squadRaw = await fetchSquadForGW(entryId, gw);
+
+    // Only to set ON/OFF indicators; points remain raw gwPoints.
+    const squad = applyAutoSubsKeepAll(squadRaw, chipPlayed || "None");
+
     return {
       entryId,
       managerName,
@@ -227,11 +461,11 @@ async function fetchManagerData(entryId, gw) {
 
 function populateManagerFilter() {
   managerFilter.innerHTML = '<option value="">All Managers</option>';
-  
-  const sortedManagers = [...allSquadsData].sort((a, b) => 
+
+  const sortedManagers = [...allSquadsData].sort((a, b) =>
     a.managerName.localeCompare(b.managerName)
   );
-  
+
   for (const manager of sortedManagers) {
     const option = document.createElement('option');
     option.value = manager.entryId;
@@ -242,37 +476,36 @@ function populateManagerFilter() {
 
 function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValue = "", captainFilterValue = "") {
   let filteredManagers = squadsData;
-  
+
   if (managerFilterValue) {
     filteredManagers = squadsData.filter(m => m.entryId.toString() === managerFilterValue);
   }
-  
+
   let html = "";
-  
+
   for (const manager of filteredManagers) {
     html += `<div style="margin-bottom: 3em; border: 2px solid #e2e8f0; padding: 1em; border-radius: 8px; max-width: 900px;">
       <h3 style="margin-top: 0; color: #2d3748;">
         ${manager.managerName} - <span style="color: #718096;">${manager.teamName}</span>
         ${manager.chipPlayed ? `<span style="background: #fef3c7; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; margin-left: 0.5em;">${manager.chipPlayed}</span>` : ''}
       </h3>
-      
+
       <table border="1" cellpadding="6" style="border-collapse:collapse; width: 100%;">
         <tr style="background:#f0f0f0">
           <th>Pos</th>
           <th>Player</th>
           <th>Position</th>
           <th>Team</th>
+          <th style="background:#e6f7ff;">GW Pts</th>
           <th>C/VC</th>
         </tr>`;
-    
+
     let squad = manager.squad;
-    
-    // Filter by position if specified
+
     if (positionFilterValue) {
       squad = squad.filter(p => p.playerPosition === positionFilterValue);
     }
-    
-    // Filter by captaincy if specified
+
     if (captainFilterValue) {
       if (captainFilterValue === 'captain') {
         squad = squad.filter(p => p.isCaptain);
@@ -282,26 +515,43 @@ function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValu
         squad = squad.filter(p => p.isCaptain || p.isViceCaptain);
       }
     }
-    
-    squad.sort((a, b) => a.position - b.position);
-    
+
+    squad = [...squad].sort((a, b) => a.position - b.position);
+
     for (const player of squad) {
       const captainBadge = player.isCaptain ? "C" : player.isViceCaptain ? "VC" : "";
       const isBench = player.position > 11;
+
+      const indicator =
+        player.subOn ? "ON" :
+        player.subOff ? "OFF" :
+        player.dnp ? "DNP" :
+        (player.status === "v" ? "v" : "");
+
+      const nameBg =
+        player.status === "v" ? "#fefcbf" :
+        player.status === "Live" ? "#bee3f8" :
+        player.dnp ? "#fed7d7" :
+        (isBench ? "#f7fafc" : "");
+
       const rowStyle = isBench ? "background: #f7fafc;" : "";
-      
+
       html += `<tr style="${rowStyle}">
         <td style="text-align: center; font-weight: bold;">${player.position}</td>
-        <td style="font-weight: ${player.isCaptain ? 'bold' : 'normal'};">${player.playerName}</td>
+        <td style="background:${nameBg}; font-weight: ${player.isCaptain ? 'bold' : 'normal'};">
+          ${player.playerName}
+          ${indicator ? `<span style="margin-left:6px; font-size:12px; color:#4a5568;">${indicator}</span>` : ""}
+        </td>
         <td style="text-align: center;">${player.playerPosition}</td>
         <td>${player.teamName}</td>
+        <td style="background:#e6f7ff; font-weight: bold; text-align: center;">${player.gwPoints ?? 0}</td>
         <td style="text-align: center; font-weight: bold; color: ${player.isCaptain ? '#e53e3e' : '#3182ce'};">${captainBadge}</td>
       </tr>`;
     }
-    
+
     html += `</table></div>`;
   }
-  
+
   return html;
 }
 
@@ -310,7 +560,7 @@ async function loadSquads(ids, gw) {
     out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
     return;
   }
-  
+
   if (!gw) {
     out.innerHTML = "<span style='color:orange'>Please select a gameweek.</span>";
     return;
@@ -318,8 +568,18 @@ async function loadSquads(ids, gw) {
 
   allSquadsData = [];
   out.innerHTML = "";
-  loadingStatus.textContent = `Loading 0 of ${ids.length} managers for GW${gw}...`;
-  
+  loadingStatus.textContent = `Loading live data + squads for GW${gw}...`;
+
+  // Load live context once per GW
+  try {
+    await Promise.all([fetchFixtures(gw), fetchLiveGW(gw)]);
+  } catch (e) {
+    console.error("Failed to load live caches:", e);
+    out.innerHTML = "<span style='color:red'>Failed to load live gameweek data. Try refresh.</span>";
+    loadingStatus.textContent = "";
+    return;
+  }
+
   let loaded = 0;
   for (const id of ids) {
     try {
@@ -327,9 +587,9 @@ async function loadSquads(ids, gw) {
       if (data) {
         allSquadsData.push(data);
         loaded++;
-        
+
         loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
-        
+
         const managerFilterValue = managerFilter.value;
         const posFilter = positionFilter.value;
         const capFilter = captainFilter.value;
@@ -340,33 +600,23 @@ async function loadSquads(ids, gw) {
       loaded++;
     }
   }
-  
+
   populateManagerFilter();
-  
   loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
 }
 
 async function init() {
   loadingStatus.textContent = "Loading player and team data...";
   await fetchBootstrapData();
-  
-  try {
-    const res = await fetch('/api/fpl/bootstrap-static');
-    const data = await res.json();
-    const currentEvent = data.events.find(e => e.is_current);
-    latestGW = currentEvent ? currentEvent.id : 1;
-    gwFilterInput.value = latestGW;
-    gwFilterInput.placeholder = `Latest: GW${latestGW}`;
-  } catch (e) {
-    console.error("Error determining current GW:", e);
-    latestGW = 1;
-  }
-  
+
+  gwFilterInput.value = latestGW;
+  gwFilterInput.placeholder = `Latest: GW${latestGW}`;
+
   const { managerIds: ids } = await loadManagerIdsFromSupabase();
   customManagerIds = ids;
-  
+
   await updateDisplay();
-  
+
   viewSelect.addEventListener('change', () => {
     currentView = viewSelect.value;
     updateDisplay();
@@ -375,7 +625,7 @@ async function init() {
 
 async function updateDisplay() {
   const ids = currentView === 'custom' ? customManagerIds : top50ManagerIds;
-  
+
   if (currentView === 'custom') {
     managerCountEl.textContent = `${customManagerIds.length} manager(s) configured`;
     if (customManagerIds.length === 0) {
@@ -394,33 +644,28 @@ async function updateDisplay() {
       }
     }
   }
-  
+
   managerIds = ids;
 
-  // Check for manager URL parameter
   const urlParams = new URLSearchParams(window.location.search);
   const managerParam = urlParams.get('manager');
-  
+
+  const gw = parseInt(gwFilterInput.value) || latestGW;
+
   if (managerParam) {
-    // If manager parameter exists, filter to just that manager
     const managerId = parseInt(managerParam);
-    if (ids.includes(managerId)) {
-      loadSquads([managerId], latestGW);
-      // Set the manager filter dropdown after data loads
-      const checkAndSetFilter = () => {
-        if (managerFilter.options.length > 1) {
-          managerFilter.value = managerId.toString();
-        } else {
-          setTimeout(checkAndSetFilter, 50);
-        }
-      };
-      setTimeout(checkAndSetFilter, 50);
-    } else {
-      // Manager not in the list, but still try to load it
-      loadSquads([managerId], latestGW);
-    }
+    loadSquads([managerId], gw);
+
+    const checkAndSetFilter = () => {
+      if (managerFilter.options.length > 1) {
+        managerFilter.value = managerId.toString();
+      } else {
+        setTimeout(checkAndSetFilter, 50);
+      }
+    };
+    setTimeout(checkAndSetFilter, 50);
   } else {
-    await loadSquads(ids, latestGW);
+    await loadSquads(ids, gw);
   }
 }
 
@@ -432,24 +677,15 @@ gwFilterInput.addEventListener('change', async () => {
 });
 
 managerFilter.addEventListener('change', () => {
-  const managerFilterValue = managerFilter.value;
-  const posFilter = positionFilter.value;
-  const capFilter = captainFilter.value;
-  out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter, capFilter);
+  out.innerHTML = makeSquadsTable(allSquadsData, managerFilter.value, positionFilter.value, captainFilter.value);
 });
 
 positionFilter.addEventListener('change', () => {
-  const managerFilterValue = managerFilter.value;
-  const posFilter = positionFilter.value;
-  const capFilter = captainFilter.value;
-  out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter, capFilter);
+  out.innerHTML = makeSquadsTable(allSquadsData, managerFilter.value, positionFilter.value, captainFilter.value);
 });
 
 captainFilter.addEventListener('change', () => {
-  const managerFilterValue = managerFilter.value;
-  const posFilter = positionFilter.value;
-  const capFilter = captainFilter.value;
-  out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter, capFilter);
+  out.innerHTML = makeSquadsTable(allSquadsData, managerFilter.value, positionFilter.value, captainFilter.value);
 });
 
 refreshBtn.addEventListener('click', async () => {
@@ -498,5 +734,6 @@ init();
     border: 1px solid #cbd5e0;
     font-weight: normal;
   }
-</style></body>
+</style>
+</body>
 </html>
