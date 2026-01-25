@@ -14,8 +14,14 @@ import Nav from '../components/Nav.astro';
 <h1>Manager Squads</h1>
 <p>View each manager's squad for any gameweek, including player points, positions, and captain selections.</p>
 
-<div style="margin-bottom: 1em;">
-  <span id="manager-count" style="font-weight: bold;">Loading managers...</span>
+<div style="margin-bottom: 1.5em;">
+  <label for="view-select" style="font-weight: bold; margin-right: 0.5em;">View:</label>
+  <select id="view-select" style="padding: 8px 12px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc;">
+    <option value="custom">My Custom Managers</option>
+    <option value="top50">World Top 50</option>
+  </select>
+  
+  <span id="manager-count" style="margin-left: 1.5em; font-weight: bold;">Loading managers...</span>
   <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
 </div>
 
@@ -97,6 +103,26 @@ const captainFilter = document.getElementById("captain-filter");
 const loadingStatus = document.getElementById("loading-status");
 const managerCountEl = document.getElementById("manager-count");
 const refreshBtn = document.getElementById("refresh-btn");
+const viewSelect = document.getElementById("view-select");
+
+let currentView = 'custom';
+let customManagerIds = [];
+let top50ManagerIds = [];
+
+async function fetchTop50ManagerIds() {
+  try {
+    const response = await fetch('/api/fpl/leagues-classic/314/standings/?page_standings=1');
+    if (!response.ok) return [];
+    
+    const data = await response.json();
+    const standings = data.standings?.results || [];
+    
+    return standings.slice(0, 50).map(s => s.entry);
+  } catch (error) {
+    console.error('Error fetching top 50:', error);
+    return [];
+  }
+}
 
 let allSquadsData = [];
 let latestGW = null;
@@ -337,8 +363,39 @@ async function init() {
   }
   
   const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  customManagerIds = ids;
+  
+  await updateDisplay();
+  
+  viewSelect.addEventListener('change', () => {
+    currentView = viewSelect.value;
+    updateDisplay();
+  });
+}
+
+async function updateDisplay() {
+  const ids = currentView === 'custom' ? customManagerIds : top50ManagerIds;
+  
+  if (currentView === 'custom') {
+    managerCountEl.textContent = `${customManagerIds.length} manager(s) configured`;
+    if (customManagerIds.length === 0) {
+      out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+      return;
+    }
+  } else {
+    managerCountEl.textContent = `Top 50 managers`;
+    if (top50ManagerIds.length === 0) {
+      loadingStatus.textContent = 'Fetching Top 50 managers...';
+      top50ManagerIds = await fetchTop50ManagerIds();
+      if (top50ManagerIds.length === 0) {
+        out.innerHTML = "<span style='color:red'>Failed to fetch Top 50 managers. Please try again later.</span>";
+        loadingStatus.textContent = '';
+        return;
+      }
+    }
+  }
+  
   managerIds = ids;
-  managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
 
   // Check for manager URL parameter
   const urlParams = new URLSearchParams(window.location.search);
@@ -347,7 +404,7 @@ async function init() {
   if (managerParam) {
     // If manager parameter exists, filter to just that manager
     const managerId = parseInt(managerParam);
-    if (managerIds.includes(managerId)) {
+    if (ids.includes(managerId)) {
       loadSquads([managerId], latestGW);
       // Set the manager filter dropdown after data loads
       const checkAndSetFilter = () => {
@@ -362,10 +419,8 @@ async function init() {
       // Manager not in the list, but still try to load it
       loadSquads([managerId], latestGW);
     }
-  } else if (managerIds.length > 0) {
-    loadSquads(managerIds, latestGW);
   } else {
-    out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+    await loadSquads(ids, latestGW);
   }
 }
 
@@ -398,10 +453,13 @@ captainFilter.addEventListener('change', () => {
 });
 
 refreshBtn.addEventListener('click', async () => {
-  const { managerIds: ids } = await loadManagerIdsFromSupabase();
-  managerIds = ids;
-  const gw = parseInt(gwFilterInput.value) || latestGW;
-  loadSquads(managerIds, gw);
+  if (currentView === 'custom') {
+    const { managerIds: ids } = await loadManagerIdsFromSupabase();
+    customManagerIds = ids;
+  } else {
+    top50ManagerIds = await fetchTop50ManagerIds();
+  }
+  await updateDisplay();
 });
 
 init();

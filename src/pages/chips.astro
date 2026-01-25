@@ -14,8 +14,14 @@ import Nav from '../components/Nav.astro';
 <h1>Chip Usage Tracker</h1>
 <p>Track which managers have used their chips (2x Wildcard, 2x Bench Boost, 2x Triple Captain, 2x Free Hit).</p>
 
-<div style="margin-bottom: 1em;">
-  <span id="manager-count" style="font-weight: bold;">Loading managers...</span>
+<div style="margin-bottom: 1.5em;">
+  <label for="view-select" style="font-weight: bold; margin-right: 0.5em;">View:</label>
+  <select id="view-select" style="padding: 8px 12px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc;">
+    <option value="custom">My Custom Managers</option>
+    <option value="top50">World Top 50</option>
+  </select>
+  
+  <span id="manager-count" style="margin-left: 1.5em; font-weight: bold;">Loading managers...</span>
   <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
   <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">Refresh Data</button>
 </div>
@@ -59,6 +65,28 @@ const out = document.getElementById("chips-output");
 const loadingStatus = document.getElementById("loading-status");
 const managerCountEl = document.getElementById("manager-count");
 const refreshBtn = document.getElementById("refresh-btn");
+const viewSelect = document.getElementById("view-select");
+
+let currentView = 'custom';
+let customManagerIds = [];
+let top50ManagerIds = [];
+
+async function fetchTop50ManagerIds() {
+  try {
+    // Fetch top 50 from the global league (league ID 314 is the overall league)
+    const response = await fetch('/api/fpl/leagues-classic/314/standings/?page_standings=1');
+    if (!response.ok) return [];
+    
+    const data = await response.json();
+    const standings = data.standings?.results || [];
+    
+    // Get top 50 manager IDs
+    return standings.slice(0, 50).map(s => s.entry);
+  } catch (error) {
+    console.error('Error fetching top 50:', error);
+    return [];
+  }
+}
 
 async function fetchManagerData(id) {
   const historyUrl = `/api/fpl/entry/${id}/history`;
@@ -209,22 +237,51 @@ async function loadChips(ids) {
   loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
 }
 
+async function updateDisplay() {
+  const ids = currentView === 'custom' ? customManagerIds : top50ManagerIds;
+  
+  if (currentView === 'custom') {
+    managerCountEl.textContent = `${customManagerIds.length} manager(s) configured`;
+    if (customManagerIds.length === 0) {
+      out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+      return;
+    }
+  } else {
+    managerCountEl.textContent = `Top 50 managers`;
+    if (top50ManagerIds.length === 0) {
+      loadingStatus.textContent = 'Fetching Top 50 managers...';
+      top50ManagerIds = await fetchTop50ManagerIds();
+      if (top50ManagerIds.length === 0) {
+        out.innerHTML = "<span style='color:red'>Failed to fetch Top 50 managers. Please try again later.</span>";
+        loadingStatus.textContent = '';
+        return;
+      }
+    }
+  }
+  
+  await loadChips(ids);
+}
+
 (async function init() {
   const { managerIds: ids } = await loadManagerIdsFromSupabase();
-  managerIds = ids;
-  managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
-
-  if (managerIds.length > 0) {
-    loadChips(managerIds);
-  } else {
-    out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
-  }
+  customManagerIds = ids;
+  
+  await updateDisplay();
+  
+  viewSelect.addEventListener('change', () => {
+    currentView = viewSelect.value;
+    updateDisplay();
+  });
 })();
 
 refreshBtn.addEventListener('click', async () => {
-  const { managerIds: ids } = await loadManagerIdsFromSupabase();
-  managerIds = ids;
-  loadChips(managerIds);
+  if (currentView === 'custom') {
+    const { managerIds: ids } = await loadManagerIdsFromSupabase();
+    customManagerIds = ids;
+  } else {
+    top50ManagerIds = await fetchTop50ManagerIds();
+  }
+  await updateDisplay();
 });
 </script>
 
