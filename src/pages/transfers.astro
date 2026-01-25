@@ -519,5 +519,102 @@ refreshBtn.addEventListener('click', async () => {
   .chip-btn:hover {
     opacity: 0.9;
   }
+
+  /* Mobile responsive styles */
+  @media (max-width: 768px) {
+    body {
+      padding: 0.5em;
+      font-size: 14px;
+    }
+
+    h1 {
+      font-size: 1.5em;
+    }
+
+    h2 {
+      font-size: 1.3em;
+    }
+
+    h3 {
+      font-size: 1.1em;
+    }
+
+    /* Stack filter controls vertically */
+    div[style*="margin-bottom: 1em"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75em;
+    }
+
+    /* Full width inputs and buttons on mobile */
+    input[type="number"],
+    button {
+      width: 100%;
+      padding: 10px 16px;
+      font-size: 14px;
+      min-height: 44px;
+    }
+
+    label {
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    /* Make table scrollable horizontally */
+    #transfers-table {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      min-width: 600px;
+      font-size: 0.75em;
+    }
+
+    /* Increase touch target for links */
+    a {
+      padding: 8px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+    }
+  }
+
+  /* Extra small phones (480px and below) */
+  @media (max-width: 480px) {
+    body {
+      padding: 0.25em;
+      font-size: 13px;
+    }
+
+    h1 {
+      font-size: 1.3em;
+    }
+
+    h2 {
+      font-size: 1.15em;
+    }
+
+    table {
+      min-width: 500px;
+      font-size: 0.65em;
+    }
+
+    th, td {
+      padding: 2px !important;
+      font-size: 11px;
+    }
+
+    /* Reduce button padding on very small screens */
+    button {
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+
+    input[type="number"] {
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+  }
 </style></body>
 </html>

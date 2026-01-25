@@ -8,11 +8,144 @@ import Nav from '../components/Nav.astro';
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Welcome to FPL Manager Data - FPL Manager Data</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0 1em;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    h1 {
+      font-size: 2em;
+      margin-top: 0.5em;
+    }
+
+    p {
+      font-size: 1em;
+      line-height: 1.6;
+    }
+
+    .setup-notice {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 1em;
+      margin: 1.5em 0;
+      border-radius: 4px;
+    }
+
+    .setup-notice p {
+      margin: 0 0 0.5em 0;
+      font-weight: 500;
+    }
+
+    .setup-notice a {
+      color: #3182ce;
+      text-decoration: none;
+      font-weight: bold;
+      padding: 8px 16px;
+      background: #3182ce;
+      color: white;
+      border-radius: 4px;
+      display: inline-block;
+      min-height: 44px;
+      line-height: 28px;
+    }
+
+    .setup-notice a:hover {
+      background: #2c5aa0;
+    }
+
+    ul {
+      line-height: 1.8;
+    }
+
+    ul li {
+      margin-bottom: 0.5em;
+    }
+
+    ul li a {
+      color: #3182ce;
+      text-decoration: none;
+      font-weight: 500;
+      padding: 4px 8px;
+      display: inline-block;
+      min-height: 44px;
+      line-height: 36px;
+    }
+
+    ul li a:hover {
+      text-decoration: underline;
+    }
+
+    /* Mobile styles */
+    @media (max-width: 768px) {
+      body {
+        padding: 0.5em;
+        font-size: 14px;
+      }
+
+      h1 {
+        font-size: 1.5em;
+      }
+
+      p {
+        font-size: 1em;
+        line-height: 1.6;
+      }
+
+      .setup-notice {
+        padding: 0.75em;
+      }
+
+      ul {
+        padding-left: 1.5em;
+        line-height: 2;
+      }
+
+      ul li {
+        margin-bottom: 0.75em;
+      }
+
+      ul li a {
+        font-size: 16px;
+        padding: 8px 12px;
+        display: inline-block;
+      }
+    }
+
+    /* Extra small phones (480px and below) */
+    @media (max-width: 480px) {
+      body {
+        padding: 0.25em;
+        font-size: 13px;
+      }
+
+      h1 {
+        font-size: 1.3em;
+      }
+
+      .setup-notice {
+        padding: 0.5em;
+        font-size: 0.95em;
+      }
+
+      .setup-notice a {
+        padding: 8px 12px;
+        font-size: 14px;
+      }
+    }
+  </style>
 </head>
 <body>
 <Nav />
 
 <h1>Welcome to FPL Manager Data</h1>
+
+<div class="setup-notice">
+  <p>🚀 First time here? Start by adding your FPL team IDs:</p>
+  <a href="/managers">⚙ Go to Managers Page</a>
+</div>
+
 <p>
   Use the navigation above to view: Squads, Transfers, Chips & Rank, or Stats.
 </p>

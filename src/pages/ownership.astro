@@ -379,5 +379,124 @@ init();
     border: 1px solid #cbd5e0;
     font-weight: normal;
   }
+
+  /* Mobile responsive styles */
+  @media (max-width: 768px) {
+    body {
+      padding: 0.5em;
+      font-size: 14px;
+    }
+
+    h1 {
+      font-size: 1.5em;
+    }
+
+    h2 {
+      font-size: 1.3em;
+    }
+
+    h3 {
+      font-size: 1.1em;
+    }
+
+    /* Stack filter controls vertically */
+    div[style*="margin-bottom"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75em;
+    }
+
+    /* Full width inputs, buttons, and selects on mobile */
+    input[type="number"],
+    button,
+    select {
+      width: 100% !important;
+      padding: 10px 16px;
+      font-size: 14px;
+      min-height: 44px;
+    }
+
+    label {
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    /* Make table scrollable horizontally */
+    #ownership-output {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      min-width: 600px;
+      font-size: 0.75em;
+    }
+
+    th, td {
+      padding: 6px 4px;
+    }
+
+    /* Make summary boxes more readable on mobile */
+    div[style*="border-left: 4px solid"] {
+      padding: 0.75em;
+      font-size: 0.9em;
+    }
+
+    div[style*="border-left: 4px solid"] ul {
+      padding-left: 1.2em;
+    }
+
+    /* Increase touch target for links */
+    a {
+      padding: 8px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+    }
+  }
+
+  /* Extra small phones (480px and below) */
+  @media (max-width: 480px) {
+    body {
+      padding: 0.25em;
+      font-size: 13px;
+    }
+
+    h1 {
+      font-size: 1.3em;
+    }
+
+    h2 {
+      font-size: 1.15em;
+    }
+
+    h3 {
+      font-size: 1.05em;
+    }
+
+    table {
+      min-width: 500px;
+      font-size: 0.65em;
+    }
+
+    th, td {
+      padding: 3px 2px !important;
+      font-size: 11px;
+    }
+
+    /* Reduce button/input padding on very small screens */
+    button,
+    input[type="number"],
+    select {
+      padding: 8px 12px !important;
+      font-size: 13px;
+    }
+
+    /* Make summary boxes more compact */
+    div[style*="border-left: 4px solid"] {
+      padding: 0.5em;
+      font-size: 0.85em;
+    }
+  }
 </style></body>
 </html>

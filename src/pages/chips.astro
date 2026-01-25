@@ -260,5 +260,91 @@ refreshBtn.addEventListener('click', async () => {
   button:hover {
     background: #2c5aa0;
   }
+
+  /* Mobile responsive styles */
+  @media (max-width: 768px) {
+    body {
+      padding: 0.5em;
+      font-size: 14px;
+    }
+
+    h1 {
+      font-size: 1.5em;
+    }
+
+    h2 {
+      font-size: 1.3em;
+    }
+
+    /* Stack filter controls vertically */
+    div[style*="margin-bottom"] {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75em;
+    }
+
+    /* Full width buttons on mobile */
+    button {
+      width: 100%;
+      padding: 10px 16px;
+      font-size: 14px;
+      min-height: 44px;
+    }
+
+    /* Make table scrollable horizontally */
+    #chips-output {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      min-width: 500px;
+      font-size: 0.8em;
+    }
+
+    th, td {
+      padding: 6px 4px;
+    }
+
+    /* Increase touch target for links */
+    a {
+      padding: 8px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+    }
+  }
+
+  /* Extra small phones (480px and below) */
+  @media (max-width: 480px) {
+    body {
+      padding: 0.25em;
+      font-size: 13px;
+    }
+
+    h1 {
+      font-size: 1.3em;
+    }
+
+    h2 {
+      font-size: 1.15em;
+    }
+
+    table {
+      min-width: 400px;
+      font-size: 0.7em;
+    }
+
+    th, td {
+      padding: 3px 2px !important;
+      font-size: 11px;
+    }
+
+    /* Reduce button padding on very small screens */
+    button {
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+  }
 </style></body>
 </html>
