@@ -44,151 +44,151 @@ import Nav from '../components/Nav.astro';
   </a>
 </div>
 
-<script type="module">
-import { createClient } from '@supabase/supabase-js'
+<script>
+  import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  'https://fnehvaoqqmkrhxcqslta.supabase.co',
-  'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
-)
+  const supabase = createClient(
+    'https://fnehvaoqqmkrhxcqslta.supabase.co',
+    'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
+  )
 
-const authCheckDiv = document.getElementById('auth-check')
-const loadingDiv = document.getElementById('loading')
-const requireLoginDiv = document.getElementById('require-login')
-const form = document.getElementById('manager-form')
-const textarea = document.getElementById('ids')
-const status = document.getElementById('status')
-const countEl = document.getElementById('count')
+  const authCheckDiv = document.getElementById('auth-check')
+  const loadingDiv = document.getElementById('loading')
+  const requireLoginDiv = document.getElementById('require-login')
+  const form = document.getElementById('manager-form')
+  const textarea = document.getElementById('ids')
+  const status = document.getElementById('status')
+  const countEl = document.getElementById('count')
 
-let currentUser = null
+  let currentUser = null
 
-// Check if user is logged in
-async function checkAuth() {
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (user) {
-    currentUser = user
-    loadingDiv.style.display = 'none'
-    authCheckDiv.style.display = 'block'
-    loadManagerIds()
-  } else {
-    loadingDiv.style.display = 'none'
-    requireLoginDiv.style.display = 'block'
-  }
-}
-
-// Load manager IDs from Supabase
-async function loadManagerIds() {
-  try {
-    const { data, error } = await supabase
-      .from('user_manager_lists')
-      .select('manager_ids')
-      .eq('user_id', currentUser.id)
-      .single()
+  // Check if user is logged in
+  async function checkAuth() {
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (error && error.code !== 'PGRST116') {
-      console.error('Error loading manager IDs:', error)
+    if (user) {
+      currentUser = user
+      loadingDiv.style.display = 'none'
+      authCheckDiv.style.display = 'block'
+      loadManagerIds()
+    } else {
+      loadingDiv.style.display = 'none'
+      requireLoginDiv.style.display = 'block'
+    }
+  }
+
+  // Load manager IDs from Supabase
+  async function loadManagerIds() {
+    try {
+      const { data, error } = await supabase
+        .from('user_manager_lists')
+        .select('manager_ids')
+        .eq('user_id', currentUser.id)
+        .single()
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading manager IDs:', error)
+        return
+      }
+      
+      if (data && data.manager_ids) {
+        textarea.value = data.manager_ids.join('\n')
+        updateCount()
+      }
+    } catch (e) {
+      console.error('Error:', e)
+    }
+  }
+
+  // Save manager IDs to Supabase
+  async function saveManagerIds(ids) {
+    try {
+      const { data: existing, error: fetchError } = await supabase
+        .from('user_manager_lists')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .single()
+      
+      if (existing) {
+        // Update existing
+        const { error } = await supabase
+          .from('user_manager_lists')
+          .update({ 
+            manager_ids: ids,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', currentUser.id)
+        
+        if (error) throw error
+      } else {
+        // Insert new
+        const { error } = await supabase
+          .from('user_manager_lists')
+          .insert({
+            user_id: currentUser.id,
+            manager_ids: ids
+          })
+        
+        if (error) throw error
+      }
+      
+      return true
+    } catch (e) {
+      console.error('Error saving manager IDs:', e)
+      return false
+    }
+  }
+
+  // Update count as user types
+  function updateCount() {
+    const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
+    countEl.textContent = ids.length
+    if (ids.length > 100) {
+      countEl.style.color = "red"
+      countEl.textContent = `${ids.length} (exceeds 100 limit!)`
+    } else {
+      countEl.style.color = ids.length > 0 ? "#38a169" : "#666"
+    }
+  }
+
+  textarea.addEventListener('input', updateCount)
+
+  // Save form submission
+  form.onsubmit = async (e) => {
+    e.preventDefault()
+    const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
+    
+    if (ids.length === 0) {
+      status.innerHTML = "<span style='color:red'>⚠️ Please enter at least one valid EntryID.</span>"
       return
     }
     
-    if (data && data.manager_ids) {
-      textarea.value = data.manager_ids.join('\n')
-      updateCount()
+    if (ids.length > 100) {
+      status.innerHTML = "<span style='color:red'>⚠️ Maximum 100 managers allowed. Please remove some entries.</span>"
+      return
     }
-  } catch (e) {
-    console.error('Error:', e)
-  }
-}
-
-// Save manager IDs to Supabase
-async function saveManagerIds(ids) {
-  try {
-    const { data: existing, error: fetchError } = await supabase
-      .from('user_manager_lists')
-      .select('id')
-      .eq('user_id', currentUser.id)
-      .single()
     
-    if (existing) {
-      // Update existing
-      const { error } = await supabase
-        .from('user_manager_lists')
-        .update({ 
-          manager_ids: ids,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', currentUser.id)
+    // Remove duplicates
+    const uniqueIds = [...new Set(ids)].map(id => parseInt(id))
+    
+    const success = await saveManagerIds(uniqueIds)
+    
+    if (success) {
+      status.innerHTML = `<span style='color:#38a169; font-weight:bold'>✅ Successfully saved ${uniqueIds.length} manager IDs to your account!</span><br>
+      <span style='color:#666'>These will now be synced across all your devices.</span>`
       
-      if (error) throw error
+      // Update textarea with deduplicated list
+      if (uniqueIds.length !== ids.length) {
+        textarea.value = uniqueIds.join('\n')
+        updateCount()
+        status.innerHTML += `<br><span style='color:#f59e0b'>ℹ️ Removed ${ids.length - uniqueIds.length} duplicate(s).</span>`
+      }
     } else {
-      // Insert new
-      const { error } = await supabase
-        .from('user_manager_lists')
-        .insert({
-          user_id: currentUser.id,
-          manager_ids: ids
-        })
-      
-      if (error) throw error
+      status.innerHTML = "<span style='color:red'>❌ Error saving manager IDs. Please try again.</span>"
     }
-    
-    return true
-  } catch (e) {
-    console.error('Error saving manager IDs:', e)
-    return false
   }
-}
 
-// Update count as user types
-function updateCount() {
-  const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
-  countEl.textContent = ids.length
-  if (ids.length > 100) {
-    countEl.style.color = "red"
-    countEl.textContent = `${ids.length} (exceeds 100 limit!)`
-  } else {
-    countEl.style.color = ids.length > 0 ? "#38a169" : "#666"
-  }
-}
-
-textarea.addEventListener('input', updateCount)
-
-// Save form submission
-form.onsubmit = async (e) => {
-  e.preventDefault()
-  const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
-  
-  if (ids.length === 0) {
-    status.innerHTML = "<span style='color:red'>⚠️ Please enter at least one valid EntryID.</span>"
-    return
-  }
-  
-  if (ids.length > 100) {
-    status.innerHTML = "<span style='color:red'>⚠️ Maximum 100 managers allowed. Please remove some entries.</span>"
-    return
-  }
-  
-  // Remove duplicates
-  const uniqueIds = [...new Set(ids)].map(id => parseInt(id))
-  
-  const success = await saveManagerIds(uniqueIds)
-  
-  if (success) {
-    status.innerHTML = `<span style='color:#38a169; font-weight:bold'>✅ Successfully saved ${uniqueIds.length} manager IDs to your account!</span><br>
-    <span style='color:#666'>These will now be synced across all your devices.</span>`
-    
-    // Update textarea with deduplicated list
-    if (uniqueIds.length !== ids.length) {
-      textarea.value = uniqueIds.join('\n')
-      updateCount()
-      status.innerHTML += `<br><span style='color:#f59e0b'>ℹ️ Removed ${ids.length - uniqueIds.length} duplicate(s).</span>`
-    }
-  } else {
-    status.innerHTML = "<span style='color:red'>❌ Error saving manager IDs. Please try again.</span>"
-  }
-}
-
-checkAuth()
+  checkAuth()
 </script>
 
 <style>
