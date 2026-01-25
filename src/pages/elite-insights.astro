@@ -258,7 +258,7 @@ function renderDataTables(data, gwLabel) {
   const pointsFWD = goalsFWD + assistsFWD + bonusFWD;
   
   // Determine hits cost label based on gwLabel
-  const hitsCostLabel = gwLabel.includes('Season') 
+  const hitsCostLabel = gwLabel.startsWith('Season') 
     ? 'Average Hit Cost per Manager (Season)' 
     : `Average Hit Cost per Manager (${gwLabel})`;
   
