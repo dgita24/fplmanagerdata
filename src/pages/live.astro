@@ -1,7 +1,15 @@
 ---
+
 import Nav from '../components/Nav.astro';
 ---
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live League Standings - FPL Manager Data</title>
+</head>
+<body>
 <Nav />
 <h1>🔴 Live League Standings</h1>
 <p>Real-time league table with live points, projected bonus, auto-subs, and transfer hits.</p>
@@ -362,7 +370,7 @@ function makeLiveTable(managers, compareToId = "") {
       <th>Manager</th>
       <th>Team Name</th>
       <th style="background:#e6f7ff;">Live GW Pts</th>
-      <th>Proj Bonus</th>
+      <th>Bonus Pts</th>
       <th>Transfer Hit</th>
       <th style="background:#e6f7ff;">GW Total</th>
       <th style="background:#fff4e6;">Proj Overall</th>
@@ -580,4 +588,5 @@ init();
   a:hover {
     text-decoration: underline !important;
   }
-</style>
+</style></body>
+</html>
