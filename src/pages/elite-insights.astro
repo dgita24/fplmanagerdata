@@ -1,5 +1,4 @@
 ---
-
 import Nav from '../components/Nav.astro';
 ---
 <!DOCTYPE html>
@@ -14,48 +13,113 @@ import Nav from '../components/Nav.astro';
 
 <div class="page-header">
   <h1>🏆 Elite Manager Insights</h1>
-  <p>Compare statistics, transfer patterns, and formations between World Top 50 and your tracked managers.</p>
+  <p>Deep dive into elite FPL strategies - formations, transfers, and points breakdown by position</p>
 </div>
 
-<div class="controls-container">
-  <div class="control-group">
-    <label for="view-select">View:</label>
-    <select id="view-select">
-      <option value="top50">World Top 50</option>
-      <option value="custom">My Custom Managers</option>
-    </select>
+<div class="controls-section">
+  <div class="controls-container">
+    <div class="control-group">
+      <label for="view-toggle" class="control-label">View:</label>
+      <div class="toggle-buttons" id="view-toggle">
+        <button class="toggle-btn active" data-view="top50">Top 50</button>
+        <button class="toggle-btn" data-view="custom">Custom Managers</button>
+      </div>
+    </div>
+    
+    <div class="control-group">
+      <label for="gw-select" class="control-label">Gameweek:</label>
+      <select id="gw-select" class="gw-selector">
+        <option value="season">Season Total</option>
+      </select>
+    </div>
+    
+    <div class="manager-info">
+      <span id="manager-count" class="manager-count-badge"></span>
+      <a href="/managers" class="manage-link">⚙ Manage IDs</a>
+    </div>
   </div>
-  
-  <div class="control-group">
-    <label for="gw-select">Gameweek:</label>
-    <select id="gw-select">
-      <option value="season">Season Total</option>
-    </select>
-  </div>
-  
-  <div class="manager-info">
-    <span id="manager-count"></span>
-    <a href="/managers" class="manage-link">Manage IDs</a>
-  </div>
+
+  <div id="data-status" class="status-bar"></div>
 </div>
 
-<div id="data-status" class="status-box">
-  <p>Loading...</p>
-</div>
-
-<div id="insights-output"></div>
+<div id="insights-container" class="insights-container"></div>
 
 <script>
 import { supabase } from '../lib/supabase.ts'
 
-let managerIds = []
+// Types
+interface AggregateData {
+  gameweek?: number;
+  managers_analyzed: number;
+  avg_goals_gk: number;
+  avg_goals_def: number;
+  avg_goals_mid: number;
+  avg_goals_fwd: number;
+  avg_assists_gk: number;
+  avg_assists_def: number;
+  avg_assists_mid: number;
+  avg_assists_fwd: number;
+  avg_cs_gk: number;
+  avg_cs_def: number;
+  avg_cs_mid: number;
+  avg_cs_fwd: number;
+  avg_bonus_points: number;
+  avg_other_points: number;
+  avg_transfers: number;
+  avg_hits_count: number;
+  avg_hits_cost: number;
+  formation_distribution: Record<string, number>;
+  most_common_formation: string;
+  data_fetched_at?: string;
+}
 
+interface CustomManagerData {
+  manager_id: number;
+  manager_name: string;
+  gameweek: number;
+  total_points: number;
+  overall_rank: number;
+  goals_gk: number;
+  goals_def: number;
+  goals_mid: number;
+  goals_fwd: number;
+  assists_gk: number;
+  assists_def: number;
+  assists_mid: number;
+  assists_fwd: number;
+  cs_gk: number;
+  cs_def: number;
+  cs_mid: number;
+  cs_fwd: number;
+  bonus_points: number;
+  other_points: number;
+  total_transfers: number;
+  hits_count: number;
+  hits_cost: number;
+  formations: Record<string, number>;
+  most_used_formation: string;
+}
+
+// State
+let managerIds: number[] = [];
+let currentView = 'top50';
+let selectedGW: string | number = 'season';
+let latestGW: number | null = null;
+
+// DOM elements
+const container = document.getElementById("insights-container")!;
+const dataStatus = document.getElementById("data-status")!;
+const managerCountEl = document.getElementById("manager-count")!;
+const gwSelect = document.getElementById("gw-select") as HTMLSelectElement;
+const viewToggle = document.getElementById("view-toggle")!;
+
+// Auth & manager IDs
 async function loadManagerIdsFromSupabase() {
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
-    window.location.replace('/login')
-    return { authenticated: false, managerIds: [] }
+    window.location.replace('/login');
+    return { authenticated: false, managerIds: [] };
   }
   
   try {
@@ -63,47 +127,21 @@ async function loadManagerIdsFromSupabase() {
       .from('user_manager_lists')
       .select('manager_ids')
       .eq('user_id', user.id)
-      .single()
+      .single();
     
     if (error && error.code !== 'PGRST116') {
-      console.error('Error loading manager IDs:', error)
-      return { authenticated: true, managerIds: [] }
+      console.error('Error loading manager IDs:', error);
+      return { authenticated: true, managerIds: [] };
     }
     
-    return { authenticated: true, managerIds: data?.manager_ids || [] }
+    return { authenticated: true, managerIds: (data?.manager_ids || []) as number[] };
   } catch (e) {
-    console.error('Error:', e)
-    return { authenticated: false, managerIds: [] }
+    console.error('Error:', e);
+    return { authenticated: false, managerIds: [] };
   }
 }
 
-const out = document.getElementById("insights-output");
-const dataStatus = document.getElementById("data-status");
-const managerCountEl = document.getElementById("manager-count");
-const viewSelect = document.getElementById("view-select");
-const gwSelect = document.getElementById("gw-select");
-
-let currentView = 'top50';
-let latestGW = null;
-let selectedGW = 'season';
-let allGWsData = [];
-
-async function fetchLatestGW() {
-  const { data, error } = await supabase
-    .from('top_50_aggregates')
-    .select('gameweek, data_fetched_at')
-    .order('gameweek', { ascending: false })
-    .limit(1)
-    .single();
-  
-  if (error) {
-    console.error('Error fetching latest GW:', error);
-    return null;
-  }
-  
-  return data;
-}
-
+// Populate gameweek selector
 async function populateGWSelector() {
   const { data, error } = await supabase
     .from('top_50_aggregates')
@@ -119,201 +157,55 @@ async function populateGWSelector() {
   
   data.forEach(row => {
     const option = document.createElement('option');
-    option.value = row.gameweek;
+    option.value = row.gameweek.toString();
     option.textContent = `GW ${row.gameweek}`;
     gwSelect.appendChild(option);
   });
+  
+  if (data.length > 0) {
+    latestGW = data[data.length - 1].gameweek;
+  }
 }
 
-function renderStatsCards(data, isAverage = false) {
-  const prefix = isAverage ? 'avg_' : '';
+// Calculate points using FPL scoring
+function calculatePositionPoints(stats: any, position: 'GK' | 'DEF' | 'MID' | 'FWD'): number {
+  const goals = stats[`goals_${position.toLowerCase()}`] || 0;
+  const assists = stats[`assists_${position.toLowerCase()}`] || 0;
+  const cleanSheets = stats[`cs_${position.toLowerCase()}`] || 0;
   
-  const transfers = data[`${prefix}transfers`] || 0;
-  const hitsCount = data[`${prefix}hits_count`] || 0;
-  const hitsCost = hitsCount * 4;
-  const formation = data.most_common_formation || 'N/A';
+  let points = 0;
   
-  return `
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-label">Average Transfers</div>
-        <div class="stat-value">${transfers.toFixed(1)}</div>
-        <div class="stat-hint">Per ${selectedGW === 'season' ? 'gameweek' : 'this GW'}</div>
-      </div>
-      
-      <div class="stat-card">
-        <div class="stat-label">Transfer Hits</div>
-        <div class="stat-value">${hitsCount.toFixed(1)}</div>
-        <div class="stat-hint">-${hitsCost.toFixed(0)} pts cost</div>
-      </div>
-      
-      <div class="stat-card highlight">
-        <div class="stat-label">Most Used Formation</div>
-        <div class="stat-value formation">${formation}</div>
-        <div class="stat-hint">Most common lineup</div>
-      </div>
-    </div>
-  `;
-}
-
-function renderFormationDistribution(formationDist) {
-  if (!formationDist || Object.keys(formationDist).length === 0) {
-    return '<p class="no-data">Formation distribution data not available</p>';
+  // Goals
+  if (position === 'GK' || position === 'DEF') {
+    points += goals * 6;
+  } else if (position === 'MID') {
+    points += goals * 5;
+  } else if (position === 'FWD') {
+    points += goals * 4;
   }
   
-  const sortedFormations = Object.entries(formationDist)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 8);
+  // Assists (3 points for all)
+  points += assists * 3;
   
-  const maxCount = sortedFormations[0][1];
-  
-  return `
-    <div class="formation-bars">
-      ${sortedFormations.map(([formation, count]) => {
-        const percentage = (count / maxCount) * 100;
-        return `
-          <div class="formation-bar-item">
-            <div class="formation-label">${formation}</div>
-            <div class="formation-bar-container">
-              <div class="formation-bar" style="width: ${percentage}%"></div>
-              <span class="formation-count">${count} uses</span>
-            </div>
-          </div>
-        `;
-      }).join('')}
-    </div>
-  `;
-}
-
-function renderCaptainPicks(data) {
-  if (!data.captain_picks || Object.keys(data.captain_picks).length === 0) {
-    return `
-      <div class="info-message">
-        <strong>📊 Captain Picks Data</strong><br>
-        Captain pick statistics are not currently available from the data source.
-        This feature will be added when the backend data collection includes captain choices.
-      </div>
-    `;
+  // Clean sheets
+  if (position === 'GK' || position === 'DEF') {
+    points += cleanSheets * 4;
+  } else if (position === 'MID') {
+    points += cleanSheets * 1;
   }
   
-  const sortedCaptains = Object.entries(data.captain_picks)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 10);
-  
-  return `
-    <div class="captain-grid">
-      ${sortedCaptains.map(([player, count]) => `
-        <div class="captain-item">
-          <span class="captain-name">${player}</span>
-          <span class="captain-count">${count}×</span>
-        </div>
-      `).join('')}
-    </div>
-  `;
+  return points;
 }
 
-function renderPointsTable(data, isAverage = false) {
-  const positions = ['GK', 'DEF', 'MID', 'FWD'];
-  const prefix = isAverage ? 'avg_' : '';
-  
-  const stats = {
-    goals: {
-      GK: data[`${prefix}goals_gk`] || 0,
-      DEF: data[`${prefix}goals_def`] || 0,
-      MID: data[`${prefix}goals_mid`] || 0,
-      FWD: data[`${prefix}goals_fwd`] || 0,
-    },
-    assists: {
-      GK: data[`${prefix}assists_gk`] || 0,
-      DEF: data[`${prefix}assists_def`] || 0,
-      MID: data[`${prefix}assists_mid`] || 0,
-      FWD: data[`${prefix}assists_fwd`] || 0,
-    },
-    cleanSheets: {
-      GK: data[`${prefix}cs_gk`] || 0,
-      DEF: data[`${prefix}cs_def`] || 0,
-      MID: data[`${prefix}cs_mid`] || 0,
-      FWD: data[`${prefix}cs_fwd`] || 0,
-    },
-    bonus: {
-      GK: data[`${prefix}bonus_gk`] || 0,
-      DEF: data[`${prefix}bonus_def`] || 0,
-      MID: data[`${prefix}bonus_mid`] || 0,
-      FWD: data[`${prefix}bonus_fwd`] || 0,
-    }
-  };
-  
-  const totals = {
-    goals: Object.values(stats.goals).reduce((a, b) => a + b, 0),
-    assists: Object.values(stats.assists).reduce((a, b) => a + b, 0),
-    cleanSheets: Object.values(stats.cleanSheets).reduce((a, b) => a + b, 0),
-    bonus: Object.values(stats.bonus).reduce((a, b) => a + b, 0)
-  };
-  
-  const pointsPerPosition = {
-    GK: (stats.goals.GK * 6) + (stats.assists.GK * 3) + (stats.cleanSheets.GK * 4) + stats.bonus.GK,
-    DEF: (stats.goals.DEF * 6) + (stats.assists.DEF * 3) + (stats.cleanSheets.DEF * 4) + stats.bonus.DEF,
-    MID: (stats.goals.MID * 5) + (stats.assists.MID * 3) + (stats.cleanSheets.MID * 1) + stats.bonus.MID,
-    FWD: (stats.goals.FWD * 4) + (stats.assists.FWD * 3) + stats.bonus.FWD
-  };
-  
-  const totalPoints = Object.values(pointsPerPosition).reduce((a, b) => a + b, 0);
-  
-  return `
-    <div class="stats-table-container">
-      <table class="stats-table">
-        <thead>
-          <tr>
-            <th>Category</th>
-            <th>GK</th>
-            <th>DEF</th>
-            <th>MID</th>
-            <th>FWD</th>
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>Goals</strong></td>
-            ${positions.map(pos => `<td>${stats.goals[pos].toFixed(1)}</td>`).join('')}
-            <td><strong>${totals.goals.toFixed(1)}</strong></td>
-          </tr>
-          <tr>
-            <td><strong>Assists</strong></td>
-            ${positions.map(pos => `<td>${stats.assists[pos].toFixed(1)}</td>`).join('')}
-            <td><strong>${totals.assists.toFixed(1)}</strong></td>
-          </tr>
-          <tr>
-            <td><strong>Clean Sheets</strong></td>
-            ${positions.map(pos => `<td>${stats.cleanSheets[pos].toFixed(1)}</td>`).join('')}
-            <td><strong>${totals.cleanSheets.toFixed(1)}</strong></td>
-          </tr>
-          <tr>
-            <td><strong>Bonus Points</strong></td>
-            ${positions.map(pos => `<td>${stats.bonus[pos].toFixed(1)}</td>`).join('')}
-            <td><strong>${totals.bonus.toFixed(1)}</strong></td>
-          </tr>
-          <tr class="points-row">
-            <td><strong>Points by Position</strong></td>
-            ${positions.map(pos => `<td><strong>${pointsPerPosition[pos].toFixed(0)}</strong></td>`).join('')}
-            <td><strong>${totalPoints.toFixed(0)}</strong></td>
-          </tr>
-        </tbody>
-      </table>
-      <p class="table-note">
-        <strong>Simplified FPL Scoring:</strong> Goals (GK/DEF: 6pts, MID: 5pts, FWD: 4pts), 
-        Assists (3pts), Clean Sheets (GK/DEF: 4pts, MID: 1pt), and Bonus Points.
-      </p>
-    </div>
-  `;
-}
-
-function aggregateSeasonData(allGameweeks) {
+// Aggregate season data
+function aggregateSeasonData(allGameweeks: AggregateData[]): AggregateData | null {
   if (!allGameweeks || allGameweeks.length === 0) {
     return null;
   }
   
-  const result = {
+  const numGWs = allGameweeks.length;
+  
+  const result: AggregateData = {
     managers_analyzed: allGameweeks[0]?.managers_analyzed || 50,
     avg_goals_gk: 0,
     avg_goals_def: 0,
@@ -327,16 +219,16 @@ function aggregateSeasonData(allGameweeks) {
     avg_cs_def: 0,
     avg_cs_mid: 0,
     avg_cs_fwd: 0,
-    avg_bonus_gk: 0,
-    avg_bonus_def: 0,
-    avg_bonus_mid: 0,
-    avg_bonus_fwd: 0,
+    avg_bonus_points: 0,
+    avg_other_points: 0,
     avg_transfers: 0,
     avg_hits_count: 0,
+    avg_hits_cost: 0,
     most_common_formation: '',
     formation_distribution: {}
   };
   
+  // Sum all stats
   allGameweeks.forEach(gw => {
     result.avg_goals_gk += (gw.avg_goals_gk || 0);
     result.avg_goals_def += (gw.avg_goals_def || 0);
@@ -350,13 +242,13 @@ function aggregateSeasonData(allGameweeks) {
     result.avg_cs_def += (gw.avg_cs_def || 0);
     result.avg_cs_mid += (gw.avg_cs_mid || 0);
     result.avg_cs_fwd += (gw.avg_cs_fwd || 0);
-    result.avg_bonus_gk += (gw.avg_bonus_gk || 0);
-    result.avg_bonus_def += (gw.avg_bonus_def || 0);
-    result.avg_bonus_mid += (gw.avg_bonus_mid || 0);
-    result.avg_bonus_fwd += (gw.avg_bonus_fwd || 0);
+    result.avg_bonus_points += (gw.avg_bonus_points || 0);
+    result.avg_other_points += (gw.avg_other_points || 0);
     result.avg_transfers += (gw.avg_transfers || 0);
     result.avg_hits_count += (gw.avg_hits_count || 0);
+    result.avg_hits_cost += (gw.avg_hits_cost || 0);
     
+    // Aggregate formations
     if (gw.formation_distribution) {
       Object.entries(gw.formation_distribution).forEach(([formation, count]) => {
         result.formation_distribution[formation] = (result.formation_distribution[formation] || 0) + count;
@@ -364,141 +256,28 @@ function aggregateSeasonData(allGameweeks) {
     }
   });
   
-  Object.keys(result).forEach(key => {
-    if (key.startsWith('avg_') && typeof result[key] === 'number') {
-      result[key] = Math.round(result[key] * 10) / 10;
-    }
-  });
+  // Average per gameweek for per-GW stats
+  result.avg_transfers = result.avg_transfers / numGWs;
+  result.avg_hits_count = result.avg_hits_count / numGWs;
+  result.avg_hits_cost = result.avg_hits_cost / numGWs;
+  result.avg_bonus_points = result.avg_bonus_points / numGWs;
+  result.avg_other_points = result.avg_other_points / numGWs;
   
+  // Find most common formation
   if (Object.keys(result.formation_distribution).length > 0) {
     result.most_common_formation = Object.entries(result.formation_distribution)
-      .sort(([, a], [, b]) => b - a)[0][0];
+      .sort(([, a], [, b]) => (b as number) - (a as number))[0][0];
   }
   
   return result;
 }
 
-async function displayTop50() {
-  out.innerHTML = '<p class="loading-text">Loading Top 50 data...</p>';
-  
-  const gwInfo = await fetchLatestGW();
-  if (!gwInfo) {
-    out.innerHTML = '<p class="error-text">❌ No Top 50 data available yet. Data will be fetched after gameweeks complete.</p>';
-    dataStatus.innerHTML = '<p class="error-text">No data available</p>';
-    return;
-  }
-  
-  latestGW = gwInfo.gameweek;
-  
-  let aggregateData;
-  let gwLabel;
-  
-  if (selectedGW === 'season') {
-    const { data: allData, error } = await supabase
-      .from('top_50_aggregates')
-      .select('*')
-      .order('gameweek', { ascending: true });
-    
-    if (error || !allData || allData.length === 0) {
-      console.error('Error fetching season data:', error);
-      out.innerHTML = '<p class="error-text">⚠️ No gameweek data available for season aggregation.</p>';
-      return;
-    }
-    
-    aggregateData = aggregateSeasonData(allData);
-    if (!aggregateData) {
-      out.innerHTML = '<p class="error-text">Error aggregating season data.</p>';
-      return;
-    }
-    gwLabel = 'Season Total';
-    
-    const fetchDate = new Date(gwInfo.data_fetched_at).toLocaleString();
-    dataStatus.innerHTML = `
-      <p>📊 Showing <strong>Season Total</strong> data (GW 1-${latestGW}) | 
-      Last updated: <strong>${fetchDate}</strong></p>
-    `;
-  } else {
-    const { data, error } = await supabase
-      .from('top_50_aggregates')
-      .select('*')
-      .eq('gameweek', selectedGW)
-      .single();
-    
-    if (error) {
-      console.error('Error fetching aggregate:', error);
-      out.innerHTML = '<p class="error-text">Error loading data for this gameweek.</p>';
-      return;
-    }
-    
-    aggregateData = data;
-    gwLabel = `GW ${selectedGW}`;
-    
-    const fetchDate = new Date(gwInfo.data_fetched_at).toLocaleString();
-    dataStatus.innerHTML = `
-      <p>📊 Showing data for <strong>GW ${selectedGW}</strong> | 
-      Last updated: <strong>${fetchDate}</strong></p>
-    `;
-  }
-  
-  let html = `
-    <div class="insights-section top50-section">
-      <div class="section-header">
-        <h2>🏆 World Top 50 Averages</h2>
-        <p class="section-subtitle">${gwLabel} • ${aggregateData.managers_analyzed} managers analyzed</p>
-      </div>
-      
-      <div class="section-content">
-        <h3>Key Statistics</h3>
-        ${renderStatsCards(aggregateData, true)}
-        
-        <h3>Points Distribution by Position</h3>
-        ${renderPointsTable(aggregateData, true)}
-        
-        <h3>Formation Usage</h3>
-        ${renderFormationDistribution(aggregateData.formation_distribution)}
-        
-        <h3>Captain Picks</h3>
-        ${renderCaptainPicks(aggregateData)}
-      </div>
-    </div>
-  `;
-  
-  out.innerHTML = html;
-}
-
-async function fetchCustomManagerData(managerId, gameweek) {
-  try {
-    const [entryRes, historyRes] = await Promise.all([
-      fetch(`/api/fpl/entry/${managerId}`),
-      fetch(`/api/fpl/entry/${managerId}/history`)
-    ]);
-    
-    if (!entryRes.ok || !historyRes.ok) {
-      throw new Error('Failed to fetch manager data');
-    }
-    
-    const entry = await entryRes.json();
-    const history = await historyRes.json();
-    
-    return { entry, history, managerId };
-  } catch (error) {
-    console.error(`Error fetching data for manager ${managerId}:`, error);
-    return null;
-  }
-}
-
-function calculateCustomManagerAggregates(managersData, gameweek) {
-  // This would aggregate stats from multiple custom managers
-  // For now, return a placeholder structure
+// Aggregate custom manager data
+function aggregateCustomManagerData(managersData: CustomManagerData[]): AggregateData {
   const numManagers = managersData.length;
   
-  // Initialize aggregate structure
-  const aggregate = {
+  const aggregate: AggregateData = {
     managers_analyzed: numManagers,
-    avg_transfers: 0,
-    avg_hits_count: 0,
-    most_common_formation: 'N/A',
-    formation_distribution: {},
     avg_goals_gk: 0,
     avg_goals_def: 0,
     avg_goals_mid: 0,
@@ -511,122 +290,503 @@ function calculateCustomManagerAggregates(managersData, gameweek) {
     avg_cs_def: 0,
     avg_cs_mid: 0,
     avg_cs_fwd: 0,
-    avg_bonus_gk: 0,
-    avg_bonus_def: 0,
-    avg_bonus_mid: 0,
-    avg_bonus_fwd: 0
+    avg_bonus_points: 0,
+    avg_other_points: 0,
+    avg_transfers: 0,
+    avg_hits_count: 0,
+    avg_hits_cost: 0,
+    most_common_formation: '',
+    formation_distribution: {}
   };
   
-  // For each manager, extract stats from history
+  // Sum all stats
   managersData.forEach(manager => {
-    if (!manager || !manager.history || !manager.history.current) return;
+    aggregate.avg_goals_gk += manager.goals_gk || 0;
+    aggregate.avg_goals_def += manager.goals_def || 0;
+    aggregate.avg_goals_mid += manager.goals_mid || 0;
+    aggregate.avg_goals_fwd += manager.goals_fwd || 0;
+    aggregate.avg_assists_gk += manager.assists_gk || 0;
+    aggregate.avg_assists_def += manager.assists_def || 0;
+    aggregate.avg_assists_mid += manager.assists_mid || 0;
+    aggregate.avg_assists_fwd += manager.assists_fwd || 0;
+    aggregate.avg_cs_gk += manager.cs_gk || 0;
+    aggregate.avg_cs_def += manager.cs_def || 0;
+    aggregate.avg_cs_mid += manager.cs_mid || 0;
+    aggregate.avg_cs_fwd += manager.cs_fwd || 0;
+    aggregate.avg_bonus_points += manager.bonus_points || 0;
+    aggregate.avg_other_points += manager.other_points || 0;
+    aggregate.avg_transfers += manager.total_transfers || 0;
+    aggregate.avg_hits_count += manager.hits_count || 0;
+    aggregate.avg_hits_cost += manager.hits_cost || 0;
     
-    const gwData = gameweek === 'season' 
-      ? manager.history.current 
-      : manager.history.current.filter(gw => gw.event == gameweek);
-    
-    // Sum transfers and hits
-    gwData.forEach(gw => {
-      aggregate.avg_transfers += gw.event_transfers || 0;
-      aggregate.avg_hits_count += gw.event_transfers_cost / 4 || 0;
-    });
+    // Aggregate formations
+    if (manager.formations) {
+      Object.entries(manager.formations).forEach(([formation, count]) => {
+        aggregate.formation_distribution[formation] = (aggregate.formation_distribution[formation] || 0) + (count as number);
+      });
+    }
   });
   
-  // Average the values
+  // Calculate averages
   if (numManagers > 0) {
-    aggregate.avg_transfers = (aggregate.avg_transfers / numManagers).toFixed(1);
-    aggregate.avg_hits_count = (aggregate.avg_hits_count / numManagers).toFixed(1);
+    aggregate.avg_goals_gk /= numManagers;
+    aggregate.avg_goals_def /= numManagers;
+    aggregate.avg_goals_mid /= numManagers;
+    aggregate.avg_goals_fwd /= numManagers;
+    aggregate.avg_assists_gk /= numManagers;
+    aggregate.avg_assists_def /= numManagers;
+    aggregate.avg_assists_mid /= numManagers;
+    aggregate.avg_assists_fwd /= numManagers;
+    aggregate.avg_cs_gk /= numManagers;
+    aggregate.avg_cs_def /= numManagers;
+    aggregate.avg_cs_mid /= numManagers;
+    aggregate.avg_cs_fwd /= numManagers;
+    aggregate.avg_bonus_points /= numManagers;
+    aggregate.avg_other_points /= numManagers;
+    aggregate.avg_transfers /= numManagers;
+    aggregate.avg_hits_count /= numManagers;
+    aggregate.avg_hits_cost /= numManagers;
+  }
+  
+  // Find most common formation
+  if (Object.keys(aggregate.formation_distribution).length > 0) {
+    aggregate.most_common_formation = Object.entries(aggregate.formation_distribution)
+      .sort(([, a], [, b]) => (b as number) - (a as number))[0][0];
   }
   
   return aggregate;
 }
 
-async function displayCustomManagers() {
-  if (managerIds.length === 0) {
-    out.innerHTML = `
-      <div class="empty-state">
-        <h3>No Custom Managers Added</h3>
-        <p>You haven't added any custom managers to track yet.</p>
-        <a href="/managers" class="button">Add Manager IDs</a>
-      </div>
-    `;
-    dataStatus.innerHTML = '<p>No custom managers to display</p>';
-    return;
-  }
+// Rendering functions
+function renderKPICards(data: AggregateData, gwLabel: string): string {
+  const avgTransfers = data.avg_transfers.toFixed(1);
+  const avgHits = data.avg_hits_count.toFixed(1);
+  const hitsCost = data.avg_hits_cost.toFixed(0);
+  const formation = data.most_common_formation || 'N/A';
   
-  out.innerHTML = '<p class="loading-text">Loading custom managers data...</p>';
-  dataStatus.innerHTML = '<p>Fetching data from FPL API...</p>';
+  // Calculate total points from all positions
+  const totalGoalsPoints = 
+    calculatePositionPoints({goals_gk: data.avg_goals_gk, assists_gk: 0, cs_gk: 0}, 'GK') +
+    calculatePositionPoints({goals_def: data.avg_goals_def, assists_def: 0, cs_def: 0}, 'DEF') +
+    calculatePositionPoints({goals_mid: data.avg_goals_mid, assists_mid: 0, cs_mid: 0}, 'MID') +
+    calculatePositionPoints({goals_fwd: data.avg_goals_fwd, assists_fwd: 0, cs_fwd: 0}, 'FWD');
   
-  const gwInfo = await fetchLatestGW();
-  latestGW = gwInfo?.gameweek || null;
+  const totalAssistsPoints = (
+    data.avg_assists_gk + data.avg_assists_def + 
+    data.avg_assists_mid + data.avg_assists_fwd
+  ) * 3;
   
-  // Fetch data for each custom manager
-  const managersData = [];
-  let loaded = 0;
+  const totalCSPoints = 
+    (data.avg_cs_gk * 4) + (data.avg_cs_def * 4) + (data.avg_cs_mid * 1);
   
-  for (const id of managerIds.slice(0, 20)) { // Limit to 20 for performance
-    const data = await fetchCustomManagerData(id, selectedGW);
-    if (data) {
-      managersData.push(data);
-    }
-    loaded++;
-    dataStatus.innerHTML = `<p>Loading... ${loaded} of ${Math.min(managerIds.length, 20)} managers</p>`;
-  }
+  const totalPoints = totalGoalsPoints + totalAssistsPoints + totalCSPoints + data.avg_bonus_points + data.avg_other_points;
   
-  if (managersData.length === 0) {
-    out.innerHTML = '<p class="error-text">Failed to load custom manager data. Please try again.</p>';
-    dataStatus.innerHTML = '<p class="error-text">Error loading data</p>';
-    return;
-  }
-  
-  const aggregateData = calculateCustomManagerAggregates(managersData, selectedGW);
-  const gwLabel = selectedGW === 'season' ? 'Season Total' : `GW ${selectedGW}`;
-  
-  dataStatus.innerHTML = `<p>📊 Showing data for ${managersData.length} custom managers | ${gwLabel}</p>`;
-  
-  let html = `
-    <div class="insights-section custom-section">
-      <div class="section-header">
-        <h2>👥 Your Custom Managers</h2>
-        <p class="section-subtitle">${gwLabel} • ${managersData.length} managers analyzed</p>
+  return `
+    <div class="kpi-grid">
+      <div class="kpi-card primary">
+        <div class="kpi-icon">🎯</div>
+        <div class="kpi-content">
+          <div class="kpi-label">Most Used Formation</div>
+          <div class="kpi-value">${formation}</div>
+          <div class="kpi-subtitle">Dominant lineup</div>
+        </div>
       </div>
       
-      <div class="section-content">
-        <h3>Key Statistics</h3>
-        ${renderStatsCards(aggregateData, true)}
-        
-        <div class="info-message">
-          <strong>ℹ️ Limited Data Available</strong><br>
-          Custom manager insights show basic statistics from the FPL API. 
-          Detailed positional breakdowns require additional data collection not yet implemented.
+      <div class="kpi-card">
+        <div class="kpi-icon">🔄</div>
+        <div class="kpi-content">
+          <div class="kpi-label">Avg Transfers</div>
+          <div class="kpi-value">${avgTransfers}</div>
+          <div class="kpi-subtitle">Per ${selectedGW === 'season' ? 'gameweek' : 'GW'}</div>
         </div>
-        
-        <h3>Manager List</h3>
-        <div class="manager-list">
-          ${managersData.map(m => `
-            <div class="manager-item">
-              <div class="manager-name">${m.entry.name}</div>
-              <div class="manager-details">
-                ${m.entry.player_first_name} ${m.entry.player_last_name} • 
-                ID: ${m.managerId} • 
-                Rank: ${m.entry.summary_overall_rank?.toLocaleString()}
-              </div>
-            </div>
-          `).join('')}
-          ${managerIds.length > 20 ? `
-            <div class="manager-item info">
-              <div class="manager-name">+${managerIds.length - 20} more managers</div>
-              <div class="manager-details">Limited to first 20 for performance</div>
-            </div>
-          ` : ''}
+      </div>
+      
+      <div class="kpi-card ${parseFloat(avgHits) > 0 ? 'warning' : ''}">
+        <div class="kpi-icon">💸</div>
+        <div class="kpi-content">
+          <div class="kpi-label">Transfer Hits</div>
+          <div class="kpi-value">${avgHits}</div>
+          <div class="kpi-subtitle">-${hitsCost} pts cost</div>
+        </div>
+      </div>
+      
+      <div class="kpi-card success">
+        <div class="kpi-icon">⭐</div>
+        <div class="kpi-content">
+          <div class="kpi-label">Avg Points</div>
+          <div class="kpi-value">${totalPoints.toFixed(0)}</div>
+          <div class="kpi-subtitle">Per ${selectedGW === 'season' ? 'gameweek' : 'GW'}</div>
         </div>
       </div>
     </div>
   `;
-  
-  out.innerHTML = html;
 }
 
+function renderPositionBreakdown(data: AggregateData): string {
+  const positions = [
+    { name: 'GK', key: 'gk' },
+    { name: 'DEF', key: 'def' },
+    { name: 'MID', key: 'mid' },
+    { name: 'FWD', key: 'fwd' }
+  ];
+  
+  const positionStats = positions.map(pos => {
+    const goals = (data as any)[`avg_goals_${pos.key}`] || 0;
+    const assists = (data as any)[`avg_assists_${pos.key}`] || 0;
+    const cleanSheets = (data as any)[`avg_cs_${pos.key}`] || 0;
+    
+    const points = calculatePositionPoints({
+      [`goals_${pos.key}`]: goals,
+      [`assists_${pos.key}`]: assists,
+      [`cs_${pos.key}`]: cleanSheets
+    }, pos.name as any);
+    
+    return {
+      name: pos.name,
+      goals,
+      assists,
+      cleanSheets,
+      points
+    };
+  });
+  
+  const maxPoints = Math.max(...positionStats.map(p => p.points), 1);
+  
+  return `
+    <div class="position-breakdown">
+      <h3 class="section-title">Points by Position</h3>
+      <div class="position-bars">
+        ${positionStats.map(pos => {
+          const percentage = (pos.points / maxPoints) * 100;
+          return `
+            <div class="position-bar-item">
+              <div class="position-header">
+                <span class="position-name">${pos.name}</span>
+                <span class="position-points">${pos.points.toFixed(1)} pts</span>
+              </div>
+              <div class="position-bar-container">
+                <div class="position-bar" style="width: ${percentage}%"></div>
+              </div>
+              <div class="position-stats">
+                <span>⚽ ${pos.goals.toFixed(1)} goals</span>
+                <span>🎯 ${pos.assists.toFixed(1)} assists</span>
+                <span>🛡️ ${pos.cleanSheets.toFixed(1)} CS</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      
+      <div class="scoring-note">
+        <strong>FPL Scoring:</strong> Goals (GK/DEF: 6pts, MID: 5pts, FWD: 4pts) • Assists: 3pts • Clean Sheets (GK/DEF: 4pts, MID: 1pt)
+      </div>
+    </div>
+  `;
+}
+
+function renderFormationDistribution(formations: Record<string, number>): string {
+  if (!formations || Object.keys(formations).length === 0) {
+    return '<div class="empty-message">Formation data not available</div>';
+  }
+  
+  const sortedFormations = Object.entries(formations)
+    .sort(([, a], [, b]) => (b as number) - (a as number))
+    .slice(0, 10);
+  
+  const maxCount = sortedFormations[0][1] as number;
+  const totalCount = sortedFormations.reduce((sum, [, count]) => sum + (count as number), 0);
+  
+  return `
+    <div class="formation-distribution">
+      <h3 class="section-title">Formation Distribution</h3>
+      <div class="formation-bars">
+        ${sortedFormations.map(([formation, count]) => {
+          const percentage = ((count as number) / maxCount) * 100;
+          const usagePercent = ((count as number) / totalCount * 100).toFixed(1);
+          return `
+            <div class="formation-bar-item">
+              <div class="formation-label">
+                <span class="formation-name">${formation}</span>
+                <span class="formation-count">${count} uses (${usagePercent}%)</span>
+              </div>
+              <div class="formation-bar-container">
+                <div class="formation-bar" style="width: ${percentage}%"></div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderAdditionalStats(data: AggregateData): string {
+  const totalGoals = (data.avg_goals_gk + data.avg_goals_def + data.avg_goals_mid + data.avg_goals_fwd).toFixed(1);
+  const totalAssists = (data.avg_assists_gk + data.avg_assists_def + data.avg_assists_mid + data.avg_assists_fwd).toFixed(1);
+  const totalCS = (data.avg_cs_gk + data.avg_cs_def + data.avg_cs_mid + data.avg_cs_fwd).toFixed(1);
+  
+  const attackPoints = calculatePositionPoints({
+    goals_mid: data.avg_goals_mid,
+    assists_mid: data.avg_assists_mid,
+    cs_mid: data.avg_cs_mid
+  }, 'MID') + calculatePositionPoints({
+    goals_fwd: data.avg_goals_fwd,
+    assists_fwd: data.avg_assists_fwd,
+    cs_fwd: 0
+  }, 'FWD');
+  
+  const defensePoints = calculatePositionPoints({
+    goals_gk: data.avg_goals_gk,
+    assists_gk: data.avg_assists_gk,
+    cs_gk: data.avg_cs_gk
+  }, 'GK') + calculatePositionPoints({
+    goals_def: data.avg_goals_def,
+    assists_def: data.avg_assists_def,
+    cs_def: data.avg_cs_def
+  }, 'DEF');
+  
+  return `
+    <div class="additional-stats">
+      <h3 class="section-title">Additional Insights</h3>
+      
+      <div class="stats-grid-2col">
+        <div class="stat-card-compact">
+          <div class="stat-card-header">Goals vs Assists</div>
+          <div class="stat-comparison">
+            <div class="stat-item">
+              <span class="stat-label">⚽ Goals</span>
+              <span class="stat-value-lg">${totalGoals}</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">🎯 Assists</span>
+              <span class="stat-value-lg">${totalAssists}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="stat-card-compact">
+          <div class="stat-card-header">Attack vs Defense</div>
+          <div class="stat-comparison">
+            <div class="stat-item">
+              <span class="stat-label">⚔️ Attack</span>
+              <span class="stat-value-lg">${attackPoints.toFixed(0)}</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">🛡️ Defense</span>
+              <span class="stat-value-lg">${defensePoints.toFixed(0)}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="stat-card-compact">
+          <div class="stat-card-header">Clean Sheets</div>
+          <div class="stat-value-center">${totalCS}</div>
+          <div class="stat-subtitle">Total clean sheets</div>
+        </div>
+        
+        <div class="stat-card-compact">
+          <div class="stat-card-header">Bonus Points</div>
+          <div class="stat-value-center">${data.avg_bonus_points.toFixed(1)}</div>
+          <div class="stat-subtitle">Average bonus pts</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Display Top 50 data
+async function displayTop50() {
+  container.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading Top 50 data...</p></div>';
+  dataStatus.innerHTML = '<div class="status-message info">Fetching data...</div>';
+  
+  try {
+    let aggregateData: AggregateData;
+    let gwLabel: string;
+    let dataDate: string | undefined;
+    
+    if (selectedGW === 'season') {
+      // Fetch all gameweeks and aggregate
+      const { data: allData, error } = await supabase
+        .from('top_50_aggregates')
+        .select('*')
+        .order('gameweek', { ascending: true });
+      
+      if (error || !allData || allData.length === 0) {
+        container.innerHTML = '<div class="error-state"><h3>⚠️ No Data Available</h3><p>Top 50 data has not been collected yet.</p></div>';
+        dataStatus.innerHTML = '<div class="status-message error">No data available</div>';
+        return;
+      }
+      
+      latestGW = allData[allData.length - 1].gameweek;
+      aggregateData = aggregateSeasonData(allData)!;
+      gwLabel = `Season Total (GW 1-${latestGW})`;
+      dataDate = allData[allData.length - 1].data_fetched_at;
+    } else {
+      // Fetch specific gameweek
+      const { data, error } = await supabase
+        .from('top_50_aggregates')
+        .select('*')
+        .eq('gameweek', selectedGW)
+        .single();
+      
+      if (error || !data) {
+        container.innerHTML = '<div class="error-state"><h3>⚠️ No Data Available</h3><p>Data for this gameweek is not available.</p></div>';
+        dataStatus.innerHTML = '<div class="status-message error">Error loading data</div>';
+        return;
+      }
+      
+      aggregateData = data;
+      gwLabel = `GW ${selectedGW}`;
+      dataDate = data.data_fetched_at;
+    }
+    
+    const lastUpdated = dataDate ? new Date(dataDate).toLocaleString() : 'Unknown';
+    dataStatus.innerHTML = `
+      <div class="status-message success">
+        <span>📊 Showing <strong>${gwLabel}</strong></span>
+        <span>👥 <strong>${aggregateData.managers_analyzed}</strong> managers analyzed</span>
+        <span>🕐 Last updated: <strong>${lastUpdated}</strong></span>
+      </div>
+    `;
+    
+    const html = `
+      <div class="insights-content">
+        <div class="view-header">
+          <h2 class="view-title">🏆 World Top 50</h2>
+          <p class="view-subtitle">${gwLabel}</p>
+        </div>
+        
+        ${renderKPICards(aggregateData, gwLabel)}
+        ${renderPositionBreakdown(aggregateData)}
+        ${renderFormationDistribution(aggregateData.formation_distribution)}
+        ${renderAdditionalStats(aggregateData)}
+      </div>
+    `;
+    
+    container.innerHTML = html;
+  } catch (error) {
+    console.error('Error displaying Top 50:', error);
+    container.innerHTML = '<div class="error-state"><h3>❌ Error</h3><p>Failed to load data. Please try again.</p></div>';
+    dataStatus.innerHTML = '<div class="status-message error">Error occurred</div>';
+  }
+}
+
+// Display Custom Managers data
+async function displayCustomManagers() {
+  if (managerIds.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">👥</div>
+        <h3>No Custom Managers</h3>
+        <p>You haven't added any managers to track yet.</p>
+        <a href="/managers" class="btn btn-primary">Add Manager IDs</a>
+      </div>
+    `;
+    dataStatus.innerHTML = '<div class="status-message warning">No custom managers configured</div>';
+    return;
+  }
+  
+  container.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading custom managers data...</p></div>';
+  dataStatus.innerHTML = '<div class="status-message info">Fetching data from database...</div>';
+  
+  try {
+    let managersData: CustomManagerData[];
+    let gwLabel: string;
+    
+    if (selectedGW === 'season') {
+      // Fetch all gameweeks for custom managers
+      const { data, error } = await supabase
+        .from('elite_manager_insights')
+        .select('*')
+        .in('manager_id', managerIds)
+        .order('gameweek', { ascending: true });
+      
+      if (error || !data || data.length === 0) {
+        container.innerHTML = `
+          <div class="info-state">
+            <h3>ℹ️ No Data Available</h3>
+            <p>Custom manager data has not been collected yet for your tracked managers.</p>
+            <p class="info-note">Data is collected periodically. Please check back later.</p>
+          </div>
+        `;
+        dataStatus.innerHTML = '<div class="status-message warning">No data available for custom managers</div>';
+        return;
+      }
+      
+      managersData = data;
+      gwLabel = 'Season Total';
+    } else {
+      // Fetch specific gameweek for custom managers
+      const { data, error } = await supabase
+        .from('elite_manager_insights')
+        .select('*')
+        .in('manager_id', managerIds)
+        .eq('gameweek', selectedGW);
+      
+      if (error || !data || data.length === 0) {
+        container.innerHTML = `
+          <div class="info-state">
+            <h3>ℹ️ No Data Available</h3>
+            <p>No data available for GW ${selectedGW} for your tracked managers.</p>
+          </div>
+        `;
+        dataStatus.innerHTML = '<div class="status-message warning">No data for selected gameweek</div>';
+        return;
+      }
+      
+      managersData = data;
+      gwLabel = `GW ${selectedGW}`;
+    }
+    
+    const aggregateData = aggregateCustomManagerData(managersData);
+    
+    dataStatus.innerHTML = `
+      <div class="status-message success">
+        <span>📊 Showing <strong>${gwLabel}</strong></span>
+        <span>👥 <strong>${aggregateData.managers_analyzed}</strong> custom managers analyzed</span>
+      </div>
+    `;
+    
+    const html = `
+      <div class="insights-content">
+        <div class="view-header">
+          <h2 class="view-title">👥 Custom Managers</h2>
+          <p class="view-subtitle">${gwLabel}</p>
+        </div>
+        
+        ${renderKPICards(aggregateData, gwLabel)}
+        ${renderPositionBreakdown(aggregateData)}
+        ${renderFormationDistribution(aggregateData.formation_distribution)}
+        ${renderAdditionalStats(aggregateData)}
+        
+        <div class="manager-list-section">
+          <h3 class="section-title">Your Tracked Managers</h3>
+          <div class="manager-list">
+            ${[...new Set(managersData.map(m => m.manager_id))].map(id => {
+              const manager = managersData.find(m => m.manager_id === id)!;
+              return `
+                <div class="manager-item">
+                  <div class="manager-name">${manager.manager_name}</div>
+                  <div class="manager-id">ID: ${manager.manager_id}</div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+    
+    container.innerHTML = html;
+  } catch (error) {
+    console.error('Error displaying custom managers:', error);
+    container.innerHTML = '<div class="error-state"><h3>❌ Error</h3><p>Failed to load custom manager data. Please try again.</p></div>';
+    dataStatus.innerHTML = '<div class="status-message error">Error occurred</div>';
+  }
+}
+
+// Update view based on current selection
 async function updateView() {
   if (currentView === 'top50') {
     await displayTop50();
@@ -637,419 +797,642 @@ async function updateView() {
 
 // Initialize
 (async function init() {
+  // Load manager IDs
   const { managerIds: ids } = await loadManagerIdsFromSupabase();
   managerIds = ids;
-  managerCountEl.textContent = `(${ids.length} manager${ids.length !== 1 ? 's' : ''} tracked)`;
+  managerCountEl.textContent = `${ids.length} tracked`;
   
+  // Populate gameweek selector
   await populateGWSelector();
   
-  viewSelect.addEventListener('change', () => {
-    currentView = viewSelect.value;
-    updateView();
+  // View toggle event listeners
+  const toggleBtns = viewToggle.querySelectorAll('.toggle-btn');
+  toggleBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      toggleBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentView = btn.dataset.view!;
+      updateView();
+    });
   });
   
+  // Gameweek selector event listener
   gwSelect.addEventListener('change', () => {
     selectedGW = gwSelect.value;
     updateView();
   });
   
+  // Initial view render
   await updateView();
 })();
 </script>
 
 <style>
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    padding: 0;
-    margin: 0;
-    background: #f8f9fa;
+  * {
+    box-sizing: border-box;
   }
   
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f5f7fa;
+    color: #2c3e50;
+    line-height: 1.6;
+  }
+  
+  /* Page Header */
   .page-header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 2em;
+    padding: 3rem 2rem;
     text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   }
   
   .page-header h1 {
-    margin: 0 0 0.5em 0;
-    font-size: 2.5em;
+    margin: 0 0 0.5rem 0;
+    font-size: 2.5rem;
+    font-weight: 700;
   }
   
   .page-header p {
     margin: 0;
-    font-size: 1.1em;
+    font-size: 1.1rem;
     opacity: 0.95;
   }
   
-  .controls-container {
+  /* Controls Section */
+  .controls-section {
     max-width: 1400px;
-    margin: 2em auto;
-    padding: 0 2em;
+    margin: 2rem auto 0;
+    padding: 0 2rem;
+  }
+  
+  .controls-container {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 1.5em;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
   
   .control-group {
     display: flex;
     align-items: center;
-    gap: 0.5em;
+    gap: 0.75rem;
   }
   
-  .control-group label {
+  .control-label {
     font-weight: 600;
+    color: #555;
+    font-size: 0.95rem;
+  }
+  
+  .toggle-buttons {
+    display: flex;
+    background: #e9ecef;
+    border-radius: 8px;
+    padding: 4px;
+  }
+  
+  .toggle-btn {
+    padding: 0.5rem 1.25rem;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #666;
+  }
+  
+  .toggle-btn.active {
+    background: white;
+    color: #667eea;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  .toggle-btn:hover:not(.active) {
     color: #333;
   }
   
-  .control-group select {
-    padding: 8px 12px;
-    font-size: 16px;
-    border-radius: 6px;
-    border: 1px solid #ddd;
+  .gw-selector {
+    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
     background: white;
     cursor: pointer;
+    transition: border-color 0.2s;
+    font-weight: 500;
   }
   
-  .control-group select:hover {
+  .gw-selector:hover, .gw-selector:focus {
     border-color: #667eea;
+    outline: none;
   }
   
   .manager-info {
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 1em;
-    color: #666;
+    gap: 1rem;
+  }
+  
+  .manager-count-badge {
+    background: #667eea;
+    color: white;
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
   }
   
   .manage-link {
     color: #667eea;
     text-decoration: none;
     font-weight: 600;
+    font-size: 0.9rem;
+    transition: color 0.2s;
   }
   
   .manage-link:hover {
+    color: #5568d3;
     text-decoration: underline;
   }
   
-  .status-box {
+  /* Status Bar */
+  .status-bar {
+    margin-top: 1rem;
+  }
+  
+  .status-message {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+  }
+  
+  .status-message.success {
+    background: #d4edda;
+    color: #155724;
+    border-left: 4px solid #28a745;
+  }
+  
+  .status-message.info {
+    background: #d1ecf1;
+    color: #0c5460;
+    border-left: 4px solid #17a2b8;
+  }
+  
+  .status-message.warning {
+    background: #fff3cd;
+    color: #856404;
+    border-left: 4px solid #ffc107;
+  }
+  
+  .status-message.error {
+    background: #f8d7da;
+    color: #721c24;
+    border-left: 4px solid #dc3545;
+  }
+  
+  /* Insights Container */
+  .insights-container {
     max-width: 1400px;
-    margin: 0 auto 2em;
-    padding: 0 2em;
+    margin: 2rem auto;
+    padding: 0 2rem 4rem;
   }
   
-  .status-box p {
-    background: #e3f2fd;
-    padding: 1em;
-    border-radius: 6px;
-    border-left: 4px solid #2196f3;
-    margin: 0;
-    color: #1565c0;
-  }
-  
-  .error-text {
-    color: #d32f2f !important;
-  }
-  
-  .loading-text {
-    color: #666;
-    font-style: italic;
-  }
-  
-  #insights-output {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 2em 4em;
-  }
-  
-  .insights-section {
+  .insights-content {
     background: white;
     border-radius: 12px;
-    padding: 2em;
+    padding: 2.5rem;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
   
-  .top50-section .section-header {
-    border-left: 4px solid #fbbf24;
-    padding-left: 1em;
-    margin-bottom: 2em;
+  /* View Header */
+  .view-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 3px solid #f0f0f0;
   }
   
-  .custom-section .section-header {
-    border-left: 4px solid #667eea;
-    padding-left: 1em;
-    margin-bottom: 2em;
-  }
-  
-  .section-header h2 {
-    margin: 0 0 0.25em 0;
+  .view-title {
+    margin: 0 0 0.5rem 0;
+    font-size: 2rem;
     color: #333;
   }
   
-  .section-subtitle {
+  .view-subtitle {
     margin: 0;
+    font-size: 1.1rem;
     color: #666;
-    font-size: 0.95em;
   }
   
-  .section-content h3 {
-    color: #444;
-    margin: 2em 0 1em 0;
-    font-size: 1.3em;
-  }
-  
-  .stats-grid {
+  /* KPI Cards */
+  .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1em;
-    margin-bottom: 2em;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
   }
   
-  .stat-card {
+  .kpi-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
     background: #f8f9fa;
-    padding: 1.5em;
-    border-radius: 8px;
-    text-align: center;
+    padding: 1.5rem;
+    border-radius: 12px;
     border: 2px solid transparent;
-    transition: all 0.3s ease;
+    transition: all 0.3s;
   }
   
-  .stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  .kpi-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
   }
   
-  .stat-card.highlight {
+  .kpi-card.primary {
     background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
     border-color: #f59e0b;
   }
   
-  .stat-label {
-    font-size: 0.9em;
-    color: #666;
-    margin-bottom: 0.5em;
+  .kpi-card.warning {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border-color: #ef4444;
+  }
+  
+  .kpi-card.success {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    border-color: #10b981;
+  }
+  
+  .kpi-icon {
+    font-size: 2.5rem;
+  }
+  
+  .kpi-content {
+    flex: 1;
+  }
+  
+  .kpi-label {
+    font-size: 0.85rem;
     font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
   }
   
-  .stat-value {
-    font-size: 2em;
-    font-weight: bold;
+  .kpi-value {
+    font-size: 2rem;
+    font-weight: 700;
     color: #333;
-    margin-bottom: 0.25em;
+    line-height: 1;
+    margin-bottom: 0.25rem;
   }
   
-  .stat-value.formation {
-    font-size: 2.5em;
-    color: #667eea;
-  }
-  
-  .stat-hint {
-    font-size: 0.85em;
+  .kpi-subtitle {
+    font-size: 0.85rem;
     color: #888;
   }
   
-  .stats-table-container {
-    overflow-x: auto;
-    margin: 1em 0;
+  /* Section Titles */
+  .section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #333;
+    margin: 2.5rem 0 1.5rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e9ecef;
   }
   
-  .stats-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
+  /* Position Breakdown */
+  .position-breakdown {
+    margin-bottom: 3rem;
   }
   
-  .stats-table th,
-  .stats-table td {
-    padding: 12px;
-    text-align: center;
-    border: 1px solid #e0e0e0;
+  .position-bars {
+    background: #f8f9fa;
+    padding: 2rem;
+    border-radius: 12px;
   }
   
-  .stats-table th {
-    background: #f5f5f5;
-    font-weight: 600;
+  .position-bar-item {
+    margin-bottom: 2rem;
+  }
+  
+  .position-bar-item:last-child {
+    margin-bottom: 0;
+  }
+  
+  .position-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+  
+  .position-name {
+    font-weight: 700;
+    font-size: 1.1rem;
     color: #333;
   }
   
-  .stats-table tbody tr:nth-child(even) {
-    background: #fafafa;
+  .position-points {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #667eea;
   }
   
-  .stats-table tbody tr:hover {
-    background: #f0f4ff;
+  .position-bar-container {
+    height: 32px;
+    background: #e9ecef;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 0.75rem;
   }
   
-  .stats-table .points-row {
-    background: #e3f2fd !important;
-    font-weight: bold;
+  .position-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    transition: width 0.5s ease;
+    border-radius: 8px;
   }
   
-  .table-note {
-    font-size: 0.85em;
+  .position-stats {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.9rem;
     color: #666;
-    margin-top: 0.5em;
-    font-style: italic;
+  }
+  
+  .scoring-note {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: #fff3cd;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: #856404;
+  }
+  
+  /* Formation Distribution */
+  .formation-distribution {
+    margin-bottom: 3rem;
   }
   
   .formation-bars {
     background: #f8f9fa;
-    padding: 1.5em;
-    border-radius: 8px;
+    padding: 2rem;
+    border-radius: 12px;
   }
   
   .formation-bar-item {
-    margin-bottom: 1em;
+    margin-bottom: 1.5rem;
+  }
+  
+  .formation-bar-item:last-child {
+    margin-bottom: 0;
   }
   
   .formation-label {
-    font-weight: 600;
-    margin-bottom: 0.25em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+  
+  .formation-name {
+    font-weight: 700;
+    font-size: 1rem;
     color: #333;
   }
   
+  .formation-count {
+    font-size: 0.9rem;
+    color: #666;
+  }
+  
   .formation-bar-container {
-    position: relative;
-    background: #e0e0e0;
-    height: 30px;
-    border-radius: 4px;
+    height: 28px;
+    background: #e9ecef;
+    border-radius: 8px;
     overflow: hidden;
   }
   
   .formation-bar {
-    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
     height: 100%;
-    transition: width 0.3s ease;
-    display: flex;
-    align-items: center;
-    padding-left: 0.5em;
+    background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+    transition: width 0.5s ease;
+    border-radius: 8px;
   }
   
-  .formation-count {
-    position: absolute;
-    right: 0.5em;
-    top: 50%;
-    transform: translateY(-50%);
-    font-weight: 600;
-    color: #333;
-    font-size: 0.9em;
+  /* Additional Stats */
+  .additional-stats {
+    margin-bottom: 2rem;
   }
   
-  .info-message {
-    background: #fff3cd;
-    border: 1px solid #ffc107;
-    border-radius: 6px;
-    padding: 1em;
-    margin: 1.5em 0;
-    color: #856404;
-  }
-  
-  .no-data {
-    color: #666;
-    font-style: italic;
-    text-align: center;
-    padding: 2em;
-  }
-  
-  .captain-grid {
+  .stats-grid-2col {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 0.75em;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
   }
   
-  .captain-item {
+  .stat-card-compact {
     background: #f8f9fa;
-    padding: 0.75em 1em;
-    border-radius: 6px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  
-  .captain-name {
-    font-weight: 600;
-    color: #333;
-  }
-  
-  .captain-count {
-    background: #667eea;
-    color: white;
-    padding: 0.25em 0.5em;
-    border-radius: 4px;
-    font-size: 0.9em;
-    font-weight: 600;
-  }
-  
-  .empty-state {
-    text-align: center;
-    padding: 4em 2em;
-    background: white;
+    padding: 1.5rem;
     border-radius: 12px;
+    border: 2px solid #e9ecef;
   }
   
-  .empty-state h3 {
-    color: #333;
-    margin-bottom: 0.5em;
-  }
-  
-  .empty-state p {
+  .stat-card-header {
+    font-weight: 700;
+    font-size: 0.9rem;
     color: #666;
-    margin-bottom: 1.5em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 1rem;
   }
   
-  .button {
-    display: inline-block;
-    background: #667eea;
-    color: white;
-    padding: 0.75em 1.5em;
-    border-radius: 6px;
-    text-decoration: none;
-    font-weight: 600;
-    transition: background 0.3s ease;
+  .stat-comparison {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
   }
   
-  .button:hover {
-    background: #5568d3;
+  .stat-item {
+    flex: 1;
+    text-align: center;
+  }
+  
+  .stat-label {
+    font-size: 0.85rem;
+    color: #666;
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+  
+  .stat-value-lg {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #333;
+    display: block;
+  }
+  
+  .stat-divider {
+    width: 2px;
+    height: 50px;
+    background: #d1d5db;
+  }
+  
+  .stat-value-center {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #667eea;
+    text-align: center;
+    margin: 1rem 0;
+  }
+  
+  .stat-subtitle {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #888;
+  }
+  
+  /* Manager List */
+  .manager-list-section {
+    margin-top: 3rem;
   }
   
   .manager-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
     background: #f8f9fa;
-    border-radius: 8px;
-    padding: 1em;
+    padding: 1.5rem;
+    border-radius: 12px;
   }
   
   .manager-item {
     background: white;
-    padding: 1em;
-    border-radius: 6px;
-    margin-bottom: 0.75em;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    transition: all 0.2s;
   }
   
-  .manager-item:last-child {
-    margin-bottom: 0;
-  }
-  
-  .manager-item.info {
-    background: #fff3cd;
+  .manager-item:hover {
+    border-color: #667eea;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
   }
   
   .manager-name {
-    font-weight: 600;
+    font-weight: 700;
     color: #333;
-    margin-bottom: 0.25em;
+    margin-bottom: 0.25rem;
   }
   
-  .manager-details {
-    font-size: 0.9em;
+  .manager-id {
+    font-size: 0.85rem;
+    color: #888;
+  }
+  
+  /* States */
+  .loading-state {
+    text-align: center;
+    padding: 4rem 2rem;
+  }
+  
+  .spinner {
+    width: 50px;
+    height: 50px;
+    margin: 0 auto 1rem;
+    border: 4px solid #e9ecef;
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  
+  .loading-state p {
     color: #666;
+    font-size: 1.1rem;
   }
   
+  .empty-state, .error-state, .info-state {
+    text-align: center;
+    padding: 4rem 2rem;
+  }
+  
+  .empty-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+  }
+  
+  .empty-state h3, .error-state h3, .info-state h3 {
+    color: #333;
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+  }
+  
+  .empty-state p, .error-state p, .info-state p {
+    color: #666;
+    margin-bottom: 1.5rem;
+  }
+  
+  .info-note {
+    font-size: 0.9rem;
+    color: #888;
+  }
+  
+  .btn {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  
+  .btn-primary {
+    background: #667eea;
+    color: white;
+  }
+  
+  .btn-primary:hover {
+    background: #5568d3;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  }
+  
+  .empty-message {
+    text-align: center;
+    padding: 2rem;
+    color: #888;
+    font-style: italic;
+  }
+  
+  /* Responsive Design */
   @media (max-width: 768px) {
     .page-header h1 {
-      font-size: 2em;
+      font-size: 2rem;
+    }
+    
+    .page-header p {
+      font-size: 1rem;
     }
     
     .controls-container {
@@ -1057,13 +1440,41 @@ async function updateView() {
       align-items: stretch;
     }
     
-    .manager-info {
-      margin-left: 0;
-      flex-direction: column;
-      align-items: flex-start;
+    .control-group {
+      width: 100%;
     }
     
-    .stats-grid {
+    .toggle-buttons {
+      width: 100%;
+    }
+    
+    .toggle-btn {
+      flex: 1;
+    }
+    
+    .manager-info {
+      margin-left: 0;
+      width: 100%;
+      justify-content: space-between;
+    }
+    
+    .kpi-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .insights-content {
+      padding: 1.5rem;
+    }
+    
+    .view-title {
+      font-size: 1.5rem;
+    }
+    
+    .stats-grid-2col {
+      grid-template-columns: 1fr;
+    }
+    
+    .manager-list {
       grid-template-columns: 1fr;
     }
   }
