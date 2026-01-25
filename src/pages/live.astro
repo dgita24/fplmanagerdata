@@ -225,68 +225,98 @@ async function fetchManagerLive(entryId, gw) {
       fetch(`/api/fpl/entry/${entryId}`),
       fetch(`/api/fpl/entry/${entryId}/history`)
     ]);
-
-    if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) {
-      throw new Error("Failed to fetch manager data");
-    }
+    if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch manager data");
 
     const picksData = await picksRes.json();
     const summaryData = await summaryRes.json();
     const historyData = await historyRes.json();
 
-    // You need to reconstruct full point calculation here, reflecting FPL's official scoring!
-    // For 11 starters (+ correct auto subs), Captain gets double/triple, Bench is only BB, bonus = real if finished, else projected.
+    // Get chip played this GW
+    const chipPlayed = (historyData.chips || []).find(c => c.event === gw)?.name || '';
+    const isBenchBoost = chipPlayed === 'bboost';
+    const isTripleCaptain = chipPlayed === '3xc';
 
-    // Prepare
-    const playerPoints = picksData.picks.map((p, i) => {
-      // Lookup from bootstrap and event live endpoint needed for total_points and bonus.
-      // Example: get total_points from event live API.
+    // Apply FPL lineup logic:
+    // - 1..11 are starting XI (positions, lowest first), 12..15 are bench
+    // - Get player live points, bonus, minutes etc from livePointsCache
+    // - Build objects for each pick
+    let picks = picksData.picks.map(p => {
+      const player = playerCache.get(p.element);
+      const liveStats = livePointsCache.get(p.element) || { points: 0, bonus: 0, minutes: 0 };
+      const projectedBonus = calculateProjectedBonus(p.element, player ? player.team : 0, gw);
       return {
         ...p,
-        // You'll want to merge in live API stats here for accuracy:
-        totalPoints: /* e.g. */ 0, // <--- fill with real API value per your fetch
-        projectedBonus: 0 // <--- fill with logic from your code
+        ...player,
+        livePoints: liveStats.points,
+        minutes: liveStats.minutes,
+        bonus: liveStats.bonus,
+        projectedBonus,
+        totalPoints: liveStats.points + projectedBonus
       }
     });
 
-    // Identify starters, bench, captain etc as your code structure requires
-    
-    // Insert console.log or debug agent here:
-    console.log(`\n\n==== Manager ${entryId} (${summaryData.player_first_name} ${summaryData.player_last_name}) =====`);
-    for(const p of playerPoints) {
-      console.log(`Player ${p.element} (${p.position}) - totalPoints: ${p.totalPoints}, multiplier: ${p.multiplier || 1}, captain: ${p.is_captain}, vice: ${p.is_vice_captain}, autoSub: ${p.autoSub}, Bench: ${p.position > 11}`);
+    // Split starters and bench: positions are given as position 1=starting
+    const sorted = [...picks].sort((a,b) => a.position - b.position);
+    const starters = sorted.slice(0, 11);
+    const bench = sorted.slice(11);
+
+    // Figure out auto-subs (if needed): Only necessary if one or more starters played 0 minutes and weren't sent off
+    // For FPL, typically, you follow auto sub rules as per official app
+
+    // Apply captain/VC multipliers
+    let liveTotal = 0;
+    let bonusPts = 0;
+    let countedPlayers = [];
+    for (const p of starters) {
+      let multiplier = 1;
+      if (p.is_captain) multiplier = isTripleCaptain ? 3 : 2;
+      liveTotal += p.livePoints * multiplier;
+      bonusPts += (p.bonus || p.projectedBonus) * multiplier;
+      countedPlayers.push(`${p.web_name || ''} (starter${multiplier>1 ? ' cap' : ''}): ${p.livePoints} x${multiplier}`);
     }
 
-    // Continue: bench boost, auto sub logic etc...
-    let livePoints = 0;
-    let livePointsBeforeHits = 0;
-    // ... your auto sub/captain logic
+    // Bench boost: add bench points if chip active, no multipliers
+    if (isBenchBoost) {
+      for (const p of bench) {
+        liveTotal += p.livePoints;
+        bonusPts += (p.bonus || p.projectedBonus);
+        countedPlayers.push(`${p.web_name || ''} (bench): ${p.livePoints}`);
+      }
+    }
+
+    // Proper auto sub logic is complex—implement if needed; this is a basic placeholder
+    // If you want to strictly match FPL, consider more exhaustive auto sub implementation as in your Excel queries
 
     const transferCost = (historyData.current.find(h => h.event === gw)?.event_transfers_cost) || 0;
-    let finalPoints = livePoints - transferCost;
+    const nettPoints = liveTotal - transferCost;
 
-    // Get total points from history
+    // Get pre-GW total
     const totalPoints = summaryData.summary_overall_points || 0;
     const gwHistory = historyData.current.find(h => h.event === gw);
-    const projectedTotal = totalPoints - (gwHistory ? gwHistory.points : 0) + finalPoints;
+    const officialGW = gwHistory ? gwHistory.points : 0;
+    const projectedOverall = totalPoints - officialGW + nettPoints;
+
+    // Debug print
+    console.log(`Manager: ${summaryData.player_first_name} ${summaryData.player_last_name} (ID ${entryId})`);
+    countedPlayers.forEach(str => console.log(str));
+    console.log(`Total: live=${liveTotal}, bench chip=${isBenchBoost}, bonus=${bonusPts}, transferCost=${transferCost}, projectedOverall=${projectedOverall}`);
 
     return {
       entryId,
       managerName: `${summaryData.player_first_name} ${summaryData.player_last_name}`,
-      chipPlayed: '', // fill if logic exists
+      chipPlayed: chipPlayed ? chipPlayed.toUpperCase() : '-',
       transferCost,
-      livePoints: finalPoints,
-      livePointsBeforeHits: livePoints,
-      projectedBonus: 0, // fill as per code
-      totalPoints: projectedTotal,
-      picks: playerPoints
+      livePoints: nettPoints,
+      livePointsBeforeHits: liveTotal,
+      projectedBonus: bonusPts,
+      totalPoints: projectedOverall,
+      picks: picks
     };
   } catch (e) {
     console.error(`Error fetching live data for manager ${entryId}:`, e);
     return null;
   }
 }
-
 function populateCompareManager() {
   compareManagerSelect.innerHTML = '<option value="">Leader</option>';
   
