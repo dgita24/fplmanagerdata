@@ -48,26 +48,33 @@ import Nav from '../components/Nav.astro';
 import { supabase } from '../lib/supabase.ts'
 
 // Types
+/**
+ * Aggregate data structure for elite manager statistics
+ */
 interface AggregateData {
   gameweek?: number;
   managers_analyzed: number;
+  // Goals by position
   avg_goals_gk: number;
   avg_goals_def: number;
   avg_goals_mid: number;
   avg_goals_fwd: number;
+  // Assists by position
   avg_assists_gk: number;
   avg_assists_def: number;
   avg_assists_mid: number;
   avg_assists_fwd: number;
+  // Clean sheets (cs) by position
   avg_cs_gk: number;
   avg_cs_def: number;
   avg_cs_mid: number;
   avg_cs_fwd: number;
+  // Other stats
   avg_bonus_points: number;
   avg_other_points: number;
-  avg_transfers: number;
-  avg_hits_count: number;
-  avg_hits_cost: number;
+  avg_transfers: number; // Average transfers per gameweek
+  avg_hits_count: number; // Average number of transfer hits
+  avg_hits_cost: number; // Points cost of hits
   formation_distribution: Record<string, number>;
   most_common_formation: string;
   data_fetched_at?: string;
@@ -168,10 +175,15 @@ async function populateGWSelector() {
 }
 
 // Calculate points using FPL scoring
-function calculatePositionPoints(stats: any, position: 'GK' | 'DEF' | 'MID' | 'FWD'): number {
-  const goals = stats[`goals_${position.toLowerCase()}`] || 0;
-  const assists = stats[`assists_${position.toLowerCase()}`] || 0;
-  const cleanSheets = stats[`cs_${position.toLowerCase()}`] || 0;
+interface PositionStats {
+  [key: string]: number;
+}
+
+function calculatePositionPoints(stats: PositionStats, position: 'GK' | 'DEF' | 'MID' | 'FWD'): number {
+  const posKey = position.toLowerCase();
+  const goals = stats[`goals_${posKey}`] || 0;
+  const assists = stats[`assists_${posKey}`] || 0;
+  const cleanSheets = stats[`cs_${posKey}`] || 0;
   
   let points = 0;
   
@@ -365,11 +377,22 @@ function renderKPICards(data: AggregateData, gwLabel: string): string {
   const formation = data.most_common_formation || 'N/A';
   
   // Calculate total points from all positions
-  const totalGoalsPoints = 
-    calculatePositionPoints({goals_gk: data.avg_goals_gk, assists_gk: 0, cs_gk: 0}, 'GK') +
-    calculatePositionPoints({goals_def: data.avg_goals_def, assists_def: 0, cs_def: 0}, 'DEF') +
-    calculatePositionPoints({goals_mid: data.avg_goals_mid, assists_mid: 0, cs_mid: 0}, 'MID') +
-    calculatePositionPoints({goals_fwd: data.avg_goals_fwd, assists_fwd: 0, cs_fwd: 0}, 'FWD');
+  const positions: Array<{key: string, position: 'GK' | 'DEF' | 'MID' | 'FWD'}> = [
+    { key: 'gk', position: 'GK' },
+    { key: 'def', position: 'DEF' },
+    { key: 'mid', position: 'MID' },
+    { key: 'fwd', position: 'FWD' }
+  ];
+  
+  let totalGoalsPoints = 0;
+  positions.forEach(({key, position}) => {
+    const statsObj: PositionStats = {
+      [`goals_${key}`]: data[`avg_goals_${key}` as keyof AggregateData] as number || 0,
+      [`assists_${key}`]: 0,
+      [`cs_${key}`]: 0
+    };
+    totalGoalsPoints += calculatePositionPoints(statsObj, position);
+  });
   
   const totalAssistsPoints = (
     data.avg_assists_gk + data.avg_assists_def + 
@@ -431,15 +454,18 @@ function renderPositionBreakdown(data: AggregateData): string {
   ];
   
   const positionStats = positions.map(pos => {
-    const goals = (data as any)[`avg_goals_${pos.key}`] || 0;
-    const assists = (data as any)[`avg_assists_${pos.key}`] || 0;
-    const cleanSheets = (data as any)[`avg_cs_${pos.key}`] || 0;
+    const posKey = pos.key;
+    const goals = data[`avg_goals_${posKey}` as keyof AggregateData] as number || 0;
+    const assists = data[`avg_assists_${posKey}` as keyof AggregateData] as number || 0;
+    const cleanSheets = data[`avg_cs_${posKey}` as keyof AggregateData] as number || 0;
     
-    const points = calculatePositionPoints({
-      [`goals_${pos.key}`]: goals,
-      [`assists_${pos.key}`]: assists,
-      [`cs_${pos.key}`]: cleanSheets
-    }, pos.name as any);
+    const statsObj: PositionStats = {
+      [`goals_${posKey}`]: goals,
+      [`assists_${posKey}`]: assists,
+      [`cs_${posKey}`]: cleanSheets
+    };
+    
+    const points = calculatePositionPoints(statsObj, pos.name);
     
     return {
       name: pos.name,
@@ -764,15 +790,21 @@ async function displayCustomManagers() {
         <div class="manager-list-section">
           <h3 class="section-title">Your Tracked Managers</h3>
           <div class="manager-list">
-            ${[...new Set(managersData.map(m => m.manager_id))].map(id => {
-              const manager = managersData.find(m => m.manager_id === id)!;
-              return `
+            ${(() => {
+              const uniqueManagers = new Map<number, CustomManagerData>();
+              managersData.forEach(m => {
+                if (!uniqueManagers.has(m.manager_id)) {
+                  uniqueManagers.set(m.manager_id, m);
+                }
+              });
+              
+              return Array.from(uniqueManagers.values()).map(manager => `
                 <div class="manager-item">
                   <div class="manager-name">${manager.manager_name}</div>
                   <div class="manager-id">ID: ${manager.manager_id}</div>
                 </div>
-              `;
-            }).join('')}
+              `).join('');
+            })()}
           </div>
         </div>
       </div>
