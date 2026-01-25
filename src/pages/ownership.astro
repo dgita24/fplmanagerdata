@@ -15,13 +15,7 @@ import Nav from '../components/Nav.astro';
 <p>See which players are owned by how many managers in your league, and which managers own them.</p>
 
 <div style="margin-bottom: 1.5em;">
-  <label for="view-select" style="font-weight: bold; margin-right: 0.5em;">View:</label>
-  <select id="view-select" style="padding: 8px 12px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc;">
-    <option value="custom">My Custom Managers</option>
-    <option value="top50">World Top 50</option>
-  </select>
-  
-  <span id="manager-count" style="margin-left: 1.5em; font-weight: bold;">Loading managers...</span>
+  <span id="manager-count" style="font-weight: bold;">Loading managers...</span>
   <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
 </div>
 
@@ -83,26 +77,8 @@ const positionFilter = document.getElementById("position-filter");
 const loadingStatus = document.getElementById("loading-status");
 const managerCountEl = document.getElementById("manager-count");
 const refreshBtn = document.getElementById("refresh-btn");
-const viewSelect = document.getElementById("view-select");
 
-let currentView = 'custom';
-let customManagerIds = [];
-let top50ManagerIds = [];
-
-async function fetchTop50ManagerIds() {
-  try {
-    const response = await fetch('/api/fpl/leagues-classic/314/standings/?page_standings=1');
-    if (!response.ok) return [];
-    
-    const data = await response.json();
-    const standings = data.standings?.results || [];
-    
-    return standings.slice(0, 50).map(s => s.entry);
-  } catch (error) {
-    console.error('Error fetching top 50:', error);
-    return [];
-  }
-}
+let managerIds = [];
 
 let ownershipData = [];
 let latestGW = null;
@@ -336,40 +312,19 @@ async function init() {
   const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
   if (!authenticated) return; // Stop if not authenticated (redirect in progress)
   
-  customManagerIds = ids;
+  managerIds = ids;
   
   await updateDisplay();
-  
-  viewSelect.addEventListener('change', () => {
-    currentView = viewSelect.value;
-    updateDisplay();
-  });
 }
 
 async function updateDisplay() {
-  const ids = currentView === 'custom' ? customManagerIds : top50ManagerIds;
-  
-  if (currentView === 'custom') {
-    managerCountEl.textContent = `${customManagerIds.length} manager(s) configured`;
-    if (customManagerIds.length === 0) {
-      out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
-      return;
-    }
-  } else {
-    managerCountEl.textContent = `Top 50 managers`;
-    if (top50ManagerIds.length === 0) {
-      loadingStatus.textContent = 'Fetching Top 50 managers...';
-      top50ManagerIds = await fetchTop50ManagerIds();
-      if (top50ManagerIds.length === 0) {
-        out.innerHTML = "<span style='color:red'>Failed to fetch Top 50 managers. Please try again later.</span>";
-        loadingStatus.textContent = '';
-        return;
-      }
-    }
+  managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+  if (managerIds.length === 0) {
+    out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+    return;
   }
   
-  managerIds = ids;
-  await loadOwnership(ids, latestGW);
+  await loadOwnership(managerIds, latestGW);
 }
 
 gwFilterInput.addEventListener('change', async () => {
@@ -385,12 +340,8 @@ positionFilter.addEventListener('change', () => {
 });
 
 refreshBtn.addEventListener('click', async () => {
-  if (currentView === 'custom') {
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    customManagerIds = ids;
-  } else {
-    top50ManagerIds = await fetchTop50ManagerIds();
-  }
+  const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  managerIds = ids;
   await updateDisplay();
 });
 
