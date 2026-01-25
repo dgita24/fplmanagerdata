@@ -124,7 +124,7 @@ function makeStatsTable(managersData) {
   for (const m of managersData) {
     html += `<tr>
       <td style="font-weight: bold; text-align: center;">${rank}</td>
-      <td style="font-weight: bold;">${m.managerName}</td>
+      <td style="font-weight: bold;"><a href="/squads?manager=${m.entryId}" style="color: #3182ce; text-decoration: none; cursor: pointer;">${m.managerName}</a></td>
       <td>${m.teamName}</td>
       <td style="background:#e6ffe6; font-weight: bold; text-align: center;">${m.totalPoints.toLocaleString()}</td>
       <td style="text-align: center;">${m.overallRank.toLocaleString()}</td>

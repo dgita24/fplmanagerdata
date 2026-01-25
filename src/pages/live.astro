@@ -529,7 +529,7 @@ function makeLiveTable(managers, compareToId = "") {
     // Render
     html += `<tr>
       <td style="text-align: center;">${rank}</td>
-      <td><strong>${m.managerName}</strong></td>
+      <td><strong><a href="/squads?manager=${m.entryId}" style="color: #3182ce; text-decoration: none; cursor: pointer;">${m.managerName}</a></strong></td>
       <td style="background:#e6f7ff; font-weight: bold; text-align: center;">${m.livePointsBeforeHits}</td>
       <td style="text-align: center;">${m.projectedBonus}</td>
       <td style="color:#e53e3e; text-align:center;">${m.transferCost === 0 ? "0" : `-${Math.abs(m.transferCost)}`}</td>
