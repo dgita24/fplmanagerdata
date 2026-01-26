@@ -122,15 +122,16 @@
     }
 
     function showError(error) {
-      errorMessage.innerHTML = getErrorMessage(error)
+      errorMessage.textContent = getErrorMessage(error)
       errorMessage.style.display = 'block'
       successMessage.style.display = 'none'
       resendContainer.style.display = 'none'
     }
 
     function showSuccess() {
-      successMessage.innerHTML = '✓ Account created successfully!<br><br><strong>Check your email</strong> (including spam folder) for the confirmation link.<br><br>The confirmation email should arrive within a few minutes.'
+      successMessage.textContent = '✓ Account created successfully!\n\nCheck your email (including spam folder) for the confirmation link.\n\nThe confirmation email should arrive within a few minutes.'
       successMessage.style.display = 'block'
+      successMessage.style.whiteSpace = 'pre-line'
       errorMessage.style.display = 'none'
       resendContainer.style.display = 'block'
     }

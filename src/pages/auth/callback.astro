@@ -49,6 +49,8 @@
     const errorMessage = document.getElementById('error-message')
     const retryButton = document.getElementById('retry-button')
 
+    const AUTH_TIMEOUT_MS = 15000 // 15 seconds
+
     let timeoutId = null
     let hasRedirected = false
     let authSubscription = null
@@ -106,10 +108,10 @@
       window.location.href = '/'
     }
 
-    // Set timeout for authentication (15 seconds)
+    // Set timeout for authentication
     timeoutId = setTimeout(() => {
       showError('Authentication timeout. The verification link may have expired or is invalid. Please try signing up again or contact support.')
-    }, 15000)
+    }, AUTH_TIMEOUT_MS)
 
     // Handle the auth callback immediately
     async function handleAuthCallback() {
@@ -147,7 +149,7 @@
           console.log('Waiting for session...')
           
           // Set up a one-time listener for auth state change
-          const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          const { data: { subscription: authStateSubscription } } = supabase.auth.onAuthStateChange((event, session) => {
             console.log('Auth state changed:', event)
             
             if (event === 'SIGNED_IN' && session && !hasRedirected) {
@@ -159,7 +161,7 @@
           })
           
           // Store subscription for cleanup
-          authSubscription = subscription
+          authSubscription = authStateSubscription
           
           // Double-check session after a short delay
           setTimeout(async () => {
