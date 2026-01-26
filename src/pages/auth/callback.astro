@@ -51,6 +51,7 @@
 
     let timeoutId = null
     let hasRedirected = false
+    let authSubscription = null
 
     function showError(message) {
       if (hasRedirected) return
@@ -62,6 +63,12 @@
       
       if (timeoutId) {
         clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      
+      if (authSubscription) {
+        authSubscription.unsubscribe()
+        authSubscription = null
       }
     }
 
@@ -73,12 +80,29 @@
       
       if (timeoutId) {
         clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      
+      if (authSubscription) {
+        authSubscription.unsubscribe()
+        authSubscription = null
       }
     }
 
     function redirect() {
       if (hasRedirected) return
       hasRedirected = true
+      
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+      
+      if (authSubscription) {
+        authSubscription.unsubscribe()
+        authSubscription = null
+      }
+      
       window.location.href = '/'
     }
 
@@ -126,21 +150,23 @@
           const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             console.log('Auth state changed:', event)
             
-            if (event === 'SIGNED_IN' && session) {
-              subscription.unsubscribe()
+            if (event === 'SIGNED_IN' && session && !hasRedirected) {
               showSuccess()
               setTimeout(redirect, 1500)
-            } else if (event === 'SIGNED_OUT') {
-              subscription.unsubscribe()
+            } else if (event === 'SIGNED_OUT' && !hasRedirected) {
               showError('Authentication failed. Please try signing up or logging in again.')
             }
           })
           
+          // Store subscription for cleanup
+          authSubscription = subscription
+          
           // Double-check session after a short delay
           setTimeout(async () => {
+            if (hasRedirected) return
+            
             const { data: { session: delayedSession } } = await supabase.auth.getSession()
-            if (delayedSession && !hasRedirected) {
-              subscription.unsubscribe()
+            if (delayedSession) {
               showSuccess()
               setTimeout(redirect, 1500)
             }

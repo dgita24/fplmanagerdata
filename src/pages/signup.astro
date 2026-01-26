@@ -71,7 +71,6 @@
     const resendMessage = document.getElementById('resend-message')
 
     let currentEmail = ''
-    let currentPassword = ''
     let lastResendTime = 0
     let resendAttempts = 0
     const RESEND_COOLDOWN = 30000 // 30 seconds
@@ -178,8 +177,14 @@
       resendMessage.style.display = 'none'
 
       try {
-        // Resend by signing up again (Supabase handles duplicate signups)
-        const { error } = await handleSignup(currentEmail, currentPassword)
+        // Use Supabase's resend method for confirmation emails
+        const { error } = await supabase.auth.resend({
+          type: 'signup',
+          email: currentEmail,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+          }
+        })
         
         lastResendTime = now
         resendAttempts++
@@ -225,9 +230,8 @@
         return
       }
       
-      // Store credentials for resend functionality
+      // Store email for resend functionality (password not stored for security)
       currentEmail = email
-      currentPassword = password
       resendAttempts = 0
       lastResendTime = 0
       
