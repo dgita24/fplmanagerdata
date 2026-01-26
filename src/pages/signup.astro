@@ -29,12 +29,22 @@
         <input type="password" id="confirm-password" required minlength="6" style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 14px;">
       </div>
       
-      <button type="submit" style="width: 100%; padding: 10px; background: #38a169; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer;">
-        Sign Up
+      <button type="submit" id="submit-button" style="width: 100%; padding: 10px; background: #38a169; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+        <span id="submit-text">Sign Up</span>
+        <span id="submit-spinner" class="spinner" style="display: none; margin-left: 10px;"></span>
       </button>
       
-      <div id="error-message" style="margin-top: 1em; color: #e53e3e; display: none;"></div>
-      <div id="success-message" style="margin-top: 1em; color: #38a169; display: none;"></div>
+      <div id="error-message" style="margin-top: 1em; padding: 12px; border-radius: 4px; background: #fff5f5; border: 1px solid #feb2b2; color: #c53030; display: none;"></div>
+      <div id="success-message" style="margin-top: 1em; padding: 12px; border-radius: 4px; background: #f0fff4; border: 1px solid #9ae6b4; color: #22543d; display: none;"></div>
+      
+      <div id="resend-container" style="margin-top: 1em; padding: 12px; border-radius: 4px; background: #ebf8ff; border: 1px solid #90cdf4; display: none;">
+        <p style="margin: 0 0 0.5em 0; color: #2c5282; font-size: 14px;">Didn't receive the email?</p>
+        <button type="button" id="resend-button" style="padding: 6px 12px; background: #3182ce; color: white; border: none; border-radius: 4px; font-size: 14px; font-weight: bold; cursor: pointer;">
+          Resend Confirmation Email
+        </button>
+        <p id="resend-cooldown" style="margin: 0.5em 0 0 0; color: #718096; font-size: 12px; display: none;"></p>
+        <p id="resend-message" style="margin: 0.5em 0 0 0; font-size: 12px; display: none;"></p>
+      </div>
     </form>
     
     <div style="margin-top: 1.5em; text-align: center;">
@@ -50,25 +60,83 @@
     import { supabase } from '../lib/supabase.ts'
 
     const form = document.getElementById('signup-form')
+    const submitButton = document.getElementById('submit-button')
+    const submitText = document.getElementById('submit-text')
+    const submitSpinner = document.getElementById('submit-spinner')
     const errorMessage = document.getElementById('error-message')
     const successMessage = document.getElementById('success-message')
+    const resendContainer = document.getElementById('resend-container')
+    const resendButton = document.getElementById('resend-button')
+    const resendCooldown = document.getElementById('resend-cooldown')
+    const resendMessage = document.getElementById('resend-message')
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault()
+    let currentEmail = ''
+    let currentPassword = ''
+    let lastResendTime = 0
+    let resendAttempts = 0
+    const RESEND_COOLDOWN = 30000 // 30 seconds
+    const MAX_RESEND_ATTEMPTS = 5
+
+    function setLoading(isLoading) {
+      submitButton.disabled = isLoading
+      if (isLoading) {
+        submitText.textContent = 'Signing up...'
+        submitSpinner.style.display = 'inline-block'
+        submitButton.style.opacity = '0.7'
+      } else {
+        submitText.textContent = 'Sign Up'
+        submitSpinner.style.display = 'none'
+        submitButton.style.opacity = '1'
+      }
+    }
+
+    function getErrorMessage(error) {
+      const message = error.message.toLowerCase()
       
-      errorMessage.style.display = 'none'
-      successMessage.style.display = 'none'
-      
-      const email = document.getElementById('email').value
-      const password = document.getElementById('password').value
-      const confirmPassword = document.getElementById('confirm-password').value
-      
-      if (password !== confirmPassword) {
-        errorMessage.textContent = 'Passwords do not match'
-        errorMessage.style.display = 'block'
-        return
+      // Email sending errors
+      if (message.includes('email') && (message.includes('send') || message.includes('smtp') || message.includes('mail'))) {
+        return 'Unable to send confirmation email. Please check that your email address is correct and try again. If the problem persists, contact support.'
       }
       
+      // Rate limiting
+      if (message.includes('rate limit') || message.includes('too many')) {
+        return 'Too many signup attempts. Please wait a few minutes before trying again.'
+      }
+      
+      // Invalid email format
+      if (message.includes('invalid') && message.includes('email')) {
+        return 'Please enter a valid email address.'
+      }
+      
+      // User already exists
+      if (message.includes('already') || message.includes('exist')) {
+        return 'An account with this email already exists. Please try logging in or use the password reset option if you\'ve forgotten your password.'
+      }
+      
+      // Password requirements
+      if (message.includes('password')) {
+        return error.message
+      }
+      
+      // Generic error with original message
+      return `Error: ${error.message}. If this problem persists, please contact support.`
+    }
+
+    function showError(error) {
+      errorMessage.innerHTML = getErrorMessage(error)
+      errorMessage.style.display = 'block'
+      successMessage.style.display = 'none'
+      resendContainer.style.display = 'none'
+    }
+
+    function showSuccess() {
+      successMessage.innerHTML = '✓ Account created successfully!<br><br><strong>Check your email</strong> (including spam folder) for the confirmation link.<br><br>The confirmation email should arrive within a few minutes.'
+      successMessage.style.display = 'block'
+      errorMessage.style.display = 'none'
+      resendContainer.style.display = 'block'
+    }
+
+    async function handleSignup(email, password) {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -77,17 +145,117 @@
         }
       })
       
-      if (error) {
-        errorMessage.textContent = error.message
-        errorMessage.style.display = 'block'
-      } else {
-        successMessage.textContent = 'Account created! Please check your email to verify your account.'
-        successMessage.style.display = 'block'
+      return { data, error }
+    }
+
+    async function handleResend() {
+      const now = Date.now()
+      const timeSinceLastResend = now - lastResendTime
+
+      // Check cooldown
+      if (timeSinceLastResend < RESEND_COOLDOWN) {
+        const remainingSeconds = Math.ceil((RESEND_COOLDOWN - timeSinceLastResend) / 1000)
+        resendCooldown.textContent = `Please wait ${remainingSeconds} seconds before resending.`
+        resendCooldown.style.display = 'block'
+        resendCooldown.style.color = '#e53e3e'
+        return
+      }
+
+      // Check max attempts
+      if (resendAttempts >= MAX_RESEND_ATTEMPTS) {
+        resendMessage.textContent = 'Maximum resend attempts reached. Please contact support if you need help.'
+        resendMessage.style.display = 'block'
+        resendMessage.style.color = '#e53e3e'
+        resendButton.disabled = true
+        resendButton.style.opacity = '0.5'
+        return
+      }
+
+      // Disable button and show loading
+      resendButton.disabled = true
+      resendButton.textContent = 'Sending...'
+      resendCooldown.style.display = 'none'
+      resendMessage.style.display = 'none'
+
+      try {
+        // Resend by signing up again (Supabase handles duplicate signups)
+        const { error } = await handleSignup(currentEmail, currentPassword)
         
-        // Clear form
-        form.reset()
+        lastResendTime = now
+        resendAttempts++
+
+        if (error) {
+          resendMessage.textContent = `Failed to resend: ${getErrorMessage(error)}`
+          resendMessage.style.display = 'block'
+          resendMessage.style.color = '#e53e3e'
+        } else {
+          resendMessage.textContent = '✓ Confirmation email resent! Check your inbox (and spam folder).'
+          resendMessage.style.display = 'block'
+          resendMessage.style.color = '#38a169'
+          
+          // Show cooldown message
+          resendCooldown.textContent = 'You can resend again in 30 seconds if needed.'
+          resendCooldown.style.display = 'block'
+          resendCooldown.style.color = '#718096'
+        }
+      } catch (err) {
+        resendMessage.textContent = 'An unexpected error occurred. Please try again.'
+        resendMessage.style.display = 'block'
+        resendMessage.style.color = '#e53e3e'
+      } finally {
+        resendButton.disabled = false
+        resendButton.textContent = 'Resend Confirmation Email'
+      }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      
+      errorMessage.style.display = 'none'
+      successMessage.style.display = 'none'
+      resendContainer.style.display = 'none'
+      
+      const email = document.getElementById('email').value
+      const password = document.getElementById('password').value
+      const confirmPassword = document.getElementById('confirm-password').value
+      
+      if (password !== confirmPassword) {
+        errorMessage.textContent = 'Passwords do not match. Please make sure both password fields are identical.'
+        errorMessage.style.display = 'block'
+        return
+      }
+      
+      // Store credentials for resend functionality
+      currentEmail = email
+      currentPassword = password
+      resendAttempts = 0
+      lastResendTime = 0
+      
+      setLoading(true)
+      
+      try {
+        const { data, error } = await handleSignup(email, password)
+        
+        if (error) {
+          console.error('Signup error:', error)
+          showError(error)
+        } else {
+          console.log('Signup successful:', data)
+          showSuccess()
+          
+          // Clear form
+          form.reset()
+        }
+      } catch (err) {
+        console.error('Unexpected error:', err)
+        errorMessage.textContent = 'An unexpected error occurred. Please try again or contact support.'
+        errorMessage.style.display = 'block'
+      } finally {
+        setLoading(false)
       }
     })
+
+    resendButton.addEventListener('click', handleResend)
   </script>
 
   <style>
@@ -103,12 +271,34 @@
       border-color: #38a169;
     }
     
-    button:hover {
+    button:not(:disabled):hover {
       background: #2f855a;
+    }
+    
+    #resend-button:not(:disabled):hover {
+      background: #2c5aa0;
+    }
+    
+    button:disabled {
+      cursor: not-allowed;
     }
     
     a:hover {
       text-decoration: underline;
+    }
+
+    .spinner {
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top: 2px solid white;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
   </style>
 </body>

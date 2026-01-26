@@ -9,8 +9,30 @@
   <title>Authenticating...</title>
 </head>
 <body>
-  <div style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif;">
-    <p>Authenticating... Please wait.</p>
+  <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f7fafc;">
+    <div id="loading-container" style="text-align: center;">
+      <div class="spinner"></div>
+      <p style="margin-top: 1em; color: #2d3748; font-size: 18px;">Authenticating...</p>
+      <p style="color: #718096; font-size: 14px;">Please wait while we verify your account.</p>
+    </div>
+    
+    <div id="error-container" style="display: none; text-align: center; max-width: 400px; padding: 2em; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      <div style="font-size: 48px; margin-bottom: 0.5em;">⚠️</div>
+      <h2 style="color: #e53e3e; margin: 0.5em 0;">Authentication Failed</h2>
+      <p id="error-message" style="color: #4a5568; margin: 1em 0;"></p>
+      <button id="retry-button" style="padding: 10px 20px; background: #3182ce; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 1em;">
+        Try Again
+      </button>
+      <div style="margin-top: 1em;">
+        <a href="/" style="color: #718096; text-decoration: none; font-size: 14px;">← Back to Home</a>
+      </div>
+    </div>
+    
+    <div id="success-container" style="display: none; text-align: center; max-width: 400px; padding: 2em; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      <div style="font-size: 48px; margin-bottom: 0.5em;">✓</div>
+      <h2 style="color: #38a169; margin: 0.5em 0;">Authentication Successful</h2>
+      <p style="color: #4a5568; margin: 1em 0;">Redirecting you to the home page...</p>
+    </div>
   </div>
 
   <script>
@@ -21,13 +43,147 @@
       'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
     )
 
-    // Handle the auth callback
-    supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN') {
-        // Redirect to home page after successful auth
-        window.location.href = '/'
+    const loadingContainer = document.getElementById('loading-container')
+    const errorContainer = document.getElementById('error-container')
+    const successContainer = document.getElementById('success-container')
+    const errorMessage = document.getElementById('error-message')
+    const retryButton = document.getElementById('retry-button')
+
+    let timeoutId = null
+    let hasRedirected = false
+
+    function showError(message) {
+      if (hasRedirected) return
+      
+      console.error('Auth callback error:', message)
+      loadingContainer.style.display = 'none'
+      errorMessage.textContent = message
+      errorContainer.style.display = 'block'
+      
+      if (timeoutId) {
+        clearTimeout(timeoutId)
       }
+    }
+
+    function showSuccess() {
+      if (hasRedirected) return
+      
+      loadingContainer.style.display = 'none'
+      successContainer.style.display = 'block'
+      
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+    }
+
+    function redirect() {
+      if (hasRedirected) return
+      hasRedirected = true
+      window.location.href = '/'
+    }
+
+    // Set timeout for authentication (15 seconds)
+    timeoutId = setTimeout(() => {
+      showError('Authentication timeout. The verification link may have expired or is invalid. Please try signing up again or contact support.')
+    }, 15000)
+
+    // Handle the auth callback immediately
+    async function handleAuthCallback() {
+      try {
+        // First, exchange the code from URL for a session
+        const hashParams = new URLSearchParams(window.location.hash.substring(1))
+        const searchParams = new URLSearchParams(window.location.search)
+        
+        // Check for error in URL parameters
+        const error = hashParams.get('error') || searchParams.get('error')
+        const errorDescription = hashParams.get('error_description') || searchParams.get('error_description')
+        
+        if (error) {
+          showError(errorDescription || 'An error occurred during authentication. Please try again.')
+          return
+        }
+
+        // Get the current session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) {
+          console.error('Session error:', sessionError)
+          showError('Unable to verify your session. Please try logging in again.')
+          return
+        }
+
+        if (session) {
+          // Session exists, authentication successful
+          console.log('Authentication successful')
+          showSuccess()
+          // Redirect after a brief delay to show success message
+          setTimeout(redirect, 1500)
+        } else {
+          // No session yet, wait for auth state change
+          console.log('Waiting for session...')
+          
+          // Set up a one-time listener for auth state change
+          const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            console.log('Auth state changed:', event)
+            
+            if (event === 'SIGNED_IN' && session) {
+              subscription.unsubscribe()
+              showSuccess()
+              setTimeout(redirect, 1500)
+            } else if (event === 'SIGNED_OUT') {
+              subscription.unsubscribe()
+              showError('Authentication failed. Please try signing up or logging in again.')
+            }
+          })
+          
+          // Double-check session after a short delay
+          setTimeout(async () => {
+            const { data: { session: delayedSession } } = await supabase.auth.getSession()
+            if (delayedSession && !hasRedirected) {
+              subscription.unsubscribe()
+              showSuccess()
+              setTimeout(redirect, 1500)
+            }
+          }, 500)
+        }
+      } catch (err) {
+        console.error('Unexpected error:', err)
+        showError('An unexpected error occurred. Please try again or contact support.')
+      }
+    }
+
+    // Retry button handler
+    retryButton.addEventListener('click', () => {
+      window.location.href = '/signup'
     })
+
+    // Start the authentication process
+    handleAuthCallback()
   </script>
+
+  <style>
+    .spinner {
+      border: 4px solid #e2e8f0;
+      border-top: 4px solid #3182ce;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    button:hover {
+      background: #2c5aa0;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
 </body>
 </html>
