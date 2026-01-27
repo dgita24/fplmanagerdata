@@ -19,13 +19,13 @@ import Nav from "../components/Nav.astro";
     </div>
 
     <section class="controls" aria-label="Ownership controls">
-      <div class="control" style="grid-column: span 3;">
-        <label class="label" for="gw-filter">Select Gameweek</label>
-        <input class="input" type="number" id="gw-filter" min="1" max="38" placeholder="Auto" inputmode="numeric" />
+      <div class="control" style="grid-column: span 2;">
+        <label class="label" for="gw-filter" style="white-space: nowrap;">Select GW</label>
+        <input class="input" type="number" id="gw-filter" min="1" max="38" placeholder="Auto" inputmode="numeric" style="max-width: 80px;" />
       </div>
 
-      <div class="control" style="grid-column: span 4;">
-        <label class="label" for="position-filter">Filter by Position</label>
+      <div class="control" style="grid-column: span 3;">
+        <label class="label" for="position-filter" style="white-space: nowrap;">Filter by Position</label>
         <select class="select" id="position-filter">
           <option value="">All Positions</option>
           <option value="GK">Goalkeepers (GK)</option>
@@ -35,8 +35,8 @@ import Nav from "../components/Nav.astro";
         </select>
       </div>
 
-      <div class="control" style="grid-column: span 5;">
-        <span class="label">Actions</span>
+      <div class="control" style="grid-column: span 7;">
+        <label class="label" style="white-space: nowrap;">Actions</label>
         <div style="display:flex; gap:10px; flex-wrap:wrap;">
           <button id="refresh-btn" class="btn btn--primary" type="button">🔄 Refresh Data</button>
         </div>
@@ -90,7 +90,7 @@ import Nav from "../components/Nav.astro";
     let latestGW = null;
     let playerCache = new Map();
     let teamCache = new Map();
-    let allManagerNames = []; // Track all manager names for "All except" logic
+    let allManagerNames = [];
 
     async function fetchBootstrapData() {
       try {
@@ -205,14 +205,14 @@ import Nav from "../components/Nav.astro";
 
         <div class="table-shell" style="margin-top: 10px;">
           <div class="table-scroll" role="region" aria-label="Ownership table" tabindex="0">
-            <table class="data-table" style="--sticky-col-1-width: 220px; --sticky-col-2-width: 90px;">
+            <table class="data-table" style="min-width: 600px;">
               <thead>
                 <tr>
-                  <th class="sticky-col-1">Player</th>
-                  <th class="sticky-col-2 num">Position</th>
-                  <th class="num">Team</th>
-                  <th class="num">Owner-<br/>ship</th>
-                  <th class="num">Count</th>
+                  <th style="width: 200px;">Player</th>
+                  <th class="num" style="width: 60px;">Pos</th>
+                  <th class="num" style="width: 60px;">Team</th>
+                  <th class="num" style="width: 70px;">Owner-<br/>ship</th>
+                  <th class="num" style="width: 60px;">Count</th>
                   <th>Owned By</th>
                 </tr>
               </thead>
@@ -222,14 +222,11 @@ import Nav from "../components/Nav.astro";
       for (const player of filtered) {
         const ownershipPct = ((player.count / totalManagers) * 100).toFixed(0);
         
-        // Smart "Owned By" text - always show the shorter list
         let ownedByText = "";
         
         if (player.count === totalManagers) {
-          // 100% ownership
           ownedByText = "All";
         } else if (player.count > totalManagers / 2) {
-          // More than 50% - show who DOESN'T own them (shorter list)
           const missing = allManagerNames.filter(name => {
             return !player.ownedBy.some(owner => `${owner.firstName} ${owner.lastName}` === name);
           });
@@ -240,7 +237,6 @@ import Nav from "../components/Nav.astro";
             ownedByText = `All except ${missing.map(n => n.split(' ')[0]).join(", ")}`;
           }
         } else {
-          // 50% or less - show who OWNS them (shorter list)
           ownedByText = player.ownedBy
             .map(m => `${m.firstName} ${m.lastName.substring(0, 2)}`)
             .join(", ");
@@ -248,8 +244,8 @@ import Nav from "../components/Nav.astro";
         
         html += `
           <tr>
-            <td class="sticky-col-1 strong">${player.playerName}</td>
-            <td class="sticky-col-2 num">${player.position}</td>
+            <td class="strong" style="font-size: 1.15rem;">${player.playerName}</td>
+            <td class="num">${player.position}</td>
             <td class="num">${player.teamName}</td>
             <td class="num strong">${ownershipPct}%</td>
             <td class="num strong">${player.count}</td>
@@ -298,7 +294,7 @@ import Nav from "../components/Nav.astro";
       }
 
       const managerSquads = [];
-      allManagerNames = []; // Reset for this load
+      allManagerNames = [];
       out.innerHTML = "";
       loadingStatus.textContent = `Loading 0 of ${ids.length} managers for GW${gw}...`;
       
@@ -308,7 +304,7 @@ import Nav from "../components/Nav.astro";
           const data = await fetchManagerSquad(id, gw);
           if (data) {
             managerSquads.push(data);
-            allManagerNames.push(data.managerName); // Store all manager names
+            allManagerNames.push(data.managerName);
             loaded++;
             
             loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
@@ -334,7 +330,7 @@ import Nav from "../components/Nav.astro";
       gwFilterInput.placeholder = `Latest: GW${latestGW}`;
       
       const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
-      if (!authenticated) return; // Stop if not authenticated (redirect in progress)
+      if (!authenticated) return;
       
       managerIds = ids;
       
