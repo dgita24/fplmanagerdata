@@ -7,7 +7,7 @@
 }
 
 h1 {
-  margin: 0.5em 0 0.25em 0;
+  margin: 0.2em 0 0.25em 0;
   font-size: 1.4em;
 }
 p {
@@ -25,6 +25,10 @@ p {
 
 .live-controls {
   justify-content: flex-start;
+}
+
+body, .live-wrap {
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI", Arial, sans-serif;
 }
 
 .manager-count {
@@ -103,6 +107,14 @@ select {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.92em;
+}
+
+.table-wrapper th,
+.table-wrapper td {
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Responsive tweaks */
