@@ -1,159 +1,42 @@
 ---
-
-import Nav from '../components/Nav.astro';
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
 ---
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to FPL Manager Data - FPL Manager Data</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0 1em;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
+<Layout title="FPL Manager Data">
+  <Nav />
 
-    h1 {
-      font-size: 2em;
-      margin-top: 0.5em;
-    }
+  <div class="page">
+    <header class="page-header">
+      <h1 class="page-title">Welcome to FPL Manager Data</h1>
+      <p class="page-subtitle">
+        Use the navigation above to view Squads, Transfers, Chips, Stats, Ownership, and Live standings.
+      </p>
+    </header>
 
-    p {
-      font-size: 1em;
-      line-height: 1.6;
-    }
+    <div class="table-shell">
+      <div style="padding: 12px;">
+        <h2 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">🚀 First time here?</h2>
+        <p style="margin: 0 0 12px 0; color: var(--muted);">
+          Start by adding your league’s manager EntryIDs. They’ll sync to your account across devices.
+        </p>
+        <a class="btn btn--primary" href="/managers" style="display:inline-flex; align-items:center; justify-content:center;">
+          ⚙ Go to Managers Page
+        </a>
+      </div>
+    </div>
 
-    .setup-notice {
-      background: #fef3c7;
-      border-left: 4px solid #f59e0b;
-      padding: 1em;
-      margin: 1.5em 0;
-      border-radius: 4px;
-    }
-
-    .setup-notice p {
-      margin: 0 0 0.5em 0;
-      font-weight: 500;
-    }
-
-    .setup-notice a {
-      color: #3182ce;
-      text-decoration: none;
-      font-weight: bold;
-      padding: 8px 16px;
-      background: #3182ce;
-      color: white;
-      border-radius: 4px;
-      display: inline-block;
-      min-height: 44px;
-      line-height: 28px;
-    }
-
-    .setup-notice a:hover {
-      background: #2c5aa0;
-    }
-
-    ul {
-      line-height: 1.8;
-    }
-
-    ul li {
-      margin-bottom: 0.5em;
-    }
-
-    ul li a {
-      color: #3182ce;
-      text-decoration: none;
-      font-weight: 500;
-      padding: 4px 8px;
-      display: inline-block;
-      min-height: 44px;
-      line-height: 36px;
-    }
-
-    ul li a:hover {
-      text-decoration: underline;
-    }
-
-    /* Mobile styles */
-    @media (max-width: 768px) {
-      body {
-        padding: 0.5em;
-        font-size: 14px;
-      }
-
-      h1 {
-        font-size: 1.5em;
-      }
-
-      p {
-        font-size: 1em;
-        line-height: 1.6;
-      }
-
-      .setup-notice {
-        padding: 0.75em;
-      }
-
-      ul {
-        padding-left: 1.5em;
-        line-height: 2;
-      }
-
-      ul li {
-        margin-bottom: 0.75em;
-      }
-
-      ul li a {
-        font-size: 16px;
-        padding: 8px 12px;
-        display: inline-block;
-      }
-    }
-
-    /* Extra small phones (480px and below) */
-    @media (max-width: 480px) {
-      body {
-        padding: 0.25em;
-        font-size: 13px;
-      }
-
-      h1 {
-        font-size: 1.3em;
-      }
-
-      .setup-notice {
-        padding: 0.5em;
-        font-size: 0.95em;
-      }
-
-      .setup-notice a {
-        padding: 8px 12px;
-        font-size: 14px;
-      }
-    }
-  </style>
-</head>
-<body>
-<Nav />
-
-<h1>Welcome to FPL Manager Data</h1>
-
-<div class="setup-notice">
-  <p>🚀 First time here? Start by adding your FPL team IDs:</p>
-  <a href="/managers">⚙ Go to Managers Page</a>
-</div>
-
-<p>
-  Use the navigation above to view: Squads, Transfers, Chips & Rank, or Stats.
-</p>
-<ul>
-  <li><a href="/transfers">Transfers</a> — See transfer histories and FTs calculation</li>
-  <li><a href="/squads">Squads</a> — Lineups for any manager</li>
-  <li><a href="/chips">Chips & Rank</a> — Chip usage and rank histories</li>
-  <li><a href="/stats">Stats</a> — League stats, tables, etc.</li>
-</ul>
-</body>
-</html>
+    <div class="table-shell">
+      <div style="padding: 12px;">
+        <h2 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">Pages</h2>
+        <ul style="margin: 0; padding-left: 18px; line-height: 1.9;">
+          <li><a href="/transfers">Transfers</a> — Transfer histories and free transfer (FT) calculations</li>
+          <li><a href="/squads">Squads</a> — Lineups for any manager</li>
+          <li><a href="/chips">Chips</a> — Chip usage summary and detail</li>
+          <li><a href="/stats">Stats</a> — League standings and summary metrics</li>
+          <li><a href="/ownership">Ownership</a> — Player ownership across managers</li>
+          <li><a href="/live">Live</a> — Live GW points and projected overall standings</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</Layout>
