@@ -1,227 +1,226 @@
 ---
-
-import Nav from '../components/Nav.astro';
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
 ---
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Manager IDs Setup - FPL Manager Data</title>
-</head>
-<body>
-<Nav />
+<Layout title="Manager IDs Setup - FPL Manager Data">
+  <Nav />
 
-<div id="auth-check" style="display: none;">
-  <h1>Manager IDs Setup</h1>
-  <p>Enter all manager EntryIDs here. These will be synced to your account and available across all your devices.</p>
+  <div class="page">
+    <header class="page-header">
+      <h1 class="page-title">Manager IDs Setup</h1>
+      <p class="page-subtitle">
+        Enter all manager EntryIDs here. These will be synced to your account and available across all your devices.
+      </p>
+    </header>
 
-  <form id="manager-form">
-    <label for="ids"><strong>Manager EntryIDs</strong> (one per line, max 100):</label><br>
-    <textarea id="ids" rows="20" cols="40" style="font-family:monospace; font-size: 14px;" placeholder="4290&#10;200&#10;1320&#10;..."></textarea><br>
-    <div style="margin-top: 0.5em; color: #666;">
-      <span id="count">0</span> managers entered
+    <div id="auth-check" style="display: none;">
+      <div class="table-shell">
+        <div style="padding: 12px;">
+          <form id="manager-form">
+            <div class="control">
+              <label class="label" for="ids">Manager EntryIDs (one per line, max 100)</label>
+              <textarea
+                id="ids"
+                class="textarea"
+                rows="20"
+                cols="40"
+                placeholder="4290&#10;200&#10;1320&#10;..."
+              ></textarea>
+
+              <div class="meta-row" style="margin-top: 8px;">
+                <span style="color: var(--muted);">Managers entered: <strong id="count">0</strong></span>
+              </div>
+
+              <div style="margin-top: 12px;">
+                <button type="submit" class="btn btn--success">Save Manager IDs</button>
+              </div>
+            </div>
+          </form>
+
+          <div id="status" style="margin-top: 12px;"></div>
+        </div>
+      </div>
+
+      <div class="table-shell" style="margin-top: 14px;">
+        <div style="padding: 12px;">
+          <h2 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">Quick Start</h2>
+          <ol style="margin: 0; padding-left: 18px; line-height: 1.9;">
+            <li>Enter your league's manager EntryIDs above (one per line)</li>
+            <li>Click “Save Manager IDs”</li>
+            <li>Visit any other page (Transfers, Chips, etc.) — they’ll automatically use these IDs</li>
+            <li>Your IDs are saved to your account and will sync across devices</li>
+          </ol>
+
+          <p style="margin: 12px 0 0 0;">
+            <strong>Tip:</strong> You can find a manager’s EntryID in their FPL URL:
+          </p>
+          <p style="margin: 6px 0 0 0;">
+            <code style="background: var(--surface-2); padding: 3px 8px; border-radius: 8px;">
+              https://fantasy.premierleague.com/entry/<strong>4290</strong>/event/22
+            </code>
+          </p>
+        </div>
+      </div>
     </div>
-    <button type="submit" style="margin-top: 1em; padding: 8px 16px; font-size: 16px;">Save Manager IDs</button>
-  </form>
 
-  <div id="status" style="margin-top: 1em;"></div>
+    <div id="loading" class="table-shell" style="text-align: center;">
+      <div style="padding: 24px;">
+        <p style="color: var(--muted); margin: 0;">Checking authentication...</p>
+      </div>
+    </div>
 
-  <div style="margin-top: 2em; padding: 1em; background: #f9f9f9; border-left: 4px solid #38a169;">
-    <h3>Quick Start:</h3>
-    <ol>
-      <li>Enter your league's manager EntryIDs above (one per line)</li>
-      <li>Click "Save Manager IDs"</li>
-      <li>Visit any other page (Transfers, Chips, etc.) - they'll automatically use these IDs</li>
-      <li>Your IDs are saved to your account and will sync across all your devices!</li>
-    </ol>
-    <p><strong>Tip:</strong> You can find a manager's EntryID in their FPL URL:<br>
-    <code>https://fantasy.premierleague.com/entry/<strong>4290</strong>/event/22</code></p>
+    <div id="require-login" class="table-shell" style="display: none; text-align: center;">
+      <div style="padding: 24px;">
+        <h2 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">Login Required</h2>
+        <p style="color: var(--muted); margin: 0 0 12px 0;">
+          You need to be logged in to manage your manager IDs.
+        </p>
+        <a class="btn btn--primary" href="/login" style="display:inline-flex; align-items:center; justify-content:center;">
+          Go to Login
+        </a>
+      </div>
+    </div>
   </div>
-</div>
 
-<div id="loading" style="text-align: center; padding: 3em;">
-  <p style="color: #666;">Checking authentication...</p>
-</div>
+  <script>
+    import { supabase } from '../lib/supabase.ts'
 
-<div id="require-login" style="display: none; text-align: center; padding: 3em;">
-  <h2>Login Required</h2>
-  <p>You need to be logged in to manage your manager IDs.</p>
-  <a href="/login" style="display: inline-block; margin-top: 1em; padding: 10px 20px; background: #3182ce; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">
-    Go to Login
-  </a>
-</div>
+    const authCheckDiv = document.getElementById('auth-check')
+    const loadingDiv = document.getElementById('loading')
+    const requireLoginDiv = document.getElementById('require-login')
+    const form = document.getElementById('manager-form')
+    const textarea = document.getElementById('ids')
+    const status = document.getElementById('status')
+    const countEl = document.getElementById('count')
 
-<script>
-  import { supabase } from '../lib/supabase.ts'
+    let currentUser = null
 
-  const authCheckDiv = document.getElementById('auth-check')
-  const loadingDiv = document.getElementById('loading')
-  const requireLoginDiv = document.getElementById('require-login')
-  const form = document.getElementById('manager-form')
-  const textarea = document.getElementById('ids')
-  const status = document.getElementById('status')
-  const countEl = document.getElementById('count')
-
-  let currentUser = null
-
-  // Check if user is logged in
-  async function checkAuth() {
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (user) {
-      currentUser = user
-      loadingDiv.style.display = 'none'
-      authCheckDiv.style.display = 'block'
-      loadManagerIds()
-    } else {
-      loadingDiv.style.display = 'none'
-      requireLoginDiv.style.display = 'block'
-    }
-  }
-
-  // Load manager IDs from Supabase
-  async function loadManagerIds() {
-    try {
-      const { data, error } = await supabase
-        .from('user_manager_lists')
-        .select('manager_ids')
-        .eq('user_id', currentUser.id)
-        .single()
+    // Check if user is logged in
+    async function checkAuth() {
+      const { data: { user } } = await supabase.auth.getUser()
       
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error loading manager IDs:', error)
+      if (user) {
+        currentUser = user
+        loadingDiv.style.display = 'none'
+        authCheckDiv.style.display = 'block'
+        loadManagerIds()
+      } else {
+        loadingDiv.style.display = 'none'
+        requireLoginDiv.style.display = 'block'
+      }
+    }
+
+    // Load manager IDs from Supabase
+    async function loadManagerIds() {
+      try {
+        const { data, error } = await supabase
+          .from('user_manager_lists')
+          .select('manager_ids')
+          .eq('user_id', currentUser.id)
+          .single()
+        
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error loading manager IDs:', error)
+          return
+        }
+        
+        if (data && data.manager_ids) {
+          textarea.value = data.manager_ids.join('\n')
+          updateCount()
+        }
+      } catch (e) {
+        console.error('Error:', e)
+      }
+    }
+
+    // Save manager IDs to Supabase
+    async function saveManagerIds(ids) {
+      try {
+        const { data: existing, error: fetchError } = await supabase
+          .from('user_manager_lists')
+          .select('id')
+          .eq('user_id', currentUser.id)
+          .single()
+        
+        if (existing) {
+          // Update existing
+          const { error } = await supabase
+            .from('user_manager_lists')
+            .update({ 
+              manager_ids: ids,
+              updated_at: new Date().toISOString()
+            })
+            .eq('user_id', currentUser.id)
+          
+          if (error) throw error
+        } else {
+          // Insert new
+          const { error } = await supabase
+            .from('user_manager_lists')
+            .insert({
+              user_id: currentUser.id,
+              manager_ids: ids
+            })
+          
+          if (error) throw error
+        }
+        
+        return true
+      } catch (e) {
+        console.error('Error saving manager IDs:', e)
+        return false
+      }
+    }
+
+    // Update count as user types
+    function updateCount() {
+      const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
+      countEl.textContent = ids.length
+      if (ids.length > 100) {
+        countEl.style.color = "red"
+        countEl.textContent = `${ids.length} (exceeds 100 limit!)`
+      } else {
+        countEl.style.color = ids.length > 0 ? "#16a34a" : "#64748b"
+      }
+    }
+
+    textarea.addEventListener('input', updateCount)
+
+    // Save form submission
+    form.onsubmit = async (e) => {
+      e.preventDefault()
+      const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
+      
+      if (ids.length === 0) {
+        status.innerHTML = "<span style='color:red'>⚠️ Please enter at least one valid EntryID.</span>"
         return
       }
       
-      if (data && data.manager_ids) {
-        textarea.value = data.manager_ids.join('\n')
-        updateCount()
+      if (ids.length > 100) {
+        status.innerHTML = "<span style='color:red'>⚠️ Maximum 100 managers allowed. Please remove some entries.</span>"
+        return
       }
-    } catch (e) {
-      console.error('Error:', e)
-    }
-  }
-
-  // Save manager IDs to Supabase
-  async function saveManagerIds(ids) {
-    try {
-      const { data: existing, error: fetchError } = await supabase
-        .from('user_manager_lists')
-        .select('id')
-        .eq('user_id', currentUser.id)
-        .single()
       
-      if (existing) {
-        // Update existing
-        const { error } = await supabase
-          .from('user_manager_lists')
-          .update({ 
-            manager_ids: ids,
-            updated_at: new Date().toISOString()
-          })
-          .eq('user_id', currentUser.id)
+      // Remove duplicates
+      const uniqueIds = [...new Set(ids)].map(id => parseInt(id))
+      
+      const success = await saveManagerIds(uniqueIds)
+      
+      if (success) {
+        status.innerHTML = `<span style='color:#16a34a; font-weight:900'>✅ Successfully saved ${uniqueIds.length} manager IDs to your account!</span><br>
+        <span style='color:#64748b'>These will now be synced across all your devices.</span>`
         
-        if (error) throw error
+        // Update textarea with deduplicated list
+        if (uniqueIds.length !== ids.length) {
+          textarea.value = uniqueIds.join('\n')
+          updateCount()
+          status.innerHTML += `<br><span style='color:#f59e0b'>ℹ️ Removed ${ids.length - uniqueIds.length} duplicate(s).</span>`
+        }
       } else {
-        // Insert new
-        const { error } = await supabase
-          .from('user_manager_lists')
-          .insert({
-            user_id: currentUser.id,
-            manager_ids: ids
-          })
-        
-        if (error) throw error
+        status.innerHTML = "<span style='color:red'>❌ Error saving manager IDs. Please try again.</span>"
       }
-      
-      return true
-    } catch (e) {
-      console.error('Error saving manager IDs:', e)
-      return false
     }
-  }
 
-  // Update count as user types
-  function updateCount() {
-    const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
-    countEl.textContent = ids.length
-    if (ids.length > 100) {
-      countEl.style.color = "red"
-      countEl.textContent = `${ids.length} (exceeds 100 limit!)`
-    } else {
-      countEl.style.color = ids.length > 0 ? "#38a169" : "#666"
-    }
-  }
-
-  textarea.addEventListener('input', updateCount)
-
-  // Save form submission
-  form.onsubmit = async (e) => {
-    e.preventDefault()
-    const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
-    
-    if (ids.length === 0) {
-      status.innerHTML = "<span style='color:red'>⚠️ Please enter at least one valid EntryID.</span>"
-      return
-    }
-    
-    if (ids.length > 100) {
-      status.innerHTML = "<span style='color:red'>⚠️ Maximum 100 managers allowed. Please remove some entries.</span>"
-      return
-    }
-    
-    // Remove duplicates
-    const uniqueIds = [...new Set(ids)].map(id => parseInt(id))
-    
-    const success = await saveManagerIds(uniqueIds)
-    
-    if (success) {
-      status.innerHTML = `<span style='color:#38a169; font-weight:bold'>✅ Successfully saved ${uniqueIds.length} manager IDs to your account!</span><br>
-      <span style='color:#666'>These will now be synced across all your devices.</span>`
-      
-      // Update textarea with deduplicated list
-      if (uniqueIds.length !== ids.length) {
-        textarea.value = uniqueIds.join('\n')
-        updateCount()
-        status.innerHTML += `<br><span style='color:#f59e0b'>ℹ️ Removed ${ids.length - uniqueIds.length} duplicate(s).</span>`
-      }
-    } else {
-      status.innerHTML = "<span style='color:red'>❌ Error saving manager IDs. Please try again.</span>"
-    }
-  }
-
-  checkAuth()
-</script>
-
-<style>
-  textarea {
-    width: 100%;
-    max-width: 500px;
-    padding: 8px;
-    border: 2px solid #ccc;
-    border-radius: 4px;
-  }
-  textarea:focus {
-    outline: none;
-    border-color: #38a169;
-  }
-  button {
-    background: #38a169;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-  }
-  button:hover {
-    background: #2f855a;
-  }
-  code {
-    background: #e2e8f0;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-family: monospace;
-  }
-</style></body>
-</html>
+    checkAuth()
+  </script>
+</Layout>
