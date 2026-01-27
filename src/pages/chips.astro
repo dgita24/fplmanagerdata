@@ -1,350 +1,264 @@
 ---
-
-import Nav from '../components/Nav.astro';
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
 ---
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chip Usage Tracker - FPL Manager Data</title>
-</head>
-<body>
-<Nav />
-<h1>Chip Usage Tracker</h1>
-<p>Track which managers have used their chips (2x Wildcard, 2x Bench Boost, 2x Triple Captain, 2x Free Hit).</p>
+<Layout title="Chip Usage Tracker - FPL Manager Data">
+  <Nav />
 
-<div style="margin-bottom: 1.5em;">
-  <span id="manager-count" style="font-weight: bold;">Loading managers...</span>
-  <a href="/managers" style="margin-left: 1em; color: #3182ce;">Manage IDs</a>
-  <button id="refresh-btn" style="margin-left: 1em; padding: 5px 12px;">Refresh Data</button>
-</div>
+  <div class="page">
+    <header class="page-header">
+      <h1 class="page-title">Chip Usage Tracker</h1>
+      <p class="page-subtitle">
+        Track which managers have used their chips (2x Wildcard, 2x Bench Boost, 2x Triple Captain, 2x Free Hit).
+      </p>
+    </header>
 
-<div id="loading-status" style="margin-bottom: 1em; color: #666;"></div>
-<div id="chips-output" style="margin-top:1.5em"></div>
+    <div class="meta-row">
+      <span id="manager-count" class="badge">Loading managers...</span>
+      <a href="/managers" class="badge">⚙ Manage IDs</a>
+      <button id="refresh-btn" class="btn btn--primary" type="button">🔄 Refresh Data</button>
+    </div>
 
-<script>
-import { supabase } from '../lib/supabase.ts'
+    <div id="loading-status" class="meta-row"></div>
+    <section id="chips-output" aria-live="polite"></section>
+  </div>
 
-async function loadManagerIdsFromSupabase() {
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    window.location.replace('/login')
-    return { authenticated: false, managerIds: [] }
-  }
-  
-  try {
-    const { data, error } = await supabase
-      .from('user_manager_lists')
-      .select('manager_ids')
-      .eq('user_id', user.id)
-      .single()
-    
-    if (error && error.code !== 'PGRST116') {
-      console.error('Error loading manager IDs:', error)
-      return { authenticated: true, managerIds: [] }
-    }
-    
-    return { authenticated: true, managerIds: data?.manager_ids || [] }
-  } catch (e) {
-    console.error('Error:', e)
-    return { authenticated: false, managerIds: [] }
-  }
-}
+  <script>
+    import { supabase } from '../lib/supabase.ts'
 
-const out = document.getElementById("chips-output");
-const loadingStatus = document.getElementById("loading-status");
-const managerCountEl = document.getElementById("manager-count");
-const refreshBtn = document.getElementById("refresh-btn");
-
-let managerIds = [];
-
-async function fetchManagerData(id) {
-  const historyUrl = `/api/fpl/entry/${id}/history`;
-  const summaryUrl = `/api/fpl/entry/${id}`;
-  
-  try {
-    const [historyRes, summaryRes] = await Promise.all([
-      fetch(historyUrl),
-      fetch(summaryUrl)
-    ]);
-    
-    if (!historyRes.ok || !summaryRes.ok) throw new Error("Load error");
-    
-    const historyData = await historyRes.json();
-    const summaryData = await summaryRes.json();
-    
-    const chips = historyData.chips || [];
-    const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
-    const teamName = summaryData.name;
-    
-    const chipsFormatted = chips.map(c => ({
-      name: c.name === "wildcard" ? "WC" :
-            c.name === "bboost" ? "BB" :
-            c.name === "3xc" ? "TC" :
-            c.name === "freehit" ? "FH" : c.name,
-      fullName: c.name === "wildcard" ? "Wildcard" :
-                c.name === "bboost" ? "Bench Boost" :
-                c.name === "3xc" ? "Triple Captain" :
-                c.name === "freehit" ? "Free Hit" : c.name,
-      gw: c.event
-    }));
-    
-    return {
-      entryId: Number(id),
-      managerName,
-      teamName,
-      chips: chipsFormatted
-    };
-  } catch (e) {
-    console.error(`Error fetching manager ${id}:`, e);
-    return null;
-  }
-}
-
-function makeChipsTable(managersData) {
-  let html = `<h2>Chips Summary</h2>
-  <table border="1" cellpadding="3" style="border-collapse:collapse; table-layout: auto; margin-bottom: 2em; font-size: 0.9em;">
-    <tr style="background:#f0f0f0">
-      <th style="min-width: 100px;">Manager</th>
-      <th style="min-width: 100px;">Team Name</th>
-      <th style="min-width: 80px;">Chips Used</th>
-      <th style="min-width: 80px;">Chips<br/>Remaining</th>
-    </tr>`;
-  
-  for (const m of managersData) {
-    const chipsUsed = m.chips.length > 0 
-      ? m.chips.map(c => c.name).join(", ")
-      : "None";
-    
-    const usedChips = m.chips.map(c => c.name);
-    const wcCount = usedChips.filter(c => c === "WC").length;
-    const bbCount = usedChips.filter(c => c === "BB").length;
-    const tcCount = usedChips.filter(c => c === "TC").length;
-    const fhCount = usedChips.filter(c => c === "FH").length;
-    
-    const remaining = [];
-    const wcRemaining = 2 - wcCount;
-    const bbRemaining = 2 - bbCount;
-    const tcRemaining = 2 - tcCount;
-    const fhRemaining = 2 - fhCount;
-    
-    if (wcRemaining > 0) remaining.push(wcRemaining === 2 ? "WC x2" : "WC x1");
-    if (bbRemaining > 0) remaining.push(bbRemaining === 2 ? "BB x2" : "BB x1");
-    if (tcRemaining > 0) remaining.push(tcRemaining === 2 ? "TC x2" : "TC x1");
-    if (fhRemaining > 0) remaining.push(fhRemaining === 2 ? "FH x2" : "FH x1");
-    
-    const chipsRemaining = remaining.length > 0 ? remaining.join(", ") : "None";
-    
-    html += `<tr>
-      <td style="font-weight: bold;">${m.managerName}</td>
-      <td>${m.teamName}</td>
-      <td>${chipsUsed}</td>
-      <td style="background:#fffacd">${chipsRemaining}</td>
-    </tr>`;
-  }
-  html += "</table>";
-  
-  html += `<h2>Detailed Chip Usage by Gameweek</h2>
-  <table border="1" cellpadding="3" style="border-collapse:collapse; table-layout: auto; font-size: 0.9em;">
-    <tr style="background:#f0f0f0">
-      <th style="min-width: 100px;">Manager</th>
-      <th style="min-width: 100px;">Team Name</th>
-      <th style="min-width: 120px;">Chips Played (GW)</th>
-    </tr>`;
-  
-  for (const m of managersData) {
-    let chipsPlayedText = "";
-    
-    if (m.chips.length === 0) {
-      chipsPlayedText = '<span style="color:#999; font-style:italic;">No chips used yet</span>';
-    } else {
-      // Sort chips by gameweek
-      const sortedChips = [...m.chips].sort((a, b) => a.gw - b.gw);
-      chipsPlayedText = sortedChips.map(chip => `${chip.name} ${chip.gw}`).join(", ");
-    }
-    
-    html += `<tr>
-      <td style="font-weight: bold;">${m.managerName}</td>
-      <td>${m.teamName}</td>
-      <td>${chipsPlayedText}</td>
-    </tr>`;
-  }
-  
-  html += "</table>";
-  
-  return html;
-}
-
-async function loadChips(ids) {
-  if (ids.length === 0) {
-    out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
-    return;
-  }
-
-  const allData = [];
-  out.innerHTML = "";
-  loadingStatus.textContent = `Loading 0 of ${ids.length} managers...`;
-  
-  let loaded = 0;
-  for (const id of ids) {
-    try {
-      const data = await fetchManagerData(id);
-      if (data) {
-        allData.push(data);
-        loaded++;
-        
-        loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
-        
-        allData.sort((a, b) => a.managerName.localeCompare(b.managerName));
-        out.innerHTML = makeChipsTable(allData);
+    async function loadManagerIdsFromSupabase() {
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        window.location.replace('/login')
+        return { authenticated: false, managerIds: [] }
       }
-    } catch (e) {
-      console.error(`Failed to load manager ${id}:`, e);
-      loaded++;
-    }
-  }
-  
-  loadingStatus.innerHTML = `<span style='color:#38a169'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
-}
-
-async function updateDisplay() {
-  managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
-  if (managerIds.length === 0) {
-    out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
-    return;
-  }
-  
-  await loadChips(managerIds);
-}
-
-(async function init() {
-  const { managerIds: ids } = await loadManagerIdsFromSupabase();
-  managerIds = ids;
-  
-  await updateDisplay();
-})();
-
-refreshBtn.addEventListener('click', async () => {
-  const { managerIds: ids } = await loadManagerIdsFromSupabase();
-  managerIds = ids;
-  await updateDisplay();
-});
-</script>
-
-<style>
-  table {
-    font-family: Arial, sans-serif;
-  }
-  th {
-    font-weight: bold;
-    padding: 4px;
-  }
-  td {
-    padding: 3px;
-  }
-  h2 {
-    margin-top: 1.5em;
-    margin-bottom: 0.5em;
-  }
-  button {
-    background: #3182ce;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-    padding: 5px 12px;
-  }
-  button:hover {
-    background: #2c5aa0;
-  }
-
-  /* Mobile responsive styles */
-  @media (max-width: 768px) {
-    body {
-      padding: 0.5em;
-      font-size: 14px;
+      
+      try {
+        const { data, error } = await supabase
+          .from('user_manager_lists')
+          .select('manager_ids')
+          .eq('user_id', user.id)
+          .single()
+        
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error loading manager IDs:', error)
+          return { authenticated: true, managerIds: [] }
+        }
+        
+        return { authenticated: true, managerIds: data?.manager_ids || [] }
+      } catch (e) {
+        console.error('Error:', e)
+        return { authenticated: false, managerIds: [] }
+      }
     }
 
-    h1 {
-      font-size: 1.5em;
+    const out = document.getElementById("chips-output");
+    const loadingStatus = document.getElementById("loading-status");
+    const managerCountEl = document.getElementById("manager-count");
+    const refreshBtn = document.getElementById("refresh-btn");
+
+    let managerIds = [];
+
+    async function fetchManagerData(id) {
+      const historyUrl = `/api/fpl/entry/${id}/history`;
+      const summaryUrl = `/api/fpl/entry/${id}`;
+      
+      try {
+        const [historyRes, summaryRes] = await Promise.all([
+          fetch(historyUrl),
+          fetch(summaryUrl)
+        ]);
+        
+        if (!historyRes.ok || !summaryRes.ok) throw new Error("Load error");
+        
+        const historyData = await historyRes.json();
+        const summaryData = await summaryRes.json();
+        
+        const chips = historyData.chips || [];
+        const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
+        const teamName = summaryData.name;
+        
+        const chipsFormatted = chips.map(c => ({
+          name: c.name === "wildcard" ? "WC" :
+                c.name === "bboost" ? "BB" :
+                c.name === "3xc" ? "TC" :
+                c.name === "freehit" ? "FH" : c.name,
+          fullName: c.name === "wildcard" ? "Wildcard" :
+                    c.name === "bboost" ? "Bench Boost" :
+                    c.name === "3xc" ? "Triple Captain" :
+                    c.name === "freehit" ? "Free Hit" : c.name,
+          gw: c.event
+        }));
+        
+        return {
+          entryId: Number(id),
+          managerName,
+          teamName,
+          chips: chipsFormatted
+        };
+      } catch (e) {
+        console.error(`Error fetching manager ${id}:`, e);
+        return null;
+      }
     }
 
-    h2 {
-      font-size: 1.3em;
+    function makeChipsTable(managersData) {
+      let html = `
+        <h2 class="page-title" style="font-size: 1.1rem;">Chips Summary</h2>
+
+        <div class="table-shell" style="margin-bottom: 14px;">
+          <div class="table-scroll" role="region" aria-label="Chips summary table" tabindex="0">
+            <table class="data-table" style="--sticky-col-1-width: 240px;">
+              <thead>
+                <tr>
+                  <th class="sticky-col-1">Manager</th>
+                  <th>Team Name</th>
+                  <th>Chips Used</th>
+                  <th>Chips Remaining</th>
+                </tr>
+              </thead>
+              <tbody>
+      `;
+      
+      for (const m of managersData) {
+        const chipsUsed = m.chips.length > 0 
+          ? m.chips.map(c => c.name).join(", ")
+          : "None";
+        
+        const usedChips = m.chips.map(c => c.name);
+        const wcCount = usedChips.filter(c => c === "WC").length;
+        const bbCount = usedChips.filter(c => c === "BB").length;
+        const tcCount = usedChips.filter(c => c === "TC").length;
+        const fhCount = usedChips.filter(c => c === "FH").length;
+        
+        const remaining = [];
+        const wcRemaining = 2 - wcCount;
+        const bbRemaining = 2 - bbCount;
+        const tcRemaining = 2 - tcCount;
+        const fhRemaining = 2 - fhCount;
+        
+        if (wcRemaining > 0) remaining.push(wcRemaining === 2 ? "WC x2" : "WC x1");
+        if (bbRemaining > 0) remaining.push(bbRemaining === 2 ? "BB x2" : "BB x1");
+        if (tcRemaining > 0) remaining.push(tcRemaining === 2 ? "TC x2" : "TC x1");
+        if (fhRemaining > 0) remaining.push(fhRemaining === 2 ? "FH x2" : "FH x1");
+        
+        const chipsRemaining = remaining.length > 0 ? remaining.join(", ") : "None";
+        
+        html += `
+          <tr>
+            <td class="sticky-col-1 strong">${m.managerName}</td>
+            <td>${m.teamName}</td>
+            <td>${chipsUsed}</td>
+            <td class="strong">${chipsRemaining}</td>
+          </tr>
+        `;
+      }
+
+      html += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <h2 class="page-title" style="font-size: 1.1rem;">Detailed Chip Usage by Gameweek</h2>
+
+        <div class="table-shell">
+          <div class="table-scroll" role="region" aria-label="Chips detailed table" tabindex="0">
+            <table class="data-table" style="--sticky-col-1-width: 240px;">
+              <thead>
+                <tr>
+                  <th class="sticky-col-1">Manager</th>
+                  <th>Team Name</th>
+                  <th>Chips Played (GW)</th>
+                </tr>
+              </thead>
+              <tbody>
+      `;
+
+      for (const m of managersData) {
+        let chipsPlayedText = "";
+        
+        if (m.chips.length === 0) {
+          chipsPlayedText = '<span style="color:#64748b; font-style:italic;">No chips used yet</span>';
+        } else {
+          // Sort chips by gameweek
+          const sortedChips = [...m.chips].sort((a, b) => a.gw - b.gw);
+          chipsPlayedText = sortedChips.map(chip => `${chip.name} ${chip.gw}`).join(", ");
+        }
+        
+        html += `
+          <tr>
+            <td class="sticky-col-1 strong">${m.managerName}</td>
+            <td>${m.teamName}</td>
+            <td>${chipsPlayedText}</td>
+          </tr>
+        `;
+      }
+
+      html += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+      
+      return html;
     }
 
-    /* Stack filter controls vertically */
-    div[style*="margin-bottom"] {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75em;
+    async function loadChips(ids) {
+      if (ids.length === 0) {
+        out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
+        return;
+      }
+
+      const allData = [];
+      out.innerHTML = "";
+      loadingStatus.textContent = `Loading 0 of ${ids.length} managers...`;
+      
+      let loaded = 0;
+      for (const id of ids) {
+        try {
+          const data = await fetchManagerData(id);
+          if (data) {
+            allData.push(data);
+            loaded++;
+            
+            loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+            
+            allData.sort((a, b) => a.managerName.localeCompare(b.managerName));
+            out.innerHTML = makeChipsTable(allData);
+          }
+        } catch (e) {
+          console.error(`Failed to load manager ${id}:`, e);
+          loaded++;
+        }
+      }
+      
+      loadingStatus.innerHTML = `<span style='color:#16a34a; font-weight: 700;'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
     }
 
-    /* Full width buttons on mobile */
-    button {
-      width: 100%;
-      padding: 10px 16px;
-      font-size: 14px;
-      min-height: 44px;
+    async function updateDisplay() {
+      managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+      if (managerIds.length === 0) {
+        out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+        return;
+      }
+      
+      await loadChips(managerIds);
     }
 
-    /* Make table scrollable horizontally */
-    #chips-output {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-    }
+    (async function init() {
+      const { managerIds: ids } = await loadManagerIdsFromSupabase();
+      managerIds = ids;
+      
+      await updateDisplay();
+    })();
 
-    table {
-      min-width: 500px;
-      font-size: 0.8em;
-    }
-
-    th, td {
-      padding: 6px 4px;
-    }
-
-    /* Increase touch target for links */
-    a {
-      padding: 8px;
-      min-height: 44px;
-      display: inline-flex;
-      align-items: center;
-    }
-  }
-
-  /* Extra small phones (480px and below) */
-  @media (max-width: 480px) {
-    body {
-      padding: 0.25em;
-      font-size: 13px;
-    }
-
-    h1 {
-      font-size: 1.3em;
-    }
-
-    h2 {
-      font-size: 1.15em;
-    }
-
-    table {
-      min-width: 400px;
-      font-size: 0.7em;
-    }
-
-    th, td {
-      padding: 3px 2px !important;
-      font-size: 11px;
-    }
-
-    /* Reduce button padding on very small screens */
-    button {
-      padding: 8px 12px;
-      font-size: 13px;
-    }
-  }
-</style></body>
-</html>
+    refreshBtn.addEventListener('click', async () => {
+      const { managerIds: ids } = await loadManagerIdsFromSupabase();
+      managerIds = ids;
+      await updateDisplay();
+    });
+  </script>
+</Layout>
