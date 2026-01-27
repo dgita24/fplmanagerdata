@@ -499,8 +499,8 @@ function makeLiveTable(managers, compareToId = "") {
   let html = `<h2>Live League Standings</h2>
   <table border="1" cellpadding="3" style="border-collapse:collapse; table-layout: auto; font-size: 0.9em;">
     <tr style="background:#f0f0f0">
-      <th style="width: 40px;">Rank</th>
-      <th style="min-width: 100px;">Manager</th>
+      <th class="sticky-col left-col" style="width: 40px;">Rank</th>
+      <th class="sticky-col" style="min-width: 100px;">Manager</th>
       <th style="background:#e6f7ff; width: 50px;">Live<br/>GW Pts</th>
       <th style="width: 50px;">Bonus<br/>Pts</th>
       <th style="width: 50px;">Transfer<br/>Hit</th>
@@ -525,8 +525,8 @@ function makeLiveTable(managers, compareToId = "") {
 
     // Render
     html += `<tr>
-      <td style="text-align: center;">${rank}</td>
-      <td><strong><a href="/squads?manager=${m.entryId}" style="color: #3182ce; text-decoration: none; cursor: pointer;">${m.managerName}</a></strong></td>
+      <td class="sticky-col left-col" style="text-align: center;">${rank}</td>
+      <td class="sticky-col"><strong><a href="/squads?manager=${m.entryId}" style="color: #3182ce; text-decoration: none; cursor: pointer;">${m.managerName}</a></strong></td>
       <td style="background:#e6f7ff; font-weight: bold; text-align: center;">${m.livePointsBeforeHits}</td>
       <td style="text-align: center;">${m.projectedBonus}</td>
       <td style="color:#e53e3e; text-align:center;">${m.transferCost === 0 ? "0" : `-${Math.abs(m.transferCost)}`}</td>
@@ -541,6 +541,7 @@ function makeLiveTable(managers, compareToId = "") {
   html += "</table>";
   return html;
 }
+
 
 async function loadLive(ids, gw) {
   if (ids.length === 0) {
