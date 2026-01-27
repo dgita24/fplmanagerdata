@@ -64,7 +64,7 @@ import Nav from "../components/Nav.astro";
     <section id="squads-output" aria-live="polite"></section>
   </div>
 
-  <script>
+  <script type="module">
     import { supabase } from '../lib/supabase.ts'
 
     async function loadManagerIdsFromSupabase() {
