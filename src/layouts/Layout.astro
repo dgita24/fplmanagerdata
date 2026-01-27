@@ -48,15 +48,12 @@ const { title = "FPL Manager Data" } = Astro.props;
 
     --container: 1200px;
 
-    /* Sticky column system:
-       Each table can override these per-table via inline style on <table> or wrapper.
-       Defaults are safe for Rank+Manager style tables.
-    */
-    --sticky-col-1-width: 56px;
-    --sticky-col-2-width: 220px;
+    /* Sticky column system - tighter defaults */
+    --sticky-col-1-width: 50px;
+    --sticky-col-2-width: 200px;
 
-    --sticky-z-header: 4;
-    --sticky-z-body: 3;
+    --sticky-z-header: 10;
+    --sticky-z-body: 5;
   }
 
   *, *::before, *::after { box-sizing: border-box; }
@@ -170,6 +167,12 @@ const { title = "FPL Manager Data" } = Astro.props;
     font: inherit;
   }
 
+  /* Auto-width selects for narrower dropdowns */
+  .select.auto-width {
+    width: auto;
+    min-width: 180px;
+  }
+
   .textarea {
     min-height: 180px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -222,7 +225,7 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ----------------------------
-     Table system
+     Table system (denser, larger text when zoomed out)
   ----------------------------- */
   .table-shell {
     border: 1px solid var(--border);
@@ -241,17 +244,18 @@ const { title = "FPL Manager Data" } = Astro.props;
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    font-size: 0.9rem;
-    min-width: 720px;
+    font-size: 0.95rem; /* Increased from 0.9rem */
+    min-width: 600px; /* Reduced from 720px */
   }
 
   .data-table th,
   .data-table td {
-    padding: 10px 10px;
+    padding: 8px 10px; /* Reduced from 10px */
     border-bottom: 1px solid var(--border);
-    border-right: 1px solid var(--border); /* column dividers */
+    border-right: 1px solid var(--border);
     vertical-align: middle;
     background: #fff;
+    white-space: nowrap;
   }
 
   .data-table th:last-child,
@@ -274,43 +278,40 @@ const { title = "FPL Manager Data" } = Astro.props;
   .data-table .strong { font-weight: 900; }
 
   /* ----------------------------
-     Generic sticky column classes
-     Use sticky-col-1 and sticky-col-2 on TH/TD you want frozen.
-     Tune widths per table by setting CSS vars on the <table>:
-       style="--sticky-col-1-width: 56px; --sticky-col-2-width: 240px;"
+     Sticky columns (FIXED z-index + positioning)
   ----------------------------- */
   .sticky-col-1,
   .sticky-col-2 {
-    position: sticky;
+    position: sticky !important;
     background: #fff;
   }
 
   .sticky-col-1 {
-    left: 0;
+    left: 0 !important;
     width: var(--sticky-col-1-width);
     min-width: var(--sticky-col-1-width);
     max-width: var(--sticky-col-1-width);
     z-index: var(--sticky-z-body);
-    box-shadow: 1px 0 0 var(--border);
+    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
   }
 
   .sticky-col-2 {
-    left: var(--sticky-col-1-width);
+    left: var(--sticky-col-1-width) !important;
     width: var(--sticky-col-2-width);
     min-width: var(--sticky-col-2-width);
     max-width: var(--sticky-col-2-width);
     z-index: calc(var(--sticky-z-body) - 1);
-    box-shadow: 1px 0 0 var(--border);
+    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
   }
 
   .data-table thead .sticky-col-1,
   .data-table thead .sticky-col-2 {
-    background: var(--surface);
-    z-index: var(--sticky-z-header);
+    background: var(--surface) !important;
+    z-index: var(--sticky-z-header) !important;
   }
 
   @media (max-width: 480px) {
-    .data-table { font-size: 0.8rem; min-width: 760px; }
-    .data-table th, .data-table td { padding: 8px 8px; }
+    .data-table { font-size: 0.85rem; min-width: 580px; }
+    .data-table th, .data-table td { padding: 7px 8px; }
   }
 </style>
