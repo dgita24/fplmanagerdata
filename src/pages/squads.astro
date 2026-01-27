@@ -104,19 +104,15 @@ import Nav from "../components/Nav.astro";
     const refreshBtn = document.getElementById("refresh-btn");
 
     let managerIds = [];
-
     let allSquadsData = [];
     let latestGW = null;
 
-    // Bootstrap caches
-    let playerCache = new Map(); // playerId -> { name, position, teamId }
-    let teamCache = new Map();   // teamId -> short_name
-
-    // Live caches
-    let fixturesCache = new Map();        // optional, but kept for debugging
-    let livePointsCache = new Map();      // playerId -> { points, bonus, minutes }
-    let projectedBonusCache = new Map();  // key: `${gw}:${playerId}` -> projected bonus
-    let teamStatusCache = new Map();      // key: `${gw}:${teamId}` -> { started, finished }
+    let playerCache = new Map();
+    let teamCache = new Map();
+    let fixturesCache = new Map();
+    let livePointsCache = new Map();
+    let projectedBonusCache = new Map();
+    let teamStatusCache = new Map();
 
     function getTeamGwStatus(teamId, gw) {
       return teamStatusCache.get(`${gw}:${teamId}`) || { started: false, finished: false };
@@ -176,8 +172,6 @@ import Nav from "../components/Nav.astro";
       const confirmedBonus = Number(live.bonus) || 0;
       const minutes = Number(live.minutes) || 0;
 
-      // Excel-style: while match not finished, remove confirmed bonus from locked points,
-      // then add projected bonus separately from BPS.
       const locked = finished ? officialTotal : (officialTotal - confirmedBonus);
       const projBonus = finished ? 0 : (Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0);
       const liveTotal = locked + projBonus;
@@ -197,8 +191,6 @@ import Nav from "../components/Nav.astro";
       const capId = cap ? cap.playerId : null;
       const vcId  = vc  ? vc.playerId : null;
 
-      // Switch ONLY when captain is confirmed no-show (0 mins + finished),
-      // consistent with your dnp flag.
       const capDnp = cap ? !!cap.dnp : true;
       const vcDnp  = vc  ? !!vc.dnp  : true;
 
@@ -213,7 +205,6 @@ import Nav from "../components/Nav.astro";
       });
     }
 
-    // Only for ON/OFF indicators; does NOT change the points column (we always show raw gwPoints).
     function applyAutoSubsKeepAll(teamPicks, chipCode) {
       const isBB = chipCode === "BB";
 
@@ -316,7 +307,7 @@ import Nav from "../components/Nav.astro";
       teamStatusCache.clear();
       projectedBonusCache.clear();
 
-      const perTeam = new Map(); // teamId -> { startedAny, finishedAll }
+      const perTeam = new Map();
       function upsertTeam(teamId, started, finished) {
         const cur = perTeam.get(teamId) || { startedAny: false, finishedAll: true };
         cur.startedAny = cur.startedAny || !!started || !!finished;
@@ -331,7 +322,6 @@ import Nav from "../components/Nav.astro";
         fixturesCache.set(`${fx.team_h}-${gw}`, { opponent: fx.team_a, finished: fx.finished, started: fx.started });
         fixturesCache.set(`${fx.team_a}-${gw}`, { opponent: fx.team_h, finished: fx.finished, started: fx.started });
 
-        // Only project bonus for live fixtures
         if (!fx.started || fx.finished) continue;
 
         const stats = Array.isArray(fx.stats) ? fx.stats : [];
@@ -405,10 +395,9 @@ import Nav from "../components/Nav.astro";
             isViceCaptain: !!pick.is_vice_captain,
 
             minutes: computed.minutes,
-            status: computed.status, // "v" | "Live" | "Fin"
+            status: computed.status,
             dnp: computed.dnp,
 
-            // Raw projected points for this player (no multipliers)
             gwPoints: Math.trunc(Number(computed.liveTotal) || 0),
             projBonus: Math.trunc(Number(computed.projBonus) || 0),
 
@@ -497,15 +486,14 @@ import Nav from "../components/Nav.astro";
               </h3>
             </div>
 
-            <div class="table-scroll" role="region" aria-label="Squad table for ${manager.managerName}" tabindex="0">
-              <table class="data-table" style="min-width: 640px; --sticky-col-1-width: 64px; --sticky-col-2-width: 260px;">
+            <div style="overflow-x: auto; -webkit-overflow-scrolling: touch;" role="region" aria-label="Squad table for ${manager.managerName}" tabindex="0">
+              <table class="data-table" style="min-width: 580px; --sticky-col-1-width: 50px; --sticky-col-2-width: 180px;">
                 <thead>
                   <tr>
                     <th class="sticky-col-1 num">Pos</th>
                     <th class="sticky-col-2">Player</th>
-                    <th class="num">Position</th>
                     <th class="num">Team</th>
-                    <th class="num">GW<br/>Pts</th>
+                    <th class="num">GW Pts</th>
                     <th class="num">C/VC</th>
                   </tr>
                 </thead>
@@ -552,12 +540,11 @@ import Nav from "../components/Nav.astro";
             <tr style="background: ${rowBg};">
               <td class="sticky-col-1 num strong">${player.position}</td>
               <td class="sticky-col-2" style="background: ${nameBg}; font-weight: ${player.isCaptain ? '900' : '700'};">
-                <span style="display:inline-flex; align-items:center; gap:8px;">
+                <span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">
                   <span>${player.playerName}</span>
-                  ${indicator ? `<span class="badge" style="padding: 2px 8px; font-size: 0.78rem;">${indicator}</span>` : ""}
+                  ${indicator ? `<span class="badge" style="padding: 2px 6px; font-size: 0.75rem;">${indicator}</span>` : ""}
                 </span>
               </td>
-              <td class="num">${player.playerPosition}</td>
               <td class="num">${player.teamName}</td>
               <td class="num strong">${player.gwPointsCap ?? player.gwPoints ?? 0}</td>
               <td class="num strong" style="color: ${player.isCaptain ? 'var(--danger)' : 'var(--primary)'};">${captainBadge}</td>
@@ -591,7 +578,6 @@ import Nav from "../components/Nav.astro";
       out.innerHTML = "";
       loadingStatus.textContent = `Loading live data + squads for GW${gw}...`;
 
-      // Load live context once per GW
       try {
         await Promise.all([fetchFixtures(gw), fetchLiveGW(gw)]);
       } catch (e) {
@@ -627,7 +613,7 @@ import Nav from "../components/Nav.astro";
         <span class="badge">✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>
         <span style="font-size: 0.85rem; color: var(--muted);">
           <strong>Legend:</strong>
-          NS = Not started · Live = In play · Fin = Finished · ON = Subbed on · OFF = Subbed off · DNP = Didn’t play
+          NS = Not started · Live = In play · Fin = Finished · ON = Subbed on · OFF = Subbed off · DNP = Didn't play
         </span>
       `;
     }
