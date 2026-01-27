@@ -7,35 +7,41 @@ import Nav from "../components/Nav.astro";
 
   <div class="page">
     <header class="page-header">
-      <h1 class="page-title">Welcome to FPL Manager Data</h1>
+      <h1 class="page-title">FPL Manager Data</h1>
       <p class="page-subtitle">
-        Use the navigation above to view Squads, Transfers, Chips, Stats, Ownership, and Live standings.
+        Track squads, transfers, chips, ownership, stats, and live standings for your league.
       </p>
     </header>
 
     <div class="table-shell">
       <div style="padding: 12px;">
-        <h2 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">🚀 First time here?</h2>
-        <p style="margin: 0 0 12px 0; color: var(--muted);">
-          Start by adding your league’s manager EntryIDs. They’ll sync to your account across devices.
+        <p style="margin: 0 0 10px 0; color: var(--muted);">
+          First time here? Start by saving your league’s manager EntryIDs.
         </p>
-        <a class="btn btn--primary" href="/managers" style="display:inline-flex; align-items:center; justify-content:center;">
-          ⚙ Go to Managers Page
-        </a>
-      </div>
-    </div>
 
-    <div class="table-shell">
-      <div style="padding: 12px;">
-        <h2 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">Pages</h2>
-        <ul style="margin: 0; padding-left: 18px; line-height: 1.9;">
-          <li><a href="/transfers">Transfers</a> — Transfer histories and free transfer (FT) calculations</li>
-          <li><a href="/squads">Squads</a> — Lineups for any manager</li>
-          <li><a href="/chips">Chips</a> — Chip usage summary and detail</li>
-          <li><a href="/stats">Stats</a> — League standings and summary metrics</li>
-          <li><a href="/ownership">Ownership</a> — Player ownership across managers</li>
-          <li><a href="/live">Live</a> — Live GW points and projected overall standings</li>
-        </ul>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <a class="btn btn--primary" href="/managers" style="display:inline-flex; align-items:center; justify-content:center;">
+            ⚙ Managers
+          </a>
+          <a class="btn btn--neutral" href="/live" style="display:inline-flex; align-items:center; justify-content:center;">
+            🔴 Live
+          </a>
+          <a class="btn btn--neutral" href="/stats" style="display:inline-flex; align-items:center; justify-content:center;">
+            📊 Stats
+          </a>
+          <a class="btn btn--neutral" href="/transfers" style="display:inline-flex; align-items:center; justify-content:center;">
+            🔁 Transfers
+          </a>
+          <a class="btn btn--neutral" href="/chips" style="display:inline-flex; align-items:center; justify-content:center;">
+            🧩 Chips
+          </a>
+          <a class="btn btn--neutral" href="/ownership" style="display:inline-flex; align-items:center; justify-content:center;">
+            🧠 Ownership
+          </a>
+          <a class="btn btn--neutral" href="/squads" style="display:inline-flex; align-items:center; justify-content:center;">
+            👥 Squads
+          </a>
+        </div>
       </div>
     </div>
   </div>
