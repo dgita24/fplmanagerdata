@@ -104,15 +104,19 @@ import Nav from "../components/Nav.astro";
     const refreshBtn = document.getElementById("refresh-btn");
 
     let managerIds = [];
+
     let allSquadsData = [];
     let latestGW = null;
 
-    let playerCache = new Map();
-    let teamCache = new Map();
-    let fixturesCache = new Map();
-    let livePointsCache = new Map();
-    let projectedBonusCache = new Map();
-    let teamStatusCache = new Map();
+    // Bootstrap caches
+    let playerCache = new Map(); // playerId -> { name, position, teamId }
+    let teamCache = new Map();   // teamId -> short_name
+
+    // Live caches
+    let fixturesCache = new Map();        // optional, but kept for debugging
+    let livePointsCache = new Map();      // playerId -> { points, bonus, minutes }
+    let projectedBonusCache = new Map();  // key: `${gw}:${playerId}` -> projected bonus
+    let teamStatusCache = new Map();      // key: `${gw}:${teamId}` -> { started, finished }
 
     function getTeamGwStatus(teamId, gw) {
       return teamStatusCache.get(`${gw}:${teamId}`) || { started: false, finished: false };
@@ -172,6 +176,8 @@ import Nav from "../components/Nav.astro";
       const confirmedBonus = Number(live.bonus) || 0;
       const minutes = Number(live.minutes) || 0;
 
+      // Excel-style: while match not finished, remove confirmed bonus from locked points,
+      // then add projected bonus separately from BPS.
       const locked = finished ? officialTotal : (officialTotal - confirmedBonus);
       const projBonus = finished ? 0 : (Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0);
       const liveTotal = locked + projBonus;
@@ -191,6 +197,8 @@ import Nav from "../components/Nav.astro";
       const capId = cap ? cap.playerId : null;
       const vcId  = vc  ? vc.playerId : null;
 
+      // Switch ONLY when captain is confirmed no-show (0 mins + finished),
+      // consistent with your dnp flag.
       const capDnp = cap ? !!cap.dnp : true;
       const vcDnp  = vc  ? !!vc.dnp  : true;
 
@@ -205,6 +213,7 @@ import Nav from "../components/Nav.astro";
       });
     }
 
+    // Only for ON/OFF indicators; does NOT change the points column (we always show raw gwPoints).
     function applyAutoSubsKeepAll(teamPicks, chipCode) {
       const isBB = chipCode === "BB";
 
@@ -307,7 +316,7 @@ import Nav from "../components/Nav.astro";
       teamStatusCache.clear();
       projectedBonusCache.clear();
 
-      const perTeam = new Map();
+      const perTeam = new Map(); // teamId -> { startedAny, finishedAll }
       function upsertTeam(teamId, started, finished) {
         const cur = perTeam.get(teamId) || { startedAny: false, finishedAll: true };
         cur.startedAny = cur.startedAny || !!started || !!finished;
@@ -322,6 +331,7 @@ import Nav from "../components/Nav.astro";
         fixturesCache.set(`${fx.team_h}-${gw}`, { opponent: fx.team_a, finished: fx.finished, started: fx.started });
         fixturesCache.set(`${fx.team_a}-${gw}`, { opponent: fx.team_h, finished: fx.finished, started: fx.started });
 
+        // Only project bonus for live fixtures
         if (!fx.started || fx.finished) continue;
 
         const stats = Array.isArray(fx.stats) ? fx.stats : [];
@@ -395,9 +405,10 @@ import Nav from "../components/Nav.astro";
             isViceCaptain: !!pick.is_vice_captain,
 
             minutes: computed.minutes,
-            status: computed.status,
+            status: computed.status, // "v" | "Live" | "Fin"
             dnp: computed.dnp,
 
+            // Raw projected points for this player (no multipliers)
             gwPoints: Math.trunc(Number(computed.liveTotal) || 0),
             projBonus: Math.trunc(Number(computed.projBonus) || 0),
 
@@ -476,8 +487,6 @@ import Nav from "../components/Nav.astro";
       let html = "";
 
       for (const manager of filteredManagers) {
-        const tableId = `squad-table-${manager.entryId}`;
-
         html += `
           <div class="table-shell" style="margin-bottom: 14px;">
             <div style="padding: 12px; border-bottom: 1px solid var(--border); background: var(--surface);">
@@ -488,15 +497,16 @@ import Nav from "../components/Nav.astro";
               </h3>
             </div>
 
-            <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;" role="region" aria-label="Squad table for ${manager.managerName}" tabindex="0">
-              <table id="${tableId}" style="width: 100%; min-width: 580px; border-collapse: separate; border-spacing: 0; font-size: 0.95rem;">
+            <div class="table-scroll" role="region" aria-label="Squad table for ${manager.managerName}" tabindex="0">
+              <table class="data-table" style="min-width: 640px; --sticky-col-1-width: 64px; --sticky-col-2-width: 260px;">
                 <thead>
                   <tr>
-                    <th style="position: sticky; left: 0; z-index: 20; background: var(--surface); padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; font-weight: 900; width: 50px; min-width: 50px; box-shadow: 2px 0 4px rgba(0,0,0,0.08);">Pos</th>
-                    <th style="position: sticky; left: 50px; z-index: 20; background: var(--surface); padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: left; font-weight: 900; min-width: 180px; box-shadow: 2px 0 4px rgba(0,0,0,0.08);">Player</th>
-                    <th style="padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; font-weight: 900; background: var(--surface); width: 60px;">Team</th>
-                    <th style="padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; font-weight: 900; background: var(--surface); width: 70px;">GW Pts</th>
-                    <th style="padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; font-weight: 900; background: var(--surface); width: 60px;">C/VC</th>
+                    <th class="sticky-col-1 num">Pos</th>
+                    <th class="sticky-col-2">Player</th>
+                    <th class="num">Position</th>
+                    <th class="num">Team</th>
+                    <th class="num">GW<br/>Pts</th>
+                    <th class="num">C/VC</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -534,22 +544,23 @@ import Nav from "../components/Nav.astro";
             player.status === "v" ? "#fef9c3" :
             player.status === "Live" ? "#dbeafe" :
             player.dnp ? "#fee2e2" :
-            (isBench ? "#f8fafc" : "#fff");
+            (isBench ? "#f8fafc" : "");
 
           const rowBg = isBench ? "#f8fafc" : "#ffffff";
 
           html += `
             <tr style="background: ${rowBg};">
-              <td style="position: sticky; left: 0; z-index: 10; background: ${rowBg}; padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; font-weight: 900; box-shadow: 2px 0 4px rgba(0,0,0,0.08);">${player.position}</td>
-              <td style="position: sticky; left: 50px; z-index: 10; background: ${nameBg}; padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); font-weight: ${player.isCaptain ? '900' : '700'}; box-shadow: 2px 0 4px rgba(0,0,0,0.08);">
-                <span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">
+              <td class="sticky-col-1 num strong">${player.position}</td>
+              <td class="sticky-col-2" style="background: ${nameBg}; font-weight: ${player.isCaptain ? '900' : '700'};">
+                <span style="display:inline-flex; align-items:center; gap:8px;">
                   <span>${player.playerName}</span>
-                  ${indicator ? `<span class="badge" style="padding: 2px 6px; font-size: 0.75rem;">${indicator}</span>` : ""}
+                  ${indicator ? `<span class="badge" style="padding: 2px 8px; font-size: 0.78rem;">${indicator}</span>` : ""}
                 </span>
               </td>
-              <td style="padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; background: ${rowBg};">${player.teamName}</td>
-              <td style="padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; font-weight: 900; background: ${rowBg};">${player.gwPointsCap ?? player.gwPoints ?? 0}</td>
-              <td style="padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; font-weight: 900; color: ${player.isCaptain ? 'var(--danger)' : 'var(--primary)'}; background: ${rowBg};">${captainBadge}</td>
+              <td class="num">${player.playerPosition}</td>
+              <td class="num">${player.teamName}</td>
+              <td class="num strong">${player.gwPointsCap ?? player.gwPoints ?? 0}</td>
+              <td class="num strong" style="color: ${player.isCaptain ? 'var(--danger)' : 'var(--primary)'};">${captainBadge}</td>
             </tr>
           `;
         }
@@ -580,6 +591,7 @@ import Nav from "../components/Nav.astro";
       out.innerHTML = "";
       loadingStatus.textContent = `Loading live data + squads for GW${gw}...`;
 
+      // Load live context once per GW
       try {
         await Promise.all([fetchFixtures(gw), fetchLiveGW(gw)]);
       } catch (e) {
@@ -615,7 +627,7 @@ import Nav from "../components/Nav.astro";
         <span class="badge">✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>
         <span style="font-size: 0.85rem; color: var(--muted);">
           <strong>Legend:</strong>
-          NS = Not started · Live = In play · Fin = Finished · ON = Subbed on · OFF = Subbed off · DNP = Didn't play
+          NS = Not started · Live = In play · Fin = Finished · ON = Subbed on · OFF = Subbed off · DNP = Didn’t play
         </span>
       `;
     }
