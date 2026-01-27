@@ -476,6 +476,8 @@ import Nav from "../components/Nav.astro";
       let html = "";
 
       for (const manager of filteredManagers) {
+        const tableId = `squad-table-${manager.entryId}`;
+
         html += `
           <div class="table-shell" style="margin-bottom: 14px;">
             <div style="padding: 12px; border-bottom: 1px solid var(--border); background: var(--surface);">
@@ -486,15 +488,15 @@ import Nav from "../components/Nav.astro";
               </h3>
             </div>
 
-            <div style="overflow-x: auto; -webkit-overflow-scrolling: touch;" role="region" aria-label="Squad table for ${manager.managerName}" tabindex="0">
-              <table class="data-table" style="min-width: 580px; --sticky-col-1-width: 50px; --sticky-col-2-width: 180px;">
+            <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;" role="region" aria-label="Squad table for ${manager.managerName}" tabindex="0">
+              <table id="${tableId}" style="width: 100%; min-width: 580px; border-collapse: separate; border-spacing: 0; font-size: 0.95rem;">
                 <thead>
                   <tr>
-                    <th class="sticky-col-1 num">Pos</th>
-                    <th class="sticky-col-2">Player</th>
-                    <th class="num">Team</th>
-                    <th class="num">GW Pts</th>
-                    <th class="num">C/VC</th>
+                    <th style="position: sticky; left: 0; z-index: 20; background: var(--surface); padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; font-weight: 900; width: 50px; min-width: 50px; box-shadow: 2px 0 4px rgba(0,0,0,0.08);">Pos</th>
+                    <th style="position: sticky; left: 50px; z-index: 20; background: var(--surface); padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: left; font-weight: 900; min-width: 180px; box-shadow: 2px 0 4px rgba(0,0,0,0.08);">Player</th>
+                    <th style="padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; font-weight: 900; background: var(--surface); width: 60px;">Team</th>
+                    <th style="padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; font-weight: 900; background: var(--surface); width: 70px;">GW Pts</th>
+                    <th style="padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; font-weight: 900; background: var(--surface); width: 60px;">C/VC</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -532,22 +534,22 @@ import Nav from "../components/Nav.astro";
             player.status === "v" ? "#fef9c3" :
             player.status === "Live" ? "#dbeafe" :
             player.dnp ? "#fee2e2" :
-            (isBench ? "#f8fafc" : "");
+            (isBench ? "#f8fafc" : "#fff");
 
           const rowBg = isBench ? "#f8fafc" : "#ffffff";
 
           html += `
             <tr style="background: ${rowBg};">
-              <td class="sticky-col-1 num strong">${player.position}</td>
-              <td class="sticky-col-2" style="background: ${nameBg}; font-weight: ${player.isCaptain ? '900' : '700'};">
+              <td style="position: sticky; left: 0; z-index: 10; background: ${rowBg}; padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; font-weight: 900; box-shadow: 2px 0 4px rgba(0,0,0,0.08);">${player.position}</td>
+              <td style="position: sticky; left: 50px; z-index: 10; background: ${nameBg}; padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); font-weight: ${player.isCaptain ? '900' : '700'}; box-shadow: 2px 0 4px rgba(0,0,0,0.08);">
                 <span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">
                   <span>${player.playerName}</span>
                   ${indicator ? `<span class="badge" style="padding: 2px 6px; font-size: 0.75rem;">${indicator}</span>` : ""}
                 </span>
               </td>
-              <td class="num">${player.teamName}</td>
-              <td class="num strong">${player.gwPointsCap ?? player.gwPoints ?? 0}</td>
-              <td class="num strong" style="color: ${player.isCaptain ? 'var(--danger)' : 'var(--primary)'};">${captainBadge}</td>
+              <td style="padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; background: ${rowBg};">${player.teamName}</td>
+              <td style="padding: 8px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); text-align: center; font-weight: 900; background: ${rowBg};">${player.gwPointsCap ?? player.gwPoints ?? 0}</td>
+              <td style="padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; font-weight: 900; color: ${player.isCaptain ? 'var(--danger)' : 'var(--primary)'}; background: ${rowBg};">${captainBadge}</td>
             </tr>
           `;
         }
