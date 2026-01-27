@@ -25,9 +25,6 @@ const { title = "FPL Manager Data" } = Astro.props;
 </html>
 
 <style is:global>
-  /* ----------------------------
-     Design tokens (2026-ready)
-  ----------------------------- */
   :root {
     color-scheme: light;
 
@@ -51,15 +48,17 @@ const { title = "FPL Manager Data" } = Astro.props;
 
     --container: 1200px;
 
-    /* Table sticky column tuning */
-    --sticky-col-1-width: 56px; /* Rank column width */
+    /* Sticky column system:
+       Each table can override these per-table via inline style on <table> or wrapper.
+       Defaults are safe for Rank+Manager style tables.
+    */
+    --sticky-col-1-width: 56px;
+    --sticky-col-2-width: 220px;
+
     --sticky-z-header: 4;
     --sticky-z-body: 3;
   }
 
-  /* ----------------------------
-     Base / Reset
-  ----------------------------- */
   *, *::before, *::after { box-sizing: border-box; }
   html, body { height: 100%; }
 
@@ -68,10 +67,6 @@ const { title = "FPL Manager Data" } = Astro.props;
     background: var(--bg);
     color: var(--text);
 
-    /*
-      Emoji + Unicode support:
-      - system UI fonts + common emoji fonts across platforms
-    */
     font-family:
       ui-sans-serif,
       system-ui,
@@ -93,6 +88,7 @@ const { title = "FPL Manager Data" } = Astro.props;
 
   a { color: var(--primary); text-decoration: none; }
   a:hover { text-decoration: underline; }
+
   a:focus-visible,
   button:focus-visible,
   input:focus-visible,
@@ -103,12 +99,7 @@ const { title = "FPL Manager Data" } = Astro.props;
     border-radius: 8px;
   }
 
-  /* ----------------------------
-     App layout helpers
-  ----------------------------- */
-  .app-shell {
-    min-height: 100%;
-  }
+  .app-shell { min-height: 100%; }
 
   .app-main {
     max-width: var(--container);
@@ -116,26 +107,12 @@ const { title = "FPL Manager Data" } = Astro.props;
     padding: 12px;
   }
 
-  @media (min-width: 640px) {
-    .app-main { padding: 16px; }
-  }
+  @media (min-width: 640px) { .app-main { padding: 16px; } }
+  @media (min-width: 1024px) { .app-main { padding: 20px; } }
 
-  @media (min-width: 1024px) {
-    .app-main { padding: 20px; }
-  }
+  .page { display: grid; gap: 12px; }
 
-  /* ----------------------------
-     Page structure
-  ----------------------------- */
-  .page {
-    display: grid;
-    gap: 12px;
-  }
-
-  .page-header {
-    display: grid;
-    gap: 6px;
-  }
+  .page-header { display: grid; gap: 6px; }
 
   .page-title {
     margin: 0;
@@ -154,9 +131,6 @@ const { title = "FPL Manager Data" } = Astro.props;
     .page-title { font-size: 1.5rem; }
   }
 
-  /* ----------------------------
-     Controls / Forms
-  ----------------------------- */
   .controls {
     display: grid;
     gap: 10px;
@@ -175,10 +149,7 @@ const { title = "FPL Manager Data" } = Astro.props;
     }
   }
 
-  .control {
-    display: grid;
-    gap: 6px;
-  }
+  .control { display: grid; gap: 6px; }
 
   .label {
     font-size: 0.9rem;
@@ -199,7 +170,10 @@ const { title = "FPL Manager Data" } = Astro.props;
     font: inherit;
   }
 
-  .textarea { min-height: 180px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  .textarea {
+    min-height: 180px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
 
   .btn {
     min-height: 44px;
@@ -222,11 +196,7 @@ const { title = "FPL Manager Data" } = Astro.props;
   .btn--danger { background: var(--danger); color: #fff; }
   .btn--danger:hover { filter: brightness(0.95); }
 
-  .btn--neutral {
-    background: #fff;
-    border-color: var(--border);
-    color: var(--text);
-  }
+  .btn--neutral { background: #fff; border-color: var(--border); color: var(--text); }
   .btn--neutral:hover { background: var(--surface-2); }
 
   .meta-row {
@@ -252,7 +222,7 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ----------------------------
-     Table system (mobile-first)
+     Table system
   ----------------------------- */
   .table-shell {
     border: 1px solid var(--border);
@@ -272,21 +242,21 @@ const { title = "FPL Manager Data" } = Astro.props;
     border-collapse: separate;
     border-spacing: 0;
     font-size: 0.9rem;
-    min-width: 720px; /* ensures horizontal scroll on mobile for dense tables */
+    min-width: 720px;
   }
 
   .data-table th,
   .data-table td {
     padding: 10px 10px;
     border-bottom: 1px solid var(--border);
-    border-right: 1px solid var(--border); /* vertical dividers */
+    border-right: 1px solid var(--border); /* column dividers */
     vertical-align: middle;
     background: #fff;
   }
 
   .data-table th:last-child,
   .data-table td:last-child {
-    border-right: 0; /* no divider after last column */
+    border-right: 0;
   }
 
   .data-table thead th {
@@ -304,8 +274,10 @@ const { title = "FPL Manager Data" } = Astro.props;
   .data-table .strong { font-weight: 900; }
 
   /* ----------------------------
-     Sticky (frozen) first 2 columns
-     Apply these classes to both TH and TD.
+     Generic sticky column classes
+     Use sticky-col-1 and sticky-col-2 on TH/TD you want frozen.
+     Tune widths per table by setting CSS vars on the <table>:
+       style="--sticky-col-1-width: 56px; --sticky-col-2-width: 240px;"
   ----------------------------- */
   .sticky-col-1,
   .sticky-col-2 {
@@ -313,7 +285,6 @@ const { title = "FPL Manager Data" } = Astro.props;
     background: #fff;
   }
 
-  /* Rank */
   .sticky-col-1 {
     left: 0;
     width: var(--sticky-col-1-width);
@@ -323,22 +294,21 @@ const { title = "FPL Manager Data" } = Astro.props;
     box-shadow: 1px 0 0 var(--border);
   }
 
-  /* Manager */
   .sticky-col-2 {
     left: var(--sticky-col-1-width);
-    min-width: 200px;
+    width: var(--sticky-col-2-width);
+    min-width: var(--sticky-col-2-width);
+    max-width: var(--sticky-col-2-width);
     z-index: calc(var(--sticky-z-body) - 1);
     box-shadow: 1px 0 0 var(--border);
   }
 
-  /* Ensure sticky header cells sit above sticky body cells */
   .data-table thead .sticky-col-1,
   .data-table thead .sticky-col-2 {
     background: var(--surface);
     z-index: var(--sticky-z-header);
   }
 
-  /* Compact density tweaks for small screens */
   @media (max-width: 480px) {
     .data-table { font-size: 0.8rem; min-width: 760px; }
     .data-table th, .data-table td { padding: 8px 8px; }
