@@ -279,8 +279,14 @@ const { title = "FPL Manager Data" } = Astro.props;
   .data-table td {
     padding: 10px 10px;
     border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border); /* vertical dividers */
     vertical-align: middle;
     background: #fff;
+  }
+
+  .data-table th:last-child,
+  .data-table td:last-child {
+    border-right: 0; /* no divider after last column */
   }
 
   .data-table thead th {
