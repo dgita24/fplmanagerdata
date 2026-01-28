@@ -466,6 +466,104 @@ import Nav from "../components/Nav.astro";
       }
     }
 
+    function filterSquad(manager, positionFilterValue = "", captainFilterValue = "") {
+      let squad = manager.squad || [];
+
+      if (positionFilterValue) {
+        squad = squad.filter(p => p.playerPosition === positionFilterValue);
+      }
+
+      if (captainFilterValue) {
+        if (captainFilterValue === 'captain') {
+          squad = squad.filter(p => p.isCaptain);
+        } else if (captainFilterValue === 'vice') {
+          squad = squad.filter(p => p.isViceCaptain);
+        } else if (captainFilterValue === 'both') {
+          squad = squad.filter(p => p.isCaptain || p.isViceCaptain);
+        }
+      }
+
+      return [...squad].sort((a, b) => a.position - b.position);
+    }
+
+    function makeSquadsCombinedTable(filteredManagers, positionFilterValue = "", captainFilterValue = "") {
+      let html = `
+        <div class="table-shell">
+          <div class="table-scroll" role="region" aria-label="Combined squads table" tabindex="0">
+            <table class="data-table" style="min-width: 720px;">
+              <thead>
+                <tr>
+                  <th style="width: 220px;">Manager</th>
+                  <th style="width: 220px;">Player</th>
+                  <th class="num" style="width: 60px;">Team</th>
+                  <th class="num" style="width: 70px;">GW Pts</th>
+                  <th class="num" style="width: 60px;">C/VC</th>
+                </tr>
+              </thead>
+              <tbody>
+      `;
+
+      for (const manager of filteredManagers) {
+        const squad = filterSquad(manager, positionFilterValue, captainFilterValue);
+        if (squad.length === 0) continue;
+
+        const rowspan = squad.length;
+
+        squad.forEach((player, idx) => {
+          const captainBadge = player.isCaptain ? "C" : player.isViceCaptain ? "VC" : "";
+          const isBench = player.position > 11;
+
+          const indicator =
+            player.subOn ? "ON" :
+            player.subOff ? "OFF" :
+            player.dnp ? "DNP" :
+            (player.status === "v" ? "NS" : "");
+
+          const nameBg =
+            player.status === "v" ? "#fef9c3" :
+            player.status === "Live" ? "#dbeafe" :
+            player.dnp ? "#fee2e2" :
+            (isBench ? "#f8fafc" : "");
+
+          const rowBg = isBench ? "#f8fafc" : "#ffffff";
+
+          html += `
+            <tr style="background: ${rowBg};">
+              ${
+                idx === 0
+                  ? `<td rowspan="${rowspan}" style="vertical-align: top; background: var(--surface); font-weight: 900; line-height: 1.2;">
+                      <div>${manager.managerName}</div>
+                      <div style="color: var(--muted); font-weight: 700; margin-top: 4px;">${manager.teamName}</div>
+                      ${manager.chipPlayed ? `<div style="margin-top: 8px;"><span class="badge">${manager.chipPlayed}</span></div>` : ""}
+                    </td>`
+                  : ``
+              }
+
+              <td style="background: ${nameBg}; font-weight: ${player.isCaptain ? '900' : '700'};">
+                <span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                  <span>${player.position}. ${player.playerName}</span>
+                  ${indicator ? `<span class="badge" style="padding: 2px 6px; font-size: 0.75rem;">${indicator}</span>` : ""}
+                </span>
+              </td>
+
+              <td class="num">${player.teamName}</td>
+              <td class="num strong">${player.gwPointsCap ?? player.gwPoints ?? 0}</td>
+              <td class="num strong" style="color: ${player.isCaptain ? 'var(--danger)' : 'var(--primary)'};">${captainBadge}</td>
+            </tr>
+          `;
+        });
+      }
+
+      html += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      return html;
+    }
+
     function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValue = "", captainFilterValue = "") {
       let filteredManagers = squadsData;
 
@@ -473,6 +571,16 @@ import Nav from "../components/Nav.astro";
         filteredManagers = squadsData.filter(m => m.entryId.toString() === managerFilterValue);
       }
 
+      const hasPositionFilter = !!positionFilterValue;
+      const hasCaptainFilter = !!captainFilterValue;
+      const useCombined = hasPositionFilter || hasCaptainFilter;
+
+      // Combined table ONLY when Position/Captaincy filters active
+      if (useCombined) {
+        return makeSquadsCombinedTable(filteredManagers, positionFilterValue, captainFilterValue);
+      }
+
+      // Default: per-manager tables (unchanged behavior)
       let html = "";
 
       for (const manager of filteredManagers) {
@@ -499,23 +607,9 @@ import Nav from "../components/Nav.astro";
                 <tbody>
         `;
 
-        let squad = manager.squad;
+        let squad = [...(manager.squad || [])];
 
-        if (positionFilterValue) {
-          squad = squad.filter(p => p.playerPosition === positionFilterValue);
-        }
-
-        if (captainFilterValue) {
-          if (captainFilterValue === 'captain') {
-            squad = squad.filter(p => p.isCaptain);
-          } else if (captainFilterValue === 'vice') {
-            squad = squad.filter(p => p.isViceCaptain);
-          } else if (captainFilterValue === 'both') {
-            squad = squad.filter(p => p.isCaptain || p.isViceCaptain);
-          }
-        }
-
-        squad = [...squad].sort((a, b) => a.position - b.position);
+        squad = squad.sort((a, b) => a.position - b.position);
 
         for (const player of squad) {
           const captainBadge = player.isCaptain ? "C" : player.isViceCaptain ? "VC" : "";
