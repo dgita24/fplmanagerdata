@@ -9,7 +9,8 @@ const { title = "FPL Manager Data" } = Astro.props;
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=0.5, maximum-scale=5.0, user-scalable=yes">
+    <!-- Back to normal scale; rely on scroll + sticky columns instead of forced zoom -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
@@ -55,8 +56,9 @@ const { title = "FPL Manager Data" } = Astro.props;
     --sticky-col-1-width: 56px;
     --sticky-col-2-width: 220px;
 
-    --sticky-z-header: 4;
-    --sticky-z-body: 3;
+    /* z-index layers tuned for iOS/Safari */
+    --sticky-z-header: 7;
+    --sticky-z-body: 6;
   }
 
   *, *::before, *::after { box-sizing: border-box; }
@@ -228,12 +230,18 @@ const { title = "FPL Manager Data" } = Astro.props;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: #fff;
-    overflow: hidden;
+
+    /* IMPORTANT: overflow hidden can break sticky columns on some mobile browsers */
+    overflow: visible;
+
     box-shadow: var(--shadow-sm);
   }
 
   .table-scroll {
+    /* The horizontal scroller is the containing block for sticky columns */
+    position: relative;
     overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
   }
 
@@ -262,7 +270,7 @@ const { title = "FPL Manager Data" } = Astro.props;
   .data-table thead th {
     position: sticky;
     top: 0;
-    z-index: 2;
+    z-index: var(--sticky-z-header);
     background: var(--surface);
     font-weight: 900;
     text-align: left;
@@ -275,14 +283,12 @@ const { title = "FPL Manager Data" } = Astro.props;
 
   /* ----------------------------
      Generic sticky column classes
-     Use sticky-col-1 and sticky-col-2 on TH/TD you want frozen.
-     Tune widths per table by setting CSS vars on the <table>:
-       style="--sticky-col-1-width: 56px; --sticky-col-2-width: 240px;"
   ----------------------------- */
   .sticky-col-1,
   .sticky-col-2 {
     position: sticky;
-    background: #fff;
+    background: #fff; /* prevents "see-through" while scrolling */
+    will-change: transform; /* helps iOS repaint */
   }
 
   .sticky-col-1 {
@@ -303,10 +309,11 @@ const { title = "FPL Manager Data" } = Astro.props;
     box-shadow: 1px 0 0 var(--border);
   }
 
+  /* Ensure sticky headers stay above sticky body cells */
   .data-table thead .sticky-col-1,
   .data-table thead .sticky-col-2 {
     background: var(--surface);
-    z-index: var(--sticky-z-header);
+    z-index: calc(var(--sticky-z-header) + 1);
   }
 
   @media (max-width: 480px) {
