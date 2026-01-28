@@ -3,239 +3,237 @@ import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 ---
 <Layout title="League Statistics & Manager Summary - FPL Manager Data">
-  <Nav />
+<Nav />
 
-  <div class="page">
-    <header class="page-header">
-      <h1 class="page-title">League Statistics &amp; Manager Summary</h1>
-      <p class="page-subtitle">
-        Overview of all managers' performance, rankings, and chip usage.
-      </p>
-    </header>
+<div class="page">
+<header class="page-header">
+<h1 class="page-title">League Statistics &amp; Manager Summary</h1>
+<p class="page-subtitle">
+Overview of all managers' performance, rankings, and chip usage.
+</p>
+</header>
 
-    <div class="meta-row">
-      <span id="manager-count" class="badge">Loading managers...</span>
-      <a href="/managers" class="badge">⚙ Manage IDs</a>
-      <button id="refresh-btn" class="btn btn--primary" type="button">🔄 Refresh Data</button>
-    </div>
+<div class="meta-row">
+<span id="manager-count" class="badge">Loading managers...</span>
+<a href="/managers" class="badge">⚙ Manage IDs</a>
+<button id="refresh-btn" class="btn btn--primary" type="button">🔄 Refresh Data</button>
+</div>
 
-    <div id="loading-status" class="meta-row"></div>
+<div id="loading-status" class="meta-row"></div>
 
-    <section id="stats-output" aria-live="polite"></section>
-  </div>
+<section id="stats-output" aria-live="polite"></section>
+</div>
 
-  <script>
-    import { supabase } from '../lib/supabase.ts'
+<script>
+import { supabase } from '../lib/supabase.ts'
 
-    async function loadManagerIdsFromSupabase() {
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        window.location.replace('/login')
-        return { authenticated: false, managerIds: [] }
-      }
-      
-      try {
-        const { data, error } = await supabase
-          .from('user_manager_lists')
-          .select('manager_ids')
-          .eq('user_id', user.id)
-          .single()
-        
-        if (error && error.code !== 'PGRST116') {
-          console.error('Error loading manager IDs:', error)
-          return { authenticated: true, managerIds: [] }
-        }
-        
-        return { authenticated: true, managerIds: data?.manager_ids || [] }
-      } catch (e) {
-        console.error('Error:', e)
-        return { authenticated: false, managerIds: [] }
-      }
-    }
+async function loadManagerIdsFromSupabase() {
+const { data: { user } } = await supabase.auth.getUser()
 
-    const out = document.getElementById("stats-output");
-    const loadingStatus = document.getElementById("loading-status");
-    const managerCountEl = document.getElementById("manager-count");
-    const refreshBtn = document.getElementById("refresh-btn");
+if (!user) {
+window.location.replace('/login')
+return { authenticated: false, managerIds: [] }
+}
 
-    let managerIds = [];
+try {
+const { data, error } = await supabase
+.from('user_manager_lists')
+.select('manager_ids')
+.eq('user_id', user.id)
+.single()
 
-    async function fetchManagerSummary(id) {
-      const summaryUrl = `/api/fpl/entry/${id}`;
-      const historyUrl = `/api/fpl/entry/${id}/history`;
-      
-      try {
-        const [summaryRes, historyRes] = await Promise.all([
-          fetch(summaryUrl),
-          fetch(historyUrl)
-        ]);
-        
-        if (!summaryRes.ok || !historyRes.ok) throw new Error("Load error");
-        
-        const summaryData = await summaryRes.json();
-        const historyData = await historyRes.json();
-        
-        const chips = historyData.chips || [];
-        const chipsUsed = chips.length > 0 
-          ? chips.map(c => {
-              const name = c.name === "wildcard" ? "WC" :
-                          c.name === "bboost" ? "BB" :
-                          c.name === "3xc" ? "TC" :
-                          c.name === "freehit" ? "FH" : c.name;
-              return name;
-            }).join(", ")
-          : "None";
-        
-        return {
-          entryId: Number(id),
-          teamName: summaryData.name,
-          firstName: summaryData.player_first_name,
-          lastName: summaryData.player_last_name,
-          managerName: `${summaryData.player_first_name} ${summaryData.player_last_name}`,
-          totalPoints: summaryData.summary_overall_points,
-          overallRank: summaryData.summary_overall_rank,
-          gwPoints: summaryData.summary_event_points,
-          gwRank: summaryData.summary_event_rank,
-          chipsUsed
-        };
-      } catch (e) {
-        console.error(`Error fetching manager ${id}:`, e);
-        return null;
-      }
-    }
+if (error && error.code !== 'PGRST116') {
+console.error('Error loading manager IDs:', error)
+return { authenticated: true, managerIds: [] }
+}
 
-    function makeStatsTable(managersData) {
-      let html = `
-        <h2 class="page-title" style="font-size: 1.1rem;">League Standings</h2>
+return { authenticated: true, managerIds: data?.manager_ids || [] }
+} catch (e) {
+console.error('Error:', e)
+return { authenticated: false, managerIds: [] }
+}
+}
 
-        <div class="table-shell">
-          <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
-            <table class="data-table"
-              style="
-                --sticky-col-1-width: 56px;
-                --sticky-col-2-width: 240px;
-              "
-            >
-              <thead>
-                <tr>
-                  <th class="sticky-col-1 num">Rank</th>
-                  <th class="sticky-col-2">Manager</th>
-                  <th>Team<br/>Name</th>
-                  <th class="num">Total<br/>Points</th>
-                  <th class="num">Overall<br/>Rank</th>
-                  <th class="num">GW<br/>Points</th>
-                  <th class="num">GW<br/>Rank</th>
-                  <th>Chips<br/>Used</th>
-                </tr>
-              </thead>
-              <tbody>
-      `;
-      
-      let rank = 1;
-      for (const m of managersData) {
-        html += `
-          <tr>
-            <td class="sticky-col-1 num strong">${rank}</td>
-            <td class="sticky-col-2 strong">
-              <a href="/squads?manager=${m.entryId}">${m.managerName}</a>
-            </td>
-            <td>${m.teamName}</td>
-            <td class="num strong">${Number(m.totalPoints).toLocaleString()}</td>
-            <td class="num">${Number(m.overallRank).toLocaleString()}</td>
-            <td class="num">${m.gwPoints}</td>
-            <td class="num">${Number(m.gwRank).toLocaleString()}</td>
-            <td>${m.chipsUsed}</td>
-          </tr>
-        `;
-        rank++;
-      }
+const out = document.getElementById("stats-output");
+const loadingStatus = document.getElementById("loading-status");
+const managerCountEl = document.getElementById("manager-count");
+const refreshBtn = document.getElementById("refresh-btn");
 
-      html += `
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
-      
-      const totalManagers = managersData.length;
-      const avgPoints = Math.round(managersData.reduce((sum, m) => sum + m.totalPoints, 0) / totalManagers);
-      const avgGWPoints = Math.round(managersData.reduce((sum, m) => sum + m.gwPoints, 0) / totalManagers);
-      const leader = managersData[0];
-      const lastPlace = managersData[managersData.length - 1];
-      const pointsGap = leader.totalPoints - lastPlace.totalPoints;
-      
-      html += `
-        <div class="table-shell" style="margin-top: 14px;">
-          <div style="padding: 12px;">
-            <h3 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">League Summary</h3>
-            <ul style="margin: 0; padding-left: 18px; line-height: 1.8;">
-              <li><strong>Total Managers:</strong> ${totalManagers}</li>
-              <li><strong>League Leader:</strong> ${leader.managerName} (${leader.totalPoints.toLocaleString()} pts)</li>
-              <li><strong>Last Place:</strong> ${lastPlace.managerName} (${lastPlace.totalPoints.toLocaleString()} pts)</li>
-              <li><strong>Points Gap:</strong> ${pointsGap.toLocaleString()} pts</li>
-              <li><strong>Average Total Points:</strong> ${avgPoints.toLocaleString()}</li>
-              <li><strong>Average GW Points:</strong> ${avgGWPoints}</li>
-            </ul>
-          </div>
-        </div>
-      `;
-      
-      return html;
-    }
+let managerIds = [];
 
-    async function loadStats(ids) {
-      if (ids.length === 0) {
-        out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
-        return;
-      }
+async function fetchManagerSummary(id) {
+const summaryUrl = `/api/fpl/entry/${id}`;
+const historyUrl = `/api/fpl/entry/${id}/history`;
 
-      const allData = [];
-      out.innerHTML = "";
-      loadingStatus.textContent = `Loading 0 of ${ids.length} managers...`;
-      
-      let loaded = 0;
-      for (const id of ids) {
-        try {
-          const data = await fetchManagerSummary(id);
-          if (data) {
-            allData.push(data);
-            loaded++;
-            
-            loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
-            
-            allData.sort((a, b) => b.totalPoints - a.totalPoints);
-            out.innerHTML = makeStatsTable(allData);
-          }
-        } catch (e) {
-          console.error(`Failed to load manager ${id}:`, e);
-          loaded++;
-        }
-      }
-      
-      loadingStatus.innerHTML = `<span style='color:#16a34a; font-weight: 700;'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
-    }
+try {
+const [summaryRes, historyRes] = await Promise.all([
+fetch(summaryUrl),
+fetch(historyUrl)
+]);
 
-    async function updateDisplay() {
-      managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
-      if (managerIds.length === 0) {
-        out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
-        return;
-      }
-      
-      await loadStats(managerIds);
-    }
+if (!summaryRes.ok || !historyRes.ok) throw new Error("Load error");
 
-    (async function init() {
-      const { managerIds: ids } = await loadManagerIdsFromSupabase();
-      managerIds = ids;
-      await updateDisplay();
-    })();
+const summaryData = await summaryRes.json();
+const historyData = await historyRes.json();
 
-    refreshBtn.addEventListener('click', async () => {
-      const { managerIds: ids } = await loadManagerIdsFromSupabase();
-      managerIds = ids;
-      await updateDisplay();
-    });
-  </script>
+const chips = historyData.chips || [];
+const chipsUsed = chips.length > 0
+? chips.map(c => {
+const name = c.name === "wildcard" ? "WC" :
+c.name === "bboost" ? "BB" :
+c.name === "3xc" ? "TC" :
+c.name === "freehit" ? "FH" : c.name;
+return name;
+}).join(", ")
+: "None";
+
+return {
+entryId: Number(id),
+teamName: summaryData.name,
+firstName: summaryData.player_first_name,
+lastName: summaryData.player_last_name,
+managerName: `${summaryData.player_first_name} ${summaryData.player_last_name}`,
+totalPoints: summaryData.summary_overall_points,
+overallRank: summaryData.summary_overall_rank,
+gwPoints: summaryData.summary_event_points,
+gwRank: summaryData.summary_event_rank,
+chipsUsed
+};
+} catch (e) {
+console.error(`Error fetching manager ${id}:`, e);
+return null;
+}
+}
+
+function makeStatsTable(managersData) {
+let html = `
+<h2 class="page-title" style="font-size: 1.1rem;">League Standings</h2>
+
+<div class="table-shell">
+<div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
+<table class="data-table" style="--sticky-col-1-width: 56px; --sticky-col-2-width: 240px;">
+<thead>
+<tr>
+<th class="sticky-col-1 num">Rank</th>
+<th class="sticky-col-2">Manager</th>
+<th>Team<br/>Name</th>
+<th class="num">Total<br/>Points</th>
+<th class="num">Overall<br/>Rank</th>
+<th class="num">GW<br/>Points</th>
+<th class="num">GW<br/>Rank</th>
+<th>Chips<br/>Used</th>
+</tr>
+</thead>
+<tbody>
+`;
+
+let rank = 1;
+for (const m of managersData) {
+html += `
+<tr>
+<td class="sticky-col-1 num strong">${rank}</td>
+<td class="sticky-col-2 strong"><a href="/squads?manager=${m.entryId}">${m.managerName}</a></td>
+<td>${m.teamName}</td>
+<td class="num strong">${Number(m.totalPoints).toLocaleString()}</td>
+<td class="num">${Number(m.overallRank).toLocaleString()}</td>
+<td class="num">${m.gwPoints}</td>
+<td class="num">${Number(m.gwRank).toLocaleString()}</td>
+<td>${m.chipsUsed}</td>
+</tr>
+`;
+rank++;
+}
+
+html += `
+</tbody>
+</table>
+</div>
+</div>
+`;
+
+// Add summary stats
+const totalManagers = managersData.length;
+const avgPoints = Math.round(managersData.reduce((sum, m) => sum + m.totalPoints, 0) / totalManagers);
+const avgGWPoints = Math.round(managersData.reduce((sum, m) => sum + m.gwPoints, 0) / totalManagers);
+const leader = managersData[0];
+const lastPlace = managersData[managersData.length - 1];
+const pointsGap = leader.totalPoints - lastPlace.totalPoints;
+
+html += `
+<div class="table-shell" style="margin-top: 14px;">
+<div style="padding: 12px;">
+<h3 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">League Summary</h3>
+<ul style="margin: 0; padding-left: 18px; line-height: 1.8;">
+<li><strong>Total Managers:</strong> ${totalManagers}</li>
+<li><strong>League Leader:</strong> ${leader.managerName} (${leader.totalPoints.toLocaleString()} pts)</li>
+<li><strong>Last Place:</strong> ${lastPlace.managerName} (${lastPlace.totalPoints.toLocaleString()} pts)</li>
+<li><strong>Points Gap:</strong> ${pointsGap.toLocaleString()} pts</li>
+<li><strong>Average Total Points:</strong> ${avgPoints.toLocaleString()}</li>
+<li><strong>Average GW Points:</strong> ${avgGWPoints}</li>
+</ul>
+</div>
+</div>
+`;
+
+return html;
+}
+
+async function loadStats(ids) {
+if (ids.length === 0) {
+out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
+return;
+}
+
+const allData = [];
+out.innerHTML = "";
+loadingStatus.textContent = `Loading 0 of ${ids.length} managers...`;
+
+let loaded = 0;
+for (const id of ids) {
+try {
+const data = await fetchManagerSummary(id);
+if (data) {
+allData.push(data);
+loaded++;
+
+loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+
+// Sort by Total Points DESC (best first)
+allData.sort((a, b) => b.totalPoints - a.totalPoints);
+
+// Progressive render
+out.innerHTML = makeStatsTable(allData);
+}
+} catch (e) {
+console.error(`Failed to load manager ${id}:`, e);
+loaded++;
+}
+}
+
+loadingStatus.innerHTML = `<span style='color:#16a34a; font-weight: 700;'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
+}
+
+async function updateDisplay() {
+managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+if (managerIds.length === 0) {
+out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+return;
+}
+
+await loadStats(managerIds);
+}
+
+(async function init() {
+const { managerIds: ids } = await loadManagerIdsFromSupabase();
+managerIds = ids;
+
+await updateDisplay();
+})();
+
+refreshBtn.addEventListener('click', async () => {
+const { managerIds: ids } = await loadManagerIdsFromSupabase();
+managerIds = ids;
+await updateDisplay();
+});
+</script>
 </Layout>
