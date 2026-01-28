@@ -111,12 +111,7 @@ import Nav from "../components/Nav.astro";
 
         <div class="table-shell">
           <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
-            <table class="data-table"
-              style="
-                --sticky-col-1-width: 56px;
-                --sticky-col-2-width: 240px;
-              "
-            >
+            <table class="data-table" style="--sticky-col-1-width: 56px; --sticky-col-2-width: 240px;">
               <thead>
                 <tr>
                   <th class="sticky-col-1 num">Rank</th>
@@ -137,9 +132,7 @@ import Nav from "../components/Nav.astro";
         html += `
           <tr>
             <td class="sticky-col-1 num strong">${rank}</td>
-            <td class="sticky-col-2 strong">
-              <a href="/squads?manager=${m.entryId}">${m.managerName}</a>
-            </td>
+            <td class="sticky-col-2 strong"><a href="/squads?manager=${m.entryId}">${m.managerName}</a></td>
             <td>${m.teamName}</td>
             <td class="num strong">${Number(m.totalPoints).toLocaleString()}</td>
             <td class="num">${Number(m.overallRank).toLocaleString()}</td>
@@ -158,6 +151,7 @@ import Nav from "../components/Nav.astro";
         </div>
       `;
       
+      // Add summary stats
       const totalManagers = managersData.length;
       const avgPoints = Math.round(managersData.reduce((sum, m) => sum + m.totalPoints, 0) / totalManagers);
       const avgGWPoints = Math.round(managersData.reduce((sum, m) => sum + m.gwPoints, 0) / totalManagers);
@@ -204,7 +198,10 @@ import Nav from "../components/Nav.astro";
             
             loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
             
+            // Sort by Total Points DESC (best first)
             allData.sort((a, b) => b.totalPoints - a.totalPoints);
+            
+            // Progressive render
             out.innerHTML = makeStatsTable(allData);
           }
         } catch (e) {
@@ -229,6 +226,7 @@ import Nav from "../components/Nav.astro";
     (async function init() {
       const { managerIds: ids } = await loadManagerIdsFromSupabase();
       managerIds = ids;
+      
       await updateDisplay();
     })();
 
