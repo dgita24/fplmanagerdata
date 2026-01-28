@@ -434,7 +434,6 @@ import Nav from "../components/Nav.astro";
               <thead>
                 <tr>
                   <th class="sticky-col-1">Manager</th>
-                  <th class="num">Chip<br/>Played</th>
                   <th class="num">Trans-<br/>fers</th>
                   <th class="num">Transfer<br/>Cost</th>
                   <th class="num">GW<br/>Points</th>
@@ -452,7 +451,6 @@ import Nav from "../components/Nav.astro";
             <td class="sticky-col-1 strong">
               <a href="#" class="manager-link" data-id="${r.entryId}" data-name="${r.managerName}">${r.managerName}</a>
             </td>
-            <td class="num">${r.chipPlayed || ""}</td>
             <td class="num">${r.transfers ?? ""}</td>
             <td class="num">${r.transferCost ?? ""}</td>
             <td class="num">${r.gwPoints ?? ""}</td>
