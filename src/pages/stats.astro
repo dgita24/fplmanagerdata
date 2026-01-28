@@ -99,7 +99,7 @@ import Nav from "../components/Nav.astro";
     const gwFilterInput = document.getElementById("gw-filter");
 
     let managerIds = [];
-    let lastManagersData = []; // cached for quick re-render if needed
+    let lastManagersData = [];
 
     function chipLabel(name) {
       return name === "wildcard" ? "WC" :
@@ -113,7 +113,6 @@ import Nav from "../components/Nav.astro";
       const chips = historyData?.chips || [];
       if (!Array.isArray(chips) || chips.length === 0) return [];
 
-      // Unique + preserve order played
       const used = [];
       for (const c of chips) {
         const label = chipLabel(c.name);
@@ -189,7 +188,7 @@ import Nav from "../components/Nav.astro";
 
         <div class="table-shell">
           <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
-            <table class="data-table" style="min-width: 760px;">
+            <table class="data-table" style="min-width: 760px; table-layout: fixed;">
               <thead>
                 <tr>
                   <th class="num" style="width: 56px;">Rank</th>
@@ -211,12 +210,15 @@ import Nav from "../components/Nav.astro";
           <tr>
             <td class="num strong">${rank}</td>
 
-            <!-- Manager column: identical formatting to live.astro -->
-            <td style="font-size: 1.15rem; font-weight: 700;">
-              <a href="/squads?manager=${m.entryId}">${m.managerName}</a>
+            <!-- Option B: single-line + ellipsis -->
+            <td style="width: 200px; font-size: 1.15rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              <a href="/squads?manager=${m.entryId}" style="display:block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${m.managerName}
+              </a>
             </td>
 
-            <td style="white-space: normal; word-break: break-word; line-height: 1.2;">
+            <!-- Option B: single-line + ellipsis -->
+            <td style="width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;">
               ${m.teamName}
             </td>
 
