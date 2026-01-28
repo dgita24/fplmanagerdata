@@ -1,323 +1,327 @@
 ---
 /**
-* Global app shell + global CSS.
-* Pages should import this layout and render inside <main class="app-main">.
-*/
+ * Global app shell + global CSS.
+ * Pages should import this layout and render inside <main class="app-main">.
+ */
 const { title = "FPL Manager Data" } = Astro.props;
 ---
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8" />
-<!-- Back to normal scale; rely on scroll + sticky columns instead of forced zoom -->
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-<meta name="generator" content={Astro.generator} />
-<title>{title}</title>
-</head>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+  </head>
 
-<body>
-<div class="app-shell">
-<main class="app-main">
-<slot />
-</main>
-</div>
-</body>
+  <body>
+    <div class="app-shell">
+      <main class="app-main">
+        <slot />
+      </main>
+    </div>
+  </body>
 </html>
 
 <style is:global>
-:root {
-color-scheme: light;
+  :root {
+    color-scheme: light;
 
---bg: #ffffff;
---surface: #f7fafc;
---surface-2: #edf2f7;
---border: #e2e8f0;
+    --bg: #ffffff;
+    --surface: #f7fafc;
+    --surface-2: #edf2f7;
+    --border: #e2e8f0;
 
---text: #0f172a;
---muted: #475569;
+    --text: #0f172a;
+    --muted: #475569;
 
---primary: #2563eb;
---primary-hover: #1d4ed8;
---success: #16a34a;
---danger: #dc2626;
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --success: #16a34a;
+    --danger: #dc2626;
 
---radius: 12px;
+    --radius: 12px;
 
---shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
---shadow-md: 0 8px 24px rgba(15, 23, 42, 0.10);
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.10);
 
---container: 1200px;
+    --container: 1200px;
 
-/* Sticky column system:
-Each table can override these per-table via inline style on <table> or wrapper.
-Defaults are safe for Rank+Manager style tables.
-*/
---sticky-col-1-width: 56px;
---sticky-col-2-width: 220px;
+    /* Sticky column system defaults */
+    --sticky-col-1-width: 56px;
+    --sticky-col-2-width: 220px;
 
-/* z-index layers tuned for iOS/Safari */
---sticky-z-header: 7;
---sticky-z-body: 6;
-}
+    /* z-index layers */
+    --sticky-z-header: 20;  /* header row baseline */
+    --sticky-z-col1: 19;    /* rank column */
+    --sticky-z-col2: 18;    /* manager column */
+    --sticky-z-body: 1;     /* normal cells */
+  }
 
-*, *::before, *::after { box-sizing: border-box; }
-html, body { height: 100%; }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
 
-body {
-margin: 0;
-background: var(--bg);
-color: var(--text);
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
 
-font-family:
-ui-sans-serif,
-system-ui,
--apple-system,
-"Segoe UI",
-Roboto,
-Helvetica,
-Arial,
-"Apple Color Emoji",
-"Segoe UI Emoji",
-"Segoe UI Symbol",
-sans-serif;
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      Helvetica,
+      Arial,
+      "Apple Color Emoji",
+      "Segoe UI Emoji",
+      "Segoe UI Symbol",
+      sans-serif;
 
-line-height: 1.5;
-text-rendering: optimizeLegibility;
--webkit-font-smoothing: antialiased;
--moz-osx-font-smoothing: grayscale;
-}
+    line-height: 1.5;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-a { color: var(--primary); text-decoration: none; }
-a:hover { text-decoration: underline; }
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { text-decoration: underline; }
 
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-outline: 3px solid rgba(37, 99, 235, 0.35);
-outline-offset: 2px;
-border-radius: 8px;
-}
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.35);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
 
-.app-shell { min-height: 100%; }
+  .app-shell { min-height: 100%; }
 
-.app-main {
-max-width: var(--container);
-margin-inline: auto;
-padding: 12px;
-}
+  .app-main {
+    max-width: var(--container);
+    margin-inline: auto;
+    padding: 12px;
+  }
 
-@media (min-width: 640px) { .app-main { padding: 16px; } }
-@media (min-width: 1024px) { .app-main { padding: 20px; } }
+  @media (min-width: 640px) { .app-main { padding: 16px; } }
+  @media (min-width: 1024px) { .app-main { padding: 20px; } }
 
-.page { display: grid; gap: 12px; }
+  .page { display: grid; gap: 12px; }
+  .page-header { display: grid; gap: 6px; }
 
-.page-header { display: grid; gap: 6px; }
+  .page-title {
+    margin: 0;
+    font-size: 1.25rem;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
 
-.page-title {
-margin: 0;
-font-size: 1.25rem;
-line-height: 1.2;
-letter-spacing: -0.01em;
-}
+  .page-subtitle {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
 
-.page-subtitle {
-margin: 0;
-color: var(--muted);
-font-size: 0.95rem;
-}
+  @media (min-width: 640px) {
+    .page-title { font-size: 1.5rem; }
+  }
 
-@media (min-width: 640px) {
-.page-title { font-size: 1.5rem; }
-}
+  .controls {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+  }
 
-.controls {
-display: grid;
-gap: 10px;
-padding: 12px;
-border: 1px solid var(--border);
-border-radius: var(--radius);
-background: var(--surface);
-box-shadow: var(--shadow-sm);
-}
+  @media (min-width: 768px) {
+    .controls {
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      align-items: end;
+      gap: 12px;
+    }
+  }
 
-@media (min-width: 768px) {
-.controls {
-grid-template-columns: repeat(12, minmax(0, 1fr));
-align-items: end;
-gap: 12px;
-}
-}
+  .control { display: grid; gap: 6px; }
 
-.control { display: grid; gap: 6px; }
+  .label {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text);
+  }
 
-.label {
-font-size: 0.9rem;
-font-weight: 700;
-color: var(--text);
-}
+  .input,
+  .select,
+  .textarea {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text);
+    font: inherit;
+  }
 
-.input,
-.select,
-.textarea {
-width: 100%;
-min-height: 44px;
-padding: 10px 12px;
-border-radius: 10px;
-border: 1px solid var(--border);
-background: #fff;
-color: var(--text);
-font: inherit;
-}
+  .textarea {
+    min-height: 180px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
 
-.textarea {
-min-height: 180px;
-font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-}
+  .btn {
+    min-height: 44px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
 
-.btn {
-min-height: 44px;
-padding: 10px 14px;
-border-radius: 10px;
-border: 1px solid transparent;
-font: inherit;
-font-weight: 800;
-cursor: pointer;
-user-select: none;
-white-space: nowrap;
-}
+  .btn--primary { background: var(--primary); color: #fff; }
+  .btn--primary:hover { background: var(--primary-hover); }
 
-.btn--primary { background: var(--primary); color: #fff; }
-.btn--primary:hover { background: var(--primary-hover); }
+  .btn--success { background: var(--success); color: #fff; }
+  .btn--success:hover { filter: brightness(0.95); }
 
-.btn--success { background: var(--success); color: #fff; }
-.btn--success:hover { filter: brightness(0.95); }
+  .btn--danger { background: var(--danger); color: #fff; }
+  .btn--danger:hover { filter: brightness(0.95); }
 
-.btn--danger { background: var(--danger); color: #fff; }
-.btn--danger:hover { filter: brightness(0.95); }
+  .btn--neutral { background: #fff; border-color: var(--border); color: var(--text); }
+  .btn--neutral:hover { background: var(--surface-2); }
 
-.btn--neutral { background: #fff; border-color: var(--border); color: var(--text); }
-.btn--neutral:hover { background: var(--surface-2); }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    align-items: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
 
-.meta-row {
-display: flex;
-flex-wrap: wrap;
-gap: 10px 14px;
-align-items: center;
-color: var(--muted);
-font-size: 0.9rem;
-}
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text);
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
 
-.badge {
-display: inline-flex;
-align-items: center;
-gap: 6px;
-padding: 4px 10px;
-border-radius: 999px;
-border: 1px solid var(--border);
-background: #fff;
-color: var(--text);
-font-size: 0.85rem;
-font-weight: 700;
-}
+  /* ----------------------------
+     Table system
+  ----------------------------- */
+  .table-shell {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: #fff;
 
-/* ----------------------------
-Table system
------------------------------ */
-.table-shell {
-border: 1px solid var(--border);
-border-radius: var(--radius);
-background: #fff;
+    /* keep visible so sticky isn't clipped */
+    overflow: visible;
 
-/* IMPORTANT: overflow hidden can break sticky columns on some mobile browsers */
-overflow: visible;
+    box-shadow: var(--shadow-sm);
+  }
 
-box-shadow: var(--shadow-sm);
-}
+  .table-scroll {
+    position: relative;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
 
-.table-scroll {
-/* The horizontal scroller is the containing block for sticky columns */
-position: relative;
-overflow-x: auto;
-overflow-y: hidden;
--webkit-overflow-scrolling: touch;
-}
+  .data-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.9rem;
+    min-width: 720px;
+  }
 
-.data-table {
-width: 100%;
-border-collapse: separate;
-border-spacing: 0;
-font-size: 0.9rem;
-min-width: 720px;
-}
+  .data-table th,
+  .data-table td {
+    padding: 10px 10px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    vertical-align: middle;
 
-.data-table th,
-.data-table td {
-padding: 10px 10px;
-border-bottom: 1px solid var(--border);
-border-right: 1px solid var(--border); /* column dividers */
-vertical-align: middle;
-background: #fff;
-}
+    /* baseline layer for normal cells */
+    position: relative;
+    z-index: var(--sticky-z-body);
+    background: #fff;
+  }
 
-.data-table th:last-child,
-.data-table td:last-child {
-border-right: 0;
-}
+  .data-table th:last-child,
+  .data-table td:last-child {
+    border-right: 0;
+  }
 
-.data-table thead th {
-position: sticky;
-top: 0;
-z-index: var(--sticky-z-header);
-background: var(--surface);
-font-weight: 900;
-text-align: left;
-}
+  .data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: var(--sticky-z-header);
+    background: var(--surface);
+    font-weight: 900;
+    text-align: left;
+  }
 
-.data-table tr:last-child td { border-bottom: 0; }
+  .data-table tr:last-child td { border-bottom: 0; }
 
-.data-table .num { text-align: center; font-variant-numeric: tabular-nums; }
-.data-table .strong { font-weight: 900; }
+  .data-table .num { text-align: center; font-variant-numeric: tabular-nums; }
+  .data-table .strong { font-weight: 900; }
 
-/* ----------------------------
-Generic sticky column classes
------------------------------ */
-.sticky-col-1,
-.sticky-col-2 {
-position: sticky;
-background: #fff; /* prevents "see-through" while scrolling */
-will-change: transform; /* helps iOS repaint */
-}
+  /* ----------------------------
+     Sticky column classes
+  ----------------------------- */
+  .sticky-col-1,
+  .sticky-col-2 {
+    position: sticky;
+    background: #fff;
+    will-change: transform;
+  }
 
-.sticky-col-1 {
-left: 0;
-width: var(--sticky-col-1-width);
-min-width: var(--sticky-col-1-width);
-max-width: var(--sticky-col-1-width);
-z-index: var(--sticky-z-body);
-box-shadow: 1px 0 0 var(--border);
-}
+  .sticky-col-1 {
+    left: 0;
+    width: var(--sticky-col-1-width);
+    min-width: var(--sticky-col-1-width);
+    max-width: var(--sticky-col-1-width);
+    z-index: var(--sticky-z-col1);
 
-.sticky-col-2 {
-left: var(--sticky-col-1-width);
-width: var(--sticky-col-2-width);
-min-width: var(--sticky-col-2-width);
-max-width: var(--sticky-col-2-width);
-z-index: calc(var(--sticky-z-body) - 1);
-box-shadow: 1px 0 0 var(--border);
-}
+    /* visual divider */
+    box-shadow: 1px 0 0 var(--border);
+  }
 
-/* Ensure sticky headers stay above sticky body cells */
-.data-table thead .sticky-col-1,
-.data-table thead .sticky-col-2 {
-background: var(--surface);
-z-index: calc(var(--sticky-z-header) + 1);
-}
+  .sticky-col-2 {
+    left: var(--sticky-col-1-width);
+    width: var(--sticky-col-2-width);
+    min-width: var(--sticky-col-2-width);
+    max-width: var(--sticky-col-2-width);
+    z-index: var(--sticky-z-col2);
 
-@media (max-width: 480px) {
-.data-table { font-size: 1.0rem; min-width: 760px; }
-.data-table th, .data-table td { padding: 8px 8px; }
-}
+    /* divider between sticky area and scrollable area */
+    box-shadow: 1px 0 0 var(--border), 8px 0 12px rgba(15, 23, 42, 0.06);
+  }
+
+  /* Sticky header cells for sticky columns must be above everything */
+  .data-table thead .sticky-col-1,
+  .data-table thead .sticky-col-2 {
+    background: var(--surface);
+    z-index: calc(var(--sticky-z-header) + 2);
+  }
+
+  @media (max-width: 480px) {
+    .data-table { font-size: 1.0rem; min-width: 760px; }
+    .data-table th, .data-table td { padding: 8px 8px; }
+  }
 </style>
