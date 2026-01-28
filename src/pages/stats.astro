@@ -212,13 +212,13 @@ import Nav from "../components/Nav.astro";
           <tr>
             <td class="num strong">${rank}</td>
 
-            <td style="width: 200px; white-space: normal; line-height: 1.2; font-size: 1.15rem; font-weight: 700;">
-              <a href="/squads?manager=${m.entryId}" style="white-space: normal; word-break: break-word;">
+            <td style="font-size: 1.15rem; font-weight: 700;">
+              <a href="/squads?manager=${m.entryId}">
                 ${m.managerName}
               </a>
             </td>
 
-            <td style="white-space: normal; word-break: break-word; line-height: 1.2;">
+            <td style="width:180px; white-space: normal; overflow-wrap: break-word; line-height: 1.2;">
               ${m.teamName}
             </td>
 
