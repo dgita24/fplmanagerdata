@@ -168,7 +168,6 @@ import Nav from "../components/Nav.astro";
     function chipsGridHtml(chipsArr) {
       if (!chipsArr || chipsArr.length === 0) return `<span style="color: var(--muted);">None</span>`;
 
-      // Up to 8 items displayed as 2 rows x 4 cols (your stated goal)
       const limited = chipsArr.slice(0, 8);
 
       return `
@@ -212,10 +211,9 @@ import Nav from "../components/Nav.astro";
           <tr>
             <td class="num strong">${rank}</td>
 
+            <!-- Manager column: identical formatting to live.astro -->
             <td style="font-size: 1.15rem; font-weight: 700;">
-              <a href="/squads?manager=${m.entryId}">
-                ${m.managerName}
-              </a>
+              <a href="/squads?manager=${m.entryId}">${m.managerName}</a>
             </td>
 
             <td style="white-space: normal; word-break: break-word; line-height: 1.2;">
@@ -266,7 +264,6 @@ import Nav from "../components/Nav.astro";
 
             loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
 
-            // Sort by Total Points DESC (best first)
             allData.sort((a, b) => b.totalPoints - a.totalPoints);
 
             lastManagersData = allData;
