@@ -37,8 +37,7 @@ import Nav from "../components/Nav.astro";
 
   <!-- Transfer History Modal -->
   <div id="transfer-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto; padding: 16px;">
-    <div style="background: white; margin: 40px auto; padding: 18px; max-width: 900px; border-radius: 12px; position: relative; box-shadow: var(--shadow-md);">
-      <button id="close-modal" class="btn btn--danger" style="position: absolute; top: 12px; right: 12px;" type="button">✕ Close</button>
+    <div id="transfer-modal-panel" style="background: white; margin: 40px auto; padding: 18px; max-width: 740px; border-radius: 12px; position: relative; box-shadow: var(--shadow-md);">
       <div id="modal-content"></div>
     </div>
   </div>
@@ -146,7 +145,6 @@ import Nav from "../components/Nav.astro";
     const refreshBtn = document.getElementById("refresh-btn");
     const transferModal = document.getElementById("transfer-modal");
     const modalContent = document.getElementById("modal-content");
-    const closeModal = document.getElementById("close-modal");
     const chipModal = document.getElementById("chip-modal");
     const chipModalContent = document.getElementById("chip-modal-content");
     const closeChipModal = document.getElementById("close-chip-modal");
@@ -154,10 +152,6 @@ import Nav from "../components/Nav.astro";
     let allHistories = [];
     let latestGW = null;
     let allPlayersMap = {};
-
-    closeModal.addEventListener("click", () => {
-      transferModal.style.display = "none";
-    });
 
     closeChipModal.addEventListener("click", () => {
       chipModal.style.display = "none";
@@ -258,16 +252,21 @@ import Nav from "../components/Nav.astro";
         }
 
         let html = `<h2 style="margin-top:0;">${escapeHtml(managerName)} - Season Transfer History</h2>`;
-        html += `<p style="color: var(--muted); margin-top: 6px;">Total Transfers: ${transfers.length}</p>`;
+
+        // Total Transfers + Close button on the same line
+        html += `
+          <div style="display:flex; align-items:center; justify-content: space-between; gap: 12px; margin-top: 6px;">
+            <p style="color: var(--muted); margin: 0;">Total Transfers: ${transfers.length}</p>
+            <button id="close-modal-inline" class="btn btn--danger" type="button">✕ Close</button>
+          </div>
+        `;
 
         const allGWs = [...new Set([
           ...Object.keys(transfersByGW).map(Number),
           ...Object.keys(chipsUsed).map(Number)
         ])].sort((a, b) => a - b);
 
-        // 1) Make the modal "longer" (taller scroll area)
-        // 2) Bump base font size
-        html += `<div style="max-height: 90vh; overflow-y: auto; padding-right: 6px; font-size: 16px;">`;
+        html += `<div style="max-height: 90vh; overflow-y: auto; padding-right: 6px; font-size: 16px; margin-top: 10px;">`;
 
         allGWs.forEach(gw => {
           const chip = chipsUsed[gw];
@@ -281,13 +280,10 @@ import Nav from "../components/Nav.astro";
             const chipBadge = chip === 'wildcard' ? '🃏 Wildcard' : chip === 'freehit' ? '🎯 Free Hit' : chip;
             html += `<button class="chip-btn btn btn--primary" data-gw="${gw}" data-manager="${managerId}" data-chip="${chip}" type="button">${chipBadge} (Click to view transfers)</button>`;
           } else if (gwTransfers.length > 0) {
-            // keep container, just slightly bigger base font from parent
             html += `<div>`;
             gwTransfers.forEach(t => {
               const playerIn = allPlayersMap[t.element_in] || `Player ${t.element_in}`;
               const playerOut = allPlayersMap[t.element_out] || `Player ${t.element_out}`;
-
-              // Requested order: OUT → IN
               html += transferLineHtml(playerOut, playerIn);
             });
             if (cost > 0) {
@@ -304,6 +300,11 @@ import Nav from "../components/Nav.astro";
         html += `</div>`;
 
         modalContent.innerHTML = html;
+
+        // Wire up the inline close button (created dynamically)
+        document.getElementById("close-modal-inline")?.addEventListener("click", () => {
+          transferModal.style.display = "none";
+        });
 
         document.querySelectorAll('.chip-btn').forEach(btn => {
           btn.addEventListener('click', async (e) => {
