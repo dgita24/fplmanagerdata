@@ -255,9 +255,9 @@ import Nav from "../components/Nav.astro";
 
         // Total Transfers + Close button on the same line
         html += `
-          <div style="display:flex; align-items:center; justify-content: space-between; gap: 12px; margin-top: 6px;">
+          <div style="display:flex; align-items:center; justify-content:flex-start; gap: 8px; margin-top: 6px;">
             <p style="color: var(--muted); margin: 0;">Total Transfers: ${transfers.length}</p>
-            <button id="close-modal-inline" class="btn btn--danger" type="button">✕ Close</button>
+            <button id="close-modal-inline" class="btn btn--danger" type="button" style="margin-left: 6px;">✕ Close</button>
           </div>
         `;
 
