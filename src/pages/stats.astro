@@ -5,6 +5,102 @@ import Nav from "../components/Nav.astro";
 <Layout title="League Statistics & Manager Summary - FPL Manager Data">
   <Nav />
 
+  <!-- Mobile table fallback: turn rows into readable "cards" (no sticky required) -->
+  <style>
+    /* Hide the mobile 2-col summary cell on desktop/tablet */
+    .stats-grid-2 { display: none; }
+    .stats-hide-on-mobile { display: table-cell; }
+
+    @media (max-width: 560px) {
+      /* On mobile we don't want horizontal scrolling; we want stacked cards */
+      .table-scroll { overflow-x: visible; overflow-y: visible; }
+      .data-table { min-width: 0 !important; width: 100%; }
+
+      /* Hide header row */
+      .data-table thead { display: none; }
+
+      /* Convert table rows/cells into blocks */
+      .data-table tbody,
+      .data-table tr,
+      .data-table td { display: block; width: 100%; }
+
+      .data-table tbody tr {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        margin: 10px 0;
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+        background: #fff;
+      }
+
+      .data-table tbody tr td {
+        border: 0;
+        border-bottom: 1px solid var(--border);
+        padding: 10px 12px;
+        background: #fff;
+      }
+
+      .data-table tbody tr td:last-child {
+        border-bottom: 0;
+      }
+
+      /* Each normal cell shows "Label" above the value */
+      .data-table tbody tr td::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 0.85rem;
+        color: var(--muted);
+        font-weight: 800;
+        margin-bottom: 4px;
+      }
+
+      /* Manager cell becomes the card header */
+      .stats-manager-cell {
+        padding: 12px 12px;
+      }
+      .stats-manager-cell::before {
+        content: "Manager";
+      }
+      .stats-manager-cell a {
+        display: inline-block;
+        font-size: 1.15rem;
+        font-weight: 900;
+        line-height: 1.2;
+        white-space: normal;
+        word-break: break-word;
+      }
+
+      /* Hide these desktop-only cells on mobile */
+      .stats-hide-on-mobile { display: none !important; }
+
+      /* Show the mobile 2-column summary block on mobile */
+      .stats-grid-2 { display: grid !important; }
+
+      .stats-grid-2 {
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        padding: 0 !important;
+      }
+
+      /* Remove the generic td label for the summary block */
+      .stats-grid-2::before { content: ""; display: none; }
+
+      .stats-grid-2 > div {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .stats-grid-2 > div:nth-child(odd) {
+        border-right: 1px solid var(--border);
+      }
+
+      /* Last row in the 2x2 grid: remove bottom borders */
+      .stats-grid-2 > div:nth-last-child(-n + 2) {
+        border-bottom: 0;
+      }
+    }
+  </style>
+
   <div class="page">
     <header class="page-header">
       <h1 class="page-title">League Statistics &amp; Manager Summary</h1>
@@ -99,7 +195,6 @@ import Nav from "../components/Nav.astro";
     const gwFilterInput = document.getElementById("gw-filter");
 
     let managerIds = [];
-    let lastManagersData = []; // cached for quick re-render if needed
 
     function chipLabel(name) {
       return name === "wildcard" ? "WC" :
@@ -113,7 +208,6 @@ import Nav from "../components/Nav.astro";
       const chips = historyData?.chips || [];
       if (!Array.isArray(chips) || chips.length === 0) return [];
 
-      // Unique + preserve order played
       const used = [];
       for (const c of chips) {
         const label = chipLabel(c.name);
@@ -168,7 +262,6 @@ import Nav from "../components/Nav.astro";
     function chipsGridHtml(chipsArr) {
       if (!chipsArr || chipsArr.length === 0) return `<span style="color: var(--muted);">None</span>`;
 
-      // Up to 8 items displayed as 2 rows x 4 cols (your stated goal)
       const limited = chipsArr.slice(0, 8);
 
       return `
@@ -190,11 +283,11 @@ import Nav from "../components/Nav.astro";
 
         <div class="table-shell">
           <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
-            <table class="data-table" style="min-width: 760px; --sticky-col-1-width: 56px; --sticky-col-2-width: 200px;">
+            <table class="data-table" style="min-width: 760px;">
               <thead>
                 <tr>
-                  <th class="sticky-col-1 num" style="width: 56px;">Rank</th>
-                  <th class="sticky-col-2" style="width: 200px;">Manager</th>
+                  <th class="num" style="width: 56px;">Rank</th>
+                  <th style="width: 200px;">Manager</th>
                   <th style="width: 180px;">Team<br/>Name</th>
                   <th class="num" style="width: 90px;">Total<br/>Points</th>
                   <th class="num" style="width: 110px;">Overall<br/>Rank</th>
@@ -210,24 +303,45 @@ import Nav from "../components/Nav.astro";
       for (const m of managersData) {
         html += `
           <tr>
-            <td class="sticky-col-1 num strong">${rank}</td>
+            <td class="num strong stats-hide-on-mobile" data-label="Rank">${rank}</td>
 
-            <td class="sticky-col-2" style="width: 200px; white-space: normal; line-height: 1.2; font-size: 1.15rem; font-weight: 700;">
-              <a href="/squads?manager=${m.entryId}" style="white-space: normal; word-break: break-word;">
+            <td class="stats-manager-cell" data-label="Manager" style="font-size: 1.15rem; font-weight: 700;">
+              <a href="/squads?manager=${m.entryId}">
                 ${m.managerName}
               </a>
             </td>
 
-            <td style="width:180px; white-space: normal; overflow-wrap: break-word; line-height: 1.2;">
+            <td data-label="Team Name" style="width:180px; white-space: normal; overflow-wrap: break-word; line-height: 1.2;">
               ${m.teamName}
             </td>
 
-            <td class="num strong">${Number(m.totalPoints).toLocaleString()}</td>
-            <td class="num">${Number(m.overallRank).toLocaleString()}</td>
-            <td class="num">${Number(m.gwPoints).toLocaleString()}</td>
-            <td class="num">${Number(m.gwRank).toLocaleString()}</td>
+            <!-- Desktop-only numeric cells -->
+            <td class="num strong stats-hide-on-mobile" data-label="Total Points">${Number(m.totalPoints).toLocaleString()}</td>
+            <td class="num stats-hide-on-mobile" data-label="Overall Rank">${Number(m.overallRank).toLocaleString()}</td>
+            <td class="num stats-hide-on-mobile" data-label="GW Points">${Number(m.gwPoints).toLocaleString()}</td>
+            <td class="num stats-hide-on-mobile" data-label="GW Rank">${Number(m.gwRank).toLocaleString()}</td>
 
-            <td>
+            <!-- Mobile-only 2x2 summary grid (replaces the 4 cells above) -->
+            <td class="stats-grid-2" data-label="Summary">
+              <div>
+                <div style="font-size: 0.85rem; color: var(--muted); font-weight: 800; margin-bottom: 4px;">Total Points</div>
+                <div class="strong">${Number(m.totalPoints).toLocaleString()}</div>
+              </div>
+              <div>
+                <div style="font-size: 0.85rem; color: var(--muted); font-weight: 800; margin-bottom: 4px;">Overall Rank</div>
+                <div>${Number(m.overallRank).toLocaleString()}</div>
+              </div>
+              <div>
+                <div style="font-size: 0.85rem; color: var(--muted); font-weight: 800; margin-bottom: 4px;">GW Points</div>
+                <div>${Number(m.gwPoints).toLocaleString()}</div>
+              </div>
+              <div>
+                <div style="font-size: 0.85rem; color: var(--muted); font-weight: 800; margin-bottom: 4px;">GW Rank</div>
+                <div>${Number(m.gwRank).toLocaleString()}</div>
+              </div>
+            </td>
+
+            <td data-label="Chips Used">
               ${chipsGridHtml(m.chipsUsedArr)}
             </td>
           </tr>
@@ -252,7 +366,6 @@ import Nav from "../components/Nav.astro";
       }
 
       const allData = [];
-      lastManagersData = [];
       out.innerHTML = "";
       loadingStatus.textContent = `Loading 0 of ${ids.length} managers for GW${gw}...`;
 
@@ -266,10 +379,8 @@ import Nav from "../components/Nav.astro";
 
             loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
 
-            // Sort by Total Points DESC (best first)
             allData.sort((a, b) => b.totalPoints - a.totalPoints);
 
-            lastManagersData = allData;
             out.innerHTML = makeStatsTable(allData, gw);
           }
         } catch (e) {
