@@ -359,7 +359,7 @@ import Nav from "../components/Nav.astro";
         html += `<div style="border: 1px solid rgba(22,163,74,0.35); border-radius: 10px; padding: 12px; background: #f0fff4;">`;
         html += `<h3 style="color: var(--success); margin-top: 0;">Players In (${playersIn.length})</h3>`;
         playersIn.forEach(pid => {
-          html += `<p style="margin: 6px 0;">▲ ${escapeHtml(allPlayersMap[pid] || `Player ${pid}`}</p>`;
+          html += `<p style="margin: 6px 0;">▲ ${escapeHtml(allPlayersMap[pid] || `Player ${pid}`)}</p>`;
         });
         html += `</div>`;
         html += `</div>`;
