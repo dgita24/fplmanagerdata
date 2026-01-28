@@ -190,11 +190,11 @@ import Nav from "../components/Nav.astro";
 
         <div class="table-shell">
           <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
-            <table class="data-table" style="min-width: 760px;">
+            <table class="data-table" style="min-width: 760px; --sticky-col-1-width: 56px; --sticky-col-2-width: 200px;">
               <thead>
                 <tr>
-                  <th class="num" style="width: 56px;">Rank</th>
-                  <th style="width: 200px;">Manager</th>
+                  <th class="sticky-col-1 num" style="width: 56px;">Rank</th>
+                  <th class="sticky-col-2" style="width: 200px;">Manager</th>
                   <th style="width: 180px;">Team<br/>Name</th>
                   <th class="num" style="width: 90px;">Total<br/>Points</th>
                   <th class="num" style="width: 110px;">Overall<br/>Rank</th>
@@ -210,10 +210,10 @@ import Nav from "../components/Nav.astro";
       for (const m of managersData) {
         html += `
           <tr>
-            <td class="num strong">${rank}</td>
+            <td class="sticky-col-1 num strong">${rank}</td>
 
-            <td style="font-size: 1.15rem; font-weight: 700;">
-              <a href="/squads?manager=${m.entryId}">
+            <td class="sticky-col-2" style="width: 200px; white-space: normal; line-height: 1.2; font-size: 1.15rem; font-weight: 700;">
+              <a href="/squads?manager=${m.entryId}" style="white-space: normal; word-break: break-word;">
                 ${m.managerName}
               </a>
             </td>
