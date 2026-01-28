@@ -534,9 +534,8 @@ import Nav from "../components/Nav.astro";
               ${
                 idx === 0
                   ? `<th rowspan="${rowspan}" scope="rowgroup"
-                       style="vertical-align: top; background: var(--surface); font-weight: 900; line-height: 1.2; text-align: left;">
+                       style="vertical-align: middle; background: var(--surface); font-weight: 900; line-height: 1.2; text-align: left;"
                       <div>${manager.managerName}</div>
-                      <div style="color: var(--muted); font-weight: 700; margin-top: 4px;">${manager.teamName}</div>
                       ${manager.chipPlayed ? `<div style="margin-top: 8px;"><span class="badge">${manager.chipPlayed}</span></div>` : ""}
                     </th>`
                   : ``
