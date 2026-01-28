@@ -490,11 +490,11 @@ import Nav from "../components/Nav.astro";
       let html = `
         <div class="table-shell">
           <div class="table-scroll" role="region" aria-label="Combined squads table" tabindex="0">
-            <table class="data-table" style="min-width: 720px;">
+            <table class="data-table" style="min-width: 720px; table-layout: fixed;">
               <thead>
                 <tr>
                   <th style="width: 220px;">Manager</th>
-                  <th style="width: 220px;">Player</th>
+                  <th style="width: 170px;">Player</th>
                   <th class="num" style="width: 60px;">Team</th>
                   <th class="num" style="width: 70px;">GW Pts</th>
                   <th class="num" style="width: 60px;">C/VC</th>
@@ -539,10 +539,13 @@ import Nav from "../components/Nav.astro";
                   : ``
               }
 
-              <td style="background: ${nameBg}; font-weight: ${player.isCaptain ? '900' : '700'};">
-                <span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                  <span>${player.position}. ${player.playerName}</span>
-                  ${indicator ? `<span class="badge" style="padding: 2px 6px; font-size: 0.75rem;">${indicator}</span>` : ""}
+              <!-- Player column: single-line + ellipsis -->
+              <td style="background: ${nameBg}; font-weight: ${player.isCaptain ? '900' : '700'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <span style="display:inline-flex; align-items:center; gap:6px; max-width: 100%; overflow: hidden;">
+                  <span style="display:block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    ${player.position}. ${player.playerName}
+                  </span>
+                  ${indicator ? `<span class="badge" style="padding: 2px 6px; font-size: 0.75rem; flex: 0 0 auto;">${indicator}</span>` : ""}
                 </span>
               </td>
 
@@ -575,12 +578,10 @@ import Nav from "../components/Nav.astro";
       const hasCaptainFilter = !!captainFilterValue;
       const useCombined = hasPositionFilter || hasCaptainFilter;
 
-      // Combined table ONLY when Position/Captaincy filters active
       if (useCombined) {
         return makeSquadsCombinedTable(filteredManagers, positionFilterValue, captainFilterValue);
       }
 
-      // Default: per-manager tables (unchanged behavior)
       let html = "";
 
       for (const manager of filteredManagers) {
@@ -595,10 +596,10 @@ import Nav from "../components/Nav.astro";
             </div>
 
             <div class="table-scroll" role="region" aria-label="Squad table for ${manager.managerName}" tabindex="0">
-              <table class="data-table" style="min-width: 500px;">
+              <table class="data-table" style="min-width: 500px; table-layout: fixed;">
                 <thead>
                   <tr>
-                    <th style="width: 200px; max-width: 200px;">Player</th>
+                    <th style="width: 170px; max-width: 170px;">Player</th>
                     <th class="num" style="width: 60px;">Team</th>
                     <th class="num" style="width: 70px;">GW Pts</th>
                     <th class="num" style="width: 60px;">C/VC</th>
@@ -608,7 +609,6 @@ import Nav from "../components/Nav.astro";
         `;
 
         let squad = [...(manager.squad || [])];
-
         squad = squad.sort((a, b) => a.position - b.position);
 
         for (const player of squad) {
@@ -631,12 +631,16 @@ import Nav from "../components/Nav.astro";
 
           html += `
             <tr style="background: ${rowBg};">
-              <td style="background: ${nameBg}; font-weight: ${player.isCaptain ? '900' : '700'};">
-                <span style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                  <span>${player.position}. ${player.playerName}</span>
-                  ${indicator ? `<span class="badge" style="padding: 2px 6px; font-size: 0.75rem;">${indicator}</span>` : ""}
+              <!-- Player column: single-line + ellipsis -->
+              <td style="background: ${nameBg}; font-weight: ${player.isCaptain ? '900' : '700'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <span style="display:inline-flex; align-items:center; gap:6px; max-width: 100%; overflow: hidden;">
+                  <span style="display:block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    ${player.position}. ${player.playerName}
+                  </span>
+                  ${indicator ? `<span class="badge" style="padding: 2px 6px; font-size: 0.75rem; flex: 0 0 auto;">${indicator}</span>` : ""}
                 </span>
               </td>
+
               <td class="num">${player.teamName}</td>
               <td class="num strong">${player.gwPointsCap ?? player.gwPoints ?? 0}</td>
               <td class="num strong" style="color: ${player.isCaptain ? 'var(--danger)' : 'var(--primary)'};">${captainBadge}</td>
