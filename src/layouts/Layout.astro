@@ -9,7 +9,7 @@ const { title = "FPL Manager Data" } = Astro.props;
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=0.5, maximum-scale=5.0, user-scalable=yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
@@ -48,15 +48,15 @@ const { title = "FPL Manager Data" } = Astro.props;
 
     --container: 1200px;
 
-    /* Sticky column system:
-       Each table can override these per-table via inline style on <table> or wrapper.
-       Defaults are safe for Rank+Manager style tables.
-    */
+    /* Sticky column system defaults */
     --sticky-col-1-width: 56px;
     --sticky-col-2-width: 220px;
 
-    --sticky-z-header: 4;
-    --sticky-z-body: 3;
+    /* z-index layers */
+    --sticky-z-header: 20;  /* header row baseline */
+    --sticky-z-col1: 19;    /* rank column */
+    --sticky-z-col2: 18;    /* manager column */
+    --sticky-z-body: 1;     /* normal cells */
   }
 
   *, *::before, *::after { box-sizing: border-box; }
@@ -111,7 +111,6 @@ const { title = "FPL Manager Data" } = Astro.props;
   @media (min-width: 1024px) { .app-main { padding: 20px; } }
 
   .page { display: grid; gap: 12px; }
-
   .page-header { display: grid; gap: 6px; }
 
   .page-title {
@@ -228,12 +227,17 @@ const { title = "FPL Manager Data" } = Astro.props;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: #fff;
-    overflow: hidden;
+
+    /* keep visible so sticky isn't clipped */
+    overflow: visible;
+
     box-shadow: var(--shadow-sm);
   }
 
   .table-scroll {
+    position: relative;
     overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
   }
 
@@ -249,8 +253,12 @@ const { title = "FPL Manager Data" } = Astro.props;
   .data-table td {
     padding: 10px 10px;
     border-bottom: 1px solid var(--border);
-    border-right: 1px solid var(--border); /* column dividers */
+    border-right: 1px solid var(--border);
     vertical-align: middle;
+
+    /* baseline layer for normal cells */
+    position: relative;
+    z-index: var(--sticky-z-body);
     background: #fff;
   }
 
@@ -262,7 +270,7 @@ const { title = "FPL Manager Data" } = Astro.props;
   .data-table thead th {
     position: sticky;
     top: 0;
-    z-index: 2;
+    z-index: var(--sticky-z-header);
     background: var(--surface);
     font-weight: 900;
     text-align: left;
@@ -274,15 +282,13 @@ const { title = "FPL Manager Data" } = Astro.props;
   .data-table .strong { font-weight: 900; }
 
   /* ----------------------------
-     Generic sticky column classes
-     Use sticky-col-1 and sticky-col-2 on TH/TD you want frozen.
-     Tune widths per table by setting CSS vars on the <table>:
-       style="--sticky-col-1-width: 56px; --sticky-col-2-width: 240px;"
+     Sticky column classes
   ----------------------------- */
   .sticky-col-1,
   .sticky-col-2 {
     position: sticky;
     background: #fff;
+    will-change: transform;
   }
 
   .sticky-col-1 {
@@ -290,7 +296,9 @@ const { title = "FPL Manager Data" } = Astro.props;
     width: var(--sticky-col-1-width);
     min-width: var(--sticky-col-1-width);
     max-width: var(--sticky-col-1-width);
-    z-index: var(--sticky-z-body);
+    z-index: var(--sticky-z-col1);
+
+    /* visual divider */
     box-shadow: 1px 0 0 var(--border);
   }
 
@@ -299,14 +307,17 @@ const { title = "FPL Manager Data" } = Astro.props;
     width: var(--sticky-col-2-width);
     min-width: var(--sticky-col-2-width);
     max-width: var(--sticky-col-2-width);
-    z-index: calc(var(--sticky-z-body) - 1);
-    box-shadow: 1px 0 0 var(--border);
+    z-index: var(--sticky-z-col2);
+
+    /* divider between sticky area and scrollable area */
+    box-shadow: 1px 0 0 var(--border), 8px 0 12px rgba(15, 23, 42, 0.06);
   }
 
+  /* Sticky header cells for sticky columns must be above everything */
   .data-table thead .sticky-col-1,
   .data-table thead .sticky-col-2 {
     background: var(--surface);
-    z-index: var(--sticky-z-header);
+    z-index: calc(var(--sticky-z-header) + 2);
   }
 
   @media (max-width: 480px) {
