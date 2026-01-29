@@ -175,10 +175,10 @@ import Nav from "../components/Nav.astro";
 
       // Chosen to be readable with dark text on light fills and white text on darker fills.
       const palette = {
-        WC: { lightBg: '#E9D5FF', darkBg: '#7C3AED', lightText: '#2E1065', darkText: '#FFFFFF' }, // purple
-        BB: { lightBg: '#BBF7D0', darkBg: '#16A34A', lightText: '#052E16', darkText: '#FFFFFF' }, // green
-        TC: { lightBg: '#FED7AA', darkBg: '#EA580C', lightText: '#431407', darkText: '#FFFFFF' }, // orange
-        FH: { lightBg: '#BAE6FD', darkBg: '#0284C7', lightText: '#082F49', darkText: '#FFFFFF' }  // blue
+        WC: { lightBg: '#FDE68A', darkBg: '#B45309', lightText: '#3B2F00', darkText: '#FFFFFF' }, // amber/gold
+        BB: { lightBg: '#BBF7D0', darkBg: '#15803D', lightText: '#052E16', darkText: '#FFFFFF' }, // green
+        TC: { lightBg: '#FECACA', darkBg: '#B91C1C', lightText: '#450A0A', darkText: '#FFFFFF' }, // red
+        FH: { lightBg: '#FED7AA', darkBg: '#C2410C', lightText: '#431407', darkText: '#FFFFFF' }  // orange
       };
 
       const p = palette[label] || { lightBg: '#E2E8F0', darkBg: '#475569', lightText: '#0F172A', darkText: '#FFFFFF' };
@@ -219,7 +219,7 @@ import Nav from "../components/Nav.astro";
 
         <div class="table-shell">
           <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
-            <table class="data-table" style="min-width: 600px; table-layout: fixed;">
+            <table class="data-table" style="min-width: 0; table-layout: fixed;">
               <thead>
                 <tr>
                   <th class="num" style="width: 52px;">Rank</th>
