@@ -173,7 +173,6 @@ import Nav from "../components/Nav.astro";
     function chipBadgeStyle(label, count) {
       const isTwice = Number(count) >= 2;
 
-      // Chosen to be readable with dark text on light fills and white text on darker fills.
       const palette = {
         WC: { lightBg: '#FDE68A', darkBg: '#B45309', lightText: '#3B2F00', darkText: '#FFFFFF' }, // amber/gold
         BB: { lightBg: '#BBF7D0', darkBg: '#15803D', lightText: '#052E16', darkText: '#FFFFFF' }, // green
@@ -187,7 +186,6 @@ import Nav from "../components/Nav.astro";
       const fg = isTwice ? p.darkText : p.lightText;
       const border = isTwice ? 'rgba(0,0,0,0.10)' : 'rgba(0,0,0,0.08)';
 
-      // NOTE: inline style used to avoid needing global CSS edits.
       return `background:${bg}; color:${fg}; border:1px solid ${border};`;
     }
 
@@ -239,7 +237,8 @@ import Nav from "../components/Nav.astro";
           <tr>
             <td class="num strong">${rank}</td>
 
-            <td style="width: 300px;">
+            <!-- IMPORTANT: no width on <td> when using table-layout: fixed; widths are controlled by <th> -->
+            <td>
               <a href="/squads?manager=${m.entryId}" style="
                 display: block;
                 font-size: 1.15rem;
@@ -274,6 +273,13 @@ import Nav from "../components/Nav.astro";
       return html;
     }
 
+    // Reset the horizontal scroll position after (re)rendering dynamic tables
+    function resetStatsTableScroll() {
+      document.querySelectorAll('#stats-output .table-scroll').forEach(el => {
+        el.scrollLeft = 0;
+      });
+    }
+
     async function loadStats(ids, gw) {
       if (ids.length === 0) {
         out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
@@ -299,6 +305,9 @@ import Nav from "../components/Nav.astro";
 
             lastManagersData = allData;
             out.innerHTML = makeStatsTable(allData, gw);
+
+            // IMPORTANT: after dynamic render, force scroll wrapper back to far left
+            requestAnimationFrame(resetStatsTableScroll);
           }
         } catch (e) {
           console.error(`Failed to load manager ${id}:`, e);
@@ -307,6 +316,7 @@ import Nav from "../components/Nav.astro";
       }
 
       loadingStatus.innerHTML = `<span style='color:#16a34a; font-weight: 700;'>✅ Loaded ${loaded} of ${ids.length} managers (GW${gw})</span>`;
+      requestAnimationFrame(resetStatsTableScroll);
     }
 
     async function updateDisplay() {
