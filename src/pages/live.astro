@@ -493,15 +493,7 @@ import Nav from "../components/Nav.astro";
     }
 
     function makeLiveTable(managers, compareToId = "") {
-      // Sort managers by projected overall points (descending) to determine standings
-      const sorted = [...managers].sort((a, b) => {
-        // Primary sort: by totalPoints descending
-        if (b.totalPoints !== a.totalPoints) {
-          return b.totalPoints - a.totalPoints;
-        }
-        // Secondary sort: by managerName ascending (for stable/deterministic tie-breaking)
-        return a.managerName.localeCompare(b.managerName);
-      });
+      const sorted = [...managers].sort((a, b) => b.totalPoints - a.totalPoints);
 
       const leader = sorted[0];
       const compareManager = compareToId ? sorted.find(m => m.entryId.toString() === compareToId) : leader;
@@ -520,17 +512,18 @@ import Nav from "../components/Nav.astro";
                   <th class="num" style="width: 80px;">Transfer<br/>Hit</th>
                   <th class="num" style="width: 80px;">Live GW<br/>Nett</th>
                   <th class="num" style="width: 100px;">Proj<br/>Overall</th>
-                  <th class="num" style="width: 100px;">Proj Position<br/>Overall</th>
+                  <th class="num" style="width: 100px;">Diff GW<br/>(vs ${compareManager.managerName.split(' ')[0]})</th>
                   <th class="num" style="width: 100px;">Diff Overall<br/>(vs ${compareManager.managerName.split(' ')[0]})</th>
                 </tr>
               </thead>
               <tbody>
       `;
 
-      // Calculate projected overall position for each manager
-      // Position is the 1-based rank in the sorted standings
       let rank = 1;
       for (const m of sorted) {
+        const diffGW = m.livePoints - compareManager.livePoints;
+        const diffGWText = diffGW > 0 ? `+${diffGW}` : diffGW === 0 ? "0" : diffGW.toString();
+
         const diffOverall = m.totalPoints - compareManager.totalPoints;
         const diffOverallText = diffOverall > 0 ? `+${diffOverall}` : diffOverall === 0 ? "0" : diffOverall.toString();
 
@@ -544,7 +537,7 @@ import Nav from "../components/Nav.astro";
             <td class="num" style="color: var(--danger);">${m.transferCost === 0 ? "0" : `-${Math.abs(m.transferCost)}`}</td>
             <td class="num strong">${m.livePoints}</td>
             <td class="num">${m.totalPoints.toLocaleString()}</td>
-            <td class="num">${rank}</td>
+            <td class="num">${diffGWText}</td>
             <td class="num">${diffOverallText}</td>
           </tr>
         `;
