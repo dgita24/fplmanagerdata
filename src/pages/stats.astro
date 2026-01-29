@@ -99,7 +99,6 @@ import Nav from "../components/Nav.astro";
     const gwFilterInput = document.getElementById("gw-filter");
 
     let managerIds = [];
-    let lastManagersData = [];
 
     function chipLabel(name) {
       return name === "wildcard" ? "WC" :
@@ -109,12 +108,10 @@ import Nav from "../components/Nav.astro";
              name;
     }
 
-    // Build compact chip counts like WC×2, BB×1, TC×1, FH×1
     function chipsUsedCountsFromHistory(historyData) {
       const chips = historyData?.chips || [];
       if (!Array.isArray(chips) || chips.length === 0) return [];
 
-      // Preserve deterministic ordering by first appearance (usually GW order from API)
       const order = [];
       const counts = new Map();
 
@@ -137,13 +134,10 @@ import Nav from "../components/Nav.astro";
     }
 
     async function fetchManagerSummary(id, gw) {
-      const summaryUrl = `/api/fpl/entry/${id}`;
-      const historyUrl = `/api/fpl/entry/${id}/history`;
-
       try {
         const [summaryRes, historyRes] = await Promise.all([
-          fetch(summaryUrl),
-          fetch(historyUrl)
+          fetch(`/api/fpl/entry/${id}`),
+          fetch(`/api/fpl/entry/${id}/history`)
         ]);
 
         if (!summaryRes.ok || !historyRes.ok) throw new Error("Load error");
@@ -151,17 +145,13 @@ import Nav from "../components/Nav.astro";
         const summaryData = await summaryRes.json();
         const historyData = await historyRes.json();
 
-        const chipsUsedCounts = chipsUsedCountsFromHistory(historyData);
-        const { gwPoints, gwRank } = gwStatsFromHistory(historyData, gw);
-
         return {
           entryId: Number(id),
           managerName: `${summaryData.player_first_name} ${summaryData.player_last_name}`.trim(),
           totalPoints: Number(summaryData.summary_overall_points) || 0,
           overallRank: Number(summaryData.summary_overall_rank) || 0,
-          gwPoints,
-          gwRank,
-          chipsUsedCounts
+          ...gwStatsFromHistory(historyData, gw),
+          chipsUsedCounts: chipsUsedCountsFromHistory(historyData)
         };
       } catch (e) {
         console.error(`Error fetching manager ${id}:`, e);
@@ -169,19 +159,17 @@ import Nav from "../components/Nav.astro";
       }
     }
 
-    // Chip badge colors: light fill for count=1; darker fill for count>=2
     function chipBadgeStyle(label, count) {
       const isTwice = Number(count) >= 2;
 
       const palette = {
-        WC: { lightBg: '#FDE68A', darkBg: '#B45309', lightText: '#3B2F00', darkText: '#FFFFFF' }, // amber/gold
-        BB: { lightBg: '#BBF7D0', darkBg: '#15803D', lightText: '#052E16', darkText: '#FFFFFF' }, // green
-        TC: { lightBg: '#FECACA', darkBg: '#B91C1C', lightText: '#450A0A', darkText: '#FFFFFF' }, // red
-        FH: { lightBg: '#FED7AA', darkBg: '#C2410C', lightText: '#431407', darkText: '#FFFFFF' }  // orange
+        WC: { lightBg: '#FDE68A', darkBg: '#B45309', lightText: '#3B2F00', darkText: '#FFFFFF' },
+        BB: { lightBg: '#BBF7D0', darkBg: '#15803D', lightText: '#052E16', darkText: '#FFFFFF' },
+        TC: { lightBg: '#FECACA', darkBg: '#B91C1C', lightText: '#450A0A', darkText: '#FFFFFF' },
+        FH: { lightBg: '#FED7AA', darkBg: '#C2410C', lightText: '#431407', darkText: '#FFFFFF' }
       };
 
       const p = palette[label] || { lightBg: '#E2E8F0', darkBg: '#475569', lightText: '#0F172A', darkText: '#FFFFFF' };
-
       const bg = isTwice ? p.darkBg : p.lightBg;
       const fg = isTwice ? p.darkText : p.lightText;
       const border = isTwice ? 'rgba(0,0,0,0.10)' : 'rgba(0,0,0,0.08)';
@@ -216,7 +204,6 @@ import Nav from "../components/Nav.astro";
         <h2 class="page-title" style="font-size: 1.1rem;">League Standings (GW${gw})</h2>
 
         <div class="table-shell">
-          <!-- IMPORTANT: removed tabindex to avoid mobile focus/scroll nudging -->
           <div class="table-scroll" role="region" aria-label="League standings table">
             <table class="data-table" style="min-width: 0; table-layout: fixed;">
               <thead>
@@ -237,8 +224,6 @@ import Nav from "../components/Nav.astro";
         html += `
           <tr>
             <td class="num strong">${rank}</td>
-
-            <!-- IMPORTANT: no width on <td> when using table-layout: fixed; widths are controlled by <th> -->
             <td>
               <a href="/squads?manager=${m.entryId}" style="
                 display: block;
@@ -251,10 +236,8 @@ import Nav from "../components/Nav.astro";
               ">
                 ${m.managerName}
               </a>
-
               ${chipsInlineCountsHtml(m.chipsUsedCounts)}
             </td>
-
             <td class="num strong">${Number(m.totalPoints).toLocaleString()}</td>
             <td class="num">${Number(m.overallRank).toLocaleString()}</td>
             <td class="num">${Number(m.gwPoints).toLocaleString()}</td>
@@ -274,7 +257,7 @@ import Nav from "../components/Nav.astro";
       return html;
     }
 
-    // HARD reset: mobile browsers can nudge scrollLeft after initial paint/address-bar changes.
+    // HARD reset: mobile browsers can nudge scrollLeft after paint/address-bar changes.
     function resetStatsTableScrollHard() {
       const els = document.querySelectorAll('#stats-output .table-scroll');
       els.forEach(el => { el.scrollLeft = 0; });
@@ -299,32 +282,22 @@ import Nav from "../components/Nav.astro";
       }
 
       const allData = [];
-      lastManagersData = [];
       out.innerHTML = "";
       loadingStatus.textContent = `Loading 0 of ${ids.length} managers for GW${gw}...`;
 
       let loaded = 0;
       for (const id of ids) {
-        try {
-          const data = await fetchManagerSummary(id, gw);
-          if (data) {
-            allData.push(data);
-            loaded++;
-
-            loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
-
-            allData.sort((a, b) => b.totalPoints - a.totalPoints);
-
-            lastManagersData = allData;
-            out.innerHTML = makeStatsTable(allData, gw);
-
-            // IMPORTANT: after dynamic render, force scroll wrapper back to far left
-            resetStatsTableScrollHard();
-          }
-        } catch (e) {
-          console.error(`Failed to load manager ${id}:`, e);
-          loaded++;
+        const data = await fetchManagerSummary(id, gw);
+        if (data) {
+          allData.push(data);
         }
+        loaded++;
+        loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+
+        allData.sort((a, b) => b.totalPoints - a.totalPoints);
+        out.innerHTML = makeStatsTable(allData, gw);
+
+        resetStatsTableScrollHard();
       }
 
       loadingStatus.innerHTML = `<span style='color:#16a34a; font-weight: 700;'>✅ Loaded ${loaded} of ${ids.length} managers (GW${gw})</span>`;

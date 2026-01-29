@@ -26,13 +26,15 @@ const { title = "FPL Manager Data" } = Astro.props;
       // Ensure horizontally-scrollable table wrappers start at the far left on mobile.
       // Some mobile browsers restore/anchor scrollLeft unexpectedly.
       const resetTableScroll = () => {
-        document.querySelectorAll('.table-scroll').forEach((el) => {
-          el.scrollLeft = 0;
-        });
+        const els = document.querySelectorAll(".table-scroll");
+        els.forEach((el) => (el.scrollLeft = 0));
+        requestAnimationFrame(() => els.forEach((el) => (el.scrollLeft = 0)));
+        setTimeout(() => els.forEach((el) => (el.scrollLeft = 0)), 100);
       };
 
-      window.addEventListener('load', resetTableScroll);
-      window.addEventListener('pageshow', resetTableScroll);
+      window.addEventListener("load", resetTableScroll);
+      window.addEventListener("pageshow", resetTableScroll);
+      window.addEventListener("resize", () => setTimeout(resetTableScroll, 50));
     </script>
   </body>
 </html>
@@ -60,16 +62,6 @@ const { title = "FPL Manager Data" } = Astro.props;
     --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.10);
 
     --container: 1200px;
-
-    /* Sticky column system defaults */
-    --sticky-col-1-width: 56px;
-    --sticky-col-2-width: 220px;
-
-    /* z-index layers */
-    --sticky-z-header: 20; /* header row baseline */
-    --sticky-z-col1: 19; /* rank column */
-    --sticky-z-col2: 18; /* manager column */
-    --sticky-z-body: 1; /* normal cells */
   }
 
   *,
@@ -290,9 +282,9 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .badge--chip {
-    padding: 1px 6px; /* tighter than normal badges */
-    font-size: 0.72rem; /* smaller text */
-    font-weight: 800; /* keeps it readable when small */
+    padding: 1px 6px;
+    font-size: 0.72rem;
+    font-weight: 800;
     line-height: 1.1;
   }
 
@@ -307,9 +299,10 @@ const { title = "FPL Manager Data" } = Astro.props;
      Table system
   ----------------------------- */
   .table-shell {
-    border: 1px solid rgba(15, 23, 42, 0.14); /* slightly stronger than --border */
+    border: 1px solid rgba(15, 23, 42, 0.14);
     background: #fff;
-    overflow: visible; /* keep visible so sticky isn't clipped */
+    overflow: hidden; /* clip to rounded corners */
+    border-radius: var(--radius);
     box-shadow: var(--shadow-sm);
   }
 
@@ -319,14 +312,16 @@ const { title = "FPL Manager Data" } = Astro.props;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
 
-    /* reduce weird horizontal scroll anchoring/overscroll on mobile */
     scroll-behavior: auto;
     scroll-snap-type: none;
     overscroll-behavior-x: contain;
     overflow-anchor: none;
-
-    /* optional: prevent tiny “bounce” revealing clipped edges */
     scroll-padding-left: 0;
+  }
+
+  /* Optional: make the horizontal scrollbar less visually intrusive where supported */
+  .table-scroll::-webkit-scrollbar {
+    height: 10px;
   }
 
   .data-table {
@@ -334,8 +329,6 @@ const { title = "FPL Manager Data" } = Astro.props;
     border-collapse: separate;
     border-spacing: 0;
     font-size: 0.9rem;
-
-    /* IMPORTANT: allow tables to shrink to the viewport; page-level can still set min-width when needed */
     min-width: 0;
   }
 
@@ -345,10 +338,6 @@ const { title = "FPL Manager Data" } = Astro.props;
     border-bottom: 1px solid rgba(15, 23, 42, 0.08);
     border-right: 1px solid rgba(15, 23, 42, 0.06);
     vertical-align: middle;
-
-    /* baseline layer for normal cells */
-    position: relative;
-    z-index: var(--sticky-z-body);
     background: #fff;
   }
 
@@ -360,7 +349,7 @@ const { title = "FPL Manager Data" } = Astro.props;
   .data-table thead th {
     position: sticky;
     top: 0;
-    z-index: var(--sticky-z-header);
+    z-index: 5;
     background: var(--surface-2);
     font-weight: 900;
     text-align: left;
@@ -381,41 +370,6 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
   .data-table .strong {
     font-weight: 900;
-  }
-
-  /* ----------------------------
-     Sticky column classes
-     (Keep these only if pages actually apply .sticky-col-1/.sticky-col-2 in markup)
-  ----------------------------- */
-  .sticky-col-1,
-  .sticky-col-2 {
-    position: sticky;
-    background: #fff;
-    will-change: transform;
-  }
-
-  .sticky-col-1 {
-    left: 0;
-    width: var(--sticky-col-1-width);
-    min-width: var(--sticky-col-1-width);
-    max-width: var(--sticky-col-1-width);
-    z-index: var(--sticky-z-col1);
-    box-shadow: 1px 0 0 var(--border);
-  }
-
-  .sticky-col-2 {
-    left: var(--sticky-col-1-width);
-    width: var(--sticky-col-2-width);
-    min-width: var(--sticky-col-2-width);
-    max-width: var(--sticky-col-2-width);
-    z-index: var(--sticky-z-col2);
-    box-shadow: 1px 0 0 var(--border), 8px 0 12px rgba(15, 23, 42, 0.06);
-  }
-
-  .data-table thead .sticky-col-1,
-  .data-table thead .sticky-col-2 {
-    background: var(--surface-2);
-    z-index: calc(var(--sticky-z-header) + 2);
   }
 
   @media (max-width: 480px) {
