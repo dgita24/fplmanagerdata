@@ -169,12 +169,33 @@ import Nav from "../components/Nav.astro";
       }
     }
 
+    // Chip badge colors: light fill for count=1; darker fill for count>=2
+    function chipBadgeStyle(label, count) {
+      const isTwice = Number(count) >= 2;
+
+      // Chosen to be readable with dark text on light fills and white text on darker fills.
+      const palette = {
+        WC: { lightBg: '#E9D5FF', darkBg: '#7C3AED', lightText: '#2E1065', darkText: '#FFFFFF' }, // purple
+        BB: { lightBg: '#BBF7D0', darkBg: '#16A34A', lightText: '#052E16', darkText: '#FFFFFF' }, // green
+        TC: { lightBg: '#FED7AA', darkBg: '#EA580C', lightText: '#431407', darkText: '#FFFFFF' }, // orange
+        FH: { lightBg: '#BAE6FD', darkBg: '#0284C7', lightText: '#082F49', darkText: '#FFFFFF' }  // blue
+      };
+
+      const p = palette[label] || { lightBg: '#E2E8F0', darkBg: '#475569', lightText: '#0F172A', darkText: '#FFFFFF' };
+
+      const bg = isTwice ? p.darkBg : p.lightBg;
+      const fg = isTwice ? p.darkText : p.lightText;
+      const border = isTwice ? 'rgba(0,0,0,0.10)' : 'rgba(0,0,0,0.08)';
+
+      // NOTE: inline style used to avoid needing global CSS edits.
+      return `background:${bg}; color:${fg}; border:1px solid ${border};`;
+    }
+
     function chipsInlineCountsHtml(chipsCounts) {
       if (!chipsCounts || chipsCounts.length === 0) {
         return `<span style="color: var(--muted);">None</span>`;
       }
 
-      // No hard cap: future-proof; allow wrapping naturally if needed.
       return `
         <div style="
           display: flex;
@@ -185,7 +206,8 @@ import Nav from "../components/Nav.astro";
         ">
           ${chipsCounts.map(({ label, count }) => {
             const text = `${label}×${count}`;
-            return `<span class="badge" style="padding: 2px 8px;">${text}</span>`;
+            const style = chipBadgeStyle(label, count);
+            return `<span class="badge" style="padding: 2px 8px; ${style}">${text}</span>`;
           }).join("")}
         </div>
       `;
@@ -197,15 +219,15 @@ import Nav from "../components/Nav.astro";
 
         <div class="table-shell">
           <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
-            <table class="data-table" style="min-width: 680px; table-layout: fixed;">
+            <table class="data-table" style="min-width: 640px; table-layout: fixed;">
               <thead>
                 <tr>
-                  <th class="num" style="width: 56px;">Rank</th>
-                  <th style="width: 320px;">Manager<br/><span style="font-weight: 600; color: var(--muted);">Chips Used</span></th>
-                  <th class="num" style="width: 90px;">Total<br/>Points</th>
+                  <th class="num" style="width: 60px;">Rank</th>
+                  <th style="width: 300px;">Manager<br/><span style="font-weight: 600; color: var(--muted);">Chips Used</span></th>
+                  <th class="num" style="width: 92px;">Total<br/>Points</th>
                   <th class="num" style="width: 110px;">Overall<br/>Rank</th>
-                  <th class="num" style="width: 90px;">GW<br/>Points</th>
-                  <th class="num" style="width: 90px;">GW<br/>Rank</th>
+                  <th class="num" style="width: 78px;">GW<br/>Pts</th>
+                  <th class="num" style="width: 78px;">GW<br/>Rank</th>
                 </tr>
               </thead>
               <tbody>
@@ -217,7 +239,7 @@ import Nav from "../components/Nav.astro";
           <tr>
             <td class="num strong">${rank}</td>
 
-            <td style="width: 320px;">
+            <td style="width: 300px;">
               <a href="/squads?manager=${m.entryId}" style="
                 display: block;
                 font-size: 1.15rem;
