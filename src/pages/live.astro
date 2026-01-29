@@ -206,15 +206,27 @@ import Nav from "../components/Nav.astro";
           continue;
         }
 
+        // UPDATED: enforce formation constraints like Excel version (GK>=1, DEF>=3, MID>=2, FWD>=1)
         const gkCount = active.filter(p => p.playingPosition === "GK").length;
         const defCount = active.filter(p => p.playingPosition === "DEF").length;
+        const midCount = active.filter(p => p.playingPosition === "MID").length;
+        const fwdCount = active.filter(p => p.playingPosition === "FWD").length;
 
         const candPos = cand.playingPosition;
         const validGK = (candPos === "GK" && gkCount === 0);
         const validDefSave = (candPos === "DEF" && defCount < 3);
-        const validGeneral = (candPos !== "GK" && gkCount > 0 && defCount >= 3);
+        const validMidSave = (candPos === "MID" && midCount < 2);
+        const validFwdSave = (candPos === "FWD" && fwdCount < 1);
 
-        if (validGK || validDefSave || validGeneral) {
+        // only allow "general" subs if resulting team satisfies minimum formation constraints
+        const validGeneral =
+          (candPos !== "GK" &&
+          gkCount > 0 &&
+          defCount >= 3 &&
+          midCount >= 2 &&
+          fwdCount >= 1);
+
+        if (validGK || validDefSave || validMidSave || validFwdSave || validGeneral) {
           active = [...active, cand];
         } else {
           benchRemaining.push(cand);
@@ -427,15 +439,26 @@ import Nav from "../components/Nav.astro";
         const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
         const projectedBonus = finalTeam.reduce((sum, p) => sum + (p.projBonus * (p.multiplier || 0)), 0);
 
+        // UPDATED: use a typed/robust history rows array (avoids gw type mismatch)
+        const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
+
+        // UPDATED: transfer cost for this GW
         const transferCost =
-          Number((historyData.current || []).find(h => h.event === gw)?.event_transfers_cost) || 0;
+          Number(historyRows.find(h => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
 
         const liveNet = livePointsBeforeHits - transferCost;
 
-        const officialTotal = Number(summaryData.summary_overall_points) || 0;
-        const officialGW = Number(summaryData.summary_event_points) || 0;
+        // UPDATED: Excel-equivalent baseline = previous GW total_points (start-of-GW overall)
+        let startOverall = 0;
+        if (Number(gw) > 1) {
+          const prev = historyRows.find(h => Number(h.event) === (Number(gw) - 1));
+          startOverall = Number(prev?.total_points) || 0;
+        } else {
+          startOverall = 0;
+        }
 
-        const liveOverall = (officialTotal - officialGW) + liveNet;
+        // UPDATED: live overall points (correct even with hits)
+        const liveOverall = startOverall + liveNet;
 
         return {
           entryId,
