@@ -439,7 +439,6 @@ import Nav from "../components/Nav.astro";
                   <th class="num">Transfer<br/>Cost</th>
                   <th class="num">GW<br/>Points</th>
                   <th class="num">Total<br/>Points</th>
-                  <th class="num">FTs Start<br/>of GW</th>
                   <th class="num">FTs for<br/>next GW</th>
                 </tr>
               </thead>
@@ -456,7 +455,6 @@ import Nav from "../components/Nav.astro";
             <td class="num">${r.transferCost ?? ""}</td>
             <td class="num">${r.gwPoints ?? ""}</td>
             <td class="num">${r.totalPoints ?? ""}</td>
-            <td class="num">${r.FTsStartOfGW ?? ""}</td>
             <td class="num strong">${r.FTsForNextGW ?? ""}</td>
           </tr>
         `;
