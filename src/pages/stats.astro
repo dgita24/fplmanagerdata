@@ -188,17 +188,22 @@ import Nav from "../components/Nav.astro";
 
         <div class="table-shell">
           <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
-            <table class="data-table" style="min-width: 760px; table-layout: fixed;">
+            <table class="data-table">
               <thead>
                 <tr>
-                  <th class="num" style="width: 56px;">Rank</th>
-                  <th style="width: 200px;">Manager</th>
-                  <th style="width: 180px;">Team<br/>Name</th>
-                  <th class="num" style="width: 90px;">Total<br/>Points</th>
-                  <th class="num" style="width: 110px;">Overall<br/>Rank</th>
-                  <th class="num" style="width: 90px;">GW<br/>Points</th>
-                  <th class="num" style="width: 90px;">GW<br/>Rank</th>
-                  <th style="width: 220px;">Chips<br/>Used</th>
+                  <!-- Sticky col 1: Rank -->
+                  <th class="num sticky-col-1">Rank</th>
+
+                  <!-- Sticky col 2: Manager -->
+                  <th class="sticky-col-2">Manager</th>
+
+                  <!-- Non-sticky columns -->
+                  <th>Team<br/>Name</th>
+                  <th class="num">Total<br/>Points</th>
+                  <th class="num">Overall<br/>Rank</th>
+                  <th class="num">GW<br/>Points</th>
+                  <th class="num">GW<br/>Rank</th>
+                  <th>Chips<br/>Used</th>
                 </tr>
               </thead>
               <tbody>
@@ -208,17 +213,18 @@ import Nav from "../components/Nav.astro";
       for (const m of managersData) {
         html += `
           <tr>
-            <td class="num strong">${rank}</td>
+            <!-- Sticky col 1 body cell -->
+            <td class="num strong sticky-col-1">${rank}</td>
 
-            <!-- Option B: single-line + ellipsis -->
-            <td style="width: 200px; font-size: 1.15rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <!-- Sticky col 2 body cell -->
+            <td class="sticky-col-2" style="font-size: 1.15rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
               <a href="/squads?manager=${m.entryId}" style="display:block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                 ${m.managerName}
               </a>
             </td>
 
-            <!-- Option B: single-line + ellipsis -->
-            <td style="width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;">
+            <!-- Non-sticky columns -->
+            <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;">
               ${m.teamName}
             </td>
 
