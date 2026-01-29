@@ -109,16 +109,22 @@ import Nav from "../components/Nav.astro";
              name;
     }
 
-    function chipsUsedArrayFromHistory(historyData) {
+    // Build compact chip counts like WC×2, BB×1, TC×1, FH×1
+    function chipsUsedCountsFromHistory(historyData) {
       const chips = historyData?.chips || [];
       if (!Array.isArray(chips) || chips.length === 0) return [];
 
-      const used = [];
+      // Preserve deterministic ordering by first appearance (usually GW order from API)
+      const order = [];
+      const counts = new Map();
+
       for (const c of chips) {
         const label = chipLabel(c.name);
-        if (!used.includes(label)) used.push(label);
+        if (!counts.has(label)) order.push(label);
+        counts.set(label, (counts.get(label) || 0) + 1);
       }
-      return used;
+
+      return order.map(label => ({ label, count: counts.get(label) || 0 }));
     }
 
     function gwStatsFromHistory(historyData, gw) {
@@ -145,18 +151,17 @@ import Nav from "../components/Nav.astro";
         const summaryData = await summaryRes.json();
         const historyData = await historyRes.json();
 
-        const chipsUsedArr = chipsUsedArrayFromHistory(historyData);
+        const chipsUsedCounts = chipsUsedCountsFromHistory(historyData);
         const { gwPoints, gwRank } = gwStatsFromHistory(historyData, gw);
 
         return {
           entryId: Number(id),
-          teamName: summaryData.name,
           managerName: `${summaryData.player_first_name} ${summaryData.player_last_name}`.trim(),
           totalPoints: Number(summaryData.summary_overall_points) || 0,
           overallRank: Number(summaryData.summary_overall_rank) || 0,
           gwPoints,
           gwRank,
-          chipsUsedArr
+          chipsUsedCounts
         };
       } catch (e) {
         console.error(`Error fetching manager ${id}:`, e);
@@ -164,20 +169,24 @@ import Nav from "../components/Nav.astro";
       }
     }
 
-    function chipsGridHtml(chipsArr) {
-      if (!chipsArr || chipsArr.length === 0) return `<span style="color: var(--muted);">None</span>`;
+    function chipsInlineCountsHtml(chipsCounts) {
+      if (!chipsCounts || chipsCounts.length === 0) {
+        return `<span style="color: var(--muted);">None</span>`;
+      }
 
-      const limited = chipsArr.slice(0, 8);
-
+      // No hard cap: future-proof; allow wrapping naturally if needed.
       return `
         <div style="
-          display: grid;
-          grid-template-columns: repeat(4, max-content);
-          gap: 6px 8px;
-          align-items: center;
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+          margin-top: 6px;
           max-width: 100%;
         ">
-          ${limited.map(c => `<span class="badge" style="padding: 2px 8px;">${c}</span>`).join("")}
+          ${chipsCounts.map(({ label, count }) => {
+            const text = `${label}×${count}`;
+            return `<span class="badge" style="padding: 2px 8px;">${text}</span>`;
+          }).join("")}
         </div>
       `;
     }
@@ -188,17 +197,15 @@ import Nav from "../components/Nav.astro";
 
         <div class="table-shell">
           <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
-            <table class="data-table" style="min-width: 760px; table-layout: fixed;">
+            <table class="data-table" style="min-width: 680px; table-layout: fixed;">
               <thead>
                 <tr>
                   <th class="num" style="width: 56px;">Rank</th>
-                  <th style="width: 200px;">Manager</th>
-                  <th style="width: 180px;">Team<br/>Name</th>
+                  <th style="width: 320px;">Manager<br/><span style="font-weight: 600; color: var(--muted);">Chips Used</span></th>
                   <th class="num" style="width: 90px;">Total<br/>Points</th>
                   <th class="num" style="width: 110px;">Overall<br/>Rank</th>
                   <th class="num" style="width: 90px;">GW<br/>Points</th>
                   <th class="num" style="width: 90px;">GW<br/>Rank</th>
-                  <th style="width: 220px;">Chips<br/>Used</th>
                 </tr>
               </thead>
               <tbody>
@@ -210,26 +217,26 @@ import Nav from "../components/Nav.astro";
           <tr>
             <td class="num strong">${rank}</td>
 
-            <!-- Option B: single-line + ellipsis -->
-            <td style="width: 200px; font-size: 1.15rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-              <a href="/squads?manager=${m.entryId}" style="display:block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <td style="width: 320px;">
+              <a href="/squads?manager=${m.entryId}" style="
+                display: block;
+                font-size: 1.15rem;
+                font-weight: 700;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                line-height: 1.2;
+              ">
                 ${m.managerName}
               </a>
-            </td>
 
-            <!-- Option B: single-line + ellipsis -->
-            <td style="width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;">
-              ${m.teamName}
+              ${chipsInlineCountsHtml(m.chipsUsedCounts)}
             </td>
 
             <td class="num strong">${Number(m.totalPoints).toLocaleString()}</td>
             <td class="num">${Number(m.overallRank).toLocaleString()}</td>
             <td class="num">${Number(m.gwPoints).toLocaleString()}</td>
             <td class="num">${Number(m.gwRank).toLocaleString()}</td>
-
-            <td>
-              ${chipsGridHtml(m.chipsUsedArr)}
-            </td>
           </tr>
         `;
         rank++;
