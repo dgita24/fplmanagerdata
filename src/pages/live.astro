@@ -534,9 +534,6 @@ import Nav from "../components/Nav.astro";
         const diffOverall = m.totalPoints - compareManager.totalPoints;
         const diffOverallText = diffOverall > 0 ? `+${diffOverall}` : diffOverall === 0 ? "0" : diffOverall.toString();
 
-        // Projected overall position is simply the rank in the current sorted standings
-        const projectedPosition = rank;
-
         html += `
           <tr>
             <td class="num strong">${rank}</td>
@@ -547,7 +544,7 @@ import Nav from "../components/Nav.astro";
             <td class="num" style="color: var(--danger);">${m.transferCost === 0 ? "0" : `-${Math.abs(m.transferCost)}`}</td>
             <td class="num strong">${m.livePoints}</td>
             <td class="num">${m.totalPoints.toLocaleString()}</td>
-            <td class="num">${projectedPosition}</td>
+            <td class="num">${rank}</td>
             <td class="num">${diffOverallText}</td>
           </tr>
         `;
