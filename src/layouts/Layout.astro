@@ -288,7 +288,7 @@ const { title = "FPL Manager Data" } = Astro.props;
   .sticky-col-2 {
     position: sticky;
     background: #fff;
-    /* will-change: transform; */
+    will-change: transform;
   }
 
   .sticky-col-1 {
@@ -311,42 +311,6 @@ const { title = "FPL Manager Data" } = Astro.props;
 
     /* divider between sticky area and scrollable area */
     box-shadow: 1px 0 0 var(--border), 8px 0 12px rgba(15, 23, 42, 0.06);
-  }
-
-   /* Mobile grid uses same sticky classes */
-.mobile-grid .sticky-col-1,
-.mobile-grid .sticky-col-2 {
-  position: sticky;
-  background: #fff;
-}
-
-.mobile-grid .sticky-col-1 {
-  left: 0;
-  width: var(--sticky-col-1-width);
-  min-width: var(--sticky-col-1-width);
-  max-width: var(--sticky-col-1-width);
-  z-index: var(--sticky-z-col1);
-  box-shadow: 1px 0 0 var(--border);
-}
-
-.mobile-grid .sticky-col-2 {
-  left: var(--sticky-col-1-width);
-  width: var(--sticky-col-2-width);
-  min-width: var(--sticky-col-2-width);
-  max-width: var(--sticky-col-2-width);
-  z-index: var(--sticky-z-col2);
-  box-shadow: 1px 0 0 var(--border), 8px 0 12px rgba(15, 23, 42, 0.06);
-}
-
-.mobile-grid .sticky-col-2 {
-  text-align: left;
-}
-
-
-  /* Manager column alignment */
-  .data-table th.sticky-col-2,
-  .data-table td.sticky-col-2 {
-    text-align: left;
   }
 
   /* Sticky header cells for sticky columns must be above everything */
