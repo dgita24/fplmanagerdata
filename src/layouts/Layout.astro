@@ -323,6 +323,10 @@ const { title = "FPL Manager Data" } = Astro.props;
     scroll-behavior: auto;
     scroll-snap-type: none;
     overscroll-behavior-x: contain;
+    overflow-anchor: none;
+
+    /* optional: prevent tiny “bounce” revealing clipped edges */
+    scroll-padding-left: 0;
   }
 
   .data-table {

@@ -216,7 +216,8 @@ import Nav from "../components/Nav.astro";
         <h2 class="page-title" style="font-size: 1.1rem;">League Standings (GW${gw})</h2>
 
         <div class="table-shell">
-          <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
+          <!-- IMPORTANT: removed tabindex to avoid mobile focus/scroll nudging -->
+          <div class="table-scroll" role="region" aria-label="League standings table">
             <table class="data-table" style="min-width: 0; table-layout: fixed;">
               <thead>
                 <tr>
@@ -273,11 +274,22 @@ import Nav from "../components/Nav.astro";
       return html;
     }
 
-    // Reset the horizontal scroll position after (re)rendering dynamic tables
-    function resetStatsTableScroll() {
-      document.querySelectorAll('#stats-output .table-scroll').forEach(el => {
-        el.scrollLeft = 0;
+    // HARD reset: mobile browsers can nudge scrollLeft after initial paint/address-bar changes.
+    function resetStatsTableScrollHard() {
+      const els = document.querySelectorAll('#stats-output .table-scroll');
+      els.forEach(el => { el.scrollLeft = 0; });
+
+      requestAnimationFrame(() => {
+        els.forEach(el => { el.scrollLeft = 0; });
       });
+
+      setTimeout(() => {
+        els.forEach(el => { el.scrollLeft = 0; });
+      }, 50);
+
+      setTimeout(() => {
+        els.forEach(el => { el.scrollLeft = 0; });
+      }, 250);
     }
 
     async function loadStats(ids, gw) {
@@ -307,7 +319,7 @@ import Nav from "../components/Nav.astro";
             out.innerHTML = makeStatsTable(allData, gw);
 
             // IMPORTANT: after dynamic render, force scroll wrapper back to far left
-            requestAnimationFrame(resetStatsTableScroll);
+            resetStatsTableScrollHard();
           }
         } catch (e) {
           console.error(`Failed to load manager ${id}:`, e);
@@ -316,7 +328,7 @@ import Nav from "../components/Nav.astro";
       }
 
       loadingStatus.innerHTML = `<span style='color:#16a34a; font-weight: 700;'>✅ Loaded ${loaded} of ${ids.length} managers (GW${gw})</span>`;
-      requestAnimationFrame(resetStatsTableScroll);
+      resetStatsTableScrollHard();
     }
 
     async function updateDisplay() {
