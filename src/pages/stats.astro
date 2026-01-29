@@ -1,4 +1,3 @@
----
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 ---
@@ -50,4 +49,327 @@ import Nav from "../components/Nav.astro";
     import { supabase } from '../lib/supabase.ts'
 
     async function loadManagerIdsFromSupabase() {
-      const { data
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        window.location.replace('/login')
+        return { authenticated: false, managerIds: [] }
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('user_manager_lists')
+          .select('manager_ids')
+          .eq('user_id', user.id)
+          .single()
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error loading manager IDs:', error)
+          return { authenticated: true, managerIds: [] }
+        }
+
+        return { authenticated: true, managerIds: data?.manager_ids || [] }
+      } catch (e) {
+        console.error('Error:', e)
+        return { authenticated: false, managerIds: [] }
+      }
+    }
+
+    let latestGW = 1;
+
+    async function fetchBootstrapData() {
+      try {
+        const res = await fetch('/api/fpl/bootstrap-static');
+        if (!res.ok) throw new Error("Failed to fetch bootstrap data");
+        const data = await res.json();
+
+        const currentEvent = (data.events || []).find(e => e.is_current);
+        latestGW = currentEvent ? currentEvent.id : 1;
+      } catch (e) {
+        console.error("Error fetching bootstrap data:", e);
+        latestGW = 1;
+      }
+    }
+
+    const out = document.getElementById("stats-output");
+    const loadingStatus = document.getElementById("loading-status");
+    const managerCountEl = document.getElementById("manager-count");
+    const refreshBtn = document.getElementById("refresh-btn");
+    const gwFilterInput = document.getElementById("gw-filter");
+
+    let managerIds = [];
+    let lastManagersData = [];
+
+    function chipLabel(name) {
+      return name === "wildcard" ? "WC" :
+             name === "bboost" ? "BB" :
+             name === "3xc" ? "TC" :
+             name === "freehit" ? "FH" :
+             name;
+    }
+
+    function chipsUsedArrayFromHistory(historyData) {
+      const chips = historyData?.chips || [];
+      if (!Array.isArray(chips) || chips.length === 0) return [];
+
+      const used = [];
+      for (const c of chips) {
+        const label = chipLabel(c.name);
+        if (!used.includes(label)) used.push(label);
+      }
+      return used;
+    }
+
+    function gwStatsFromHistory(historyData, gw) {
+      const current = Array.isArray(historyData?.current) ? historyData.current : [];
+      const row = current.find(r => Number(r.event) === Number(gw));
+      return {
+        gwPoints: row ? Number(row.points) || 0 : 0,
+        gwRank: row ? Number(row.rank) || 0 : 0
+      };
+    }
+
+    async function fetchManagerSummary(id, gw) {
+      const summaryUrl = `/api/fpl/entry/${id}`;
+      const historyUrl = `/api/fpl/entry/${id}/history`;
+
+      try {
+        const [summaryRes, historyRes] = await Promise.all([
+          fetch(summaryUrl),
+          fetch(historyUrl)
+        ]);
+
+        if (!summaryRes.ok || !historyRes.ok) throw new Error("Load error");
+
+        const summaryData = await summaryRes.json();
+        const historyData = await historyRes.json();
+
+        const chipsUsedArr = chipsUsedArrayFromHistory(historyData);
+        const { gwPoints, gwRank } = gwStatsFromHistory(historyData, gw);
+
+        return {
+          entryId: Number(id),
+          teamName: summaryData.name,
+          managerName: `${summaryData.player_first_name} ${summaryData.player_last_name}`.trim(),
+          totalPoints: Number(summaryData.summary_overall_points) || 0,
+          overallRank: Number(summaryData.summary_overall_rank) || 0,
+          gwPoints,
+          gwRank,
+          chipsUsedArr
+        };
+      } catch (e) {
+        console.error(`Error fetching manager ${id}:`, e);
+        return null;
+      }
+    }
+
+    function chipsGridHtml(chipsArr) {
+      if (!chipsArr || chipsArr.length === 0) return `<span style="color: var(--muted);">None</span>`;
+
+      const limited = chipsArr.slice(0, 8);
+
+      return `
+        <div style="
+          display: grid;
+          grid-template-columns: repeat(4, max-content);
+          gap: 6px 8px;
+          align-items: center;
+          max-width: 100%;
+        ">
+          ${limited.map(c => `<span class="badge" style="padding: 2px 8px;">${c}</span>`).join("")}
+        </div>
+      `;
+    }
+
+    function makeStatsTable(managersData, gw) {
+      // Desktop/tablet table (existing)
+      const desktopTable = `
+        <h2 class="page-title" style="font-size: 1.1rem;">League Standings (GW${gw})</h2>
+        <div class="table-desktop" style="display: block;">
+          <div class="table-shell">
+            <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th class="num sticky-col-1">Rank</th>
+                    <th class="sticky-col-2">Manager</th>
+                    <th>Team<br/>Name</th>
+                    <th class="num">Total<br/>Points</th>
+                    <th class="num">Overall<br/>Rank</th>
+                    <th class="num">GW<br/>Points</th>
+                    <th class="num">GW<br/>Rank</th>
+                    <th>Chips<br/>Used</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${managersData.map((m, i) => `
+                    <tr>
+                      <td class="num strong sticky-col-1">${i + 1}</td>
+                      <td class="sticky-col-2" style="font-size: 1.15rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        <a href="/squads?manager=${m.entryId}" style="display:block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                          ${m.managerName}
+                        </a>
+                      </td>
+                      <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;">
+                        ${m.teamName}
+                      </td>
+                      <td class="num strong">${Number(m.totalPoints).toLocaleString()}</td>
+                      <td class="num">${Number(m.overallRank).toLocaleString()}</td>
+                      <td class="num">${Number(m.gwPoints).toLocaleString()}</td>
+                      <td class="num">${Number(m.gwRank).toLocaleString()}</td>
+                      <td>${chipsGridHtml(m.chipsUsedArr)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Mobile grid (divs instead of table)
+      const mobileGrid = `
+        <h2 class="page-title" style="font-size: 1.1rem;">League Standings (GW${gw})</h2>
+        <div class="table-mobile">
+          <div class="table-shell">
+            <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
+              <div class="mobile-grid">
+                <div class="mobile-grid-header">
+                  <div class="sticky-col-1 num">Rank</div>
+                  <div class="sticky-col-2">Manager</div>
+                  <div>Team Name</div>
+                  <div class="num">Total Points</div>
+                  <div class="num">Overall Rank</div>
+                  <div class="num">GW Points</div>
+                  <div class="num">GW Rank</div>
+                  <div>Chips Used</div>
+                </div>
+                <div class="mobile-grid-body">
+                  ${managersData.map((m, i) => `
+                    <div class="mobile-grid-row">
+                      <div class="sticky-col-1 num strong">${i + 1}</div>
+                      <div class="sticky-col-2" style="font-size: 1.15rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        <a href="/squads?manager=${m.entryId}" style="display:block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                          ${m.managerName}
+                        </a>
+                      </div>
+                      <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;">
+                        ${m.teamName}
+                      </div>
+                      <div class="num strong">${Number(m.totalPoints).toLocaleString()}</div>
+                      <div class="num">${Number(m.overallRank).toLocaleString()}</div>
+                      <div class="num">${Number(m.gwPoints).toLocaleString()}</div>
+                      <div class="num">${Number(m.gwRank).toLocaleString()}</div>
+                      <div>${chipsGridHtml(m.chipsUsedArr)}</div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      return `
+        <style>
+          @media (min-width: 640px) {
+            .table-mobile { display: none !important; }
+          }
+          @media (max-width: 639px) {
+            .table-desktop { display: none !important; }
+            .mobile-grid {
+              display: grid;
+              grid-template-columns: var(--sticky-col-1-width) var(--sticky-col-2-width) 1fr 1fr 1fr 1fr 1fr 1fr;
+              gap: 0;
+              min-width: 720px;
+              font-size: 0.9rem;
+            }
+            .mobile-grid-header {
+              position: sticky;
+              top: 0;
+              z-index: var(--sticky-z-header);
+              background: var(--surface);
+              font-weight: 900;
+            }
+            .mobile-grid-header > * { padding: 10px; border-bottom: 1px solid var(--border); }
+            .mobile-grid-row > * { padding: 10px; border-bottom: 1px solid var(--border); }
+            .mobile-grid-body { overflow: hidden; }
+          }
+        </style>
+        ${desktopTable}
+        ${mobileGrid}
+      `;
+    }
+
+    async function loadStats(ids, gw) {
+      if (ids.length === 0) {
+        out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
+        return;
+      }
+
+      const allData = [];
+      lastManagersData = [];
+      out.innerHTML = "";
+      loadingStatus.textContent = `Loading 0 of ${ids.length} managers for GW${gw}...`;
+
+      let loaded = 0;
+      for (const id of ids) {
+        try {
+          const data = await fetchManagerSummary(id, gw);
+          if (data) {
+            allData.push(data);
+            loaded++;
+
+            loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+
+            allData.sort((a, b) => b.totalPoints - a.totalPoints);
+
+            lastManagersData = allData;
+            out.innerHTML = makeStatsTable(allData, gw);
+          }
+        } catch (e) {
+          console.error(`Failed to load manager ${id}:`, e);
+          loaded++;
+        }
+      }
+
+      loadingStatus.innerHTML = `<span style='color:#16a34a; font-weight: 700;'>✅ Loaded ${loaded} of ${ids.length} managers (GW${gw})</span>`;
+    }
+
+    async function updateDisplay() {
+      managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+      if (managerIds.length === 0) {
+        out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
+        return;
+      }
+
+      const gw = parseInt(gwFilterInput.value) || latestGW;
+      await loadStats(managerIds, gw);
+    }
+
+    (async function init() {
+      await fetchBootstrapData();
+
+      gwFilterInput.value = latestGW;
+      gwFilterInput.placeholder = `Latest: GW${latestGW}`;
+
+      const { managerIds: ids } = await loadManagerIdsFromSupabase();
+      managerIds = ids;
+
+      await updateDisplay();
+    })();
+
+    gwFilterInput.addEventListener('change', async () => {
+      const gw = parseInt(gwFilterInput.value);
+      if (gw && gw >= 1 && gw <= 38) {
+        await loadStats(managerIds, gw);
+      }
+    });
+
+    refreshBtn.addEventListener('click', async () => {
+      const { managerIds: ids } = await loadManagerIdsFromSupabase();
+      managerIds = ids;
+      await updateDisplay();
+    });
+  </script>
+</Layout>
