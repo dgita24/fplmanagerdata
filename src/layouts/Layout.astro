@@ -9,7 +9,7 @@ const { title = "FPL Manager Data" } = Astro.props;
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
@@ -21,6 +21,19 @@ const { title = "FPL Manager Data" } = Astro.props;
         <slot />
       </main>
     </div>
+
+    <script is:inline>
+      // Ensure horizontally-scrollable table wrappers start at the far left on mobile.
+      // Some mobile browsers restore/anchor scrollLeft unexpectedly.
+      const resetTableScroll = () => {
+        document.querySelectorAll('.table-scroll').forEach((el) => {
+          el.scrollLeft = 0;
+        });
+      };
+
+      window.addEventListener('load', resetTableScroll);
+      window.addEventListener('pageshow', resetTableScroll);
+    </script>
   </body>
 </html>
 
@@ -53,32 +66,29 @@ const { title = "FPL Manager Data" } = Astro.props;
     --sticky-col-2-width: 220px;
 
     /* z-index layers */
-    --sticky-z-header: 20;  /* header row baseline */
-    --sticky-z-col1: 19;    /* rank column */
-    --sticky-z-col2: 18;    /* manager column */
-    --sticky-z-body: 1;     /* normal cells */
+    --sticky-z-header: 20; /* header row baseline */
+    --sticky-z-col1: 19; /* rank column */
+    --sticky-z-col2: 18; /* manager column */
+    --sticky-z-body: 1; /* normal cells */
   }
 
-  *, *::before, *::after { box-sizing: border-box; }
-  html, body { height: 100%; }
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    height: 100%;
+  }
 
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
 
-    font-family:
-      ui-sans-serif,
-      system-ui,
-      -apple-system,
-      "Segoe UI",
-      Roboto,
-      Helvetica,
-      Arial,
-      "Apple Color Emoji",
-      "Segoe UI Emoji",
-      "Segoe UI Symbol",
-      sans-serif;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+      "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
 
     line-height: 1.5;
     text-rendering: optimizeLegibility;
@@ -86,8 +96,13 @@ const { title = "FPL Manager Data" } = Astro.props;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  a { color: var(--primary); text-decoration: none; }
-  a:hover { text-decoration: underline; }
+  a {
+    color: var(--primary);
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
 
   a:focus-visible,
   button:focus-visible,
@@ -99,19 +114,46 @@ const { title = "FPL Manager Data" } = Astro.props;
     border-radius: 8px;
   }
 
-  .app-shell { min-height: 100%; }
+  .app-shell {
+    min-height: 100%;
+  }
 
   .app-main {
     max-width: var(--container);
     margin-inline: auto;
-    padding: 12px;
+
+    padding-left: calc(12px + env(safe-area-inset-left));
+    padding-right: calc(12px + env(safe-area-inset-right));
+    padding-top: 12px;
+    padding-bottom: 12px;
   }
 
-  @media (min-width: 640px) { .app-main { padding: 16px; } }
-  @media (min-width: 1024px) { .app-main { padding: 20px; } }
+  @media (min-width: 640px) {
+    .app-main {
+      padding-left: calc(16px + env(safe-area-inset-left));
+      padding-right: calc(16px + env(safe-area-inset-right));
+      padding-top: 16px;
+      padding-bottom: 16px;
+    }
+  }
 
-  .page { display: grid; gap: 12px; }
-  .page-header { display: grid; gap: 6px; }
+  @media (min-width: 1024px) {
+    .app-main {
+      padding-left: calc(20px + env(safe-area-inset-left));
+      padding-right: calc(20px + env(safe-area-inset-right));
+      padding-top: 20px;
+      padding-bottom: 20px;
+    }
+  }
+
+  .page {
+    display: grid;
+    gap: 12px;
+  }
+  .page-header {
+    display: grid;
+    gap: 6px;
+  }
 
   .page-title {
     margin: 0;
@@ -127,7 +169,9 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   @media (min-width: 640px) {
-    .page-title { font-size: 1.5rem; }
+    .page-title {
+      font-size: 1.5rem;
+    }
   }
 
   .controls {
@@ -148,7 +192,10 @@ const { title = "FPL Manager Data" } = Astro.props;
     }
   }
 
-  .control { display: grid; gap: 6px; }
+  .control {
+    display: grid;
+    gap: 6px;
+  }
 
   .label {
     font-size: 0.9rem;
@@ -171,7 +218,8 @@ const { title = "FPL Manager Data" } = Astro.props;
 
   .textarea {
     min-height: 180px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+      monospace;
   }
 
   .btn {
@@ -186,17 +234,38 @@ const { title = "FPL Manager Data" } = Astro.props;
     white-space: nowrap;
   }
 
-  .btn--primary { background: var(--primary); color: #fff; }
-  .btn--primary:hover { background: var(--primary-hover); }
+  .btn--primary {
+    background: var(--primary);
+    color: #fff;
+  }
+  .btn--primary:hover {
+    background: var(--primary-hover);
+  }
 
-  .btn--success { background: var(--success); color: #fff; }
-  .btn--success:hover { filter: brightness(0.95); }
+  .btn--success {
+    background: var(--success);
+    color: #fff;
+  }
+  .btn--success:hover {
+    filter: brightness(0.95);
+  }
 
-  .btn--danger { background: var(--danger); color: #fff; }
-  .btn--danger:hover { filter: brightness(0.95); }
+  .btn--danger {
+    background: var(--danger);
+    color: #fff;
+  }
+  .btn--danger:hover {
+    filter: brightness(0.95);
+  }
 
-  .btn--neutral { background: #fff; border-color: var(--border); color: var(--text); }
-  .btn--neutral:hover { background: var(--surface-2); }
+  .btn--neutral {
+    background: #fff;
+    border-color: var(--border);
+    color: var(--text);
+  }
+  .btn--neutral:hover {
+    background: var(--surface-2);
+  }
 
   .meta-row {
     display: flex;
@@ -221,10 +290,10 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .badge--chip {
-  padding: 1px 6px;          /* tighter than normal badges */
-  font-size: 0.72rem;        /* smaller text */
-  font-weight: 800;          /* keeps it readable when small */
-  line-height: 1.1;
+    padding: 1px 6px; /* tighter than normal badges */
+    font-size: 0.72rem; /* smaller text */
+    font-weight: 800; /* keeps it readable when small */
+    line-height: 1.1;
   }
 
   @media (max-width: 480px) {
@@ -233,17 +302,14 @@ const { title = "FPL Manager Data" } = Astro.props;
       font-size: 0.68rem;
     }
   }
+
   /* ----------------------------
      Table system
   ----------------------------- */
   .table-shell {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border: 1px solid rgba(15, 23, 42, 0.14); /* slightly stronger than --border */
     background: #fff;
-
-    /* keep visible so sticky isn't clipped */
-    overflow: visible;
-
+    overflow: visible; /* keep visible so sticky isn't clipped */
     box-shadow: var(--shadow-sm);
   }
 
@@ -252,6 +318,11 @@ const { title = "FPL Manager Data" } = Astro.props;
     overflow-x: auto;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
+
+    /* reduce weird horizontal scroll anchoring/overscroll on mobile */
+    scroll-behavior: auto;
+    scroll-snap-type: none;
+    overscroll-behavior-x: contain;
   }
 
   .data-table {
@@ -259,14 +330,16 @@ const { title = "FPL Manager Data" } = Astro.props;
     border-collapse: separate;
     border-spacing: 0;
     font-size: 0.9rem;
-    min-width: 0px;
+
+    /* IMPORTANT: allow tables to shrink to the viewport; page-level can still set min-width when needed */
+    min-width: 0;
   }
 
   .data-table th,
   .data-table td {
     padding: 10px 10px;
-    border-bottom: 1px solid var(--border);
-    border-right: 1px solid var(--border);
+    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+    border-right: 1px solid rgba(15, 23, 42, 0.06);
     vertical-align: middle;
 
     /* baseline layer for normal cells */
@@ -284,18 +357,31 @@ const { title = "FPL Manager Data" } = Astro.props;
     position: sticky;
     top: 0;
     z-index: var(--sticky-z-header);
-    background: var(--surface);
+    background: var(--surface-2);
     font-weight: 900;
     text-align: left;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.14);
   }
 
-  .data-table tr:last-child td { border-bottom: 0; }
+  .data-table tbody tr:nth-child(even) td {
+    background: #fafafa;
+  }
 
-  .data-table .num { text-align: center; font-variant-numeric: tabular-nums; }
-  .data-table .strong { font-weight: 900; }
+  .data-table tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .data-table .num {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .data-table .strong {
+    font-weight: 900;
+  }
 
   /* ----------------------------
      Sticky column classes
+     (Keep these only if pages actually apply .sticky-col-1/.sticky-col-2 in markup)
   ----------------------------- */
   .sticky-col-1,
   .sticky-col-2 {
@@ -310,8 +396,6 @@ const { title = "FPL Manager Data" } = Astro.props;
     min-width: var(--sticky-col-1-width);
     max-width: var(--sticky-col-1-width);
     z-index: var(--sticky-z-col1);
-
-    /* visual divider */
     box-shadow: 1px 0 0 var(--border);
   }
 
@@ -321,20 +405,23 @@ const { title = "FPL Manager Data" } = Astro.props;
     min-width: var(--sticky-col-2-width);
     max-width: var(--sticky-col-2-width);
     z-index: var(--sticky-z-col2);
-
-    /* divider between sticky area and scrollable area */
     box-shadow: 1px 0 0 var(--border), 8px 0 12px rgba(15, 23, 42, 0.06);
   }
 
-  /* Sticky header cells for sticky columns must be above everything */
   .data-table thead .sticky-col-1,
   .data-table thead .sticky-col-2 {
-    background: var(--surface);
+    background: var(--surface-2);
     z-index: calc(var(--sticky-z-header) + 2);
   }
 
   @media (max-width: 480px) {
-    .data-table { font-size: 1.0rem; min-width: 0px; }
-    .data-table th, .data-table td { padding: 8px 8px; }
+    .data-table {
+      font-size: 1rem;
+      min-width: 0;
+    }
+    .data-table th,
+    .data-table td {
+      padding: 8px 8px;
+    }
   }
 </style>
