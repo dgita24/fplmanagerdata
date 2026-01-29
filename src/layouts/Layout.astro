@@ -220,6 +220,19 @@ const { title = "FPL Manager Data" } = Astro.props;
     font-weight: 700;
   }
 
+  .badge--chip {
+  padding: 1px 6px;          /* tighter than normal badges */
+  font-size: 0.72rem;        /* smaller text */
+  font-weight: 800;          /* keeps it readable when small */
+  line-height: 1.1;
+  }
+
+  @media (max-width: 480px) {
+    .badge--chip {
+      padding: 1px 5px;
+      font-size: 0.68rem;
+    }
+  }
   /* ----------------------------
      Table system
   ----------------------------- */

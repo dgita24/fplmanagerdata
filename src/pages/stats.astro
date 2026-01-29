@@ -199,15 +199,15 @@ import Nav from "../components/Nav.astro";
       return `
         <div style="
           display: flex;
-          gap: 6px;
+          gap: 4px;
           flex-wrap: wrap;
-          margin-top: 6px;
+          margin-top: 4px;
           max-width: 100%;
         ">
           ${chipsCounts.map(({ label, count }) => {
             const text = `${label}×${count}`;
             const style = chipBadgeStyle(label, count);
-            return `<span class="badge" style="padding: 2px 8px; ${style}">${text}</span>`;
+            return `<span class="badge badge--chip" style="${style}">${text}</span>`;
           }).join("")}
         </div>
       `;
@@ -219,15 +219,15 @@ import Nav from "../components/Nav.astro";
 
         <div class="table-shell">
           <div class="table-scroll" role="region" aria-label="League standings table" tabindex="0">
-            <table class="data-table" style="min-width: 640px; table-layout: fixed;">
+            <table class="data-table" style="min-width: 600px; table-layout: fixed;">
               <thead>
                 <tr>
-                  <th class="num" style="width: 60px;">Rank</th>
-                  <th style="width: 300px;">Manager<br/><span style="font-weight: 600; color: var(--muted);">Chips Used</span></th>
-                  <th class="num" style="width: 92px;">Total<br/>Points</th>
-                  <th class="num" style="width: 110px;">Overall<br/>Rank</th>
-                  <th class="num" style="width: 78px;">GW<br/>Pts</th>
-                  <th class="num" style="width: 78px;">GW<br/>Rank</th>
+                  <th class="num" style="width: 52px;">Rank</th>
+                  <th style="width: 260px;">Manager<br/><span style="font-weight: 600; color: var(--muted);">Chips Used</span></th>
+                  <th class="num" style="width: 84px;">Total<br/>Points</th>
+                  <th class="num" style="width: 98px;">Overall<br/>Rank</th>
+                  <th class="num" style="width: 64px;">GW<br/>Pts</th>
+                  <th class="num" style="width: 72px;">GW<br/>Rank</th>
                 </tr>
               </thead>
               <tbody>
