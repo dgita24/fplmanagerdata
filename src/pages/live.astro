@@ -19,7 +19,9 @@ import Nav from "../components/Nav.astro";
     <section class="controls">
       <div class="control">
         <label class="label" for="gw-filter">Gameweek</label>
-        <input class="input" type="number" id="gw-filter" min="1" max="38" placeholder="Auto" inputmode="numeric" />
+        <select class="select" id="gw-filter">
+          <option value="">Select GW</option>
+        </select>
       </div>
 
       <div class="control">
@@ -43,6 +45,50 @@ import Nav from "../components/Nav.astro";
     <section id="live-output" aria-live="polite"></section>
   </main>
 </Layout>
+
+<style>
+  .live-table td,
+  .live-table th {
+    padding: var(--space-1) var(--space-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .live-table .rank-col {
+    width: 28px;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .live-table .gw-col {
+    width: 28px;
+    text-align: center;
+  }
+
+  .live-table .hit-col {
+    width: 32px;
+    text-align: center;
+  }
+
+  .live-table .nett-col {
+    width: 32px;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .live-table .total-col {
+    width: 48px;
+    text-align: center;
+  }
+
+  .live-table .diff-col {
+    width: 32px;
+    text-align: center;
+  }
+
+  .live-table .manager-col {
+    font-weight: 600;
+  }
+</style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
@@ -77,7 +123,7 @@ import Nav from "../components/Nav.astro";
   }
 
   const out = document.getElementById("live-output");
-  const gwFilterInput = document.getElementById("gw-filter");
+  const gwFilterSelect = document.getElementById("gw-filter");
   const compareManagerSelect = document.getElementById("compare-manager");
   const loadingStatus = document.getElementById("loading-status");
   const lastUpdatedEl = document.getElementById("last-updated");
@@ -95,6 +141,17 @@ import Nav from "../components/Nav.astro";
 
   let autoRefreshInterval = null;
   let autoRefreshEnabled = false;
+
+  function populateGWSelector(currentGW) {
+    gwFilterSelect.innerHTML = '';
+    for (let i = 1; i <= 38; i++) {
+      const option = document.createElement('option');
+      option.value = i;
+      option.textContent = `GW ${i}`;
+      if (i === currentGW) option.selected = true;
+      gwFilterSelect.appendChild(option);
+    }
+  }
 
   function positionLabel(elementType) {
     if (elementType === 1) return "GK";
@@ -267,6 +324,8 @@ import Nav from "../components/Nav.astro";
 
       const currentEvent = data.events.find(e => e.is_current);
       latestGW = currentEvent ? currentEvent.id : 1;
+
+      populateGWSelector(latestGW);
 
       return data;
     } catch (e) {
@@ -460,21 +519,20 @@ import Nav from "../components/Nav.astro";
 
     const leader = sorted[0];
     const compareManager = compareToId ? sorted.find(m => m.entryId.toString() === compareToId) : leader;
-    const compareName = compareManager?.managerName?.split(' ')[0] || 'Ldr';
 
     let html = `
       <div class="table-container">
         <div class="table-scroll">
-          <table class="data-table">
+          <table class="data-table live-table">
             <thead>
               <tr>
-                <th class="num col-narrow">#</th>
+                <th class="rank-col">#</th>
                 <th>Manager</th>
-                <th class="num col-narrow">GW</th>
-                <th class="num col-narrow">Hit</th>
-                <th class="num col-narrow">Net</th>
-                <th class="num col-medium">Total</th>
-                <th class="num col-narrow">±${compareName}</th>
+                <th class="gw-col">GW</th>
+                <th class="hit-col">Hit</th>
+                <th class="nett-col">Nett</th>
+                <th class="total-col">Total</th>
+                <th class="diff-col">Diff</th>
               </tr>
             </thead>
             <tbody>
@@ -487,16 +545,16 @@ import Nav from "../components/Nav.astro";
 
       html += `
         <tr>
-          <td class="num col-narrow strong">${rank}</td>
-          <td class="nowrap">
-            <a href="/squads?manager=${m.entryId}" class="strong">${m.managerName}</a>
-            ${m.chipPlayed ? `<span class="badge" style="margin-left:var(--space-1);">${m.chipPlayed}</span>` : ""}
+          <td class="rank-col">${rank}</td>
+          <td class="manager-col">
+            <a href="/squads?manager=${m.entryId}">${m.managerName}</a>
+            ${m.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${m.chipPlayed}</span>` : ""}
           </td>
-          <td class="num col-narrow">${m.livePointsBeforeHits}</td>
-          <td class="num col-narrow text-danger">${m.transferCost === 0 ? "0" : `-${m.transferCost}`}</td>
-          <td class="num col-narrow strong">${m.livePoints}</td>
-          <td class="num col-medium">${m.totalPoints.toLocaleString()}</td>
-          <td class="num col-narrow">${diffText}</td>
+          <td class="gw-col">${m.livePointsBeforeHits}</td>
+          <td class="hit-col text-danger">${m.transferCost === 0 ? "0" : `-${m.transferCost}`}</td>
+          <td class="nett-col">${m.livePoints}</td>
+          <td class="total-col">${m.totalPoints.toLocaleString()}</td>
+          <td class="diff-col">${diffText}</td>
         </tr>
       `;
       rank++;
@@ -560,9 +618,6 @@ import Nav from "../components/Nav.astro";
     loadingStatus.textContent = "Loading player data...";
     await fetchBootstrapData();
 
-    gwFilterInput.value = latestGW;
-    gwFilterInput.placeholder = `GW${latestGW}`;
-
     const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
     if (!authenticated) return;
 
@@ -576,8 +631,8 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  gwFilterInput.addEventListener('change', async () => {
-    const gw = parseInt(gwFilterInput.value);
+  gwFilterSelect.addEventListener('change', async () => {
+    const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
       loadLive(managerIds, gw);
     }
@@ -591,7 +646,7 @@ import Nav from "../components/Nav.astro";
   refreshBtn.addEventListener('click', async () => {
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
-    const gw = parseInt(gwFilterInput.value) || latestGW;
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
     loadLive(managerIds, gw);
   });
 
@@ -603,7 +658,7 @@ import Nav from "../components/Nav.astro";
       autoRefreshBtn.className = "btn btn--success";
 
       autoRefreshInterval = setInterval(async () => {
-        const gw = parseInt(gwFilterInput.value) || latestGW;
+        const gw = parseInt(gwFilterSelect.value) || latestGW;
         loadLive(managerIds, gw);
       }, 120000);
     } else {

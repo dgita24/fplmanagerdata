@@ -19,7 +19,9 @@ import Nav from "../components/Nav.astro";
     <section class="controls">
       <div class="control">
         <label class="label" for="gw-filter">Gameweek</label>
-        <input class="input" type="number" id="gw-filter" min="1" max="38" placeholder="Auto" inputmode="numeric" />
+        <select class="select" id="gw-filter">
+          <option value="">All GWs</option>
+        </select>
       </div>
 
       <div class="control">
@@ -52,7 +54,6 @@ import Nav from "../components/Nav.astro";
 </Layout>
 
 <script>
-  // Inline FT calculation logic - MATCHES EXCEL EXACTLY
   function calculateFTs(managerHistory) {
     const byGW = new Map();
     managerHistory.forEach(row => byGW.set(row.gw, row));
@@ -139,7 +140,7 @@ import Nav from "../components/Nav.astro";
   }
 
   const out = document.getElementById("transfers-table");
-  const gwFilterInput = document.getElementById("gw-filter");
+  const gwFilterSelect = document.getElementById("gw-filter");
   const clearFilterBtn = document.getElementById("clear-filter-btn");
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
@@ -158,6 +159,17 @@ import Nav from "../components/Nav.astro";
     chipModal.classList.remove("is-open");
   });
 
+  function populateGWSelector(currentGW) {
+    gwFilterSelect.innerHTML = '<option value="">All GWs</option>';
+    for (let i = 1; i <= 38; i++) {
+      const option = document.createElement('option');
+      option.value = i;
+      option.textContent = `GW ${i}`;
+      if (i === currentGW) option.selected = true;
+      gwFilterSelect.appendChild(option);
+    }
+  }
+
   async function fetchPlayers() {
     try {
       const res = await fetch('/api/fpl/bootstrap-static');
@@ -166,6 +178,10 @@ import Nav from "../components/Nav.astro";
       data.elements.forEach(p => {
         allPlayersMap[p.id] = p.web_name;
       });
+
+      const currentEvent = (data.events || []).find(e => e.is_current);
+      latestGW = currentEvent ? currentEvent.id : 1;
+      populateGWSelector(latestGW);
     } catch (e) {
       console.error("Error fetching players:", e);
     }
@@ -235,7 +251,7 @@ import Nav from "../components/Nav.astro";
         const cost = history.current?.find(h => h.event === gw)?.event_transfers_cost || 0;
 
         html += `<div class="card" style="margin-bottom:var(--space-3);">`;
-        html += `<div class="card-body">`;
+        html += `<div class="card-body" style="padding:var(--space-2);">`;
         html += `<h3 style="margin:0 0 var(--space-2) 0; font-size:var(--text-sm);">GW ${gw}</h3>`;
 
         if (chip) {
@@ -386,7 +402,7 @@ import Nav from "../components/Nav.astro";
       rows = rows.filter(r => r.gw === gwNum);
       rows.sort((a, b) => b.totalPoints - a.totalPoints);
     } else {
-      rows.sort((a,b) => a.managerName.localeCompare(b.managerName) || a.gw-b.gw);
+      rows.sort((a,b) => a.managerName.localeCompare(b.managerName) || a.gw - b.gw);
     }
 
     let html = `
@@ -396,10 +412,10 @@ import Nav from "../components/Nav.astro";
             <thead>
               <tr>
                 <th>Manager</th>
-                <th class="num col-narrow">Hit</th>
-                <th class="num col-narrow">GW Pts</th>
-                <th class="num col-narrow">Total</th>
-                <th class="num col-narrow">FTs Next</th>
+                <th class="num" style="width:40px;">Hit</th>
+                <th class="num" style="width:45px;">GW Pts</th>
+                <th class="num" style="width:50px;">Total</th>
+                <th class="num" style="width:45px;">FTs</th>
               </tr>
             </thead>
             <tbody>
@@ -411,10 +427,10 @@ import Nav from "../components/Nav.astro";
           <td class="strong nowrap">
             <a href="#" class="manager-link" data-id="${r.entryId}" data-name="${r.managerName}">${r.managerName}</a>
           </td>
-          <td class="num col-narrow">${r.transferCost || 0}</td>
-          <td class="num col-narrow">${r.gwPoints ?? ""}</td>
-          <td class="num col-narrow">${r.totalPoints ?? ""}</td>
-          <td class="num col-narrow strong">${r.FTsForNextGW ?? ""}</td>
+          <td class="num">${r.transferCost || 0}</td>
+          <td class="num">${r.gwPoints ?? ""}</td>
+          <td class="num">${r.totalPoints ?? ""}</td>
+          <td class="num strong">${r.FTsForNextGW ?? ""}</td>
         </tr>
       `;
     }
@@ -435,7 +451,6 @@ import Nav from "../components/Nav.astro";
     }
 
     allHistories = [];
-    latestGW = null;
     out.innerHTML = "";
     loadingStatus.textContent = `Loading 0 of ${ids.length}...`;
 
@@ -464,8 +479,7 @@ import Nav from "../components/Nav.astro";
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
 
     if (latestGW) {
-      gwFilterInput.value = latestGW;
-      gwFilterInput.placeholder = `GW${latestGW}`;
+      gwFilterSelect.value = latestGW;
       filterByGW();
     }
   }
@@ -482,12 +496,10 @@ import Nav from "../components/Nav.astro";
   }
 
   function filterByGW() {
-    const filterGW = gwFilterInput.value.trim();
+    const filterGW = gwFilterSelect.value;
     out.innerHTML = makeTable(allHistories, filterGW);
     attachManagerLinks();
   }
-
-  fetchPlayers();
 
   (async function init() {
     await fetchPlayers();
@@ -505,15 +517,15 @@ import Nav from "../components/Nav.astro";
     }
   })();
 
-  gwFilterInput.addEventListener('input', filterByGW);
+  gwFilterSelect.addEventListener('change', filterByGW);
 
   clearFilterBtn.addEventListener('click', () => {
-    gwFilterInput.value = "";
+    gwFilterSelect.value = "";
     filterByGW();
   });
 
   refreshBtn.addEventListener('click', async () => {
-    gwFilterInput.value = "";
+    gwFilterSelect.value = "";
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     loadManagers(managerIds);

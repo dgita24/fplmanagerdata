@@ -19,7 +19,9 @@ import Nav from "../components/Nav.astro";
     <section class="controls">
       <div class="control">
         <label class="label" for="gw-filter">Gameweek</label>
-        <input class="input" type="number" id="gw-filter" min="1" max="38" placeholder="Auto" inputmode="numeric" />
+        <select class="select" id="gw-filter">
+          <option value="">Select GW</option>
+        </select>
       </div>
 
       <div class="control">
@@ -41,6 +43,64 @@ import Nav from "../components/Nav.astro";
     <section id="squads-output" aria-live="polite"></section>
   </main>
 </Layout>
+
+<style>
+  .squad-table td,
+  .squad-table th {
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-sm);
+  }
+
+  .squad-table .pos-num {
+    width: 24px;
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+  }
+
+  .squad-table .player-name {
+    font-weight: 600;
+  }
+
+  .squad-table .team-col {
+    width: 36px;
+    font-size: var(--text-xs);
+  }
+
+  .squad-table .pts-col {
+    width: 36px;
+    font-weight: 700;
+  }
+
+  .squad-table .cap-col {
+    width: 24px;
+    font-weight: 700;
+    font-size: var(--text-xs);
+  }
+
+  .squad-header {
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface-alt);
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--text-sm);
+  }
+
+  .bench-row {
+    background: var(--color-surface-alt);
+  }
+
+  .sub-on-row {
+    background: rgb(22 163 74 / 0.1);
+  }
+
+  .sub-off-row {
+    background: rgb(220 38 38 / 0.1);
+  }
+
+  .dnp-row {
+    background: rgb(220 38 38 / 0.05);
+    opacity: 0.7;
+  }
+</style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
@@ -73,7 +133,7 @@ import Nav from "../components/Nav.astro";
   }
 
   const out = document.getElementById("squads-output");
-  const gwFilterInput = document.getElementById("gw-filter");
+  const gwFilterSelect = document.getElementById("gw-filter");
   const managerFilter = document.getElementById("manager-filter");
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
@@ -88,6 +148,17 @@ import Nav from "../components/Nav.astro";
   let livePointsCache = new Map();
   let teamStatusCache = new Map();
   let projectedBonusCache = new Map();
+
+  function populateGWSelector(currentGW) {
+    gwFilterSelect.innerHTML = '';
+    for (let i = 1; i <= 38; i++) {
+      const option = document.createElement('option');
+      option.value = i;
+      option.textContent = `GW ${i}`;
+      if (i === currentGW) option.selected = true;
+      gwFilterSelect.appendChild(option);
+    }
+  }
 
   function getTeamGwStatus(teamId, gw) {
     return teamStatusCache.get(`${gw}:${teamId}`) || { started: false, finished: false };
@@ -258,6 +329,8 @@ import Nav from "../components/Nav.astro";
 
       const currentEvent = data.events?.find(e => e.is_current);
       latestGW = currentEvent ? currentEvent.id : 1;
+
+      populateGWSelector(latestGW);
 
       return data;
     } catch (e) {
@@ -443,21 +516,21 @@ import Nav from "../components/Nav.astro";
       const squad = [...(manager.squad || [])].sort((a, b) => a.position - b.position);
 
       html += `
-        <div class="card" style="margin-bottom:var(--space-4);">
-          <div style="padding:var(--space-3); background:var(--color-surface-alt); border-bottom:1px solid var(--color-border);">
+        <div class="card" style="margin-bottom:var(--space-3);">
+          <div class="squad-header">
             <strong>${manager.managerName}</strong>
             <span class="text-muted"> — ${manager.teamName}</span>
             ${manager.chipPlayed ? `<span class="badge" style="margin-left:var(--space-2);">${manager.chipPlayed}</span>` : ''}
           </div>
           <div class="table-scroll">
-            <table class="data-table">
+            <table class="data-table squad-table">
               <thead>
                 <tr>
-                  <th class="num col-narrow">#</th>
+                  <th class="num pos-num">#</th>
                   <th>Player</th>
-                  <th class="num col-narrow">Team</th>
-                  <th class="num col-narrow">Pts</th>
-                  <th class="num col-narrow">C</th>
+                  <th class="num team-col">Team</th>
+                  <th class="num pts-col">Pts</th>
+                  <th class="num cap-col">C</th>
                 </tr>
               </thead>
               <tbody>
@@ -467,29 +540,26 @@ import Nav from "../components/Nav.astro";
         const isBench = player.position > 11;
         
         let rowClass = "";
-        if (isBench) rowClass = "style='background:var(--color-surface-alt);'";
-        if (player.subOn) rowClass = "style='background:rgb(22 163 74 / 0.1);'";
-        if (player.subOff) rowClass = "style='background:rgb(220 38 38 / 0.1);'";
-        if (player.dnp) rowClass = "style='background:rgb(220 38 38 / 0.05); opacity:0.7;'";
+        if (player.subOn) rowClass = "sub-on-row";
+        else if (player.subOff) rowClass = "sub-off-row";
+        else if (player.dnp) rowClass = "dnp-row";
+        else if (isBench) rowClass = "bench-row";
 
         const captainLabel = player.isCaptain ? "C" : (player.isViceCaptain ? "V" : "");
         const captainClass = player.isCaptain ? "text-danger" : (player.isViceCaptain ? "text-primary" : "");
 
         let statusBadge = "";
-        if (player.subOn) statusBadge = `<span class="badge badge--success" style="margin-left:var(--space-1);">ON</span>`;
-        else if (player.subOff) statusBadge = `<span class="badge badge--danger" style="margin-left:var(--space-1);">OFF</span>`;
-        else if (player.dnp) statusBadge = `<span class="badge" style="margin-left:var(--space-1);">DNP</span>`;
+        if (player.subOn) statusBadge = `<span class="badge badge--success" style="font-size:9px;padding:1px 4px;margin-left:4px;">ON</span>`;
+        else if (player.subOff) statusBadge = `<span class="badge badge--danger" style="font-size:9px;padding:1px 4px;margin-left:4px;">OFF</span>`;
+        else if (player.dnp) statusBadge = `<span class="badge" style="font-size:9px;padding:1px 4px;margin-left:4px;">DNP</span>`;
 
         html += `
-          <tr ${rowClass}>
-            <td class="num col-narrow">${player.position}</td>
-            <td class="nowrap">
-              <span class="${player.isCaptain ? 'font-bold' : ''}">${player.playerName}</span>
-              ${statusBadge}
-            </td>
-            <td class="num col-narrow">${player.teamName}</td>
-            <td class="num col-narrow strong">${player.gwPointsCap ?? player.gwPoints}</td>
-            <td class="num col-narrow strong ${captainClass}">${captainLabel}</td>
+          <tr class="${rowClass}">
+            <td class="num pos-num">${player.position}</td>
+            <td class="player-name">${player.playerName}${statusBadge}</td>
+            <td class="num team-col">${player.teamName}</td>
+            <td class="num pts-col">${player.gwPointsCap ?? player.gwPoints}</td>
+            <td class="num cap-col ${captainClass}">${captainLabel}</td>
           </tr>
         `;
       }
@@ -553,17 +623,12 @@ import Nav from "../components/Nav.astro";
 
     populateManagerFilter();
 
-    loadingStatus.innerHTML = `
-      <span class="text-success font-bold">✅ Loaded ${loaded} managers for GW${gw}</span>
-    `;
+    loadingStatus.innerHTML = `<span class="text-success font-bold">✅ Loaded ${loaded} managers for GW${gw}</span>`;
   }
 
   async function init() {
     loadingStatus.textContent = "Loading player data...";
     await fetchBootstrapData();
-
-    gwFilterInput.value = latestGW;
-    gwFilterInput.placeholder = `GW${latestGW}`;
 
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
@@ -581,7 +646,7 @@ import Nav from "../components/Nav.astro";
     const urlParams = new URLSearchParams(window.location.search);
     const managerParam = urlParams.get('manager');
 
-    const gw = parseInt(gwFilterInput.value) || latestGW;
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
 
     if (managerParam) {
       const managerId = parseInt(managerParam);
@@ -600,8 +665,8 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  gwFilterInput.addEventListener('change', async () => {
-    const gw = parseInt(gwFilterInput.value);
+  gwFilterSelect.addEventListener('change', async () => {
+    const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
       loadSquads(managerIds, gw);
     }

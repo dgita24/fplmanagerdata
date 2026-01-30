@@ -30,6 +30,27 @@ import Nav from "../components/Nav.astro";
     </div>
 
     <div id="auth-check" style="display: none;">
+      <!-- Quick Start FIRST -->
+      <section class="card">
+        <div class="card-body">
+          <h2 class="card-title">Quick Start</h2>
+          <ol class="help-list">
+            <li>Enter your league's manager EntryIDs below (one per line)</li>
+            <li>Click "Save Manager IDs"</li>
+            <li>Visit any other page — they'll automatically use these IDs</li>
+            <li>Your IDs sync across all your devices</li>
+          </ol>
+
+          <p class="tip">
+            <strong>Tip:</strong> Find a manager's EntryID in their FPL URL:
+          </p>
+          <code class="code-block">
+            https://fantasy.premierleague.com/entry/<strong>4290</strong>/event/22
+          </code>
+        </div>
+      </section>
+
+      <!-- Entry IDs SECOND -->
       <section class="card">
         <div class="card-body">
           <form id="manager-form">
@@ -53,25 +74,6 @@ import Nav from "../components/Nav.astro";
           </form>
 
           <div id="status" style="margin-top: var(--space-4);"></div>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="card-body">
-          <h2 class="card-title">Quick Start</h2>
-          <ol class="help-list">
-            <li>Enter your league's manager EntryIDs above (one per line)</li>
-            <li>Click "Save Manager IDs"</li>
-            <li>Visit any other page — they'll automatically use these IDs</li>
-            <li>Your IDs sync across all your devices</li>
-          </ol>
-
-          <p class="tip">
-            <strong>Tip:</strong> Find a manager's EntryID in their FPL URL:
-          </p>
-          <code class="code-block">
-            https://fantasy.premierleague.com/entry/<strong>4290</strong>/event/22
-          </code>
         </div>
       </section>
     </div>
@@ -119,7 +121,6 @@ import Nav from "../components/Nav.astro";
 
   let currentUser = null
 
-  // Check if user is logged in
   async function checkAuth() {
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -134,7 +135,6 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  // Load manager IDs from Supabase
   async function loadManagerIds() {
     try {
       const { data, error } = await supabase
@@ -157,7 +157,6 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  // Save manager IDs to Supabase
   async function saveManagerIds(ids) {
     try {
       const { data: existing, error: fetchError } = await supabase
@@ -167,7 +166,6 @@ import Nav from "../components/Nav.astro";
         .single()
 
       if (existing) {
-        // Update existing
         const { error } = await supabase
           .from('user_manager_lists')
           .update({
@@ -178,7 +176,6 @@ import Nav from "../components/Nav.astro";
 
         if (error) throw error
       } else {
-        // Insert new
         const { error } = await supabase
           .from('user_manager_lists')
           .insert({
@@ -196,7 +193,6 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  // Update count as user types
   function updateCount() {
     const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
     countEl.textContent = ids.length
@@ -210,7 +206,6 @@ import Nav from "../components/Nav.astro";
 
   textarea.addEventListener('input', updateCount)
 
-  // Save form submission
   form.onsubmit = async (e) => {
     e.preventDefault()
     const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
@@ -225,7 +220,6 @@ import Nav from "../components/Nav.astro";
       return
     }
 
-    // Remove duplicates
     const uniqueIds = [...new Set(ids)].map(id => parseInt(id))
 
     const success = await saveManagerIds(uniqueIds)
@@ -233,7 +227,6 @@ import Nav from "../components/Nav.astro";
     if (success) {
       let msg = `<p class='status status--success'>✅ Successfully saved ${uniqueIds.length} manager IDs to your account!</p>`
 
-      // Update textarea with deduplicated list
       if (uniqueIds.length !== ids.length) {
         textarea.value = uniqueIds.join('\n')
         updateCount()

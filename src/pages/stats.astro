@@ -19,7 +19,9 @@ import Nav from "../components/Nav.astro";
     <section class="controls">
       <div class="control">
         <label class="label" for="gw-filter">Gameweek</label>
-        <input class="input" type="number" id="gw-filter" min="1" max="38" placeholder="Auto" inputmode="numeric" />
+        <select class="select" id="gw-filter">
+          <option value="">Select GW</option>
+        </select>
       </div>
 
       <div class="control">
@@ -67,6 +69,25 @@ import Nav from "../components/Nav.astro";
 
   let latestGW = 1;
 
+  const out = document.getElementById("stats-output");
+  const loadingStatus = document.getElementById("loading-status");
+  const managerCountEl = document.getElementById("manager-count");
+  const refreshBtn = document.getElementById("refresh-btn");
+  const gwFilterSelect = document.getElementById("gw-filter");
+
+  let managerIds = [];
+
+  function populateGWSelector(currentGW) {
+    gwFilterSelect.innerHTML = '';
+    for (let i = 1; i <= 38; i++) {
+      const option = document.createElement('option');
+      option.value = i;
+      option.textContent = `GW ${i}`;
+      if (i === currentGW) option.selected = true;
+      gwFilterSelect.appendChild(option);
+    }
+  }
+
   async function fetchBootstrapData() {
     try {
       const res = await fetch('/api/fpl/bootstrap-static');
@@ -75,26 +96,12 @@ import Nav from "../components/Nav.astro";
 
       const currentEvent = (data.events || []).find(e => e.is_current);
       latestGW = currentEvent ? currentEvent.id : 1;
+
+      populateGWSelector(latestGW);
     } catch (e) {
       console.error("Error fetching bootstrap data:", e);
       latestGW = 1;
     }
-  }
-
-  const out = document.getElementById("stats-output");
-  const loadingStatus = document.getElementById("loading-status");
-  const managerCountEl = document.getElementById("manager-count");
-  const refreshBtn = document.getElementById("refresh-btn");
-  const gwFilterInput = document.getElementById("gw-filter");
-
-  let managerIds = [];
-
-  function chipLabel(name) {
-    return name === "wildcard" ? "WC" :
-           name === "bboost" ? "BB" :
-           name === "3xc" ? "TC" :
-           name === "freehit" ? "FH" :
-           name;
   }
 
   function gwStatsFromHistory(historyData, gw) {
@@ -146,12 +153,12 @@ import Nav from "../components/Nav.astro";
           <table class="data-table">
             <thead>
               <tr>
-                <th class="num col-narrow">#</th>
+                <th class="num" style="width:28px;">#</th>
                 <th>Manager</th>
-                <th class="num col-narrow">Total</th>
-                <th class="num col-medium">OR</th>
-                <th class="num col-narrow">GW</th>
-                <th class="num col-medium">GWR</th>
+                <th class="num" style="width:50px;">Total</th>
+                <th class="num" style="width:60px;">OR</th>
+                <th class="num" style="width:40px;">GW</th>
+                <th class="num" style="width:60px;">GWR</th>
               </tr>
             </thead>
             <tbody>
@@ -161,15 +168,15 @@ import Nav from "../components/Nav.astro";
     for (const m of managersData) {
       html += `
         <tr>
-          <td class="num col-narrow strong">${rank}</td>
+          <td class="num strong">${rank}</td>
           <td class="manager-cell">
             <a href="/squads?manager=${m.entryId}" class="strong">${m.managerName}</a>
             <div class="team-name">${m.teamName}</div>
           </td>
-          <td class="num col-narrow strong">${m.totalPoints.toLocaleString()}</td>
-          <td class="num col-medium">${m.overallRank.toLocaleString()}</td>
-          <td class="num col-narrow">${m.gwPoints}</td>
-          <td class="num col-medium">${m.gwRank.toLocaleString()}</td>
+          <td class="num strong">${m.totalPoints.toLocaleString()}</td>
+          <td class="num">${m.overallRank.toLocaleString()}</td>
+          <td class="num">${m.gwPoints}</td>
+          <td class="num">${m.gwRank.toLocaleString()}</td>
         </tr>
       `;
       rank++;
@@ -224,15 +231,12 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
-    const gw = parseInt(gwFilterInput.value) || latestGW;
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
     await loadStats(managerIds, gw);
   }
 
   (async function init() {
     await fetchBootstrapData();
-
-    gwFilterInput.value = latestGW;
-    gwFilterInput.placeholder = `GW${latestGW}`;
 
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
@@ -240,8 +244,8 @@ import Nav from "../components/Nav.astro";
     await updateDisplay();
   })();
 
-  gwFilterInput.addEventListener('change', async () => {
-    const gw = parseInt(gwFilterInput.value);
+  gwFilterSelect.addEventListener('change', async () => {
+    const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
       await loadStats(managerIds, gw);
     }

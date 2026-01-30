@@ -19,7 +19,9 @@ import Nav from "../components/Nav.astro";
     <section class="controls">
       <div class="control">
         <label class="label" for="gw-filter">Gameweek</label>
-        <input class="input" type="number" id="gw-filter" min="1" max="38" placeholder="Auto" inputmode="numeric" />
+        <select class="select" id="gw-filter">
+          <option value="">Select GW</option>
+        </select>
       </div>
 
       <div class="control">
@@ -47,12 +49,74 @@ import Nav from "../components/Nav.astro";
 
   <!-- Owned By Modal -->
   <div id="owned-by-modal" class="modal">
-    <div class="modal-panel">
+    <div class="modal-panel modal-panel--compact">
       <button id="close-owned-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
       <div id="owned-by-content"></div>
     </div>
   </div>
 </Layout>
+
+<style>
+  .modal-panel--compact {
+    padding: var(--space-3);
+    max-width: 320px;
+  }
+
+  .modal-panel--compact .modal-title {
+    font-size: var(--text-base);
+    margin-bottom: var(--space-2);
+    padding-right: var(--space-6);
+  }
+
+  .owner-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+
+  .owner-list li {
+    padding: var(--space-1) var(--space-2);
+    background: var(--color-surface-alt);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+  }
+
+  .ownership-table .player-cell {
+    line-height: 1.2;
+  }
+
+  .ownership-table .player-name {
+    font-weight: 600;
+  }
+
+  .ownership-table .player-count {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+  }
+
+  .ownership-table .pos-cell,
+  .ownership-table .team-cell {
+    font-size: var(--text-xs);
+    padding: var(--space-1);
+  }
+
+  .ownership-table .pct-cell {
+    font-size: var(--text-sm);
+    font-weight: 700;
+  }
+
+  .ownership-table .pct-cell.pct-100 {
+    font-size: var(--text-xs);
+  }
+
+  .ownership-table td,
+  .ownership-table th {
+    padding: var(--space-1) var(--space-2);
+  }
+</style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
@@ -85,7 +149,7 @@ import Nav from "../components/Nav.astro";
   }
 
   const out = document.getElementById("ownership-output");
-  const gwFilterInput = document.getElementById("gw-filter");
+  const gwFilterSelect = document.getElementById("gw-filter");
   const positionFilter = document.getElementById("position-filter");
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
@@ -104,6 +168,17 @@ import Nav from "../components/Nav.astro";
   closeOwnedModal.addEventListener("click", () => {
     ownedByModal.classList.remove("is-open");
   });
+
+  function populateGWSelector(currentGW) {
+    gwFilterSelect.innerHTML = '';
+    for (let i = 1; i <= 38; i++) {
+      const option = document.createElement('option');
+      option.value = i;
+      option.textContent = `GW ${i}`;
+      if (i === currentGW) option.selected = true;
+      gwFilterSelect.appendChild(option);
+    }
+  }
 
   async function fetchBootstrapData() {
     try {
@@ -127,6 +202,8 @@ import Nav from "../components/Nav.astro";
 
       const currentEvent = data.events.find(e => e.is_current);
       latestGW = currentEvent ? currentEvent.id : 1;
+      
+      populateGWSelector(latestGW);
     } catch (e) {
       console.error("Error fetching bootstrap data:", e);
     }
@@ -189,21 +266,20 @@ import Nav from "../components/Nav.astro";
     const allOwn = ownedByList.length === totalManagers;
     
     let html = `<h2 class="modal-title">${playerName}</h2>`;
-    html += `<p class="text-muted" style="margin-bottom:var(--space-3);">Owned by ${ownedByList.length} of ${totalManagers} managers</p>`;
+    html += `<p class="text-muted" style="margin-bottom:var(--space-2); font-size:var(--text-xs);">${ownedByList.length} of ${totalManagers} managers</p>`;
     
     if (allOwn) {
-      html += `<p class="text-success font-bold">✓ Owned by everyone</p>`;
+      html += `<p class="text-success font-bold" style="font-size:var(--text-sm);">✓ Owned by everyone</p>`;
     } else {
-      html += `<ul style="list-style:none; display:flex; flex-direction:column; gap:var(--space-2);">`;
+      html += `<ul class="owner-list">`;
       ownedByList.forEach(name => {
-        html += `<li style="padding:var(--space-2); background:var(--color-surface-alt); border-radius:var(--radius-sm);">${name}</li>`;
+        html += `<li>${name}</li>`;
       });
       html += `</ul>`;
       
-      // Show who DOESN'T own
       const notOwned = allManagerNames.filter(n => !ownedByList.includes(n));
       if (notOwned.length > 0 && notOwned.length <= 5) {
-        html += `<p class="text-muted" style="margin-top:var(--space-4);"><strong>Not owned by:</strong> ${notOwned.join(", ")}</p>`;
+        html += `<p class="text-muted" style="margin-top:var(--space-3); font-size:var(--text-xs);"><strong>Not owned by:</strong> ${notOwned.join(", ")}</p>`;
       }
     }
     
@@ -226,22 +302,21 @@ import Nav from "../components/Nav.astro";
     const totalManagers = allManagerNames.length;
 
     let html = `
-      <div class="meta-row" style="margin-bottom:var(--space-3);">
+      <div class="meta-row" style="margin-bottom:var(--space-2);">
         <span>Managers: <strong>${totalManagers}</strong></span>
         <span>Players: <strong>${filtered.length}</strong></span>
       </div>
 
       <div class="table-container">
         <div class="table-scroll">
-          <table class="data-table">
+          <table class="data-table ownership-table">
             <thead>
               <tr>
                 <th>Player</th>
-                <th class="num col-narrow">Pos</th>
-                <th class="num col-narrow">Team</th>
-                <th class="num col-narrow">%</th>
-                <th class="num col-narrow">#</th>
-                <th class="num col-narrow">View</th>
+                <th class="num pos-cell">Pos</th>
+                <th class="num team-cell">Team</th>
+                <th class="num">%</th>
+                <th class="num">👁</th>
               </tr>
             </thead>
             <tbody>
@@ -250,20 +325,24 @@ import Nav from "../components/Nav.astro";
     for (const player of filtered) {
       const ownershipPct = ((player.count / totalManagers) * 100).toFixed(0);
       const ownedByJson = JSON.stringify(player.ownedBy).replace(/"/g, '&quot;');
+      const pctClass = ownershipPct === "100" ? "pct-cell pct-100" : "pct-cell";
 
       html += `
         <tr>
-          <td class="strong nowrap">${player.playerName}</td>
-          <td class="num col-narrow">${player.position}</td>
-          <td class="num col-narrow">${player.teamName}</td>
-          <td class="num col-narrow strong">${ownershipPct}%</td>
-          <td class="num col-narrow">${player.count}</td>
-          <td class="num col-narrow">
+          <td class="player-cell">
+            <div class="player-name">${player.playerName}</div>
+            <div class="player-count">${player.count} of ${totalManagers}</div>
+          </td>
+          <td class="num pos-cell">${player.position}</td>
+          <td class="num team-cell">${player.teamName}</td>
+          <td class="num ${pctClass}">${ownershipPct}%</td>
+          <td class="num">
             <button 
               class="btn btn--neutral btn--small owned-by-btn" 
               type="button"
               data-player="${player.playerName}"
               data-owned="${ownedByJson}"
+              style="padding:2px 6px; min-height:28px;"
             >👁</button>
           </td>
         </tr>
@@ -335,9 +414,6 @@ import Nav from "../components/Nav.astro";
     loadingStatus.textContent = "Loading player data...";
     await fetchBootstrapData();
 
-    gwFilterInput.value = latestGW;
-    gwFilterInput.placeholder = `GW${latestGW}`;
-
     const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
     if (!authenticated) return;
 
@@ -353,11 +429,12 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
-    await loadOwnership(managerIds, latestGW);
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
+    await loadOwnership(managerIds, gw);
   }
 
-  gwFilterInput.addEventListener('change', async () => {
-    const gw = parseInt(gwFilterInput.value);
+  gwFilterSelect.addEventListener('change', async () => {
+    const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
       loadOwnership(managerIds, gw);
     }
