@@ -11,27 +11,23 @@ import Nav from "../components/Nav.astro";
       <p class="page-subtitle">Calculated FTs for next GW for all managers.</p>
     </header>
 
-    <div class="meta-row">
-      <span id="manager-count" class="badge">Loading...</span>
-      <a href="/managers" class="badge">⚙ Manage IDs</a>
+    <div class="meta-row-wide">
+      <span id="manager-count" class="badge badge-wide">Loading...</span>
+      <a href="/managers" class="badge badge-wide">⚙ Manage IDs</a>
     </div>
 
-    <section class="controls">
-      <div class="control">
-        <label class="label" for="gw-filter">Gameweek</label>
-        <select class="select" id="gw-filter">
+    <div class="controls-inline">
+      <div class="control-inline">
+        <label class="label-small" for="gw-filter">Gameweek</label>
+        <select class="select-small" id="gw-filter">
           <option value="">All GWs</option>
         </select>
       </div>
-
-      <div class="control">
-        <label class="label">Actions</label>
-        <div class="control-actions">
-          <button id="clear-filter-btn" class="btn btn--neutral" type="button">All GWs</button>
-          <button id="refresh-btn" class="btn btn--primary" type="button">🔄 Refresh</button>
-        </div>
+      <div class="control-inline">
+        <label class="label-small">&nbsp;</label>
+        <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
       </div>
-    </section>
+    </div>
 
     <div id="loading-status" class="meta-row"></div>
     <section id="transfers-table" aria-live="polite"></section>
@@ -52,6 +48,97 @@ import Nav from "../components/Nav.astro";
     </div>
   </div>
 </Layout>
+
+<style>
+  .meta-row-wide {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .badge-wide {
+    flex: 1;
+    justify-content: center;
+    padding: var(--space-2) var(--space-3);
+    text-align: center;
+  }
+
+  .controls-inline {
+    display: flex;
+    gap: var(--space-2);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2);
+  }
+
+  .control-inline {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .label-small {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-align: center;
+  }
+
+  .select-small {
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  .select-small:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+
+  .btn-row {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: var(--space-2) var(--space-3);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+    background: var(--color-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+
+  .btn-row:hover {
+    background: var(--color-primary-hover);
+  }
+
+  /* Highlight styles for table */
+  .hit-highlight {
+    color: var(--color-danger) !important;
+    font-weight: 700 !important;
+  }
+
+  .top-scorer-row {
+    color: var(--color-success) !important;
+    font-weight: 700 !important;
+  }
+
+  .top-scorer-row a {
+    color: var(--color-success) !important;
+    font-weight: 700 !important;
+  }
+</style>
 
 <script>
   function calculateFTs(managerHistory) {
@@ -141,7 +228,6 @@ import Nav from "../components/Nav.astro";
 
   const out = document.getElementById("transfers-table");
   const gwFilterSelect = document.getElementById("gw-filter");
-  const clearFilterBtn = document.getElementById("clear-filter-btn");
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
@@ -405,6 +491,18 @@ import Nav from "../components/Nav.astro";
       rows.sort((a,b) => a.managerName.localeCompare(b.managerName) || a.gw - b.gw);
     }
 
+    // Find highest GW score for highlighting
+    let maxGwPoints = -Infinity;
+    let maxGwEntryId = null;
+    if (filterGW !== null && filterGW !== "") {
+      rows.forEach(r => {
+        if (r.gwPoints > maxGwPoints) {
+          maxGwPoints = r.gwPoints;
+          maxGwEntryId = r.entryId;
+        }
+      });
+    }
+
     let html = `
       <div class="table-container">
         <div class="table-scroll">
@@ -422,12 +520,16 @@ import Nav from "../components/Nav.astro";
     `;
 
     for (const r of rows) {
+      const isTopScorer = filterGW !== null && filterGW !== "" && r.gwPoints === maxGwPoints;
+      const rowClass = isTopScorer ? 'top-scorer-row' : '';
+      const hitClass = r.transferCost > 0 ? 'hit-highlight' : '';
+
       html += `
-        <tr>
+        <tr class="${rowClass}">
           <td class="strong nowrap">
             <a href="#" class="manager-link" data-id="${r.entryId}" data-name="${r.managerName}">${r.managerName}</a>
           </td>
-          <td class="num">${r.transferCost || 0}</td>
+          <td class="num ${hitClass}">${r.transferCost || 0}</td>
           <td class="num">${r.gwPoints ?? ""}</td>
           <td class="num">${r.totalPoints ?? ""}</td>
           <td class="num strong">${r.FTsForNextGW ?? ""}</td>
@@ -519,13 +621,7 @@ import Nav from "../components/Nav.astro";
 
   gwFilterSelect.addEventListener('change', filterByGW);
 
-  clearFilterBtn.addEventListener('click', () => {
-    gwFilterSelect.value = "";
-    filterByGW();
-  });
-
   refreshBtn.addEventListener('click', async () => {
-    gwFilterSelect.value = "";
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     loadManagers(managerIds);
