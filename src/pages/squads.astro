@@ -495,8 +495,8 @@ import Nav from "../components/Nav.astro";
             <table class="data-table" style="min-width: 760px; table-layout: fixed;">
               <thead>
                 <tr>
-                  <th style="width: 260px;">Manager</th>
-                  <th class="wrap-180">Player</th>
+                  <th style="width: 220px;">Manager</th>
+                  <th style="width: 170px;">Player</th>
                   <th class="num" style="width: 60px;">Team</th>
                   <th class="num" style="width: 70px;">GW Pts</th>
                   <th class="num" style="width: 60px;">C/VC</th>
@@ -534,17 +534,16 @@ import Nav from "../components/Nav.astro";
               ${
                 idx === 0
                   ? `<th rowspan="${rowspan}" scope="rowgroup"
-                       style="vertical-align: middle; background: var(--surface); font-weight: 900; line-height: 1.2; text-align: left; white-space: normal; word-break: break-word;">
+                       style="vertical-align: middle; background: var(--surface); font-weight: 900; line-height: 1.2; text-align: left;"
                       <div>${manager.managerName}</div>
                       ${manager.chipPlayed ? `<div style="margin-top: 8px;"><span class="badge">${manager.chipPlayed}</span></div>` : ""}
                     </th>`
                   : ``
               }
 
-              <td class="wrap-180"
-                  style="background: ${nameBg}; font-weight: ${player.isCaptain ? '900' : '700'};">
+              <td style="background: ${nameBg}; font-weight: ${player.isCaptain ? '900' : '700'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                 <span style="display:inline-flex; align-items:center; gap:6px; max-width: 100%; overflow: hidden;">
-                  <span style="display:block; overflow: hidden; text-overflow: ellipsis;">
+                  <span style="display:block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                     ${player.position}. ${player.playerName}
                   </span>
                   ${indicator ? `<span class="badge" style="padding: 2px 6px; font-size: 0.75rem; flex: 0 0 auto;">${indicator}</span>` : ""}
@@ -635,15 +634,17 @@ import Nav from "../components/Nav.astro";
 
           html += `
             <tr style="background: ${rowBg};">
-              <td class="wrap-180"
-                  style="background: ${nameBg}; font-weight: ${player.isCaptain ? '900' : '700'};">
+              <td style="background: ${nameBg}; font-weight: ${player.isCaptain ? '900' : '700'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                 <span style="display:inline-flex; align-items:center; gap:6px; max-width: 100%; overflow: hidden;">
-                  <span style="display:block; overflow: hidden; text-overflow: ellipsis;">
-                     ${player.position}. ${player.playerName}
+                  <span style="display:block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    ${player.position}. ${player.playerName}
                   </span>
                   ${indicator ? `<span class="badge" style="padding: 2px 6px; font-size: 0.75rem; flex: 0 0 auto;">${indicator}</span>` : ""}
                 </span>
               </td>
+              <td class="num">${player.teamName}</td>
+              <td class="num strong">${player.gwPointsCap ?? player.gwPoints ?? 0}</td>
+              <td class="num strong" style="color: ${player.isCaptain ? 'var(--danger)' : 'var(--primary)'};">${captainBadge}</td>
             </tr>
           `;
         }
