@@ -614,7 +614,7 @@ import Nav from "../components/Nav.astro";
             ${m.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${m.chipPlayed}</span>` : ""}
           </td>
           <td class="gw-col">${m.livePointsBeforeHits}</td>
-          <td class="hit-col text-danger">${m.transferCost}</td>
+          <td class="hit-col ${hitClass}">${m.transferCost}</td>
           <td class="nett-col">${m.livePoints}</td>
           <td class="total-col">${m.totalPoints.toLocaleString()}</td>
           <td class="diff-col">${diffText}</td>

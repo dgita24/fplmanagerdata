@@ -442,20 +442,10 @@ const { title = "FPL Manager Data" } = Astro.props;
     color: var(--color-success) !important;
   }
 
-   /* ========================================
+  /* ========================================
      LIVE TABLE - Highlights
      ======================================== */
-
-   .live-table .top-scorer-row td {
-    color: var(--color-success) !important;
-    font-weight: 700 !important;
-  }
-
-   .live-table .top-scorer-row a {
-    color: var(--color-success) !important;
-  }
-
-    .live-table .hit-highlight {
+  .live-table .hit-highlight {
     color: var(--color-danger) !important;
     font-weight: 700 !important;
   }
@@ -467,6 +457,10 @@ const { title = "FPL Manager Data" } = Astro.props;
 
   .live-table .top-scorer-row td a {
     color: var(--color-success) !important;
+  }
+
+  .live-table .top-scorer-row td.diff-col {
+    font-weight: 400 !important;
   }
 
   /* ========================================
