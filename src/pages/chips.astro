@@ -8,13 +8,11 @@ import Nav from "../components/Nav.astro";
   <main class="page">
     <header class="page-header">
       <h1 class="page-title">Chip Usage Tracker</h1>
-      <p class="page-subtitle">
-        Track which managers have used their chips (2x Wildcard, 2x Bench Boost, 2x Triple Captain, 2x Free Hit).
-      </p>
+      <p class="page-subtitle">Track which managers have used their chips.</p>
     </header>
 
     <div class="meta-row">
-      <span id="manager-count" class="badge">Loading managers...</span>
+      <span id="manager-count" class="badge">Loading...</span>
       <a href="/managers" class="badge">⚙ Manage IDs</a>
       <button id="refresh-btn" class="btn btn--primary" type="button">🔄 Refresh</button>
     </div>
@@ -78,24 +76,18 @@ import Nav from "../components/Nav.astro";
 
       const chips = historyData.chips || [];
       const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
-      const teamName = summaryData.name;
 
       const chipsFormatted = chips.map(c => ({
         name: c.name === "wildcard" ? "WC" :
               c.name === "bboost" ? "BB" :
               c.name === "3xc" ? "TC" :
               c.name === "freehit" ? "FH" : c.name,
-        fullName: c.name === "wildcard" ? "Wildcard" :
-                  c.name === "bboost" ? "Bench Boost" :
-                  c.name === "3xc" ? "Triple Captain" :
-                  c.name === "freehit" ? "Free Hit" : c.name,
         gw: c.event
       }));
 
       return {
         entryId: Number(id),
         managerName,
-        teamName,
         chips: chipsFormatted
       };
     } catch (e) {
@@ -113,9 +105,8 @@ import Nav from "../components/Nav.astro";
             <thead>
               <tr>
                 <th>Manager</th>
-                <th>Team Name</th>
-                <th>Chips Used</th>
-                <th>Chips Remaining</th>
+                <th>Used</th>
+                <th>Remaining</th>
               </tr>
             </thead>
             <tbody>
@@ -133,22 +124,16 @@ import Nav from "../components/Nav.astro";
       const fhCount = usedChips.filter(c => c === "FH").length;
 
       const remaining = [];
-      const wcRemaining = 2 - wcCount;
-      const bbRemaining = 2 - bbCount;
-      const tcRemaining = 2 - tcCount;
-      const fhRemaining = 2 - fhCount;
-
-      if (wcRemaining > 0) remaining.push(wcRemaining === 2 ? "WC x2" : "WC x1");
-      if (bbRemaining > 0) remaining.push(bbRemaining === 2 ? "BB x2" : "BB x1");
-      if (tcRemaining > 0) remaining.push(tcRemaining === 2 ? "TC x2" : "TC x1");
-      if (fhRemaining > 0) remaining.push(fhRemaining === 2 ? "FH x2" : "FH x1");
+      if (2 - wcCount > 0) remaining.push(`WC×${2 - wcCount}`);
+      if (2 - bbCount > 0) remaining.push(`BB×${2 - bbCount}`);
+      if (2 - tcCount > 0) remaining.push(`TC×${2 - tcCount}`);
+      if (2 - fhCount > 0) remaining.push(`FH×${2 - fhCount}`);
 
       const chipsRemaining = remaining.length > 0 ? remaining.join(", ") : "None";
 
       html += `
         <tr>
-          <td class="strong">${m.managerName}</td>
-          <td>${m.teamName}</td>
+          <td class="strong nowrap">${m.managerName}</td>
           <td>${chipsUsed}</td>
           <td class="strong">${chipsRemaining}</td>
         </tr>
@@ -161,14 +146,13 @@ import Nav from "../components/Nav.astro";
         </div>
       </div>
 
-      <h2 class="section-title" style="margin-top: var(--space-5);">Detailed Chip Usage by Gameweek</h2>
+      <h2 class="section-title" style="margin-top:var(--space-5);">Chip Usage by Gameweek</h2>
       <div class="table-container">
         <div class="table-scroll">
           <table class="data-table">
             <thead>
               <tr>
                 <th>Manager</th>
-                <th>Team Name</th>
                 <th>Chips Played (GW)</th>
               </tr>
             </thead>
@@ -179,16 +163,15 @@ import Nav from "../components/Nav.astro";
       let chipsPlayedText = "";
 
       if (m.chips.length === 0) {
-        chipsPlayedText = '<span class="text-muted">No chips used yet</span>';
+        chipsPlayedText = '<span class="text-muted">None yet</span>';
       } else {
         const sortedChips = [...m.chips].sort((a, b) => a.gw - b.gw);
-        chipsPlayedText = sortedChips.map(chip => `${chip.name} ${chip.gw}`).join(", ");
+        chipsPlayedText = sortedChips.map(chip => `${chip.name} (${chip.gw})`).join(", ");
       }
 
       html += `
         <tr>
-          <td class="strong">${m.managerName}</td>
-          <td>${m.teamName}</td>
+          <td class="strong nowrap">${m.managerName}</td>
           <td>${chipsPlayedText}</td>
         </tr>
       `;
@@ -212,7 +195,7 @@ import Nav from "../components/Nav.astro";
 
     const allData = [];
     out.innerHTML = "";
-    loadingStatus.textContent = `Loading 0 of ${ids.length} managers...`;
+    loadingStatus.textContent = `Loading 0 of ${ids.length}...`;
 
     let loaded = 0;
     for (const id of ids) {
@@ -222,7 +205,7 @@ import Nav from "../components/Nav.astro";
           allData.push(data);
           loaded++;
 
-          loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+          loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
 
           allData.sort((a, b) => a.managerName.localeCompare(b.managerName));
           out.innerHTML = makeChipsTable(allData);
@@ -233,11 +216,11 @@ import Nav from "../components/Nav.astro";
       }
     }
 
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
+    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
   }
 
   async function updateDisplay() {
-    managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+    managerCountEl.textContent = `${managerIds.length} managers`;
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
       return;

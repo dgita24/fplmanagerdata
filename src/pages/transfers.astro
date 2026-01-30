@@ -8,24 +8,24 @@ import Nav from "../components/Nav.astro";
   <main class="page">
     <header class="page-header">
       <h1 class="page-title">Transfers & Free Transfers</h1>
-      <p class="page-subtitle">Display calculated FTs for next GW for all managers.</p>
+      <p class="page-subtitle">Calculated FTs for next GW for all managers.</p>
     </header>
 
     <div class="meta-row">
-      <span id="manager-count" class="badge">Loading managers...</span>
+      <span id="manager-count" class="badge">Loading...</span>
       <a href="/managers" class="badge">⚙ Manage IDs</a>
     </div>
 
     <section class="controls">
       <div class="control">
-        <label class="label" for="gw-filter">Filter by Gameweek</label>
+        <label class="label" for="gw-filter">Gameweek</label>
         <input class="input" type="number" id="gw-filter" min="1" max="38" placeholder="Auto" inputmode="numeric" />
       </div>
 
       <div class="control">
         <label class="label">Actions</label>
         <div class="control-actions">
-          <button id="clear-filter-btn" class="btn btn--neutral" type="button">Show All GWs</button>
+          <button id="clear-filter-btn" class="btn btn--neutral" type="button">All GWs</button>
           <button id="refresh-btn" class="btn btn--primary" type="button">🔄 Refresh</button>
         </div>
       </div>
@@ -45,95 +45,11 @@ import Nav from "../components/Nav.astro";
   <!-- Chip Detail Modal -->
   <div id="chip-modal" class="modal modal--nested">
     <div class="modal-panel">
-      <button id="close-chip-modal" class="btn btn--danger modal-close" type="button">✕ Close</button>
+      <button id="close-chip-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
       <div id="chip-modal-content"></div>
     </div>
   </div>
 </Layout>
-
-<style>
-  .modal {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgb(0 0 0 / 0.5);
-    z-index: 200;
-    overflow-y: auto;
-    padding: var(--space-4);
-  }
-
-  .modal--nested {
-    z-index: 210;
-    background: rgb(0 0 0 / 0.7);
-  }
-
-  .modal-panel {
-    background: var(--color-surface);
-    margin: var(--space-8) auto;
-    padding: var(--space-5);
-    max-width: 600px;
-    border-radius: var(--radius-lg);
-    position: relative;
-    box-shadow: var(--shadow-lg);
-  }
-
-  .modal-close {
-    position: absolute;
-    top: var(--space-3);
-    right: var(--space-3);
-  }
-
-  .transfer-line {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-3);
-    margin: var(--space-2) 0;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    background: var(--color-surface);
-    font-size: var(--text-sm);
-    flex-wrap: wrap;
-  }
-
-  .transfer-badge {
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-full);
-    font-weight: 700;
-    font-size: var(--text-xs);
-    flex-shrink: 0;
-  }
-
-  .transfer-badge--out {
-    color: var(--color-danger);
-    background: rgb(220 38 38 / 0.1);
-    border: 1px solid rgb(220 38 38 / 0.25);
-  }
-
-  .transfer-badge--in {
-    color: var(--color-success);
-    background: rgb(22 163 74 / 0.1);
-    border: 1px solid rgb(22 163 74 / 0.25);
-  }
-
-  .transfer-arrow {
-    color: var(--color-text-muted);
-    font-weight: 700;
-  }
-
-  .gw-block {
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: var(--space-3);
-    margin-bottom: var(--space-3);
-    background: var(--color-surface-alt);
-  }
-
-  .gw-block h3 {
-    margin: 0 0 var(--space-2) 0;
-    font-size: var(--text-base);
-  }
-</style>
 
 <script>
   // Inline FT calculation logic - MATCHES EXCEL EXACTLY
@@ -239,7 +155,7 @@ import Nav from "../components/Nav.astro";
   let allPlayersMap = {};
 
   closeChipModal.addEventListener("click", () => {
-    chipModal.style.display = "none";
+    chipModal.classList.remove("is-open");
   });
 
   async function fetchPlayers() {
@@ -266,11 +182,11 @@ import Nav from "../components/Nav.astro";
 
   function transferLineHtml(playerOut, playerIn) {
     return `
-      <div class="transfer-line">
-        <span class="transfer-badge transfer-badge--out">OUT</span>
+      <div style="display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2); margin:var(--space-1) 0; border:1px solid var(--color-border); border-radius:var(--radius-md); font-size:var(--text-sm); flex-wrap:wrap;">
+        <span class="badge badge--danger">OUT</span>
         <span class="font-bold">${escapeHtml(playerOut)}</span>
-        <span class="transfer-arrow">→</span>
-        <span class="transfer-badge transfer-badge--in">IN</span>
+        <span class="text-muted">→</span>
+        <span class="badge badge--success">IN</span>
         <span class="font-bold">${escapeHtml(playerIn)}</span>
       </div>
     `;
@@ -278,7 +194,7 @@ import Nav from "../components/Nav.astro";
 
   async function showTransferHistory(managerId, managerName) {
     modalContent.innerHTML = "<p>Loading transfer history...</p>";
-    transferModal.style.display = "block";
+    transferModal.classList.add("is-open");
 
     try {
       const transfersRes = await fetch(`/api/fpl/entry/${managerId}/transfers`);
@@ -300,13 +216,10 @@ import Nav from "../components/Nav.astro";
         });
       }
 
-      let html = `<h2 style="margin-top:0;">${escapeHtml(managerName)} - Season Transfer History</h2>`;
-
-      html += `
-        <div class="meta-row" style="margin: var(--space-3) 0;">
-          <span class="text-muted">Total Transfers: ${transfers.length}</span>
-          <button id="close-modal-inline" class="btn btn--danger" type="button">✕ Close</button>
-        </div>
+      let html = `
+        <button id="close-modal-btn" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+        <h2 class="modal-title">${escapeHtml(managerName)}</h2>
+        <p class="text-muted" style="margin-bottom:var(--space-4);">Total Transfers: ${transfers.length}</p>
       `;
 
       const allGWs = [...new Set([
@@ -314,43 +227,42 @@ import Nav from "../components/Nav.astro";
         ...Object.keys(chipsUsed).map(Number)
       ])].sort((a, b) => a - b);
 
-      html += `<div style="max-height: 60vh; overflow-y: auto;">`;
+      html += `<div style="max-height:60vh; overflow-y:auto;">`;
 
       allGWs.forEach(gw => {
         const chip = chipsUsed[gw];
         const gwTransfers = transfersByGW[gw] || [];
         const cost = history.current?.find(h => h.event === gw)?.event_transfers_cost || 0;
 
-        html += `<div class="gw-block">`;
-        html += `<h3>Gameweek ${gw}</h3>`;
+        html += `<div class="card" style="margin-bottom:var(--space-3);">`;
+        html += `<div class="card-body">`;
+        html += `<h3 style="margin:0 0 var(--space-2) 0; font-size:var(--text-sm);">GW ${gw}</h3>`;
 
         if (chip) {
           const chipBadge = chip === 'wildcard' ? '🃏 Wildcard' : chip === 'freehit' ? '🎯 Free Hit' : chip;
-          html += `<button class="chip-btn btn btn--primary" data-gw="${gw}" data-manager="${managerId}" data-chip="${chip}" type="button">${chipBadge} (Click to view transfers)</button>`;
+          html += `<button class="chip-btn btn btn--primary btn--small" data-gw="${gw}" data-manager="${managerId}" data-chip="${chip}" type="button">${chipBadge} (view)</button>`;
         } else if (gwTransfers.length > 0) {
-          html += `<div>`;
           gwTransfers.forEach(t => {
             const playerIn = allPlayersMap[t.element_in] || `Player ${t.element_in}`;
             const playerOut = allPlayersMap[t.element_out] || `Player ${t.element_out}`;
             html += transferLineHtml(playerOut, playerIn);
           });
           if (cost > 0) {
-            html += `<p class="text-danger font-bold" style="margin-top: var(--space-2);">Hit taken: -${cost} pts</p>`;
+            html += `<p class="text-danger font-bold" style="margin-top:var(--space-2);">Hit: -${cost} pts</p>`;
           }
-          html += `</div>`;
         } else {
           html += `<p class="text-muted">No transfers</p>`;
         }
 
-        html += `</div>`;
+        html += `</div></div>`;
       });
 
       html += `</div>`;
 
       modalContent.innerHTML = html;
 
-      document.getElementById("close-modal-inline")?.addEventListener("click", () => {
-        transferModal.style.display = "none";
+      document.getElementById("close-modal-btn")?.addEventListener("click", () => {
+        transferModal.classList.remove("is-open");
       });
 
       document.querySelectorAll('.chip-btn').forEach(btn => {
@@ -370,7 +282,7 @@ import Nav from "../components/Nav.astro";
 
   async function showChipTransfers(managerId, gw, chipName) {
     chipModalContent.innerHTML = "<p>Loading chip transfers...</p>";
-    chipModal.style.display = "block";
+    chipModal.classList.add("is-open");
 
     try {
       const picksRes = await fetch(`/api/fpl/entry/${managerId}/event/${gw}/picks`);
@@ -395,20 +307,20 @@ import Nav from "../components/Nav.astro";
 
       const chipDisplay = chipName === 'wildcard' ? '🃏 Wildcard' : '🎯 Free Hit';
 
-      let html = `<h2 style="margin-top:0;">${chipDisplay} - Gameweek ${gw}</h2>`;
-      html += `<div style="display: grid; gap: var(--space-3); margin-top: var(--space-4);">`;
+      let html = `<h2 class="modal-title">${chipDisplay} - GW ${gw}</h2>`;
+      html += `<div style="display:grid; gap:var(--space-3);">`;
 
-      html += `<div style="border: 1px solid rgb(220 38 38 / 0.35); border-radius: var(--radius-md); padding: var(--space-3); background: rgb(220 38 38 / 0.05);">`;
-      html += `<h3 class="text-danger" style="margin-top: 0;">Players Out (${playersOut.length})</h3>`;
+      html += `<div style="border:1px solid rgb(220 38 38 / 0.35); border-radius:var(--radius-md); padding:var(--space-3); background:rgb(220 38 38 / 0.05);">`;
+      html += `<h3 class="text-danger" style="margin:0 0 var(--space-2) 0; font-size:var(--text-sm);">Out (${playersOut.length})</h3>`;
       playersOut.forEach(pid => {
-        html += `<p style="margin: var(--space-1) 0;">▼ ${escapeHtml(allPlayersMap[pid] || `Player ${pid}`)}</p>`;
+        html += `<p style="margin:var(--space-1) 0; font-size:var(--text-sm);">▼ ${escapeHtml(allPlayersMap[pid] || `Player ${pid}`)}</p>`;
       });
       html += `</div>`;
 
-      html += `<div style="border: 1px solid rgb(22 163 74 / 0.35); border-radius: var(--radius-md); padding: var(--space-3); background: rgb(22 163 74 / 0.05);">`;
-      html += `<h3 class="text-success" style="margin-top: 0;">Players In (${playersIn.length})</h3>`;
+      html += `<div style="border:1px solid rgb(22 163 74 / 0.35); border-radius:var(--radius-md); padding:var(--space-3); background:rgb(22 163 74 / 0.05);">`;
+      html += `<h3 class="text-success" style="margin:0 0 var(--space-2) 0; font-size:var(--text-sm);">In (${playersIn.length})</h3>`;
       playersIn.forEach(pid => {
-        html += `<p style="margin: var(--space-1) 0;">▲ ${escapeHtml(allPlayersMap[pid] || `Player ${pid}`)}</p>`;
+        html += `<p style="margin:var(--space-1) 0; font-size:var(--text-sm);">▲ ${escapeHtml(allPlayersMap[pid] || `Player ${pid}`)}</p>`;
       });
       html += `</div>`;
 
@@ -484,11 +396,10 @@ import Nav from "../components/Nav.astro";
             <thead>
               <tr>
                 <th>Manager</th>
-                <th class="num">GW Transfers</th>
-                <th class="num">Transfer Cost</th>
-                <th class="num">GW Points</th>
-                <th class="num">Total Points</th>
-                <th class="num">FTs Next GW</th>
+                <th class="num col-narrow">Hit</th>
+                <th class="num col-narrow">GW Pts</th>
+                <th class="num col-narrow">Total</th>
+                <th class="num col-narrow">FTs Next</th>
               </tr>
             </thead>
             <tbody>
@@ -497,14 +408,13 @@ import Nav from "../components/Nav.astro";
     for (const r of rows) {
       html += `
         <tr>
-          <td class="strong">
+          <td class="strong nowrap">
             <a href="#" class="manager-link" data-id="${r.entryId}" data-name="${r.managerName}">${r.managerName}</a>
           </td>
-          <td class="num">${r.transfers ?? ""}</td>
-          <td class="num">${r.transferCost ?? ""}</td>
-          <td class="num">${r.gwPoints ?? ""}</td>
-          <td class="num">${r.totalPoints ?? ""}</td>
-          <td class="num strong">${r.FTsForNextGW ?? ""}</td>
+          <td class="num col-narrow">${r.transferCost || 0}</td>
+          <td class="num col-narrow">${r.gwPoints ?? ""}</td>
+          <td class="num col-narrow">${r.totalPoints ?? ""}</td>
+          <td class="num col-narrow strong">${r.FTsForNextGW ?? ""}</td>
         </tr>
       `;
     }
@@ -527,7 +437,7 @@ import Nav from "../components/Nav.astro";
     allHistories = [];
     latestGW = null;
     out.innerHTML = "";
-    loadingStatus.textContent = `Loading 0 of ${ids.length} managers...`;
+    loadingStatus.textContent = `Loading 0 of ${ids.length}...`;
 
     let loaded = 0;
     for (const id of ids) {
@@ -542,21 +452,20 @@ import Nav from "../components/Nav.astro";
         }
 
         loaded++;
-        loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+        loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
         out.innerHTML = makeTable(allHistories, "");
         attachManagerLinks();
       } catch (e) {
         console.error(`Failed to load manager ${id}:`, e);
         loaded++;
-        loadingStatus.innerHTML = `<span class='text-warning'>⚠️ Failed to load manager ${id}</span>`;
       }
     }
 
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} of ${ids.length} managers</span>`;
+    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
 
     if (latestGW) {
       gwFilterInput.value = latestGW;
-      gwFilterInput.placeholder = `Latest: GW${latestGW}`;
+      gwFilterInput.placeholder = `GW${latestGW}`;
       filterByGW();
     }
   }
@@ -587,7 +496,7 @@ import Nav from "../components/Nav.astro";
     if (!authenticated) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+    managerCountEl.textContent = `${managerIds.length} managers`;
 
     if (managerIds.length > 0) {
       loadManagers(managerIds);

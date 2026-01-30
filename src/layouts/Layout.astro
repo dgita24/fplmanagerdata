@@ -347,6 +347,12 @@ const { title = "FPL Manager Data" } = Astro.props;
     text-decoration: none;
   }
 
+  .btn--small {
+    min-height: 32px;
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-xs);
+  }
+
   /* ========================================
      BADGES / PILLS
      ======================================== */
@@ -395,7 +401,7 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ========================================
-     TABLES - Mobile-first responsive
+     TABLES - Mobile-first with column dividers
      ======================================== */
   .table-container {
     background: var(--color-surface);
@@ -417,16 +423,26 @@ const { title = "FPL Manager Data" } = Astro.props;
 
   .data-table th,
   .data-table td {
-    padding: var(--space-3);
+    padding: var(--space-2) var(--space-3);
     text-align: left;
     border-bottom: 1px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
     vertical-align: middle;
+    white-space: normal;
+    word-wrap: break-word;
+  }
+
+  .data-table th:last-child,
+  .data-table td:last-child {
+    border-right: none;
   }
 
   .data-table th {
     font-weight: 600;
+    font-size: var(--text-xs);
     background: var(--color-surface-alt);
-    white-space: nowrap;
+    white-space: normal;
+    line-height: 1.3;
   }
 
   .data-table tbody tr:last-child td {
@@ -447,22 +463,29 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .data-table .truncate {
-    max-width: 180px;
+    max-width: 150px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  /* Mobile: Stack table or allow horizontal scroll */
-  @media (max-width: 639px) {
-    .data-table {
-      font-size: var(--text-xs);
-    }
+  .data-table .compact {
+    padding: var(--space-1) var(--space-2);
+  }
 
-    .data-table th,
-    .data-table td {
-      padding: var(--space-2);
-    }
+  .data-table .nowrap {
+    white-space: nowrap;
+  }
+
+  /* Narrow columns for mobile */
+  .data-table .col-narrow {
+    width: 50px;
+    max-width: 60px;
+  }
+
+  .data-table .col-medium {
+    width: 70px;
+    max-width: 80px;
   }
 
   /* ========================================
@@ -500,6 +523,51 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ========================================
+     MODAL
+     ======================================== */
+  .modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgb(0 0 0 / 0.5);
+    z-index: 200;
+    overflow-y: auto;
+    padding: var(--space-4);
+  }
+
+  .modal.is-open {
+    display: block;
+  }
+
+  .modal--nested {
+    z-index: 210;
+    background: rgb(0 0 0 / 0.7);
+  }
+
+  .modal-panel {
+    background: var(--color-surface);
+    margin: var(--space-8) auto;
+    padding: var(--space-5);
+    max-width: 500px;
+    border-radius: var(--radius-lg);
+    position: relative;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .modal-close {
+    position: absolute;
+    top: var(--space-3);
+    right: var(--space-3);
+  }
+
+  .modal-title {
+    font-size: var(--text-lg);
+    font-weight: 700;
+    margin-bottom: var(--space-4);
+    padding-right: var(--space-8);
+  }
+
+  /* ========================================
      UTILITIES
      ======================================== */
   .sr-only {
@@ -519,6 +587,16 @@ const { title = "FPL Manager Data" } = Astro.props;
   .text-success { color: var(--color-success); }
   .text-danger { color: var(--color-danger); }
   .font-bold { font-weight: 700; }
+
+  .manager-cell {
+    line-height: 1.3;
+  }
+
+  .manager-cell .team-name {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    font-weight: 400;
+  }
 
   /* ========================================
      FOCUS STYLES (Accessibility)

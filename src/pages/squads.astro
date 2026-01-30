@@ -12,41 +12,20 @@ import Nav from "../components/Nav.astro";
     </header>
 
     <div class="meta-row">
-      <span id="manager-count" class="badge">Loading managers...</span>
+      <span id="manager-count" class="badge">Loading...</span>
       <a href="/managers" class="badge">⚙ Manage IDs</a>
     </div>
 
     <section class="controls">
       <div class="control">
-        <label class="label" for="gw-filter">Select GW</label>
+        <label class="label" for="gw-filter">Gameweek</label>
         <input class="input" type="number" id="gw-filter" min="1" max="38" placeholder="Auto" inputmode="numeric" />
       </div>
 
       <div class="control">
-        <label class="label" for="manager-filter">Filter by Manager</label>
+        <label class="label" for="manager-filter">Manager</label>
         <select class="select" id="manager-filter">
           <option value="">All Managers</option>
-        </select>
-      </div>
-
-      <div class="control">
-        <label class="label" for="position-filter">Filter by Position</label>
-        <select class="select" id="position-filter">
-          <option value="">All Positions</option>
-          <option value="GK">Goalkeepers</option>
-          <option value="DEF">Defenders</option>
-          <option value="MID">Midfielders</option>
-          <option value="FWD">Forwards</option>
-        </select>
-      </div>
-
-      <div class="control">
-        <label class="label" for="captain-filter">Captaincy Filter</label>
-        <select class="select" id="captain-filter">
-          <option value="">All Players</option>
-          <option value="captain">Captain Only</option>
-          <option value="vice">Vice Captain Only</option>
-          <option value="both">Captain or Vice</option>
         </select>
       </div>
 
@@ -62,122 +41,6 @@ import Nav from "../components/Nav.astro";
     <section id="squads-output" aria-live="polite"></section>
   </main>
 </Layout>
-
-<style>
-  .squad-card {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    margin-bottom: var(--space-4);
-  }
-
-  .squad-header {
-    padding: var(--space-3) var(--space-4);
-    background: var(--color-surface-alt);
-    border-bottom: 1px solid var(--color-border);
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .squad-header h3 {
-    margin: 0;
-    font-size: var(--text-base);
-  }
-
-  .squad-header .team-name {
-    color: var(--color-text-muted);
-    font-weight: 500;
-  }
-
-  .player-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border-bottom: 1px solid var(--color-border);
-    font-size: var(--text-sm);
-  }
-
-  .player-row:last-child {
-    border-bottom: none;
-  }
-
-  .player-row.bench {
-    background: var(--color-surface-alt);
-  }
-
-  .player-row.sub-on {
-    background: rgb(22 163 74 / 0.08);
-  }
-
-  .player-row.sub-off {
-    background: rgb(220 38 38 / 0.08);
-  }
-
-  .player-row.dnp {
-    background: rgb(220 38 38 / 0.05);
-    opacity: 0.7;
-  }
-
-  .player-pos {
-    width: 24px;
-    font-size: var(--text-xs);
-    color: var(--color-text-muted);
-  }
-
-  .player-name {
-    flex: 1;
-    font-weight: 600;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .player-name.captain {
-    font-weight: 800;
-  }
-
-  .player-team {
-    width: 36px;
-    text-align: center;
-    color: var(--color-text-muted);
-    font-size: var(--text-xs);
-  }
-
-  .player-points {
-    width: 40px;
-    text-align: center;
-    font-weight: 700;
-  }
-
-  .player-captain {
-    width: 24px;
-    text-align: center;
-    font-weight: 800;
-    font-size: var(--text-xs);
-  }
-
-  .player-captain.is-captain {
-    color: var(--color-danger);
-  }
-
-  .player-captain.is-vice {
-    color: var(--color-primary);
-  }
-
-  .legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2) var(--space-4);
-    font-size: var(--text-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--space-2);
-  }
-</style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
@@ -212,8 +75,6 @@ import Nav from "../components/Nav.astro";
   const out = document.getElementById("squads-output");
   const gwFilterInput = document.getElementById("gw-filter");
   const managerFilter = document.getElementById("manager-filter");
-  const positionFilter = document.getElementById("position-filter");
-  const captainFilter = document.getElementById("captain-filter");
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
@@ -224,10 +85,9 @@ import Nav from "../components/Nav.astro";
 
   let playerCache = new Map();
   let teamCache = new Map();
-  let fixturesCache = new Map();
   let livePointsCache = new Map();
-  let projectedBonusCache = new Map();
   let teamStatusCache = new Map();
+  let projectedBonusCache = new Map();
 
   function getTeamGwStatus(teamId, gw) {
     return teamStatusCache.get(`${gw}:${teamId}`) || { started: false, finished: false };
@@ -291,7 +151,7 @@ import Nav from "../components/Nav.astro";
     const projBonus = finished ? 0 : (Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0);
     const liveTotal = locked + projBonus;
 
-    const status = finished ? "Fin" : (started ? "Live" : "v");
+    const status = finished ? "Fin" : (started ? "Live" : "NS");
     const dnp = (minutes === 0 && status === "Fin");
 
     return { locked, projBonus, liveTotal, status, minutes, dnp };
@@ -301,13 +161,13 @@ import Nav from "../components/Nav.astro";
     const capFactor = (chipCode === "TC") ? 3 : 2;
 
     const cap = teamPicks.find(p => p.isCaptain);
-    const vc  = teamPicks.find(p => p.isViceCaptain);
+    const vc = teamPicks.find(p => p.isViceCaptain);
 
     const capId = cap ? cap.playerId : null;
-    const vcId  = vc  ? vc.playerId : null;
+    const vcId = vc ? vc.playerId : null;
 
     const capDnp = cap ? !!cap.dnp : true;
-    const vcDnp  = vc  ? !!vc.dnp  : true;
+    const vcDnp = vc ? !!vc.dnp : true;
 
     const actingCaptainId =
       (!capDnp && capId !== null) ? capId :
@@ -328,16 +188,11 @@ import Nav from "../components/Nav.astro";
     const bench = sorted.slice(11);
 
     if (isBB) {
-      return sorted.map(p => ({
-        ...p,
-        subOn: false,
-        subOff: false
-      }));
+      return sorted.map(p => ({ ...p, subOn: false, subOff: false }));
     }
 
-    let active = starters.filter(p => !(p.dnp));
+    let active = starters.filter(p => !p.dnp);
     const benchRemaining = [];
-    const subbedInIds = new Set();
 
     for (const cand of bench) {
       if (active.length >= 11) {
@@ -360,7 +215,6 @@ import Nav from "../components/Nav.astro";
 
       if (validGK || validDefSave || validGeneral) {
         active = [...active, cand];
-        subbedInIds.add(cand.playerId);
       } else {
         benchRemaining.push(cand);
       }
@@ -418,7 +272,6 @@ import Nav from "../components/Nav.astro";
     if (!res.ok) throw new Error("Failed to fetch fixtures");
     const fixtures = await res.json();
 
-    fixturesCache.clear();
     teamStatusCache.clear();
     projectedBonusCache.clear();
 
@@ -433,9 +286,6 @@ import Nav from "../components/Nav.astro";
     for (const fx of fixtures) {
       upsertTeam(fx.team_h, fx.started, fx.finished);
       upsertTeam(fx.team_a, fx.started, fx.finished);
-
-      fixturesCache.set(`${fx.team_h}-${gw}`, { opponent: fx.team_a, finished: fx.finished, started: fx.started });
-      fixturesCache.set(`${fx.team_a}-${gw}`, { opponent: fx.team_h, finished: fx.finished, started: fx.started });
 
       if (!fx.started || fx.finished) continue;
 
@@ -494,7 +344,7 @@ import Nav from "../components/Nav.astro";
 
       return picks.map(pick => {
         const info = playerCache.get(pick.element) || { name: "Unknown", position: "?", teamId: 0 };
-        const teamName = teamCache.get(info.teamId) || "UNK";
+        const teamName = teamCache.get(info.teamId) || "???";
 
         const computed = getPlayerLiveComputed(pick.element, info.teamId, gw);
 
@@ -514,7 +364,6 @@ import Nav from "../components/Nav.astro";
           dnp: computed.dnp,
 
           gwPoints: Math.trunc(Number(computed.liveTotal) || 0),
-          projBonus: Math.trunc(Number(computed.projBonus) || 0),
 
           subOn: false,
           subOff: false
@@ -581,27 +430,7 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  function filterSquad(manager, positionFilterValue = "", captainFilterValue = "") {
-    let squad = manager.squad || [];
-
-    if (positionFilterValue) {
-      squad = squad.filter(p => p.playerPosition === positionFilterValue);
-    }
-
-    if (captainFilterValue) {
-      if (captainFilterValue === 'captain') {
-        squad = squad.filter(p => p.isCaptain);
-      } else if (captainFilterValue === 'vice') {
-        squad = squad.filter(p => p.isViceCaptain);
-      } else if (captainFilterValue === 'both') {
-        squad = squad.filter(p => p.isCaptain || p.isViceCaptain);
-      }
-    }
-
-    return [...squad].sort((a, b) => a.position - b.position);
-  }
-
-  function makeSquadsTable(squadsData, managerFilterValue = "", positionFilterValue = "", captainFilterValue = "") {
+  function makeSquadsDisplay(squadsData, managerFilterValue = "") {
     let filteredManagers = squadsData;
 
     if (managerFilterValue) {
@@ -611,58 +440,70 @@ import Nav from "../components/Nav.astro";
     let html = "";
 
     for (const manager of filteredManagers) {
-      const squad = filterSquad(manager, positionFilterValue, captainFilterValue);
-      if (squad.length === 0 && (positionFilterValue || captainFilterValue)) continue;
+      const squad = [...(manager.squad || [])].sort((a, b) => a.position - b.position);
 
       html += `
-        <div class="squad-card">
-          <div class="squad-header">
-            <h3>${manager.managerName}</h3>
-            <span class="team-name">— ${manager.teamName}</span>
-            ${manager.chipPlayed ? `<span class="badge">${manager.chipPlayed}</span>` : ''}
+        <div class="card" style="margin-bottom:var(--space-4);">
+          <div style="padding:var(--space-3); background:var(--color-surface-alt); border-bottom:1px solid var(--color-border);">
+            <strong>${manager.managerName}</strong>
+            <span class="text-muted"> — ${manager.teamName}</span>
+            ${manager.chipPlayed ? `<span class="badge" style="margin-left:var(--space-2);">${manager.chipPlayed}</span>` : ''}
           </div>
-          <div class="squad-body">
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th class="num col-narrow">#</th>
+                  <th>Player</th>
+                  <th class="num col-narrow">Team</th>
+                  <th class="num col-narrow">Pts</th>
+                  <th class="num col-narrow">C</th>
+                </tr>
+              </thead>
+              <tbody>
       `;
 
       for (const player of squad) {
         const isBench = player.position > 11;
-        let rowClass = "player-row";
-        if (isBench) rowClass += " bench";
-        if (player.subOn) rowClass += " sub-on";
-        if (player.subOff) rowClass += " sub-off";
-        if (player.dnp) rowClass += " dnp";
+        
+        let rowClass = "";
+        if (isBench) rowClass = "style='background:var(--color-surface-alt);'";
+        if (player.subOn) rowClass = "style='background:rgb(22 163 74 / 0.1);'";
+        if (player.subOff) rowClass = "style='background:rgb(220 38 38 / 0.1);'";
+        if (player.dnp) rowClass = "style='background:rgb(220 38 38 / 0.05); opacity:0.7;'";
 
-        const captainClass = player.isCaptain ? "is-captain" : (player.isViceCaptain ? "is-vice" : "");
         const captainLabel = player.isCaptain ? "C" : (player.isViceCaptain ? "V" : "");
+        const captainClass = player.isCaptain ? "text-danger" : (player.isViceCaptain ? "text-primary" : "");
 
-        let indicator = "";
-        if (player.subOn) indicator = "ON";
-        else if (player.subOff) indicator = "OFF";
-        else if (player.dnp) indicator = "DNP";
-        else if (player.status === "v") indicator = "NS";
+        let statusBadge = "";
+        if (player.subOn) statusBadge = `<span class="badge badge--success" style="margin-left:var(--space-1);">ON</span>`;
+        else if (player.subOff) statusBadge = `<span class="badge badge--danger" style="margin-left:var(--space-1);">OFF</span>`;
+        else if (player.dnp) statusBadge = `<span class="badge" style="margin-left:var(--space-1);">DNP</span>`;
 
         html += `
-          <div class="${rowClass}">
-            <span class="player-pos">${player.position}</span>
-            <span class="player-name ${player.isCaptain ? 'captain' : ''}">
-              ${player.playerName}
-              ${indicator ? `<span class="badge" style="margin-left: var(--space-1); font-size: var(--text-xs);">${indicator}</span>` : ''}
-            </span>
-            <span class="player-team">${player.teamName}</span>
-            <span class="player-points">${player.gwPointsCap ?? player.gwPoints ?? 0}</span>
-            <span class="player-captain ${captainClass}">${captainLabel}</span>
-          </div>
+          <tr ${rowClass}>
+            <td class="num col-narrow">${player.position}</td>
+            <td class="nowrap">
+              <span class="${player.isCaptain ? 'font-bold' : ''}">${player.playerName}</span>
+              ${statusBadge}
+            </td>
+            <td class="num col-narrow">${player.teamName}</td>
+            <td class="num col-narrow strong">${player.gwPointsCap ?? player.gwPoints}</td>
+            <td class="num col-narrow strong ${captainClass}">${captainLabel}</td>
+          </tr>
         `;
       }
 
       html += `
+              </tbody>
+            </table>
           </div>
         </div>
       `;
     }
 
     if (!html) {
-      html = "<p class='text-muted'>No players match the current filters.</p>";
+      html = "<p class='text-muted'>No squads to display.</p>";
     }
 
     return html;
@@ -681,13 +522,13 @@ import Nav from "../components/Nav.astro";
 
     allSquadsData = [];
     out.innerHTML = "";
-    loadingStatus.textContent = `Loading live data + squads for GW${gw}...`;
+    loadingStatus.textContent = `Loading GW${gw} data...`;
 
     try {
       await Promise.all([fetchFixtures(gw), fetchLiveGW(gw)]);
     } catch (e) {
       console.error("Failed to load live caches:", e);
-      out.innerHTML = "<p class='status status--error'>Failed to load live gameweek data. Try refresh.</p>";
+      out.innerHTML = "<p class='status status--error'>Failed to load live data. Try refresh.</p>";
       loadingStatus.textContent = "";
       return;
     }
@@ -700,12 +541,9 @@ import Nav from "../components/Nav.astro";
           allSquadsData.push(data);
           loaded++;
 
-          loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+          loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
 
-          const managerFilterValue = managerFilter.value;
-          const posFilter = positionFilter.value;
-          const capFilter = captainFilter.value;
-          out.innerHTML = makeSquadsTable(allSquadsData, managerFilterValue, posFilter, capFilter);
+          out.innerHTML = makeSquadsDisplay(allSquadsData, managerFilter.value);
         }
       } catch (e) {
         console.error(`Failed to load manager ${id}:`, e);
@@ -716,24 +554,16 @@ import Nav from "../components/Nav.astro";
     populateManagerFilter();
 
     loadingStatus.innerHTML = `
-      <span class="text-success font-bold">✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>
-      <div class="legend">
-        <span><strong>NS</strong> = Not started</span>
-        <span><strong>Live</strong> = In play</span>
-        <span><strong>Fin</strong> = Finished</span>
-        <span><strong>ON</strong> = Subbed on</span>
-        <span><strong>OFF</strong> = Subbed off</span>
-        <span><strong>DNP</strong> = Didn't play</span>
-      </div>
+      <span class="text-success font-bold">✅ Loaded ${loaded} managers for GW${gw}</span>
     `;
   }
 
   async function init() {
-    loadingStatus.textContent = "Loading player and team data...";
+    loadingStatus.textContent = "Loading player data...";
     await fetchBootstrapData();
 
     gwFilterInput.value = latestGW;
-    gwFilterInput.placeholder = `Latest: GW${latestGW}`;
+    gwFilterInput.placeholder = `GW${latestGW}`;
 
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
@@ -742,7 +572,7 @@ import Nav from "../components/Nav.astro";
   }
 
   async function updateDisplay() {
-    managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+    managerCountEl.textContent = `${managerIds.length} managers`;
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
       return;
@@ -778,15 +608,7 @@ import Nav from "../components/Nav.astro";
   });
 
   managerFilter.addEventListener('change', () => {
-    out.innerHTML = makeSquadsTable(allSquadsData, managerFilter.value, positionFilter.value, captainFilter.value);
-  });
-
-  positionFilter.addEventListener('change', () => {
-    out.innerHTML = makeSquadsTable(allSquadsData, managerFilter.value, positionFilter.value, captainFilter.value);
-  });
-
-  captainFilter.addEventListener('change', () => {
-    out.innerHTML = makeSquadsTable(allSquadsData, managerFilter.value, positionFilter.value, captainFilter.value);
+    out.innerHTML = makeSquadsDisplay(allSquadsData, managerFilter.value);
   });
 
   refreshBtn.addEventListener('click', async () => {

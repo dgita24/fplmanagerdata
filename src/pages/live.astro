@@ -8,22 +8,22 @@ import Nav from "../components/Nav.astro";
   <main class="page">
     <header class="page-header">
       <h1 class="page-title">🔴 Live Standings</h1>
-      <p class="page-subtitle">Real-time league table with live points, projected bonus, auto-subs, and transfer hits.</p>
+      <p class="page-subtitle">Real-time league table with live points and projected bonus.</p>
     </header>
 
     <div class="meta-row">
-      <span id="manager-count" class="badge">Loading managers...</span>
+      <span id="manager-count" class="badge">Loading...</span>
       <a href="/managers" class="badge">⚙ Manage IDs</a>
     </div>
 
     <section class="controls">
       <div class="control">
-        <label class="label" for="gw-filter">Select Gameweek</label>
+        <label class="label" for="gw-filter">Gameweek</label>
         <input class="input" type="number" id="gw-filter" min="1" max="38" placeholder="Auto" inputmode="numeric" />
       </div>
 
       <div class="control">
-        <label class="label" for="compare-manager">Compare to Manager</label>
+        <label class="label" for="compare-manager">Compare to</label>
         <select class="select" id="compare-manager">
           <option value="">Leader</option>
         </select>
@@ -32,8 +32,8 @@ import Nav from "../components/Nav.astro";
       <div class="control">
         <label class="label">Actions</label>
         <div class="control-actions">
-          <button id="refresh-btn" class="btn btn--primary" type="button">🔄 Refresh</button>
-          <button id="auto-refresh-btn" class="btn btn--neutral" type="button">⏱️ Auto: OFF</button>
+          <button id="refresh-btn" class="btn btn--primary" type="button">🔄</button>
+          <button id="auto-refresh-btn" class="btn btn--neutral" type="button">⏱ OFF</button>
         </div>
       </div>
     </section>
@@ -89,7 +89,6 @@ import Nav from "../components/Nav.astro";
   let latestGW = null;
   let playerCache = new Map();
   let teamCache = new Map();
-  let fixturesCache = new Map();
   let livePointsCache = new Map();
   let projectedBonusCache = new Map();
   let teamStatusCache = new Map();
@@ -147,8 +146,7 @@ import Nav from "../components/Nav.astro";
     if (!thirdRow) return out;
 
     const thirdVal = thirdRow.value;
-    const third = rows.filter(r => r.value === thirdVal);
-    for (const r of third) out.set(r.element, 1);
+    for (const r of rows.filter(r => r.value === thirdVal)) out.set(r.element, 1);
 
     return out;
   }
@@ -283,7 +281,6 @@ import Nav from "../components/Nav.astro";
       if (!res.ok) throw new Error("Failed to fetch fixtures");
       const fixtures = await res.json();
 
-      fixturesCache.clear();
       teamStatusCache.clear();
       projectedBonusCache.clear();
 
@@ -298,21 +295,6 @@ import Nav from "../components/Nav.astro";
       for (const fx of fixtures) {
         upsertTeam(fx.team_h, fx.started, fx.finished);
         upsertTeam(fx.team_a, fx.started, fx.finished);
-
-        fixturesCache.set(`${fx.team_h}-${gw}`, {
-          opponent: fx.team_a,
-          isHome: true,
-          finished: fx.finished,
-          started: fx.started,
-          kickoffTime: fx.kickoff_time
-        });
-        fixturesCache.set(`${fx.team_a}-${gw}`, {
-          opponent: fx.team_h,
-          isHome: false,
-          finished: fx.finished,
-          started: fx.started,
-          kickoffTime: fx.kickoff_time
-        });
 
         if (!fx.started || fx.finished) continue;
 
@@ -374,12 +356,6 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  function calculateProjectedBonus(playerId, teamId, gw) {
-    const { finished, started } = getTeamGwStatus(teamId, gw);
-    if (!started || finished) return 0;
-    return Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0;
-  }
-
   async function fetchManagerLive(entryId, gw) {
     try {
       const [picksRes, summaryRes, historyRes] = await Promise.all([
@@ -433,7 +409,6 @@ import Nav from "../components/Nav.astro";
       const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
 
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
-      const projectedBonus = finalTeam.reduce((sum, p) => sum + (p.projBonus * (p.multiplier || 0)), 0);
 
       const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
 
@@ -446,8 +421,6 @@ import Nav from "../components/Nav.astro";
       if (Number(gw) > 1) {
         const prev = historyRows.find(h => Number(h.event) === (Number(gw) - 1));
         startOverall = Number(prev?.total_points) || 0;
-      } else {
-        startOverall = 0;
       }
 
       const liveOverall = startOverall + liveNet;
@@ -455,13 +428,11 @@ import Nav from "../components/Nav.astro";
       return {
         entryId,
         managerName: `${summaryData.player_first_name || ""} ${summaryData.player_last_name || ""}`.trim(),
-        chipPlayed: chipCode === "None" ? "-" : chipCode,
+        chipPlayed: chipCode === "None" ? "" : chipCode,
         transferCost,
         livePointsBeforeHits,
         livePoints: liveNet,
-        projectedBonus,
-        totalPoints: liveOverall,
-        picks: finalTeam
+        totalPoints: liveOverall
       };
     } catch (e) {
       console.error(`Error fetching live data for manager ${entryId}:`, e);
@@ -489,22 +460,21 @@ import Nav from "../components/Nav.astro";
 
     const leader = sorted[0];
     const compareManager = compareToId ? sorted.find(m => m.entryId.toString() === compareToId) : leader;
-    const compareName = compareManager?.managerName?.split(' ')[0] || 'Leader';
+    const compareName = compareManager?.managerName?.split(' ')[0] || 'Ldr';
 
     let html = `
-      <h2 class="section-title">Live Standings</h2>
       <div class="table-container">
         <div class="table-scroll">
           <table class="data-table">
             <thead>
               <tr>
-                <th class="num">Rank</th>
+                <th class="num col-narrow">#</th>
                 <th>Manager</th>
-                <th class="num">Live GW</th>
-                <th class="num">Hit</th>
-                <th class="num">GW Net</th>
-                <th class="num">Proj Total</th>
-                <th class="num">vs ${compareName}</th>
+                <th class="num col-narrow">GW</th>
+                <th class="num col-narrow">Hit</th>
+                <th class="num col-narrow">Net</th>
+                <th class="num col-medium">Total</th>
+                <th class="num col-narrow">±${compareName}</th>
               </tr>
             </thead>
             <tbody>
@@ -513,20 +483,20 @@ import Nav from "../components/Nav.astro";
     let rank = 1;
     for (const m of sorted) {
       const diffOverall = m.totalPoints - compareManager.totalPoints;
-      const diffText = diffOverall > 0 ? `+${diffOverall}` : diffOverall === 0 ? "0" : diffOverall.toString();
+      const diffText = diffOverall > 0 ? `+${diffOverall}` : diffOverall === 0 ? "—" : `${diffOverall}`;
 
       html += `
         <tr>
-          <td class="num strong">${rank}</td>
-          <td class="strong">
-            <a href="/squads?manager=${m.entryId}">${m.managerName}</a>
-            ${m.chipPlayed !== "-" ? `<span class="badge" style="margin-left: var(--space-1);">${m.chipPlayed}</span>` : ""}
+          <td class="num col-narrow strong">${rank}</td>
+          <td class="nowrap">
+            <a href="/squads?manager=${m.entryId}" class="strong">${m.managerName}</a>
+            ${m.chipPlayed ? `<span class="badge" style="margin-left:var(--space-1);">${m.chipPlayed}</span>` : ""}
           </td>
-          <td class="num">${m.livePointsBeforeHits}</td>
-          <td class="num text-danger">${m.transferCost === 0 ? "0" : `-${Math.abs(m.transferCost)}`}</td>
-          <td class="num strong">${m.livePoints}</td>
-          <td class="num">${m.totalPoints.toLocaleString()}</td>
-          <td class="num">${diffText}</td>
+          <td class="num col-narrow">${m.livePointsBeforeHits}</td>
+          <td class="num col-narrow text-danger">${m.transferCost === 0 ? "0" : `-${m.transferCost}`}</td>
+          <td class="num col-narrow strong">${m.livePoints}</td>
+          <td class="num col-medium">${m.totalPoints.toLocaleString()}</td>
+          <td class="num col-narrow">${diffText}</td>
         </tr>
       `;
       rank++;
@@ -554,7 +524,7 @@ import Nav from "../components/Nav.astro";
 
     liveData = [];
     out.innerHTML = "";
-    loadingStatus.textContent = `Loading live data for GW${gw}...`;
+    loadingStatus.textContent = `Loading GW${gw}...`;
 
     await Promise.all([
       fetchFixtures(gw),
@@ -569,7 +539,7 @@ import Nav from "../components/Nav.astro";
           liveData.push(data);
           loaded++;
 
-          loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+          loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
 
           const compareId = compareManagerSelect.value;
           out.innerHTML = makeLiveTable(liveData, compareId);
@@ -582,22 +552,22 @@ import Nav from "../components/Nav.astro";
 
     populateCompareManager();
 
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
-    lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
+    lastUpdatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
   }
 
   async function init() {
-    loadingStatus.textContent = "Loading player and fixture data...";
+    loadingStatus.textContent = "Loading player data...";
     await fetchBootstrapData();
 
     gwFilterInput.value = latestGW;
-    gwFilterInput.placeholder = `Latest: GW${latestGW}`;
+    gwFilterInput.placeholder = `GW${latestGW}`;
 
     const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
     if (!authenticated) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+    managerCountEl.textContent = `${managerIds.length} managers`;
 
     if (managerIds.length > 0) {
       loadLive(managerIds, latestGW);
@@ -629,7 +599,7 @@ import Nav from "../components/Nav.astro";
     autoRefreshEnabled = !autoRefreshEnabled;
 
     if (autoRefreshEnabled) {
-      autoRefreshBtn.textContent = "⏱️ Auto: ON";
+      autoRefreshBtn.textContent = "⏱ ON";
       autoRefreshBtn.className = "btn btn--success";
 
       autoRefreshInterval = setInterval(async () => {
@@ -637,7 +607,7 @@ import Nav from "../components/Nav.astro";
         loadLive(managerIds, gw);
       }, 120000);
     } else {
-      autoRefreshBtn.textContent = "⏱️ Auto: OFF";
+      autoRefreshBtn.textContent = "⏱ OFF";
       autoRefreshBtn.className = "btn btn--neutral";
 
       if (autoRefreshInterval) {
