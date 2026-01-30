@@ -4,13 +4,13 @@
  * Hamburger menu on mobile, horizontal nav on desktop.
  */
 const navLinks = [
-  { href: "/", label: "Home" },
-  { href: "/live", label: "Live" },
-  { href: "/stats", label: "Stats" },
-  { href: "/transfers", label: "Transfers" },
-  { href: "/chips", label: "Chips" },
-  { href: "/ownership", label: "Ownership" },
-  { href: "/squads", label: "Squads" },
+  { href: "/", label: "Home", emoji: "🏠" },
+  { href: "/live", label: "Live", emoji: "🔴" },
+  { href: "/stats", label: "Stats", emoji: "📊" },
+  { href: "/transfers", label: "Transfers", emoji: "🔄" },
+  { href: "/chips", label: "Chips", emoji: "🎯" },
+  { href: "/ownership", label: "Ownership", emoji: "👥" },
+  { href: "/squads", label: "Squads", emoji: "⚽" },
 ];
 ---
 <header class="nav-header">
@@ -22,16 +22,29 @@ const navLinks = [
     </button>
 
     <div id="nav-menu" class="nav-menu">
+      <div class="nav-menu-header">
+        <a href="/" class="nav-brand">FPL Manager</a>
+        <button id="menu-close" class="menu-close" type="button" aria-label="Close menu">✕</button>
+      </div>
+
       <ul class="nav-links">
         {navLinks.map(link => (
-          <li><a href={link.href} class="nav-link">{link.label}</a></li>
+          <li>
+            <a href={link.href} class="nav-link">
+              <span class="nav-link-emoji">{link.emoji}</span>
+              {link.label}
+            </a>
+          </li>
         ))}
       </ul>
 
       <div class="nav-divider"></div>
 
       <div class="theme-toggle-row">
-        <span class="theme-label">Theme</span>
+        <span class="nav-link">
+          <span class="nav-link-emoji">🎨</span>
+          Theme
+        </span>
         <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="Toggle theme">
           <span class="theme-icon theme-icon--light">☀️</span>
           <span class="theme-icon theme-icon--dark">🌙</span>
@@ -127,21 +140,49 @@ const navLinks = [
     transform: translateY(-7px) rotate(-45deg);
   }
 
-  /* Mobile menu */
+  /* Mobile menu - FULL SCREEN */
   .nav-menu {
     display: none;
-    position: absolute;
-    top: 100%;
+    position: fixed;
+    top: 0;
     left: 0;
     right: 0;
+    bottom: 0;
     background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
-    padding: var(--space-3) var(--space-4) var(--space-4);
-    box-shadow: var(--shadow-md);
+    padding: var(--space-4);
+    z-index: 150;
+    overflow-y: auto;
+    flex-direction: column;
   }
 
   .nav-menu.is-open {
-    display: block;
+    display: flex;
+  }
+
+  .nav-menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: var(--space-4);
+  }
+
+  .menu-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: var(--text-xl);
+    color: var(--color-text);
+  }
+
+  .menu-close:hover {
+    color: var(--color-primary);
   }
 
   .nav-links {
@@ -149,11 +190,14 @@ const navLinks = [
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
+    flex: 1;
   }
 
   .nav-link {
-    display: block;
-    padding: var(--space-2) var(--space-3);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-3);
     font-size: var(--text-base);
     font-weight: 500;
     color: var(--color-text);
@@ -167,6 +211,12 @@ const navLinks = [
     text-decoration: none;
   }
 
+  .nav-link-emoji {
+    font-size: var(--text-lg);
+    width: 24px;
+    text-align: center;
+  }
+
   .nav-divider {
     height: 1px;
     background: var(--color-border);
@@ -175,7 +225,15 @@ const navLinks = [
 
   .nav-auth {
     display: flex;
-    gap: var(--space-2);
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .nav-user {
+    font-size: var(--text-base);
+    font-weight: 500;
+    color: var(--color-text);
   }
 
   /* Theme toggle row */
@@ -183,13 +241,7 @@ const navLinks = [
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-2) var(--space-3);
-  }
-
-  .theme-label {
-    font-size: var(--text-sm);
-    font-weight: 500;
-    color: var(--color-text);
+    padding: var(--space-2) 0;
   }
 
   .theme-toggle-btn {
@@ -214,25 +266,25 @@ const navLinks = [
   }
 
   .theme-icon--light {
-    opacity: 1;
+    opacity: 0.4;
   }
 
   .theme-icon--dark {
-    opacity: 0.4;
-  }
-
-  :global([data-theme="dark"]) .theme-icon--light {
-    opacity: 0.4;
-  }
-
-  :global([data-theme="dark"]) .theme-icon--dark {
     opacity: 1;
+  }
+
+  :global([data-theme="light"]) .theme-icon--light {
+    opacity: 1;
+  }
+
+  :global([data-theme="light"]) .theme-icon--dark {
+    opacity: 0.4;
   }
 
   .theme-toggle-slider {
     position: absolute;
     top: 3px;
-    left: 3px;
+    left: 31px;
     width: 20px;
     height: 20px;
     background: var(--color-surface);
@@ -241,8 +293,8 @@ const navLinks = [
     transition: transform var(--transition-base);
   }
 
-  :global([data-theme="dark"]) .theme-toggle-slider {
-    transform: translateX(28px);
+  :global([data-theme="light"]) .theme-toggle-slider {
+    left: 3px;
   }
 
   /* Desktop */
@@ -254,22 +306,33 @@ const navLinks = [
     .nav-menu {
       display: flex;
       position: static;
+      flex-direction: row;
       align-items: center;
       gap: var(--space-4);
       background: transparent;
-      border: none;
       padding: 0;
-      box-shadow: none;
+      overflow: visible;
+    }
+
+    .nav-menu-header {
+      display: none;
     }
 
     .nav-links {
       flex-direction: row;
       gap: var(--space-1);
+      flex: unset;
     }
 
     .nav-link {
       padding: var(--space-2) var(--space-3);
       font-size: var(--text-sm);
+      gap: var(--space-2);
+    }
+
+    .nav-link-emoji {
+      font-size: var(--text-sm);
+      width: auto;
     }
 
     .nav-divider {
@@ -280,8 +343,12 @@ const navLinks = [
       padding: 0;
     }
 
-    .theme-label {
+    .theme-toggle-row .nav-link {
       display: none;
+    }
+
+    .nav-auth {
+      padding: 0;
     }
   }
 </style>
@@ -291,26 +358,37 @@ const navLinks = [
 
   // Menu toggle
   const menuToggle = document.getElementById('menu-toggle');
+  const menuClose = document.getElementById('menu-close');
   const navMenu = document.getElementById('nav-menu');
 
-  menuToggle?.addEventListener('click', () => {
-    const isOpen = navMenu?.classList.toggle('is-open');
-    menuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-  });
+  function openMenu() {
+    navMenu?.classList.add('is-open');
+    menuToggle?.setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeMenu() {
+    navMenu?.classList.remove('is-open');
+    menuToggle?.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+  }
+
+  menuToggle?.addEventListener('click', openMenu);
+  menuClose?.addEventListener('click', closeMenu);
 
   // Close menu when clicking a link (mobile)
   navMenu?.querySelectorAll('.nav-link').forEach(link => {
-    link.addEventListener('click', () => {
-      navMenu.classList.remove('is-open');
-      menuToggle?.setAttribute('aria-expanded', 'false');
-    });
+    if (link.closest('.theme-toggle-row')) return;
+    link.addEventListener('click', closeMenu);
   });
 
   // Theme toggle
   const themeToggle = document.getElementById('theme-toggle');
   
   function getStoredTheme() {
-    return localStorage.getItem('theme') || 'light';
+    const stored = localStorage.getItem('theme');
+    if (stored) return stored;
+    return 'dark';
   }
 
   function setTheme(theme: string) {
@@ -322,7 +400,7 @@ const navLinks = [
   setTheme(getStoredTheme());
 
   themeToggle?.addEventListener('click', () => {
-    const currentTheme = getStoredTheme();
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
     const newTheme = currentTheme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
   });
