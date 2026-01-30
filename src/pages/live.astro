@@ -11,34 +11,30 @@ import Nav from "../components/Nav.astro";
       <p class="page-subtitle">Real-time league table with live points and projected bonus.</p>
     </header>
 
-    <div class="meta-row">
-      <span id="manager-count" class="badge">Loading...</span>
-      <a href="/managers" class="badge">⚙ Manage IDs</a>
+    <div class="meta-row-wide">
+      <span id="manager-count" class="badge badge-wide">Loading...</span>
+      <a href="/managers" class="badge badge-wide">⚙ Manage IDs</a>
     </div>
 
-    <section class="controls">
-      <div class="control">
-        <label class="label" for="gw-filter">Gameweek</label>
-        <select class="select" id="gw-filter">
+    <div class="controls-inline">
+      <div class="control-inline">
+        <label class="label-small" for="gw-filter">Gameweek</label>
+        <select class="select-small" id="gw-filter">
           <option value="">Select GW</option>
         </select>
       </div>
-
-      <div class="control">
-        <label class="label" for="compare-manager">Compare to</label>
-        <select class="select" id="compare-manager">
+      <div class="control-inline">
+        <label class="label-small" for="compare-manager">Compare to</label>
+        <select class="select-small" id="compare-manager">
           <option value="">Leader</option>
         </select>
       </div>
+    </div>
 
-      <div class="control">
-        <label class="label">Actions</label>
-        <div class="control-actions">
-          <button id="refresh-btn" class="btn btn--primary" type="button">🔄</button>
-          <button id="auto-refresh-btn" class="btn btn--neutral" type="button">⏱ OFF</button>
-        </div>
-      </div>
-    </section>
+    <div class="buttons-row">
+      <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
+      <button id="auto-refresh-btn" class="btn-row btn-row--neutral" type="button">⏱ Auto: OFF</button>
+    </div>
 
     <div id="loading-status" class="meta-row"></div>
     <div id="last-updated" class="meta-row"></div>
@@ -47,46 +43,100 @@ import Nav from "../components/Nav.astro";
 </Layout>
 
 <style>
-  .live-table td,
-  .live-table th {
-    padding: var(--space-1) var(--space-2);
-    font-variant-numeric: tabular-nums;
+  .meta-row-wide {
+    display: flex;
+    gap: var(--space-2);
   }
 
-  .live-table .rank-col {
-    width: 28px;
-    text-align: center;
-    font-weight: 700;
-  }
-
-  .live-table .gw-col {
-    width: 28px;
+  .badge-wide {
+    flex: 1;
+    justify-content: center;
+    padding: var(--space-2) var(--space-3);
     text-align: center;
   }
 
-  .live-table .hit-col {
-    width: 32px;
-    text-align: center;
+  .controls-inline {
+    display: flex;
+    gap: var(--space-2);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2);
   }
 
-  .live-table .nett-col {
-    width: 32px;
-    text-align: center;
-    font-weight: 700;
+  .control-inline {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
 
-  .live-table .total-col {
-    width: 48px;
-    text-align: center;
-  }
-
-  .live-table .diff-col {
-    width: 32px;
-    text-align: center;
-  }
-
-  .live-table .manager-col {
+  .label-small {
+    font-size: 10px;
     font-weight: 600;
+    color: var(--color-text-secondary);
+  }
+
+  .select-small {
+    width: 100%;
+    min-height: 32px;
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  .select-small:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+
+  .buttons-row {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .btn-row {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: var(--space-2) var(--space-3);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+    background: var(--color-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+
+  .btn-row:hover {
+    background: var(--color-primary-hover);
+  }
+
+  .btn-row--neutral {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+
+  .btn-row--neutral:hover {
+    background: var(--color-surface-alt);
+  }
+
+  .btn-row--success {
+    background: var(--color-success);
+    color: white;
+  }
+
+  .btn-row--success:hover {
+    background: var(--color-success-hover);
   }
 </style>
 
@@ -551,7 +601,7 @@ import Nav from "../components/Nav.astro";
             ${m.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${m.chipPlayed}</span>` : ""}
           </td>
           <td class="gw-col">${m.livePointsBeforeHits}</td>
-          <td class="hit-col text-danger">${m.transferCost === 0 ? "0" : `-${m.transferCost}`}</td>
+          <td class="hit-col text-danger">${m.transferCost}</td>
           <td class="nett-col">${m.livePoints}</td>
           <td class="total-col">${m.totalPoints.toLocaleString()}</td>
           <td class="diff-col">${diffText}</td>
@@ -654,16 +704,16 @@ import Nav from "../components/Nav.astro";
     autoRefreshEnabled = !autoRefreshEnabled;
 
     if (autoRefreshEnabled) {
-      autoRefreshBtn.textContent = "⏱ ON";
-      autoRefreshBtn.className = "btn btn--success";
+      autoRefreshBtn.textContent = "⏱ Auto: ON";
+      autoRefreshBtn.className = "btn-row btn-row--success";
 
       autoRefreshInterval = setInterval(async () => {
         const gw = parseInt(gwFilterSelect.value) || latestGW;
         loadLive(managerIds, gw);
       }, 120000);
     } else {
-      autoRefreshBtn.textContent = "⏱ OFF";
-      autoRefreshBtn.className = "btn btn--neutral";
+      autoRefreshBtn.textContent = "⏱ Auto: OFF";
+      autoRefreshBtn.className = "btn-row btn-row--neutral";
 
       if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
