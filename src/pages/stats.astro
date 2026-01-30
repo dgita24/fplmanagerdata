@@ -45,7 +45,7 @@ import Nav from "../components/Nav.astro";
 
     <section id="stats-output" aria-live="polite"></section>
 
-    <!-- Bottom sheet modal -->
+    <!-- Bottom sheet modal (mobile only) -->
     <div id="manager-modal" class="modal-overlay" style="display: none;">
       <div class="modal-sheet">
         <div class="modal-header">
@@ -210,8 +210,90 @@ import Nav from "../components/Nav.astro";
       `;
     }
 
+    function chipsInlineCountsHtml(chipsCounts) {
+      if (!chipsCounts || chipsCounts.length === 0) {
+        return `<span style="color: var(--muted);">None</span>`;
+      }
+
+      return `
+        <div style="
+          display: flex;
+          gap: 4px;
+          flex-wrap: wrap;
+          margin-top: 4px;
+          max-width: 100%;
+        ">
+          ${chipsCounts.map(({ label, count }) => {
+            const text = `${label}×${count}`;
+            const style = chipBadgeStyle(label, count);
+            return `<span class="badge badge--chip" style="${style}">${text}</span>`;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    // Desktop table view
+    function makeStatsTable(managersData, gw) {
+      let html = `
+        <h2 class="page-title desktop-only" style="font-size: 1.1rem;">League Standings (GW${gw})</h2>
+
+        <div class="table-shell desktop-only">
+          <div class="table-scroll" role="region" aria-label="League standings table">
+            <table class="data-table" style="min-width: 720px;">
+              <thead>
+                <tr>
+                  <th class="num" style="width: 52px;">Rank</th>
+                  <th style="min-width: 180px;">Manager<br/><span style="font-weight: 600; color: var(--muted);">Chips Used</span></th>
+                  <th class="num" style="width: 84px;">Total<br/>Points</th>
+                  <th class="num" style="width: 98px;">Overall<br/>Rank</th>
+                  <th class="num" style="width: 64px;">GW<br/>Pts</th>
+                  <th class="num" style="width: 72px;">GW<br/>Rank</th>
+                </tr>
+              </thead>
+              <tbody>
+      `;
+
+      let rank = 1;
+      for (const m of managersData) {
+        html += `
+          <tr>
+            <td class="num strong">${rank}</td>
+            <td>
+              <a href="/squads?manager=${m.entryId}" style="
+                display: block;
+                font-size: 1.15rem;
+                font-weight: 700;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                line-height: 1.2;
+              ">
+                ${m.managerName}
+              </a>
+              ${chipsInlineCountsHtml(m.chipsUsedCounts)}
+            </td>
+            <td class="num strong">${Number(m.totalPoints).toLocaleString()}</td>
+            <td class="num">${Number(m.overallRank).toLocaleString()}</td>
+            <td class="num">${Number(m.gwPoints).toLocaleString()}</td>
+            <td class="num">${Number(m.gwRank).toLocaleString()}</td>
+          </tr>
+        `;
+        rank++;
+      }
+
+      html += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      return html;
+    }
+
+    // Mobile card view
     function makeManagerCards(data) {
-      let html = `<div class="manager-cards">`;
+      let html = `<div class="manager-cards mobile-only">`;
 
       let rank = 1;
       for (const m of data) {
@@ -272,6 +354,23 @@ import Nav from "../components/Nav.astro";
       if (e.target === modal) closeModal();
     });
 
+    function resetStatsTableScrollHard() {
+      const els = document.querySelectorAll('#stats-output .table-scroll');
+      els.forEach(el => { el.scrollLeft = 0; });
+
+      requestAnimationFrame(() => {
+        els.forEach(el => { el.scrollLeft = 0; });
+      });
+
+      setTimeout(() => {
+        els.forEach(el => { el.scrollLeft = 0; });
+      }, 50);
+
+      setTimeout(() => {
+        els.forEach(el => { el.scrollLeft = 0; });
+      }, 250);
+    }
+
     async function loadStats(ids, gw) {
       if (ids.length === 0) {
         out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
@@ -292,9 +391,13 @@ import Nav from "../components/Nav.astro";
         loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
 
         managersData.sort((a, b) => b.totalPoints - a.totalPoints);
-        out.innerHTML = makeManagerCards(managersData);
+        
+        // Render both desktop table and mobile cards
+        out.innerHTML = makeStatsTable(managersData, gw) + makeManagerCards(managersData);
 
-        // Attach click handlers
+        resetStatsTableScrollHard();
+
+        // Attach click handlers to mobile cards
         document.querySelectorAll('.card-expand-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
             const card = e.target.closest('.manager-card');
@@ -306,6 +409,7 @@ import Nav from "../components/Nav.astro";
       }
 
       loadingStatus.innerHTML = `<span style='color:#16a34a; font-weight: 700;'>✅ Loaded ${loaded} of ${ids.length} managers (GW${gw})</span>`;
+      resetStatsTableScrollHard();
     }
 
     async function updateDisplay() {
@@ -346,6 +450,26 @@ import Nav from "../components/Nav.astro";
   </script>
 
   <style>
+    /* Show/hide based on screen size */
+    .desktop-only {
+      display: none;
+    }
+
+    .mobile-only {
+      display: block;
+    }
+
+    @media (min-width: 768px) {
+      .desktop-only {
+        display: block;
+      }
+
+      .mobile-only {
+        display: none;
+      }
+    }
+
+    /* Mobile card styles */
     .manager-cards {
       display: grid;
       gap: 8px;
