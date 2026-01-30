@@ -16,17 +16,16 @@ import Nav from "../components/Nav.astro";
       <a href="/managers" class="badge badge-wide">⚙ Manage IDs</a>
     </div>
 
-    <section class="controls-compact">
-      <div class="control-half">
-        <label class="label" for="gw-filter">Gameweek</label>
-        <select class="select select-compact" id="gw-filter">
+    <div class="controls-inline">
+      <div class="control-inline">
+        <label class="label-small" for="gw-filter">Gameweek</label>
+        <select class="select-small" id="gw-filter">
           <option value="">Select GW</option>
         </select>
       </div>
-
-      <div class="control-half">
-        <label class="label" for="position-filter">Position</label>
-        <select class="select select-compact" id="position-filter">
+      <div class="control-inline">
+        <label class="label-small" for="position-filter">Position</label>
+        <select class="select-small" id="position-filter">
           <option value="">All</option>
           <option value="GK">GK</option>
           <option value="DEF">DEF</option>
@@ -34,7 +33,7 @@ import Nav from "../components/Nav.astro";
           <option value="FWD">FWD</option>
         </select>
       </div>
-    </section>
+    </div>
 
     <div id="loading-status" class="meta-row"></div>
     <section id="ownership-output" aria-live="polite"></section>
@@ -42,7 +41,7 @@ import Nav from "../components/Nav.astro";
 
   <!-- Owned By Modal -->
   <div id="owned-by-modal" class="modal">
-    <div class="modal-panel modal-panel--compact">
+    <div class="modal-panel" style="max-width:300px; padding:var(--space-3);">
       <button id="close-owned-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
       <div id="owned-by-content"></div>
     </div>
@@ -59,105 +58,64 @@ import Nav from "../components/Nav.astro";
     flex: 1;
     justify-content: center;
     padding: var(--space-2) var(--space-3);
+    text-align: center;
   }
 
-  .controls-compact {
+  .controls-inline {
     display: flex;
     gap: var(--space-2);
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
-    padding: var(--space-3);
+    padding: var(--space-2);
   }
 
-  .control-half {
+  .control-inline {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 4px;
   }
 
-  .control-half .label {
-    font-size: var(--text-xs);
+  .label-small {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
   }
 
-  .select-compact {
-    min-height: 36px;
-    padding: var(--space-2);
-    font-size: var(--text-sm);
+  .select-small {
+    width: 100%;
+    min-height: 32px;
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
   }
 
-  .modal-panel--compact {
-    padding: var(--space-3);
-    max-width: 320px;
-  }
-
-  .modal-panel--compact .modal-title {
-    font-size: var(--text-base);
-    margin-bottom: var(--space-2);
-    padding-right: var(--space-6);
+  .select-small:focus {
+    outline: none;
+    border-color: var(--color-primary);
   }
 
   .owner-list {
     list-style: none;
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 4px;
     max-height: 50vh;
     overflow-y: auto;
+    margin: 0;
+    padding: 0;
   }
 
   .owner-list li {
-    padding: var(--space-1) var(--space-2);
+    padding: 4px 8px;
     background: var(--color-surface-alt);
     border-radius: var(--radius-sm);
-    font-size: var(--text-sm);
-  }
-
-  .ownership-table td,
-  .ownership-table th {
-    padding: 4px 6px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .ownership-table .player-cell {
-    line-height: 1.2;
-  }
-
-  .ownership-table .player-name {
-    font-weight: 700;
-    font-size: var(--text-sm);
-  }
-
-  .ownership-table .player-count {
-    font-size: 10px;
-    color: var(--color-text-muted);
-  }
-
-  .ownership-table .pos-cell {
-    width: 24px;
-    font-size: 10px;
-    text-align: center;
-    color: var(--color-text-secondary);
-  }
-
-  .ownership-table .team-cell {
-    width: 28px;
-    font-size: 10px;
-    text-align: center;
-    color: var(--color-text-secondary);
-  }
-
-  .ownership-table .pct-cell {
-    width: 32px;
-    font-size: var(--text-xs);
-    font-weight: 700;
-    text-align: center;
-  }
-
-  .ownership-table .view-cell {
-    width: 32px;
-    text-align: center;
+    font-size: 13px;
   }
 </style>
 
@@ -307,11 +265,11 @@ import Nav from "../components/Nav.astro";
   function showOwnedByModal(playerName, ownedByList, totalManagers) {
     const allOwn = ownedByList.length === totalManagers;
     
-    let html = `<h2 class="modal-title">${playerName}</h2>`;
-    html += `<p class="text-muted" style="margin-bottom:var(--space-2); font-size:var(--text-xs);">${ownedByList.length} of ${totalManagers} managers</p>`;
+    let html = `<h2 style="font-size:15px; font-weight:700; margin-bottom:8px; padding-right:32px;">${playerName}</h2>`;
+    html += `<p style="margin-bottom:8px; font-size:11px; color:var(--color-text-muted);">${ownedByList.length} of ${totalManagers} managers</p>`;
     
     if (allOwn) {
-      html += `<p class="text-success font-bold" style="font-size:var(--text-sm);">✓ Owned by everyone</p>`;
+      html += `<p style="color:var(--color-success); font-weight:700; font-size:13px;">✓ Owned by everyone</p>`;
     } else {
       html += `<ul class="owner-list">`;
       ownedByList.forEach(name => {
@@ -321,7 +279,7 @@ import Nav from "../components/Nav.astro";
       
       const notOwned = allManagerNames.filter(n => !ownedByList.includes(n));
       if (notOwned.length > 0 && notOwned.length <= 5) {
-        html += `<p class="text-muted" style="margin-top:var(--space-3); font-size:var(--text-xs);"><strong>Not owned by:</strong> ${notOwned.join(", ")}</p>`;
+        html += `<p style="margin-top:12px; font-size:11px; color:var(--color-text-muted);"><strong>Not owned by:</strong> ${notOwned.join(", ")}</p>`;
       }
     }
     
@@ -344,7 +302,7 @@ import Nav from "../components/Nav.astro";
     const totalManagers = allManagerNames.length;
 
     let html = `
-      <div class="meta-row" style="margin-bottom:var(--space-2);">
+      <div class="meta-row" style="margin-bottom:8px;">
         <span>Managers: <strong>${totalManagers}</strong></span>
         <span>Players: <strong>${filtered.length}</strong></span>
       </div>
@@ -356,9 +314,9 @@ import Nav from "../components/Nav.astro";
               <tr>
                 <th>Player</th>
                 <th class="pos-cell">Pos</th>
-                <th class="team-cell">Team</th>
+                <th class="team-cell">Tm</th>
                 <th class="pct-cell">%</th>
-                <th class="view-cell">👁</th>
+                <th class="view-cell"></th>
               </tr>
             </thead>
             <tbody>
@@ -379,11 +337,10 @@ import Nav from "../components/Nav.astro";
           <td class="pct-cell">${ownershipPct}%</td>
           <td class="view-cell">
             <button 
-              class="btn btn--neutral btn--small owned-by-btn" 
+              class="btn btn--neutral view-btn owned-by-btn" 
               type="button"
               data-player="${player.playerName}"
               data-owned="${ownedByJson}"
-              style="padding:2px 5px; min-height:24px; font-size:10px;"
             >👁</button>
           </td>
         </tr>
@@ -403,8 +360,9 @@ import Nav from "../components/Nav.astro";
   function attachOwnedByButtons() {
     document.querySelectorAll('.owned-by-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const playerName = e.target.dataset.player;
-        const ownedBy = JSON.parse(e.target.dataset.owned);
+        const button = e.target.closest('.owned-by-btn');
+        const playerName = button.dataset.player;
+        const ownedBy = JSON.parse(button.dataset.owned);
         showOwnedByModal(playerName, ownedBy, allManagerNames.length);
       });
     });

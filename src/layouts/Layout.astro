@@ -462,30 +462,8 @@ const { title = "FPL Manager Data" } = Astro.props;
     font-weight: 700;
   }
 
-  .data-table .truncate {
-    max-width: 150px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .data-table .compact {
-    padding: var(--space-1) var(--space-2);
-  }
-
   .data-table .nowrap {
     white-space: nowrap;
-  }
-
-  /* Narrow columns for mobile */
-  .data-table .col-narrow {
-    width: 50px;
-    max-width: 60px;
-  }
-
-  .data-table .col-medium {
-    width: 70px;
-    max-width: 80px;
   }
 
   /* ========================================
@@ -596,6 +574,149 @@ const { title = "FPL Manager Data" } = Astro.props;
     font-size: var(--text-xs);
     color: var(--color-text-muted);
     font-weight: 400;
+  }
+
+  /* ========================================
+     OWNERSHIP TABLE - Compact columns
+     ======================================== */
+  .ownership-table td,
+  .ownership-table th {
+    padding: 4px 5px !important;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ownership-table .player-cell {
+    line-height: 1.2;
+  }
+
+  .ownership-table .player-name {
+    font-weight: 700 !important;
+    font-size: 13px !important;
+  }
+
+  .ownership-table .player-count {
+    font-size: 10px !important;
+    color: var(--color-text-muted);
+  }
+
+  .ownership-table .pos-cell {
+    width: 26px !important;
+    max-width: 26px !important;
+    font-size: 9px !important;
+    text-align: center !important;
+    color: var(--color-text-secondary);
+    padding: 4px 2px !important;
+  }
+
+  .ownership-table .team-cell {
+    width: 28px !important;
+    max-width: 28px !important;
+    font-size: 9px !important;
+    text-align: center !important;
+    color: var(--color-text-secondary);
+    padding: 4px 2px !important;
+  }
+
+  .ownership-table .pct-cell {
+    width: 30px !important;
+    max-width: 30px !important;
+    font-size: 11px !important;
+    font-weight: 700;
+    text-align: center !important;
+    padding: 4px 2px !important;
+  }
+
+  .ownership-table .view-cell {
+    width: 28px !important;
+    max-width: 28px !important;
+    text-align: center !important;
+    padding: 4px 2px !important;
+  }
+
+  .ownership-table .view-btn {
+    padding: 2px 4px !important;
+    min-height: 22px !important;
+    font-size: 10px !important;
+  }
+
+  /* ========================================
+     LIVE TABLE - Compact columns
+     ======================================== */
+  .live-table td,
+  .live-table th {
+    padding: var(--space-1) var(--space-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .live-table .rank-col {
+    width: 28px;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .live-table .gw-col {
+    width: 28px;
+    text-align: center;
+  }
+
+  .live-table .hit-col {
+    width: 32px;
+    text-align: center;
+  }
+
+  .live-table .nett-col {
+    width: 32px;
+    text-align: center;
+    font-weight: 700;
+  }
+
+  .live-table .total-col {
+    width: 48px;
+    text-align: center;
+  }
+
+  .live-table .diff-col {
+    width: 32px;
+    text-align: center;
+  }
+
+  .live-table .manager-col {
+    font-weight: 600;
+  }
+
+  /* ========================================
+     SQUAD TABLE - Compact rows
+     ======================================== */
+  .squad-table td,
+  .squad-table th {
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-sm);
+  }
+
+  .squad-table .pos-num {
+    width: 24px;
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+  }
+
+  .squad-table .player-name {
+    font-weight: 600;
+  }
+
+  .squad-table .team-col {
+    width: 36px;
+    font-size: var(--text-xs);
+  }
+
+  .squad-table .pts-col {
+    width: 36px;
+    font-weight: 700;
+  }
+
+  .squad-table .cap-col {
+    width: 24px;
+    font-weight: 700;
+    font-size: var(--text-xs);
   }
 
   /* ========================================
