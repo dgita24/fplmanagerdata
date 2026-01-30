@@ -48,12 +48,6 @@ const { title = "FPL Manager Data" } = Astro.props;
 
     --container: 1200px;
 
-    /* ----------------------------
-    Wrap utilities
-    ----------------------------- */
-    .wrap-180 { max-width: 180px; word-break: break-word; overflow-wrap: break-word; }
-
-
     /* Sticky column system defaults */
     --sticky-col-1-width: 56px;
     --sticky-col-2-width: 220px;
@@ -64,6 +58,11 @@ const { title = "FPL Manager Data" } = Astro.props;
     --sticky-z-col2: 18;    /* manager column */
     --sticky-z-body: 1;     /* normal cells */
   }
+
+  /* ----------------------------
+  Wrap utilities
+  ----------------------------- */
+  .wrap-180 { max-width: 180px; word-break: break-word; overflow-wrap: break-word; }
 
   *, *::before, *::after { box-sizing: border-box; }
   html, body { height: 100%; }
