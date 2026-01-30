@@ -602,8 +602,12 @@ import Nav from "../components/Nav.astro";
       const diffOverall = m.totalPoints - compareManager.totalPoints;
       const diffText = diffOverall > 0 ? `+${diffOverall}` : diffOverall === 0 ? "—" : `${diffOverall}`;
 
+      const isTopScorer = m.livePoints === maxGwPoints;
+      const rowClass = isTopScorer ? 'top-scorer-row' : '';
+      const hitClass = m.transferCost > 0 ? 'hit-highlight' : '';
+
       html += `
-        <tr>
+        <tr class="${rowClass}">
           <td class="rank-col">${rank}</td>
           <td class="manager-col">
             <a href="/squads?manager=${m.entryId}">${m.managerName}</a>
