@@ -1,178 +1,199 @@
-<nav>
-  <div class="nav-container">
-    <button id="hamburger-btn" class="hamburger" aria-label="Toggle navigation menu">
-      <span></span>
-      <span></span>
-      <span></span>
+<header class="nav-header">
+  <nav class="nav">
+    <a href="/" class="nav-brand">FPL Manager</a>
+
+    <button
+      id="hamburger-btn"
+      class="nav-toggle"
+      type="button"
+      aria-label="Toggle navigation"
+      aria-expanded="false"
+      aria-controls="nav-menu"
+    >
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
     </button>
-    
-    <div id="nav-links" class="nav-links">
-      <a href="/">Home</a>
-      <a href="/managers">⚙ Managers</a>
-      <a href="/transfers">Transfers</a>
-      <a href="/chips">Chips</a>
-      <a href="/stats">Stats</a>
-      <a href="/ownership">Ownership</a>
-      <a href="/squads">Squads</a>
-      <a href="/live">🔴 Live</a>
+
+    <div id="nav-menu" class="nav-menu">
+      <div class="nav-links">
+        <a href="/" class="nav-link">Home</a>
+        <a href="/managers" class="nav-link">Managers</a>
+        <a href="/transfers" class="nav-link">Transfers</a>
+        <a href="/chips" class="nav-link">Chips</a>
+        <a href="/stats" class="nav-link">Stats</a>
+        <a href="/ownership" class="nav-link">Ownership</a>
+        <a href="/squads" class="nav-link">Squads</a>
+        <a href="/live" class="nav-link nav-link--live">🔴 Live</a>
+      </div>
+
+      <div id="auth-section" class="nav-auth">
+        <span class="nav-auth-loading">Loading...</span>
+      </div>
     </div>
-    
-    <div id="auth-section" class="auth-section">
-      <span class="loading-text">Loading...</span>
-    </div>
-  </div>
-</nav>
+  </nav>
+</header>
 
 <style>
-  nav {
-    padding: 1em;
-    background: #f7fafc;
-    border-bottom: 2px solid #e2e8f0;
-    margin-bottom: 1.5em;
+  .nav-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
   }
 
-  .nav-container {
+  .nav {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    max-width: 1400px;
+    justify-content: space-between;
+    gap: var(--space-4);
+    max-width: var(--container-max);
     margin: 0 auto;
-    position: relative;
+    padding: var(--space-3) var(--space-4);
   }
 
-  .hamburger {
-    display: none;
+  .nav-brand {
+    font-size: var(--text-lg);
+    font-weight: 700;
+    color: var(--color-text);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .nav-brand:hover {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  /* Hamburger toggle */
+  .nav-toggle {
+    display: flex;
     flex-direction: column;
-    background: none;
+    justify-content: center;
+    gap: 5px;
+    width: var(--touch-target);
+    height: var(--touch-target);
+    padding: var(--space-2);
+    background: transparent;
     border: none;
     cursor: pointer;
-    padding: 8px;
-    gap: 4px;
-    min-width: 44px;
-    min-height: 44px;
-    justify-content: center;
-    align-items: center;
   }
 
-  .hamburger span {
+  .nav-toggle-bar {
     display: block;
-    width: 25px;
-    height: 3px;
-    background: #2d3748;
-    transition: all 0.3s ease;
+    width: 22px;
+    height: 2px;
+    background: var(--color-text);
+    border-radius: 2px;
+    transition: transform var(--transition-base), opacity var(--transition-base);
   }
 
-  .hamburger.active span:nth-child(1) {
-    transform: rotate(45deg) translate(5px, 5px);
+  .nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
   }
 
-  .hamburger.active span:nth-child(2) {
+  .nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(2) {
     opacity: 0;
   }
 
-  .hamburger.active span:nth-child(3) {
-    transform: rotate(-45deg) translate(7px, -6px);
+  .nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
+  }
+
+  /* Mobile menu (off-canvas) */
+  .nav-menu {
+    position: fixed;
+    inset: 0;
+    top: 57px; /* Height of nav header */
+    background: var(--color-surface);
+    padding: var(--space-4);
+    transform: translateX(100%);
+    transition: transform var(--transition-base);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+
+  .nav-menu.is-open {
+    transform: translateX(0);
   }
 
   .nav-links {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    gap: var(--space-1);
   }
 
-  .nav-links a {
-    margin-right: 1em;
-    color: #2d3748;
-    text-decoration: none;
-    font-weight: bold;
-    padding: 8px 12px;
-    min-height: 44px;
-    display: inline-flex;
-    align-items: center;
-  }
-
-  .nav-links a:hover {
-    text-decoration: underline;
-  }
-
-  .auth-section {
+  .nav-link {
     display: flex;
     align-items: center;
-    gap: 1em;
+    min-height: var(--touch-target);
+    padding: var(--space-3);
+    font-size: var(--text-base);
+    font-weight: 500;
+    color: var(--color-text);
+    text-decoration: none;
+    border-radius: var(--radius-md);
+    transition: background var(--transition-fast);
   }
 
-  .loading-text {
-    color: #718096;
+  .nav-link:hover,
+  .nav-link:focus {
+    background: var(--color-surface-alt);
+    text-decoration: none;
   }
 
-  /* Mobile styles */
-  @media (max-width: 768px) {
-    .hamburger {
-      display: flex;
-      z-index: 1001;
+  .nav-link--live {
+    color: var(--color-danger);
+    font-weight: 600;
+  }
+
+  .nav-auth {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .nav-auth-loading {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+
+  /* Desktop layout */
+  @media (min-width: 768px) {
+    .nav-toggle {
+      display: none;
     }
 
-    .nav-links {
-      position: fixed;
-      top: 0;
-      left: -100%;
-      width: 80%;
-      max-width: 300px;
-      height: 100vh;
-      background: #f7fafc;
-      flex-direction: column;
-      align-items: flex-start;
-      padding: 80px 20px 20px 20px;
-      box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-      transition: left 0.3s ease;
-      z-index: 1000;
-      overflow-y: auto;
-    }
-
-    .nav-links.active {
-      left: 0;
-    }
-
-    .nav-links a {
-      width: 100%;
-      margin: 0;
-      margin-bottom: 0.5em;
-      padding: 12px 16px;
-      border-radius: 4px;
-      min-height: 48px;
-      font-size: 16px;
-    }
-
-    .nav-links a:hover {
-      background: #e2e8f0;
-    }
-
-    .auth-section {
+    .nav-menu {
+      position: static;
+      transform: none;
+      padding: 0;
       flex-direction: row;
-      gap: 0.5em;
-      justify-content: center;
-    }
-  }
-
-  /* Extra small phones (480px and below) */
-  @media (max-width: 480px) {
-    nav {
-      padding: 0.75em 0.5em;
+      align-items: center;
+      gap: var(--space-4);
+      background: transparent;
+      overflow: visible;
     }
 
     .nav-links {
-      width: 85%;
-      max-width: 280px;
-      padding: 70px 15px 15px 15px;
+      flex-direction: row;
+      gap: 0;
     }
 
-    .nav-links a {
-      padding: 10px 12px;
-      font-size: 15px;
-      min-height: 44px;
+    .nav-link {
+      padding: var(--space-2) var(--space-3);
+      font-size: var(--text-sm);
     }
 
-    .auth-section {
-      gap: 0.25em;
+    .nav-auth {
+      flex-direction: row;
+      padding-top: 0;
+      border-top: none;
     }
   }
 </style>
@@ -182,62 +203,58 @@
 
   const authSection = document.getElementById('auth-section')
   const hamburger = document.getElementById('hamburger-btn')
-  const navLinks = document.getElementById('nav-links')
+  const navMenu = document.getElementById('nav-menu')
 
-  // Hamburger menu toggle
+  // Hamburger toggle
   hamburger?.addEventListener('click', () => {
-    hamburger.classList.toggle('active')
-    navLinks?.classList.toggle('active')
+    const isOpen = navMenu?.classList.toggle('is-open')
+    hamburger.setAttribute('aria-expanded', isOpen ? 'true' : 'false')
   })
 
-  // Close menu when clicking a link
-  navLinks?.querySelectorAll('a').forEach(link => {
+  // Close menu on link click
+  navMenu?.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', () => {
-      hamburger?.classList.remove('active')
-      navLinks?.classList.remove('active')
+      navMenu?.classList.remove('is-open')
+      hamburger?.setAttribute('aria-expanded', 'false')
     })
   })
 
-  // Close menu when clicking outside
+  // Close menu on outside click
   document.addEventListener('click', (e) => {
-    if (hamburger && navLinks && 
-        !hamburger.contains(e.target as Node) && 
-        !navLinks.contains(e.target as Node)) {
-      hamburger.classList.remove('active')
-      navLinks.classList.remove('active')
+    if (
+      hamburger &&
+      navMenu &&
+      !hamburger.contains(e.target as Node) &&
+      !navMenu.contains(e.target as Node)
+    ) {
+      navMenu.classList.remove('is-open')
+      hamburger.setAttribute('aria-expanded', 'false')
     }
   })
 
   async function updateAuthUI() {
     const { data: { user } } = await supabase.auth.getUser()
-    
+
     if (user) {
       authSection.innerHTML = `
-        <span style="margin-right: 0.5em; color: #2d3748;">${user.email}</span>
-        <button id="logout-btn" style="padding: 10px 16px; background: #e53e3e; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; min-width: 44px; min-height: 44px;">
-          Logout
-        </button>
+        <span class="nav-user">${user.email}</span>
+        <button id="logout-btn" class="btn btn--danger" type="button">Logout</button>
       `
-      
+
       document.getElementById('logout-btn')?.addEventListener('click', async () => {
         await supabase.auth.signOut()
         window.location.href = '/login'
       })
     } else {
       authSection.innerHTML = `
-        <a href="/login" style="padding: 10px 16px; background: #3182ce; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;">
-          Login
-        </a>
-        <a href="/signup" style="padding: 10px 16px; background: #38a169; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;">
-          Sign Up
-        </a>
+        <a href="/login" class="btn btn--primary">Login</a>
+        <a href="/signup" class="btn btn--success">Sign Up</a>
       `
     }
   }
 
   updateAuthUI()
 
-  // Listen for auth changes
   supabase.auth.onAuthStateChange((event, session) => {
     updateAuthUI()
   })

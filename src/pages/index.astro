@@ -5,38 +5,56 @@ import Nav from "../components/Nav.astro";
 <Layout title="FPL Manager Data">
   <Nav />
 
-  <div class="page">
+  <main class="page">
     <header class="page-header">
       <h1 class="page-title">Welcome to FPL Manager Data</h1>
       <p class="page-subtitle">
-        Use the navigation above to view Squads, Transfers, Chips, Stats, Ownership, and Live standings.
+        Track your Fantasy Premier League mini-league with live standings, transfer history, chip usage, and more.
       </p>
     </header>
 
-    <div class="table-shell">
-      <div style="padding: 12px;">
-        <h2 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">🚀 First time here?</h2>
-        <p style="margin: 0 0 12px 0; color: var(--muted);">
-          Start by adding your league’s manager EntryIDs. They’ll sync to your account across devices.
+    <section class="card">
+      <div class="card-body">
+        <h2 class="card-title">🚀 First time here?</h2>
+        <p class="text-muted">
+          Start by adding your league's manager EntryIDs. They'll sync to your account across devices.
         </p>
-        <a class="btn btn--primary" href="/managers" style="display:inline-flex; align-items:center; justify-content:center;">
-          ⚙ Go to Managers Page
-        </a>
+        <div style="margin-top: var(--space-4);">
+          <a href="/managers" class="btn btn--primary">⚙ Go to Managers Page</a>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <div class="table-shell">
-      <div style="padding: 12px;">
-        <h2 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">Pages</h2>
-        <ul style="margin: 0; padding-left: 18px; line-height: 1.9;">
-          <li><a href="/transfers">Transfers</a> — Transfer histories and free transfer (FT) calculations</li>
-          <li><a href="/squads">Squads</a> — Lineups for any manager</li>
-          <li><a href="/chips">Chips</a> — Chip usage summary and detail</li>
-          <li><a href="/stats">Stats</a> — League standings and summary metrics</li>
-          <li><a href="/ownership">Ownership</a> — Player ownership across managers</li>
-          <li><a href="/live">Live</a> — Live GW points and projected overall standings</li>
+    <section class="card">
+      <div class="card-body">
+        <h2 class="card-title">📊 Available Pages</h2>
+        <ul class="nav-list">
+          <li><a href="/transfers"><strong>Transfers</strong></a> — Transfer histories and free transfer calculations</li>
+          <li><a href="/squads"><strong>Squads</strong></a> — Lineups for any manager</li>
+          <li><a href="/chips"><strong>Chips</strong></a> — Chip usage summary and detail</li>
+          <li><a href="/stats"><strong>Stats</strong></a> — League standings and summary metrics</li>
+          <li><a href="/ownership"><strong>Ownership</strong></a> — Player ownership across managers</li>
+          <li><a href="/live"><strong>Live</strong></a> — Live GW points and projected standings</li>
         </ul>
       </div>
-    </div>
-  </div>
+    </section>
+  </main>
 </Layout>
+
+<style>
+  .nav-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .nav-list li {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .nav-list a {
+    font-weight: 600;
+  }
+</style>

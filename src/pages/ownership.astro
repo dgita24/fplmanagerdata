@@ -2,15 +2,13 @@
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 ---
-<Layout title="Player Ownership Dashboard - FPL Manager Data">
+<Layout title="Player Ownership - FPL Manager Data">
   <Nav />
 
-  <div class="page">
+  <main class="page">
     <header class="page-header">
-      <h1 class="page-title">Player Ownership Dashboard</h1>
-      <p class="page-subtitle">
-        See which players are owned by how many managers in your league, and which managers own them.
-      </p>
+      <h1 class="page-title">Player Ownership</h1>
+      <p class="page-subtitle">See which players are owned by how many managers in your league.</p>
     </header>
 
     <div class="meta-row">
@@ -18,15 +16,15 @@ import Nav from "../components/Nav.astro";
       <a href="/managers" class="badge">⚙ Manage IDs</a>
     </div>
 
-    <section class="controls" aria-label="Ownership controls">
-      <div class="control" style="grid-column: span 2;">
-        <label class="label" for="gw-filter" style="white-space: nowrap;">Select GW</label>
-        <input class="input" type="number" id="gw-filter" min="1" max="38" placeholder="Auto" inputmode="numeric" style="max-width: 80px;" />
+    <section class="controls">
+      <div class="control">
+        <label class="label" for="gw-filter">Select GW</label>
+        <input class="input" type="number" id="gw-filter" min="1" max="38" placeholder="Auto" inputmode="numeric" />
       </div>
 
-      <div class="control" style="grid-column: span 3;">
-        <label class="label" for="position-filter" style="white-space: nowrap;">Filter by Position</label>
-        <select class="select" id="position-filter" style="max-width: 180px;">
+      <div class="control">
+        <label class="label" for="position-filter">Filter by Position</label>
+        <select class="select" id="position-filter">
           <option value="">All Positions</option>
           <option value="GK">Goalkeepers (GK)</option>
           <option value="DEF">Defenders (DEF)</option>
@@ -35,336 +33,346 @@ import Nav from "../components/Nav.astro";
         </select>
       </div>
 
-      <div class="control" style="grid-column: span 7;">
-        <label class="label" style="white-space: nowrap;">Actions</label>
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-          <button id="refresh-btn" class="btn btn--primary" type="button">🔄 Refresh Data</button>
+      <div class="control">
+        <label class="label">Actions</label>
+        <div class="control-actions">
+          <button id="refresh-btn" class="btn btn--primary" type="button">🔄 Refresh</button>
         </div>
       </div>
     </section>
 
     <div id="loading-status" class="meta-row"></div>
     <section id="ownership-output" aria-live="polite"></section>
-  </div>
-
-  <script>
-    import { supabase } from '../lib/supabase.ts'
-
-    async function loadManagerIdsFromSupabase() {
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        window.location.replace('/login')
-        return { authenticated: false, managerIds: [] }
-      }
-      
-      try {
-        const { data, error } = await supabase
-          .from('user_manager_lists')
-          .select('manager_ids')
-          .eq('user_id', user.id)
-          .single()
-        
-        if (error && error.code !== 'PGRST116') {
-          console.error('Error loading manager IDs:', error)
-          return { authenticated: true, managerIds: [] }
-        }
-        
-        return { authenticated: true, managerIds: data?.manager_ids || [] }
-      } catch (e) {
-        console.error('Error:', e)
-        return { authenticated: false, managerIds: [] }
-      }
-    }
-
-    const out = document.getElementById("ownership-output");
-    const gwFilterInput = document.getElementById("gw-filter");
-    const positionFilter = document.getElementById("position-filter");
-    const loadingStatus = document.getElementById("loading-status");
-    const managerCountEl = document.getElementById("manager-count");
-    const refreshBtn = document.getElementById("refresh-btn");
-
-    let managerIds = [];
-
-    let ownershipData = [];
-    let latestGW = null;
-    let playerCache = new Map();
-    let teamCache = new Map();
-    let allManagerNames = [];
-
-    async function fetchBootstrapData() {
-      try {
-        const res = await fetch('/api/fpl/bootstrap-static');
-        if (!res.ok) throw new Error("Failed to fetch bootstrap data");
-        const data = await res.json();
-        
-        data.elements.forEach(player => {
-          playerCache.set(player.id, {
-            name: player.web_name,
-            position: player.element_type === 1 ? "GK" :
-                      player.element_type === 2 ? "DEF" :
-                      player.element_type === 3 ? "MID" : "FWD",
-            team: player.team
-          });
-        });
-        
-        data.teams.forEach(team => {
-          teamCache.set(team.id, team.short_name);
-        });
-        
-        const currentEvent = data.events.find(e => e.is_current);
-        latestGW = currentEvent ? currentEvent.id : 1;
-      } catch (e) {
-        console.error("Error fetching bootstrap data:", e);
-      }
-    }
-
-    async function fetchManagerSquad(entryId, gw) {
-      try {
-        const [picksRes, summaryRes] = await Promise.all([
-          fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
-          fetch(`/api/fpl/entry/${entryId}`)
-        ]);
-        
-        if (!picksRes.ok || !summaryRes.ok) throw new Error("Failed to fetch data");
-        
-        const picksData = await picksRes.json();
-        const summaryData = await summaryRes.json();
-        
-        const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
-        const firstName = summaryData.player_first_name;
-        const lastName = summaryData.player_last_name;
-        
-        return {
-          entryId,
-          managerName,
-          firstName,
-          lastName,
-          picks: picksData.picks.map(p => p.element)
-        };
-      } catch (e) {
-        console.error(`Error fetching squad for ${entryId}:`, e);
-        return null;
-      }
-    }
-
-    function calculateOwnership(managerSquads) {
-      const ownership = new Map();
-      
-      for (const manager of managerSquads) {
-        for (const playerId of manager.picks) {
-          if (!ownership.has(playerId)) {
-            const playerInfo = playerCache.get(playerId) || { name: "Unknown", position: "?", team: 0 };
-            const teamName = teamCache.get(playerInfo.team) || "Unknown";
-            
-            ownership.set(playerId, {
-              playerId,
-              playerName: playerInfo.name,
-              position: playerInfo.position,
-              teamName: teamName,
-              ownedBy: [],
-              count: 0
-            });
-          }
-          
-          const entry = ownership.get(playerId);
-          entry.ownedBy.push({
-            firstName: manager.firstName,
-            lastName: manager.lastName,
-            managerName: manager.managerName
-          });
-          entry.count++;
-        }
-      }
-      
-      return Array.from(ownership.values());
-    }
-
-    function makeOwnershipTable(ownership, positionFilterValue = "") {
-      let filtered = ownership;
-      
-      if (positionFilterValue) {
-        filtered = ownership.filter(p => p.position === positionFilterValue);
-      }
-      
-      filtered.sort((a, b) => {
-        if (b.count !== a.count) return b.count - a.count;
-        return a.playerName.localeCompare(b.playerName);
-      });
-      
-      const totalManagers = allManagerNames.length;
-      
-      let html = `
-        <h2 class="page-title" style="font-size: 1.1rem;">
-          Player Ownership ${positionFilterValue ? `- ${positionFilterValue}` : '(All Positions)'}
-        </h2>
-        <div class="meta-row" style="margin-top: -4px;">
-          <span>Total managers: <strong>${totalManagers}</strong></span>
-          <span>Showing <strong>${filtered.length}</strong> players</span>
-        </div>
-
-        <div class="table-shell" style="margin-top: 10px;">
-          <div class="table-scroll" role="region" aria-label="Ownership table" tabindex="0">
-            <table class="data-table" style="min-width: 600px;">
-              <thead>
-                <tr>
-                  <th class="wrap-180">Player</th>
-                  <th class="num" style="width: 60px;">Pos</th>
-                  <th class="num" style="width: 60px;">Team</th>
-                  <th class="num" style="width: 70px;">Owner-<br/>ship</th>
-                  <th class="num" style="width: 60px;">Count</th>
-                  <th>Owned By</th>
-                </tr>
-              </thead>
-              <tbody>
-      `;
-      
-      for (const player of filtered) {
-        const ownershipPct = ((player.count / totalManagers) * 100).toFixed(0);
-        
-        let ownedByText = "";
-        
-        if (player.count === totalManagers) {
-          ownedByText = "All";
-        } else if (player.count > totalManagers / 2) {
-          const missing = allManagerNames.filter(name => {
-            return !player.ownedBy.some(owner => `${owner.firstName} ${owner.lastName}` === name);
-          });
-          
-          if (missing.length === 0) {
-            ownedByText = "All";
-          } else {
-            ownedByText = `All except ${missing.map(n => n.split(' ')[0]).join(", ")}`;
-          }
-        } else {
-          ownedByText = player.ownedBy
-            .map(m => `${m.firstName} ${m.lastName.substring(0, 2)}`)
-            .join(", ");
-        }
-        
-        html += `
-          <tr>
-            <td class="strong" style="font-size: 1.15rem;">${player.playerName}</td>
-            <td class="num">${player.position}</td>
-            <td class="num">${player.teamName}</td>
-            <td class="num strong">${ownershipPct}%</td>
-            <td class="num strong">${player.count}</td>
-            <td style="font-size: 0.85rem;">${ownedByText}</td>
-          </tr>
-        `;
-      }
-      
-      html += `
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
-      
-      const highly_owned = filtered.filter(p => p.count >= totalManagers * 0.5).length;
-      const moderately_owned = filtered.filter(p => p.count >= totalManagers * 0.3 && p.count < totalManagers * 0.5).length;
-      const differential = filtered.filter(p => p.count === 1).length;
-      
-      html += `
-        <div class="table-shell" style="margin-top: 14px;">
-          <div style="padding: 12px;">
-            <h3 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">Ownership Summary</h3>
-            <ul style="margin: 0; padding-left: 18px; line-height: 1.8;">
-              <li><strong>Highly Owned (50%+):</strong> ${highly_owned} players</li>
-              <li><strong>Moderately Owned (30-50%):</strong> ${moderately_owned} players</li>
-              <li><strong>Differentials (1 manager only):</strong> ${differential} players</li>
-              <li><strong>Total Unique Players:</strong> ${filtered.length}</li>
-            </ul>
-          </div>
-        </div>
-      `;
-      
-      return html;
-    }
-
-    async function loadOwnership(ids, gw) {
-      if (ids.length === 0) {
-        out.innerHTML = "<span style='color:red'>No manager IDs found. <a href='/managers'>Add managers here</a>.</span>";
-        return;
-      }
-      
-      if (!gw) {
-        out.innerHTML = "<span style='color:orange'>Please select a gameweek.</span>";
-        return;
-      }
-
-      const managerSquads = [];
-      allManagerNames = [];
-      out.innerHTML = "";
-      loadingStatus.textContent = `Loading 0 of ${ids.length} managers for GW${gw}...`;
-      
-      let loaded = 0;
-      for (const id of ids) {
-        try {
-          const data = await fetchManagerSquad(id, gw);
-          if (data) {
-            managerSquads.push(data);
-            allManagerNames.push(data.managerName);
-            loaded++;
-            
-            loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
-            
-            ownershipData = calculateOwnership(managerSquads);
-            const posFilter = positionFilter.value;
-            out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
-          }
-        } catch (e) {
-          console.error(`Failed to load manager ${id}:`, e);
-          loaded++;
-        }
-      }
-      
-      loadingStatus.innerHTML = `<span style='color:#16a34a; font-weight: 700;'>✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
-    }
-
-    async function init() {
-      loadingStatus.textContent = "Loading player and team data...";
-      await fetchBootstrapData();
-      
-      gwFilterInput.value = latestGW;
-      gwFilterInput.placeholder = `Latest: GW${latestGW}`;
-      
-      const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
-      if (!authenticated) return;
-      
-      managerIds = ids;
-      
-      await updateDisplay();
-    }
-
-    async function updateDisplay() {
-      managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
-      if (managerIds.length === 0) {
-        out.innerHTML = "<span style='color:red'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</span>";
-        return;
-      }
-      
-      await loadOwnership(managerIds, latestGW);
-    }
-
-    gwFilterInput.addEventListener('change', async () => {
-      const gw = parseInt(gwFilterInput.value);
-      if (gw && gw >= 1 && gw <= 38) {
-        loadOwnership(managerIds, gw);
-      }
-    });
-
-    positionFilter.addEventListener('change', () => {
-      const posFilter = positionFilter.value;
-      out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
-    });
-
-    refreshBtn.addEventListener('click', async () => {
-      const { managerIds: ids } = await loadManagerIdsFromSupabase();
-      managerIds = ids;
-      await updateDisplay();
-    });
-
-    init();
-  </script>
+  </main>
 </Layout>
+
+<script>
+  import { supabase } from '../lib/supabase.ts'
+
+  async function loadManagerIdsFromSupabase() {
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      window.location.replace('/login')
+      return { authenticated: false, managerIds: [] }
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('user_manager_lists')
+        .select('manager_ids')
+        .eq('user_id', user.id)
+        .single()
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading manager IDs:', error)
+        return { authenticated: true, managerIds: [] }
+      }
+
+      return { authenticated: true, managerIds: data?.manager_ids || [] }
+    } catch (e) {
+      console.error('Error:', e)
+      return { authenticated: false, managerIds: [] }
+    }
+  }
+
+  const out = document.getElementById("ownership-output");
+  const gwFilterInput = document.getElementById("gw-filter");
+  const positionFilter = document.getElementById("position-filter");
+  const loadingStatus = document.getElementById("loading-status");
+  const managerCountEl = document.getElementById("manager-count");
+  const refreshBtn = document.getElementById("refresh-btn");
+
+  let managerIds = [];
+
+  let ownershipData = [];
+  let latestGW = null;
+  let playerCache = new Map();
+  let teamCache = new Map();
+  let allManagerNames = [];
+
+  async function fetchBootstrapData() {
+    try {
+      const res = await fetch('/api/fpl/bootstrap-static');
+      if (!res.ok) throw new Error("Failed to fetch bootstrap data");
+      const data = await res.json();
+
+      data.elements.forEach(player => {
+        playerCache.set(player.id, {
+          name: player.web_name,
+          position: player.element_type === 1 ? "GK" :
+                    player.element_type === 2 ? "DEF" :
+                    player.element_type === 3 ? "MID" : "FWD",
+          team: player.team
+        });
+      });
+
+      data.teams.forEach(team => {
+        teamCache.set(team.id, team.short_name);
+      });
+
+      const currentEvent = data.events.find(e => e.is_current);
+      latestGW = currentEvent ? currentEvent.id : 1;
+    } catch (e) {
+      console.error("Error fetching bootstrap data:", e);
+    }
+  }
+
+  async function fetchManagerSquad(entryId, gw) {
+    try {
+      const [picksRes, summaryRes] = await Promise.all([
+        fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
+        fetch(`/api/fpl/entry/${entryId}`)
+      ]);
+
+      if (!picksRes.ok || !summaryRes.ok) throw new Error("Failed to fetch data");
+
+      const picksData = await picksRes.json();
+      const summaryData = await summaryRes.json();
+
+      const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
+      const firstName = summaryData.player_first_name;
+      const lastName = summaryData.player_last_name;
+
+      return {
+        entryId,
+        managerName,
+        firstName,
+        lastName,
+        picks: picksData.picks.map(p => p.element)
+      };
+    } catch (e) {
+      console.error(`Error fetching squad for ${entryId}:`, e);
+      return null;
+    }
+  }
+
+  function calculateOwnership(managerSquads) {
+    const ownership = new Map();
+
+    for (const manager of managerSquads) {
+      for (const playerId of manager.picks) {
+        if (!ownership.has(playerId)) {
+          const playerInfo = playerCache.get(playerId) || { name: "Unknown", position: "?", team: 0 };
+          const teamName = teamCache.get(playerInfo.team) || "Unknown";
+
+          ownership.set(playerId, {
+            playerId,
+            playerName: playerInfo.name,
+            position: playerInfo.position,
+            teamName: teamName,
+            ownedBy: [],
+            count: 0
+          });
+        }
+
+        const entry = ownership.get(playerId);
+        entry.ownedBy.push({
+          firstName: manager.firstName,
+          lastName: manager.lastName,
+          managerName: manager.managerName
+        });
+        entry.count++;
+      }
+    }
+
+    return Array.from(ownership.values());
+  }
+
+  function makeOwnershipTable(ownership, positionFilterValue = "") {
+    let filtered = ownership;
+
+    if (positionFilterValue) {
+      filtered = ownership.filter(p => p.position === positionFilterValue);
+    }
+
+    filtered.sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.playerName.localeCompare(b.playerName);
+    });
+
+    const totalManagers = allManagerNames.length;
+
+    let html = `
+      <h2 class="section-title">
+        Player Ownership ${positionFilterValue ? `- ${positionFilterValue}` : '(All Positions)'}
+      </h2>
+      <div class="meta-row" style="margin-bottom: var(--space-3);">
+        <span>Total managers: <strong>${totalManagers}</strong></span>
+        <span>Showing <strong>${filtered.length}</strong> players</span>
+      </div>
+
+      <div class="table-container">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th class="num">Pos</th>
+                <th class="num">Team</th>
+                <th class="num">Own %</th>
+                <th class="num">Count</th>
+                <th>Owned By</th>
+              </tr>
+            </thead>
+            <tbody>
+    `;
+
+    for (const player of filtered) {
+      const ownershipPct = ((player.count / totalManagers) * 100).toFixed(0);
+
+      let ownedByText = "";
+
+      if (player.count === totalManagers) {
+        ownedByText = "All";
+      } else if (player.count > totalManagers / 2) {
+        const missing = allManagerNames.filter(name => {
+          return !player.ownedBy.some(owner => `${owner.firstName} ${owner.lastName}` === name);
+        });
+
+        if (missing.length === 0) {
+          ownedByText = "All";
+        } else {
+          ownedByText = `All except ${missing.map(n => n.split(' ')[0]).join(", ")}`;
+        }
+      } else {
+        ownedByText = player.ownedBy
+          .map(m => `${m.firstName} ${m.lastName.substring(0, 2)}`)
+          .join(", ");
+      }
+
+      html += `
+        <tr>
+          <td class="strong">${player.playerName}</td>
+          <td class="num">${player.position}</td>
+          <td class="num">${player.teamName}</td>
+          <td class="num strong">${ownershipPct}%</td>
+          <td class="num strong">${player.count}</td>
+          <td class="truncate">${ownedByText}</td>
+        </tr>
+      `;
+    }
+
+    html += `
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    const highly_owned = filtered.filter(p => p.count >= totalManagers * 0.5).length;
+    const moderately_owned = filtered.filter(p => p.count >= totalManagers * 0.3 && p.count < totalManagers * 0.5).length;
+    const differential = filtered.filter(p => p.count === 1).length;
+
+    html += `
+      <section class="card" style="margin-top: var(--space-4);">
+        <div class="card-body">
+          <h3 class="card-title">Ownership Summary</h3>
+          <ul class="summary-list">
+            <li><strong>Highly Owned (50%+):</strong> ${highly_owned} players</li>
+            <li><strong>Moderately Owned (30-50%):</strong> ${moderately_owned} players</li>
+            <li><strong>Differentials (1 manager only):</strong> ${differential} players</li>
+            <li><strong>Total Unique Players:</strong> ${filtered.length}</li>
+          </ul>
+        </div>
+      </section>
+    `;
+
+    return html;
+  }
+
+  async function loadOwnership(ids, gw) {
+    if (ids.length === 0) {
+      out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
+      return;
+    }
+
+    if (!gw) {
+      out.innerHTML = "<p class='status status--warning'>Please select a gameweek.</p>";
+      return;
+    }
+
+    const managerSquads = [];
+    allManagerNames = [];
+    out.innerHTML = "";
+    loadingStatus.textContent = `Loading 0 of ${ids.length} managers for GW${gw}...`;
+
+    let loaded = 0;
+    for (const id of ids) {
+      try {
+        const data = await fetchManagerSquad(id, gw);
+        if (data) {
+          managerSquads.push(data);
+          allManagerNames.push(data.managerName);
+          loaded++;
+
+          loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
+
+          ownershipData = calculateOwnership(managerSquads);
+          const posFilter = positionFilter.value;
+          out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
+        }
+      } catch (e) {
+        console.error(`Failed to load manager ${id}:`, e);
+        loaded++;
+      }
+    }
+
+    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} of ${ids.length} managers for GW${gw}</span>`;
+  }
+
+  async function init() {
+    loadingStatus.textContent = "Loading player and team data...";
+    await fetchBootstrapData();
+
+    gwFilterInput.value = latestGW;
+    gwFilterInput.placeholder = `Latest: GW${latestGW}`;
+
+    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    if (!authenticated) return;
+
+    managerIds = ids;
+
+    await updateDisplay();
+  }
+
+  async function updateDisplay() {
+    managerCountEl.textContent = `${managerIds.length} manager(s) configured`;
+    if (managerIds.length === 0) {
+      out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
+      return;
+    }
+
+    await loadOwnership(managerIds, latestGW);
+  }
+
+  gwFilterInput.addEventListener('change', async () => {
+    const gw = parseInt(gwFilterInput.value);
+    if (gw && gw >= 1 && gw <= 38) {
+      loadOwnership(managerIds, gw);
+    }
+  });
+
+  positionFilter.addEventListener('change', () => {
+    const posFilter = positionFilter.value;
+    out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
+  });
+
+  refreshBtn.addEventListener('click', async () => {
+    const { managerIds: ids } = await loadManagerIdsFromSupabase();
+    managerIds = ids;
+    await updateDisplay();
+  });
+
+  init();
+</script>
+
+<style>
+  .summary-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+  }
+</style>

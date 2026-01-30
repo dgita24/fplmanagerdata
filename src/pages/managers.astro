@@ -5,7 +5,7 @@ import Nav from "../components/Nav.astro";
 <Layout title="Manager IDs Setup - FPL Manager Data">
   <Nav />
 
-  <div class="page">
+  <main class="page">
     <header class="page-header">
       <h1 class="page-title">Manager IDs Setup</h1>
       <p class="page-subtitle">
@@ -13,214 +13,237 @@ import Nav from "../components/Nav.astro";
       </p>
     </header>
 
+    <div id="loading" class="card">
+      <div class="card-body text-center">
+        <p class="text-muted">Checking authentication...</p>
+      </div>
+    </div>
+
+    <div id="require-login" class="card" style="display: none;">
+      <div class="card-body text-center">
+        <h2 class="card-title">Login Required</h2>
+        <p class="text-muted">You need to be logged in to manage your manager IDs.</p>
+        <div style="margin-top: var(--space-4);">
+          <a href="/login" class="btn btn--primary">Go to Login</a>
+        </div>
+      </div>
+    </div>
+
     <div id="auth-check" style="display: none;">
-      <div class="table-shell">
-        <div style="padding: 12px;">
+      <section class="card">
+        <div class="card-body">
           <form id="manager-form">
             <div class="control">
               <label class="label" for="ids">Manager EntryIDs (one per line, max 100)</label>
               <textarea
                 id="ids"
                 class="textarea"
-                rows="20"
-                cols="40"
+                rows="12"
                 placeholder="4290&#10;200&#10;1320&#10;..."
               ></textarea>
+            </div>
 
-              <div class="meta-row" style="margin-top: 8px;">
-                <span style="color: var(--muted);">Managers entered: <strong id="count">0</strong></span>
-              </div>
+            <div class="meta-row" style="margin-top: var(--space-3);">
+              <span class="text-muted">Managers entered: <strong id="count">0</strong></span>
+            </div>
 
-              <div style="margin-top: 12px;">
-                <button type="submit" class="btn btn--success">Save Manager IDs</button>
-              </div>
+            <div style="margin-top: var(--space-4);">
+              <button type="submit" class="btn btn--success">Save Manager IDs</button>
             </div>
           </form>
 
-          <div id="status" style="margin-top: 12px;"></div>
+          <div id="status" style="margin-top: var(--space-4);"></div>
         </div>
-      </div>
+      </section>
 
-      <div class="table-shell" style="margin-top: 14px;">
-        <div style="padding: 12px;">
-          <h2 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">Quick Start</h2>
-          <ol style="margin: 0; padding-left: 18px; line-height: 1.9;">
+      <section class="card">
+        <div class="card-body">
+          <h2 class="card-title">Quick Start</h2>
+          <ol class="help-list">
             <li>Enter your league's manager EntryIDs above (one per line)</li>
-            <li>Click “Save Manager IDs”</li>
-            <li>Visit any other page (Transfers, Chips, etc.) — they’ll automatically use these IDs</li>
-            <li>Your IDs are saved to your account and will sync across devices</li>
+            <li>Click "Save Manager IDs"</li>
+            <li>Visit any other page — they'll automatically use these IDs</li>
+            <li>Your IDs sync across all your devices</li>
           </ol>
 
-          <p style="margin: 12px 0 0 0;">
-            <strong>Tip:</strong> You can find a manager’s EntryID in their FPL URL:
+          <p class="tip">
+            <strong>Tip:</strong> Find a manager's EntryID in their FPL URL:
           </p>
-          <p style="margin: 6px 0 0 0;">
-            <code style="background: var(--surface-2); padding: 3px 8px; border-radius: 8px;">
-              https://fantasy.premierleague.com/entry/<strong>4290</strong>/event/22
-            </code>
-          </p>
+          <code class="code-block">
+            https://fantasy.premierleague.com/entry/<strong>4290</strong>/event/22
+          </code>
         </div>
-      </div>
+      </section>
     </div>
-
-    <div id="loading" class="table-shell" style="text-align: center;">
-      <div style="padding: 24px;">
-        <p style="color: var(--muted); margin: 0;">Checking authentication...</p>
-      </div>
-    </div>
-
-    <div id="require-login" class="table-shell" style="display: none; text-align: center;">
-      <div style="padding: 24px;">
-        <h2 class="page-title" style="font-size: 1.05rem; margin: 0 0 8px 0;">Login Required</h2>
-        <p style="color: var(--muted); margin: 0 0 12px 0;">
-          You need to be logged in to manage your manager IDs.
-        </p>
-        <a class="btn btn--primary" href="/login" style="display:inline-flex; align-items:center; justify-content:center;">
-          Go to Login
-        </a>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    import { supabase } from '../lib/supabase.ts'
-
-    const authCheckDiv = document.getElementById('auth-check')
-    const loadingDiv = document.getElementById('loading')
-    const requireLoginDiv = document.getElementById('require-login')
-    const form = document.getElementById('manager-form')
-    const textarea = document.getElementById('ids')
-    const status = document.getElementById('status')
-    const countEl = document.getElementById('count')
-
-    let currentUser = null
-
-    // Check if user is logged in
-    async function checkAuth() {
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (user) {
-        currentUser = user
-        loadingDiv.style.display = 'none'
-        authCheckDiv.style.display = 'block'
-        loadManagerIds()
-      } else {
-        loadingDiv.style.display = 'none'
-        requireLoginDiv.style.display = 'block'
-      }
-    }
-
-    // Load manager IDs from Supabase
-    async function loadManagerIds() {
-      try {
-        const { data, error } = await supabase
-          .from('user_manager_lists')
-          .select('manager_ids')
-          .eq('user_id', currentUser.id)
-          .single()
-        
-        if (error && error.code !== 'PGRST116') {
-          console.error('Error loading manager IDs:', error)
-          return
-        }
-        
-        if (data && data.manager_ids) {
-          textarea.value = data.manager_ids.join('\n')
-          updateCount()
-        }
-      } catch (e) {
-        console.error('Error:', e)
-      }
-    }
-
-    // Save manager IDs to Supabase
-    async function saveManagerIds(ids) {
-      try {
-        const { data: existing, error: fetchError } = await supabase
-          .from('user_manager_lists')
-          .select('id')
-          .eq('user_id', currentUser.id)
-          .single()
-        
-        if (existing) {
-          // Update existing
-          const { error } = await supabase
-            .from('user_manager_lists')
-            .update({ 
-              manager_ids: ids,
-              updated_at: new Date().toISOString()
-            })
-            .eq('user_id', currentUser.id)
-          
-          if (error) throw error
-        } else {
-          // Insert new
-          const { error } = await supabase
-            .from('user_manager_lists')
-            .insert({
-              user_id: currentUser.id,
-              manager_ids: ids
-            })
-          
-          if (error) throw error
-        }
-        
-        return true
-      } catch (e) {
-        console.error('Error saving manager IDs:', e)
-        return false
-      }
-    }
-
-    // Update count as user types
-    function updateCount() {
-      const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
-      countEl.textContent = ids.length
-      if (ids.length > 100) {
-        countEl.style.color = "red"
-        countEl.textContent = `${ids.length} (exceeds 100 limit!)`
-      } else {
-        countEl.style.color = ids.length > 0 ? "#16a34a" : "#64748b"
-      }
-    }
-
-    textarea.addEventListener('input', updateCount)
-
-    // Save form submission
-    form.onsubmit = async (e) => {
-      e.preventDefault()
-      const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
-      
-      if (ids.length === 0) {
-        status.innerHTML = "<span style='color:red'>⚠️ Please enter at least one valid EntryID.</span>"
-        return
-      }
-      
-      if (ids.length > 100) {
-        status.innerHTML = "<span style='color:red'>⚠️ Maximum 100 managers allowed. Please remove some entries.</span>"
-        return
-      }
-      
-      // Remove duplicates
-      const uniqueIds = [...new Set(ids)].map(id => parseInt(id))
-      
-      const success = await saveManagerIds(uniqueIds)
-      
-      if (success) {
-        status.innerHTML = `<span style='color:#16a34a; font-weight:900'>✅ Successfully saved ${uniqueIds.length} manager IDs to your account!</span><br>
-        <span style='color:#64748b'>These will now be synced across all your devices.</span>`
-        
-        // Update textarea with deduplicated list
-        if (uniqueIds.length !== ids.length) {
-          textarea.value = uniqueIds.join('\n')
-          updateCount()
-          status.innerHTML += `<br><span style='color:#f59e0b'>ℹ️ Removed ${ids.length - uniqueIds.length} duplicate(s).</span>`
-        }
-      } else {
-        status.innerHTML = "<span style='color:red'>❌ Error saving manager IDs. Please try again.</span>"
-      }
-    }
-
-    checkAuth()
-  </script>
+  </main>
 </Layout>
+
+<style>
+  .help-list {
+    padding-left: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .tip {
+    margin-top: var(--space-4);
+    font-size: var(--text-sm);
+  }
+
+  .code-block {
+    display: block;
+    margin-top: var(--space-2);
+    padding: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    background: var(--color-surface-alt);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    word-break: break-all;
+  }
+</style>
+
+<script>
+  import { supabase } from '../lib/supabase.ts'
+
+  const authCheckDiv = document.getElementById('auth-check')
+  const loadingDiv = document.getElementById('loading')
+  const requireLoginDiv = document.getElementById('require-login')
+  const form = document.getElementById('manager-form')
+  const textarea = document.getElementById('ids')
+  const status = document.getElementById('status')
+  const countEl = document.getElementById('count')
+
+  let currentUser = null
+
+  // Check if user is logged in
+  async function checkAuth() {
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (user) {
+      currentUser = user
+      loadingDiv.style.display = 'none'
+      authCheckDiv.style.display = 'block'
+      loadManagerIds()
+    } else {
+      loadingDiv.style.display = 'none'
+      requireLoginDiv.style.display = 'block'
+    }
+  }
+
+  // Load manager IDs from Supabase
+  async function loadManagerIds() {
+    try {
+      const { data, error } = await supabase
+        .from('user_manager_lists')
+        .select('manager_ids')
+        .eq('user_id', currentUser.id)
+        .single()
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading manager IDs:', error)
+        return
+      }
+
+      if (data && data.manager_ids) {
+        textarea.value = data.manager_ids.join('\n')
+        updateCount()
+      }
+    } catch (e) {
+      console.error('Error:', e)
+    }
+  }
+
+  // Save manager IDs to Supabase
+  async function saveManagerIds(ids) {
+    try {
+      const { data: existing, error: fetchError } = await supabase
+        .from('user_manager_lists')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .single()
+
+      if (existing) {
+        // Update existing
+        const { error } = await supabase
+          .from('user_manager_lists')
+          .update({
+            manager_ids: ids,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', currentUser.id)
+
+        if (error) throw error
+      } else {
+        // Insert new
+        const { error } = await supabase
+          .from('user_manager_lists')
+          .insert({
+            user_id: currentUser.id,
+            manager_ids: ids
+          })
+
+        if (error) throw error
+      }
+
+      return true
+    } catch (e) {
+      console.error('Error saving manager IDs:', e)
+      return false
+    }
+  }
+
+  // Update count as user types
+  function updateCount() {
+    const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
+    countEl.textContent = ids.length
+    if (ids.length > 100) {
+      countEl.style.color = "var(--color-danger)"
+      countEl.textContent = `${ids.length} (exceeds 100 limit!)`
+    } else {
+      countEl.style.color = ids.length > 0 ? "var(--color-success)" : "var(--color-text-muted)"
+    }
+  }
+
+  textarea.addEventListener('input', updateCount)
+
+  // Save form submission
+  form.onsubmit = async (e) => {
+    e.preventDefault()
+    const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
+
+    if (ids.length === 0) {
+      status.innerHTML = "<p class='status status--error'>⚠️ Please enter at least one valid EntryID.</p>"
+      return
+    }
+
+    if (ids.length > 100) {
+      status.innerHTML = "<p class='status status--error'>⚠️ Maximum 100 managers allowed. Please remove some entries.</p>"
+      return
+    }
+
+    // Remove duplicates
+    const uniqueIds = [...new Set(ids)].map(id => parseInt(id))
+
+    const success = await saveManagerIds(uniqueIds)
+
+    if (success) {
+      let msg = `<p class='status status--success'>✅ Successfully saved ${uniqueIds.length} manager IDs to your account!</p>`
+
+      // Update textarea with deduplicated list
+      if (uniqueIds.length !== ids.length) {
+        textarea.value = uniqueIds.join('\n')
+        updateCount()
+        msg += `<p class='status status--warning' style='margin-top: var(--space-2);'>ℹ️ Removed ${ids.length - uniqueIds.length} duplicate(s).</p>`
+      }
+      status.innerHTML = msg
+    } else {
+      status.innerHTML = "<p class='status status--error'>❌ Error saving manager IDs. Please try again.</p>"
+    }
+  }
+
+  checkAuth()
+</script>

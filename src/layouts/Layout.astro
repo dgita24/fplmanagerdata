@@ -1,7 +1,7 @@
 ---
 /**
- * Global app shell + global CSS.
- * Pages should import this layout and render inside <main class="app-main">.
+ * Global app shell + design system CSS.
+ * Mobile-first responsive design for 2026.
  */
 const { title = "FPL Manager Data" } = Astro.props;
 ---
@@ -9,324 +9,522 @@ const { title = "FPL Manager Data" } = Astro.props;
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
   </head>
 
   <body>
-    <div class="app-shell">
-      <main class="app-main">
-        <slot />
-      </main>
+    <div class="app">
+      <slot />
     </div>
   </body>
 </html>
 
 <style is:global>
+  /* ========================================
+     DESIGN SYSTEM - CSS Custom Properties
+     ======================================== */
   :root {
-    color-scheme: light;
+    /* Colors */
+    --color-bg: #f8fafc;
+    --color-surface: #ffffff;
+    --color-surface-alt: #f1f5f9;
+    --color-border: #e2e8f0;
+    --color-border-strong: #cbd5e1;
 
-    --bg: #ffffff;
-    --surface: #f7fafc;
-    --surface-2: #edf2f7;
-    --border: #e2e8f0;
+    --color-text: #0f172a;
+    --color-text-secondary: #475569;
+    --color-text-muted: #94a3b8;
 
-    --text: #0f172a;
-    --muted: #475569;
+    --color-primary: #2563eb;
+    --color-primary-hover: #1d4ed8;
+    --color-success: #16a34a;
+    --color-success-hover: #15803d;
+    --color-danger: #dc2626;
+    --color-danger-hover: #b91c1c;
+    --color-warning: #f59e0b;
 
-    --primary: #2563eb;
-    --primary-hover: #1d4ed8;
-    --success: #16a34a;
-    --danger: #dc2626;
+    /* Spacing scale */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
 
-    --radius: 12px;
+    /* Typography */
+    --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-    --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.10);
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-3xl: 1.875rem;
 
-    --container: 1200px;
+    /* Radius */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-full: 9999px;
 
-    /* Sticky column system defaults */
-    --sticky-col-1-width: 56px;
-    --sticky-col-2-width: 220px;
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 
-    /* z-index layers */
-    --sticky-z-header: 20;  /* header row baseline */
-    --sticky-z-col1: 19;    /* rank column */
-    --sticky-z-col2: 18;    /* manager column */
-    --sticky-z-body: 1;     /* normal cells */
+    /* Transitions */
+    --transition-fast: 150ms ease;
+    --transition-base: 200ms ease;
+
+    /* Layout */
+    --container-max: 1100px;
+    --touch-target: 44px;
   }
 
-  /* ----------------------------
-  Wrap utilities
-  ----------------------------- */
-  .wrap-180 { max-width: 180px; word-break: break-word; overflow-wrap: break-word; }
-
-  *, *::before, *::after { box-sizing: border-box; }
-  html, body { height: 100%; }
-
-  body {
+  /* ========================================
+     RESET & BASE
+     ======================================== */
+  *, *::before, *::after {
+    box-sizing: border-box;
     margin: 0;
-    background: var(--bg);
-    color: var(--text);
+    padding: 0;
+  }
 
-    font-family:
-      ui-sans-serif,
-      system-ui,
-      -apple-system,
-      "Segoe UI",
-      Roboto,
-      Helvetica,
-      Arial,
-      "Apple Color Emoji",
-      "Segoe UI Emoji",
-      "Segoe UI Symbol",
-      sans-serif;
-
-    line-height: 1.5;
-    text-rendering: optimizeLegibility;
+  html {
+    -webkit-text-size-adjust: 100%;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
-  a { color: var(--primary); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-
-  a:focus-visible,
-  button:focus-visible,
-  input:focus-visible,
-  select:focus-visible,
-  textarea:focus-visible {
-    outline: 3px solid rgba(37, 99, 235, 0.35);
-    outline-offset: 2px;
-    border-radius: 8px;
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: 1.6;
+    color: var(--color-text);
+    background: var(--color-bg);
+    min-height: 100dvh;
   }
 
-  .app-shell { min-height: 100%; }
-
-  .app-main {
-    max-width: var(--container);
-    margin-inline: auto;
-    padding: 12px;
+  /* ========================================
+     APP SHELL
+     ======================================== */
+  .app {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
   }
 
-  @media (min-width: 640px) { .app-main { padding: 16px; } }
-  @media (min-width: 1024px) { .app-main { padding: 20px; } }
-
-  .page { display: grid; gap: 12px; }
-  .page-header { display: grid; gap: 6px; }
-
-  .page-title {
-    margin: 0;
-    font-size: 1.25rem;
-    line-height: 1.2;
-    letter-spacing: -0.01em;
-  }
-
-  .page-subtitle {
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.95rem;
+  .page {
+    flex: 1;
+    width: 100%;
+    max-width: var(--container-max);
+    margin: 0 auto;
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
   }
 
   @media (min-width: 640px) {
-    .page-title { font-size: 1.5rem; }
-  }
-
-  .controls {
-    display: grid;
-    gap: 10px;
-    padding: 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-    box-shadow: var(--shadow-sm);
-  }
-
-  @media (min-width: 768px) {
-    .controls {
-      grid-template-columns: repeat(12, minmax(0, 1fr));
-      align-items: end;
-      gap: 12px;
+    .page {
+      padding: var(--space-5);
+      gap: var(--space-5);
     }
   }
 
-  .control { display: grid; gap: 6px; }
+  /* ========================================
+     TYPOGRAPHY
+     ======================================== */
+  .page-header {
+    text-align: center;
+  }
 
-  .label {
-    font-size: 0.9rem;
+  .page-title {
+    font-size: var(--text-xl);
     font-weight: 700;
-    color: var(--text);
+    color: var(--color-text);
+    line-height: 1.3;
+  }
+
+  @media (min-width: 640px) {
+    .page-title {
+      font-size: var(--text-2xl);
+    }
+  }
+
+  .page-subtitle {
+    margin-top: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* ========================================
+     LINKS
+     ======================================== */
+  a {
+    color: var(--color-primary);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  a:hover {
+    color: var(--color-primary-hover);
+    text-decoration: underline;
+  }
+
+  /* ========================================
+     CARDS / PANELS
+     ======================================== */
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .card-body {
+    padding: var(--space-4);
+  }
+
+  .card-title {
+    font-size: var(--text-base);
+    font-weight: 600;
+    margin-bottom: var(--space-2);
+  }
+
+  /* ========================================
+     CONTROLS SECTION
+     ======================================== */
+  .controls {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  @media (min-width: 640px) {
+    .controls {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+  }
+
+  .control {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .control-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  /* ========================================
+     FORM ELEMENTS
+     ======================================== */
+  .label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-text);
   }
 
   .input,
   .select,
   .textarea {
     width: 100%;
-    min-height: 44px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: #fff;
-    color: var(--text);
-    font: inherit;
+    min-height: var(--touch-target);
+    padding: var(--space-3);
+    font-family: inherit;
+    font-size: var(--text-base);
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  }
+
+  .input:focus,
+  .select:focus,
+  .textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgb(37 99 235 / 0.15);
   }
 
   .textarea {
-    min-height: 180px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    min-height: 160px;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    resize: vertical;
   }
 
+  /* ========================================
+     BUTTONS
+     ======================================== */
   .btn {
-    min-height: 44px;
-    padding: 10px 14px;
-    border-radius: 10px;
-    border: 1px solid transparent;
-    font: inherit;
-    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: var(--touch-target);
+    padding: var(--space-3) var(--space-4);
+    font-family: inherit;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    border: none;
+    border-radius: var(--radius-md);
     cursor: pointer;
-    user-select: none;
+    transition: background var(--transition-fast), transform var(--transition-fast);
     white-space: nowrap;
   }
 
-  .btn--primary { background: var(--primary); color: #fff; }
-  .btn--primary:hover { background: var(--primary-hover); }
-
-  .btn--success { background: var(--success); color: #fff; }
-  .btn--success:hover { filter: brightness(0.95); }
-
-  .btn--danger { background: var(--danger); color: #fff; }
-  .btn--danger:hover { filter: brightness(0.95); }
-
-  .btn--neutral { background: #fff; border-color: var(--border); color: var(--text); }
-  .btn--neutral:hover { background: var(--surface-2); }
-
-  .meta-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px 14px;
-    align-items: center;
-    color: var(--muted);
-    font-size: 0.9rem;
+  .btn:active {
+    transform: scale(0.98);
   }
 
+  .btn--primary {
+    background: var(--color-primary);
+    color: white;
+  }
+
+  .btn--primary:hover {
+    background: var(--color-primary-hover);
+    color: white;
+    text-decoration: none;
+  }
+
+  .btn--success {
+    background: var(--color-success);
+    color: white;
+  }
+
+  .btn--success:hover {
+    background: var(--color-success-hover);
+    color: white;
+    text-decoration: none;
+  }
+
+  .btn--danger {
+    background: var(--color-danger);
+    color: white;
+  }
+
+  .btn--danger:hover {
+    background: var(--color-danger-hover);
+    color: white;
+    text-decoration: none;
+  }
+
+  .btn--neutral {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+
+  .btn--neutral:hover {
+    background: var(--color-surface-alt);
+    text-decoration: none;
+  }
+
+  /* ========================================
+     BADGES / PILLS
+     ======================================== */
   .badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: #fff;
-    color: var(--text);
-    font-size: 0.85rem;
-    font-weight: 700;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    white-space: nowrap;
   }
 
-  /* ----------------------------
-     Table system
-  ----------------------------- */
-  .table-shell {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: #fff;
+  .badge--primary {
+    background: rgb(37 99 235 / 0.1);
+    color: var(--color-primary);
+    border-color: rgb(37 99 235 / 0.2);
+  }
 
-    /* keep visible so sticky isn't clipped */
-    overflow: visible;
+  .badge--success {
+    background: rgb(22 163 74 / 0.1);
+    color: var(--color-success);
+    border-color: rgb(22 163 74 / 0.2);
+  }
 
-    box-shadow: var(--shadow-sm);
+  .badge--danger {
+    background: rgb(220 38 38 / 0.1);
+    color: var(--color-danger);
+    border-color: rgb(220 38 38 / 0.2);
+  }
+
+  /* ========================================
+     META ROW (status, counts, links)
+     ======================================== */
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  /* ========================================
+     TABLES - Mobile-first responsive
+     ======================================== */
+  .table-container {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
   }
 
   .table-scroll {
-    position: relative;
     overflow-x: auto;
-    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
   }
 
   .data-table {
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    font-size: 0.9rem;
-    min-width: 720px;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
   }
 
   .data-table th,
   .data-table td {
-    padding: 10px 10px;
-    border-bottom: 1px solid var(--border);
-    border-right: 1px solid var(--border);
-    vertical-align: middle;
-
-    /* baseline layer for normal cells */
-    position: relative;
-    z-index: var(--sticky-z-body);
-    background: #fff;
-  }
-
-  .data-table th:last-child,
-  .data-table td:last-child {
-    border-right: 0;
-  }
-
-  .data-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: var(--sticky-z-header);
-    background: var(--surface);
-    font-weight: 900;
+    padding: var(--space-3);
     text-align: left;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
   }
 
-  .data-table tr:last-child td { border-bottom: 0; }
-
-  .data-table .num { text-align: center; font-variant-numeric: tabular-nums; }
-  .data-table .strong { font-weight: 900; }
-
-  /* ----------------------------
-     Sticky column classes
-  ----------------------------- */
-  .sticky-col-1,
-  .sticky-col-2 {
-    position: sticky;
-    background: #fff;
-    will-change: transform;
+  .data-table th {
+    font-weight: 600;
+    background: var(--color-surface-alt);
+    white-space: nowrap;
   }
 
-  .sticky-col-1 {
-    left: 0;
-    width: var(--sticky-col-1-width);
-    min-width: var(--sticky-col-1-width);
-    max-width: var(--sticky-col-1-width);
-    z-index: var(--sticky-z-col1);
-
-    /* visual divider */
-    box-shadow: 1px 0 0 var(--border);
+  .data-table tbody tr:last-child td {
+    border-bottom: none;
   }
 
-  .sticky-col-2 {
-    left: var(--sticky-col-1-width);
-    width: var(--sticky-col-2-width);
-    min-width: var(--sticky-col-2-width);
-    max-width: var(--sticky-col-2-width);
-    z-index: var(--sticky-z-col2);
-
-    /* divider between sticky area and scrollable area */
-    box-shadow: 1px 0 0 var(--border), 8px 0 12px rgba(15, 23, 42, 0.06);
+  .data-table tbody tr:hover {
+    background: var(--color-surface-alt);
   }
 
-  /* Sticky header cells for sticky columns must be above everything */
-  .data-table thead .sticky-col-1,
-  .data-table thead .sticky-col-2 {
-    background: var(--surface);
-    z-index: calc(var(--sticky-z-header) + 2);
+  .data-table .num {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
   }
 
-  @media (max-width: 480px) {
-    .data-table { font-size: 1.0rem; min-width: 760px; }
-    .data-table th, .data-table td { padding: 8px 8px; }
+  .data-table .strong {
+    font-weight: 700;
+  }
+
+  .data-table .truncate {
+    max-width: 180px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Mobile: Stack table or allow horizontal scroll */
+  @media (max-width: 639px) {
+    .data-table {
+      font-size: var(--text-xs);
+    }
+
+    .data-table th,
+    .data-table td {
+      padding: var(--space-2);
+    }
+  }
+
+  /* ========================================
+     SECTION TITLE (for within tables/cards)
+     ======================================== */
+  .section-title {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: var(--space-3);
+  }
+
+  /* ========================================
+     STATUS MESSAGES
+     ======================================== */
+  .status {
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+  }
+
+  .status--success {
+    background: rgb(22 163 74 / 0.1);
+    color: var(--color-success);
+  }
+
+  .status--error {
+    background: rgb(220 38 38 / 0.1);
+    color: var(--color-danger);
+  }
+
+  .status--warning {
+    background: rgb(245 158 11 / 0.1);
+    color: var(--color-warning);
+  }
+
+  /* ========================================
+     UTILITIES
+     ======================================== */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .text-center { text-align: center; }
+  .text-muted { color: var(--color-text-muted); }
+  .text-success { color: var(--color-success); }
+  .text-danger { color: var(--color-danger); }
+  .font-bold { font-weight: 700; }
+
+  /* ========================================
+     FOCUS STYLES (Accessibility)
+     ======================================== */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 </style>
