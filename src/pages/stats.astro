@@ -44,6 +44,17 @@ import Nav from "../components/Nav.astro";
     <div id="loading-status" class="meta-row"></div>
 
     <section id="stats-output" aria-live="polite"></section>
+
+    <!-- Bottom sheet modal -->
+    <div id="manager-modal" class="modal-overlay" style="display: none;">
+      <div class="modal-sheet">
+        <div class="modal-header">
+          <h3 id="modal-manager-name" class="modal-title"></h3>
+          <button id="modal-close" class="modal-close-btn" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body" id="modal-content"></div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -98,7 +109,13 @@ import Nav from "../components/Nav.astro";
     const refreshBtn = document.getElementById("refresh-btn");
     const gwFilterInput = document.getElementById("gw-filter");
 
+    const modal = document.getElementById("manager-modal");
+    const modalContent = document.getElementById("modal-content");
+    const modalManagerName = document.getElementById("modal-manager-name");
+    const modalCloseBtn = document.getElementById("modal-close");
+
     let managerIds = [];
+    let managersData = [];
 
     function chipLabel(name) {
       return name === "wildcard" ? "WC" :
@@ -177,19 +194,13 @@ import Nav from "../components/Nav.astro";
       return `background:${bg}; color:${fg}; border:1px solid ${border};`;
     }
 
-    function chipsInlineCountsHtml(chipsCounts) {
+    function chipsDisplayHtml(chipsCounts) {
       if (!chipsCounts || chipsCounts.length === 0) {
-        return `<span style="color: var(--muted);">None</span>`;
+        return `<span style="color: var(--muted); font-style: italic;">No chips used</span>`;
       }
 
       return `
-        <div style="
-          display: flex;
-          gap: 4px;
-          flex-wrap: wrap;
-          margin-top: 4px;
-          max-width: 100%;
-        ">
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;">
           ${chipsCounts.map(({ label, count }) => {
             const text = `${label}×${count}`;
             const style = chipBadgeStyle(label, count);
@@ -199,81 +210,67 @@ import Nav from "../components/Nav.astro";
       `;
     }
 
-    function makeStatsTable(managersData, gw) {
-      let html = `
-        <h2 class="page-title" style="font-size: 1.1rem;">League Standings (GW${gw})</h2>
-
-        <div class="table-shell">
-          <div class="table-scroll" role="region" aria-label="League standings table">
-            <table class="data-table" style="table-layout: fixed;">
-              <thead>
-                <tr>
-                  <th class="num" style="width: 52px;">Rank</th>
-                  <th style="width: 260px;">Manager<br/><span style="font-weight: 600; color: var(--muted);">Chips Used</span></th>
-                  <th class="num" style="width: 84px;">Total<br/>Points</th>
-                  <th class="num" style="width: 98px;">Overall<br/>Rank</th>
-                  <th class="num" style="width: 64px;">GW<br/>Pts</th>
-                  <th class="num" style="width: 72px;">GW<br/>Rank</th>
-                </tr>
-              </thead>
-              <tbody>
-      `;
+    function makeManagerCards(data) {
+      let html = `<div class="manager-cards">`;
 
       let rank = 1;
-      for (const m of managersData) {
+      for (const m of data) {
         html += `
-          <tr>
-            <td class="num strong">${rank}</td>
-            <td>
-              <a href="/squads?manager=${m.entryId}" style="
-                display: block;
-                font-size: 1.15rem;
-                font-weight: 700;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                line-height: 1.2;
-              ">
-                ${m.managerName}
-              </a>
-              ${chipsInlineCountsHtml(m.chipsUsedCounts)}
-            </td>
-            <td class="num strong">${Number(m.totalPoints).toLocaleString()}</td>
-            <td class="num">${Number(m.overallRank).toLocaleString()}</td>
-            <td class="num">${Number(m.gwPoints).toLocaleString()}</td>
-            <td class="num">${Number(m.gwRank).toLocaleString()}</td>
-          </tr>
+          <div class="manager-card" data-manager-id="${m.entryId}">
+            <div class="card-content">
+              <div class="card-rank">${rank}</div>
+              <div class="card-name">${m.managerName}</div>
+              <div class="card-points">${Number(m.totalPoints).toLocaleString()}</div>
+              <button class="card-expand-btn" aria-label="View details for ${m.managerName}">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
         `;
         rank++;
       }
 
-      html += `
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `;
-
+      html += `</div>`;
       return html;
     }
 
-    // HARD reset: mobile browsers can nudge scrollLeft after paint/address-bar changes.
-    function resetStatsTableScrollHard() {
-      const els = document.querySelectorAll('#stats-output .table-scroll');
-      els.forEach(el => { el.scrollLeft = 0; });
+    function openModal(manager) {
+      modalManagerName.textContent = manager.managerName;
 
-      requestAnimationFrame(() => {
-        els.forEach(el => { el.scrollLeft = 0; });
-      });
+      modalContent.innerHTML = `
+        <div class="modal-stat-row">
+          <span class="modal-stat-label">Overall Rank</span>
+          <span class="modal-stat-value">${Number(manager.overallRank).toLocaleString()}</span>
+        </div>
+        <div class="modal-stat-row">
+          <span class="modal-stat-label">GW Points</span>
+          <span class="modal-stat-value">${Number(manager.gwPoints).toLocaleString()}</span>
+        </div>
+        <div class="modal-stat-row">
+          <span class="modal-stat-label">GW Rank</span>
+          <span class="modal-stat-value">${Number(manager.gwRank).toLocaleString()}</span>
+        </div>
+        <div class="modal-stat-row" style="flex-direction: column; align-items: flex-start;">
+          <span class="modal-stat-label" style="margin-bottom: 4px;">Chips Used</span>
+          ${chipsDisplayHtml(manager.chipsUsedCounts)}
+        </div>
+      `;
 
-      setTimeout(() => {
-        els.forEach(el => { el.scrollLeft = 0; });
-      }, 50);
-
-      setTimeout(() => {
-        els.forEach(el => { el.scrollLeft = 0; });
-      }, 250);
+      modal.style.display = "flex";
+      document.body.style.overflow = "hidden";
     }
+
+    function closeModal() {
+      modal.style.display = "none";
+      document.body.style.overflow = "";
+    }
+
+    modalCloseBtn.addEventListener("click", closeModal);
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeModal();
+    });
 
     async function loadStats(ids, gw) {
       if (ids.length === 0) {
@@ -281,7 +278,7 @@ import Nav from "../components/Nav.astro";
         return;
       }
 
-      const allData = [];
+      managersData = [];
       out.innerHTML = "";
       loadingStatus.textContent = `Loading 0 of ${ids.length} managers for GW${gw}...`;
 
@@ -289,19 +286,26 @@ import Nav from "../components/Nav.astro";
       for (const id of ids) {
         const data = await fetchManagerSummary(id, gw);
         if (data) {
-          allData.push(data);
+          managersData.push(data);
         }
         loaded++;
         loadingStatus.textContent = `Loading ${loaded} of ${ids.length} managers...`;
 
-        allData.sort((a, b) => b.totalPoints - a.totalPoints);
-        out.innerHTML = makeStatsTable(allData, gw);
+        managersData.sort((a, b) => b.totalPoints - a.totalPoints);
+        out.innerHTML = makeManagerCards(managersData);
 
-        resetStatsTableScrollHard();
+        // Attach click handlers
+        document.querySelectorAll('.card-expand-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const card = e.target.closest('.manager-card');
+            const managerId = Number(card.dataset.managerId);
+            const manager = managersData.find(m => m.entryId === managerId);
+            if (manager) openModal(manager);
+          });
+        });
       }
 
       loadingStatus.innerHTML = `<span style='color:#16a34a; font-weight: 700;'>✅ Loaded ${loaded} of ${ids.length} managers (GW${gw})</span>`;
-      resetStatsTableScrollHard();
     }
 
     async function updateDisplay() {
@@ -340,4 +344,186 @@ import Nav from "../components/Nav.astro";
       await updateDisplay();
     });
   </script>
+
+  <style>
+    .manager-cards {
+      display: grid;
+      gap: 8px;
+    }
+
+    .manager-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+
+    .card-content {
+      display: grid;
+      grid-template-columns: 40px 1fr auto 44px;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      min-height: 56px;
+    }
+
+    .card-rank {
+      font-size: 1.1rem;
+      font-weight: 900;
+      color: var(--text);
+      text-align: center;
+    }
+
+    .card-name {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-points {
+      font-size: 1rem;
+      font-weight: 900;
+      color: var(--primary);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .card-expand-btn {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      color: var(--muted);
+      transition: all 0.2s;
+    }
+
+    .card-expand-btn:hover {
+      background: var(--surface-2);
+      color: var(--text);
+    }
+
+    .card-expand-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .modal-sheet {
+      background: #fff;
+      width: 100%;
+      max-width: 600px;
+      border-radius: 20px 20px 0 0;
+      box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.2);
+      max-height: 80vh;
+      overflow-y: auto;
+      animation: slideUp 0.3s ease-out;
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translateY(100%);
+      }
+      to {
+        transform: translateY(0);
+      }
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: #fff;
+      z-index: 10;
+    }
+
+    .modal-title {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .modal-close-btn {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1.2rem;
+      color: var(--muted);
+      transition: all 0.2s;
+    }
+
+    .modal-close-btn:hover {
+      background: var(--surface-2);
+      color: var(--text);
+    }
+
+    .modal-body {
+      padding: 20px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .modal-stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: var(--surface);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+
+    .modal-stat-label {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    .modal-stat-value {
+      font-size: 1.1rem;
+      font-weight: 900;
+      color: var(--text);
+    }
+
+    @media (min-width: 640px) {
+      .manager-cards {
+        gap: 10px;
+      }
+
+      .card-content {
+        padding: 14px;
+      }
+    }
+  </style>
 </Layout>
