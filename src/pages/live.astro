@@ -571,6 +571,14 @@ import Nav from "../components/Nav.astro";
     const leader = sorted[0];
     const compareManager = compareToId ? sorted.find(m => m.entryId.toString() === compareToId) : leader;
 
+    // Find highest GW score (livePoints = net after hits)
+    let maxGwPoints = -Infinity;
+    sorted.forEach(m => {
+      if (m.livePoints > maxGwPoints) {
+        maxGwPoints = m.livePoints;
+      }
+    });
+
     let html = `
       <div class="table-container">
         <div class="table-scroll">
