@@ -1,34 +1,48 @@
+---
+/**
+ * Mobile-first responsive navigation.
+ * Hamburger menu on mobile, horizontal nav on desktop.
+ */
+const navLinks = [
+  { href: "/", label: "Home" },
+  { href: "/live", label: "Live" },
+  { href: "/stats", label: "Stats" },
+  { href: "/transfers", label: "Transfers" },
+  { href: "/chips", label: "Chips" },
+  { href: "/ownership", label: "Ownership" },
+  { href: "/squads", label: "Squads" },
+];
+---
 <header class="nav-header">
   <nav class="nav">
-    <a href="/" class="nav-brand">FPL Manager Watch</a>
+    <a href="/" class="nav-brand">FPL Manager</a>
 
-    <button
-      id="hamburger-btn"
-      class="nav-toggle"
-      type="button"
-      aria-label="Toggle navigation"
-      aria-expanded="false"
-      aria-controls="nav-menu"
-    >
-      <span class="nav-toggle-bar"></span>
-      <span class="nav-toggle-bar"></span>
-      <span class="nav-toggle-bar"></span>
+    <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Toggle menu" aria-expanded="false">
+      <span class="hamburger"></span>
     </button>
 
     <div id="nav-menu" class="nav-menu">
-      <div class="nav-links">
-        <a href="/" class="nav-link">Home</a>
-        <a href="/managers" class="nav-link">Managers</a>
-        <a href="/transfers" class="nav-link">Transfers</a>
-        <a href="/chips" class="nav-link">Chips</a>
-        <a href="/stats" class="nav-link">Stats</a>
-        <a href="/ownership" class="nav-link">Ownership</a>
-        <a href="/squads" class="nav-link">Squads</a>
-        <a href="/live" class="nav-link nav-link--live">🔴 Live</a>
+      <ul class="nav-links">
+        {navLinks.map(link => (
+          <li><a href={link.href} class="nav-link">{link.label}</a></li>
+        ))}
+      </ul>
+
+      <div class="nav-divider"></div>
+
+      <div class="theme-toggle-row">
+        <span class="theme-label">Theme</span>
+        <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="Toggle theme">
+          <span class="theme-icon theme-icon--light">☀️</span>
+          <span class="theme-icon theme-icon--dark">🌙</span>
+          <span class="theme-toggle-slider"></span>
+        </button>
       </div>
 
-      <div id="auth-section" class="nav-auth">
-        <span class="nav-auth-loading">Loading...</span>
+      <div class="nav-divider"></div>
+
+      <div class="nav-auth" id="nav-auth">
+        <a href="/login" class="btn btn--neutral btn--small">Login</a>
       </div>
     </div>
   </nav>
@@ -47,7 +61,6 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-4);
     max-width: var(--container-max);
     margin: 0 auto;
     padding: var(--space-3) var(--space-4);
@@ -58,7 +71,6 @@
     font-weight: 700;
     color: var(--color-text);
     text-decoration: none;
-    white-space: nowrap;
   }
 
   .nav-brand:hover {
@@ -66,71 +78,82 @@
     text-decoration: none;
   }
 
-  /* Hamburger toggle */
-  .nav-toggle {
+  /* Hamburger button */
+  .menu-toggle {
     display: flex;
-    flex-direction: column;
+    align-items: center;
     justify-content: center;
-    gap: 5px;
-    width: var(--touch-target);
-    height: var(--touch-target);
-    padding: var(--space-2);
+    width: 44px;
+    height: 44px;
     background: transparent;
     border: none;
     cursor: pointer;
+    padding: 0;
   }
 
-  .nav-toggle-bar {
-    display: block;
-    width: 22px;
+  .hamburger {
+    position: relative;
+    width: 24px;
     height: 2px;
     background: var(--color-text);
     border-radius: 2px;
-    transition: transform var(--transition-base), opacity var(--transition-base);
+    transition: background var(--transition-fast);
   }
 
-  .nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(1) {
+  .hamburger::before,
+  .hamburger::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    width: 24px;
+    height: 2px;
+    background: var(--color-text);
+    border-radius: 2px;
+    transition: transform var(--transition-base);
+  }
+
+  .hamburger::before { top: -7px; }
+  .hamburger::after { top: 7px; }
+
+  .menu-toggle[aria-expanded="true"] .hamburger {
+    background: transparent;
+  }
+
+  .menu-toggle[aria-expanded="true"] .hamburger::before {
     transform: translateY(7px) rotate(45deg);
   }
 
-  .nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(2) {
-    opacity: 0;
-  }
-
-  .nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(3) {
+  .menu-toggle[aria-expanded="true"] .hamburger::after {
     transform: translateY(-7px) rotate(-45deg);
   }
 
-  /* Mobile menu (off-canvas) */
+  /* Mobile menu */
   .nav-menu {
-    position: fixed;
-    inset: 0;
-    top: 57px; /* Height of nav header */
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
     background: var(--color-surface);
-    padding: var(--space-4);
-    transform: translateX(100%);
-    transition: transform var(--transition-base);
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
+    border-bottom: 1px solid var(--color-border);
+    padding: var(--space-3) var(--space-4) var(--space-4);
+    box-shadow: var(--shadow-md);
   }
 
   .nav-menu.is-open {
-    transform: translateX(0);
+    display: block;
   }
 
   .nav-links {
+    list-style: none;
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
   }
 
   .nav-link {
-    display: flex;
-    align-items: center;
-    min-height: var(--touch-target);
-    padding: var(--space-3);
+    display: block;
+    padding: var(--space-2) var(--space-3);
     font-size: var(--text-base);
     font-weight: 500;
     color: var(--color-text);
@@ -139,50 +162,109 @@
     transition: background var(--transition-fast);
   }
 
-  .nav-link:hover,
-  .nav-link:focus {
+  .nav-link:hover {
     background: var(--color-surface-alt);
     text-decoration: none;
   }
 
-  .nav-link--live {
-    color: var(--color-danger);
-    font-weight: 600;
+  .nav-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: var(--space-3) 0;
   }
 
   .nav-auth {
     display: flex;
-    flex-direction: column;
     gap: var(--space-2);
-    padding-top: var(--space-4);
-    border-top: 1px solid var(--color-border);
   }
 
-  .nav-auth-loading {
+  /* Theme toggle row */
+  .theme-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .theme-label {
     font-size: var(--text-sm);
-    color: var(--color-text-muted);
+    font-weight: 500;
+    color: var(--color-text);
   }
 
-  /* Desktop layout */
+  .theme-toggle-btn {
+    position: relative;
+    width: 56px;
+    height: 28px;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 6px;
+  }
+
+  .theme-icon {
+    font-size: 14px;
+    z-index: 1;
+    transition: opacity var(--transition-fast);
+  }
+
+  .theme-icon--light {
+    opacity: 1;
+  }
+
+  .theme-icon--dark {
+    opacity: 0.4;
+  }
+
+  :global([data-theme="dark"]) .theme-icon--light {
+    opacity: 0.4;
+  }
+
+  :global([data-theme="dark"]) .theme-icon--dark {
+    opacity: 1;
+  }
+
+  .theme-toggle-slider {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    background: var(--color-surface);
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-base);
+  }
+
+  :global([data-theme="dark"]) .theme-toggle-slider {
+    transform: translateX(28px);
+  }
+
+  /* Desktop */
   @media (min-width: 768px) {
-    .nav-toggle {
+    .menu-toggle {
       display: none;
     }
 
     .nav-menu {
+      display: flex;
       position: static;
-      transform: none;
-      padding: 0;
-      flex-direction: row;
       align-items: center;
       gap: var(--space-4);
       background: transparent;
-      overflow: visible;
+      border: none;
+      padding: 0;
+      box-shadow: none;
     }
 
     .nav-links {
       flex-direction: row;
-      gap: 0;
+      gap: var(--space-1);
     }
 
     .nav-link {
@@ -190,10 +272,16 @@
       font-size: var(--text-sm);
     }
 
-    .nav-auth {
-      flex-direction: row;
-      padding-top: 0;
-      border-top: none;
+    .nav-divider {
+      display: none;
+    }
+
+    .theme-toggle-row {
+      padding: 0;
+    }
+
+    .theme-label {
+      display: none;
     }
   }
 </style>
@@ -201,61 +289,72 @@
 <script>
   import { supabase } from '../lib/supabase.ts'
 
-  const authSection = document.getElementById('auth-section')
-  const hamburger = document.getElementById('hamburger-btn')
-  const navMenu = document.getElementById('nav-menu')
+  // Menu toggle
+  const menuToggle = document.getElementById('menu-toggle');
+  const navMenu = document.getElementById('nav-menu');
 
-  // Hamburger toggle
-  hamburger?.addEventListener('click', () => {
-    const isOpen = navMenu?.classList.toggle('is-open')
-    hamburger.setAttribute('aria-expanded', isOpen ? 'true' : 'false')
-  })
+  menuToggle?.addEventListener('click', () => {
+    const isOpen = navMenu?.classList.toggle('is-open');
+    menuToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  });
 
-  // Close menu on link click
+  // Close menu when clicking a link (mobile)
   navMenu?.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', () => {
-      navMenu?.classList.remove('is-open')
-      hamburger?.setAttribute('aria-expanded', 'false')
-    })
-  })
+      navMenu.classList.remove('is-open');
+      menuToggle?.setAttribute('aria-expanded', 'false');
+    });
+  });
 
-  // Close menu on outside click
-  document.addEventListener('click', (e) => {
-    if (
-      hamburger &&
-      navMenu &&
-      !hamburger.contains(e.target as Node) &&
-      !navMenu.contains(e.target as Node)
-    ) {
-      navMenu.classList.remove('is-open')
-      hamburger.setAttribute('aria-expanded', 'false')
-    }
-  })
+  // Theme toggle
+  const themeToggle = document.getElementById('theme-toggle');
+  
+  function getStoredTheme() {
+    return localStorage.getItem('theme') || 'light';
+  }
+
+  function setTheme(theme: string) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }
+
+  // Initialize theme on load
+  setTheme(getStoredTheme());
+
+  themeToggle?.addEventListener('click', () => {
+    const currentTheme = getStoredTheme();
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+  });
+
+  // Auth state
+  const navAuth = document.getElementById('nav-auth');
 
   async function updateAuthUI() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser();
 
-    if (user) {
-      authSection.innerHTML = `
-        <span class="nav-user">${user.email}</span>
-        <button id="logout-btn" class="btn btn--danger" type="button">Logout</button>
-      `
+    if (navAuth) {
+      if (user) {
+        navAuth.innerHTML = `
+          <span class="nav-user">${user.email?.split('@')[0] || 'User'}</span>
+          <button id="logout-btn" class="btn btn--neutral btn--small" type="button">Logout</button>
+        `;
 
-      document.getElementById('logout-btn')?.addEventListener('click', async () => {
-        await supabase.auth.signOut()
-        window.location.href = '/login'
-      })
-    } else {
-      authSection.innerHTML = `
-        <a href="/login" class="btn btn--primary">Login</a>
-        <a href="/signup" class="btn btn--success">Sign Up</a>
-      `
+        document.getElementById('logout-btn')?.addEventListener('click', async () => {
+          await supabase.auth.signOut();
+          window.location.href = '/login';
+        });
+      } else {
+        navAuth.innerHTML = `
+          <a href="/login" class="btn btn--neutral btn--small">Login</a>
+        `;
+      }
     }
   }
 
-  updateAuthUI()
+  updateAuthUI();
 
-  supabase.auth.onAuthStateChange((event, session) => {
-    updateAuthUI()
-  })
+  supabase.auth.onAuthStateChange(() => {
+    updateAuthUI();
+  });
 </script>

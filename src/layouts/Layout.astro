@@ -28,7 +28,7 @@ const { title = "FPL Manager Data" } = Astro.props;
      DESIGN SYSTEM - CSS Custom Properties
      ======================================== */
   :root {
-    /* Colors */
+     /* Light theme (default) */
     --color-bg: #f8fafc;
     --color-surface: #ffffff;
     --color-surface-alt: #f1f5f9;
@@ -87,6 +87,31 @@ const { title = "FPL Manager Data" } = Astro.props;
     /* Layout */
     --container-max: 1100px;
     --touch-target: 44px;
+  }
+
+  /* Dark theme */
+  [data-theme="dark"] {
+    --color-bg: #0f172a;
+    --color-surface: #1e293b;
+    --color-surface-alt: #334155;
+    --color-border: #475569;
+    --color-border-strong: #64748b;
+
+    --color-text: #f1f5f9;
+    --color-text-secondary: #cbd5e1;
+    --color-text-muted: #94a3b8;
+
+    --color-primary: #3b82f6;
+    --color-primary-hover: #60a5fa;
+    --color-success: #22c55e;
+    --color-success-hover: #4ade80;
+    --color-danger: #ef4444;
+    --color-danger-hover: #f87171;
+    --color-warning: #fbbf24;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
   }
 
   /* ========================================
