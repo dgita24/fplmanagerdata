@@ -630,48 +630,76 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ========================================
-     LIVE TABLE - Compact columns
+     LIVE TABLE - Tight compact columns
      ======================================== */
-  .live-table td,
-  .live-table th {
-    padding: var(--space-1) var(--space-2);
+  .live-table {
+    font-size: 13px !important;
+  }
+
+  .live-table th,
+  .live-table td {
+    padding: 6px 4px !important;
     font-variant-numeric: tabular-nums;
   }
 
+  .live-table th {
+    font-size: 11px !important;
+  }
+
   .live-table .rank-col {
-    width: 32px;
-    text-align: center;
+    width: 24px !important;
+    min-width: 24px !important;
+    max-width: 24px !important;
+    text-align: center !important;
     font-weight: 700;
-  }
-
-  .live-table .gw-col {
-    width: 36px;
-    text-align: center;
-  }
-
-  .live-table .hit-col {
-    width: 38px;
-    text-align: center;
-  }
-
-  .live-table .nett-col {
-    width: 40px;
-    text-align: center;
-    font-weight: 700;
-  }
-
-  .live-table .total-col {
-    width: 54px;
-    text-align: center;
-  }
-
-  .live-table .diff-col {
-    width: 40px;
-    text-align: center;
+    padding: 6px 2px !important;
   }
 
   .live-table .manager-col {
     font-weight: 600;
+    font-size: 13px !important;
+    padding: 6px 4px !important;
+  }
+
+  .live-table .gw-col {
+    width: 28px !important;
+    min-width: 28px !important;
+    max-width: 28px !important;
+    text-align: center !important;
+    padding: 6px 2px !important;
+  }
+
+  .live-table .hit-col {
+    width: 24px !important;
+    min-width: 24px !important;
+    max-width: 24px !important;
+    text-align: center !important;
+    padding: 6px 2px !important;
+  }
+
+  .live-table .nett-col {
+    width: 30px !important;
+    min-width: 30px !important;
+    max-width: 30px !important;
+    text-align: center !important;
+    font-weight: 700;
+    padding: 6px 2px !important;
+  }
+
+  .live-table .total-col {
+    width: 42px !important;
+    min-width: 42px !important;
+    max-width: 42px !important;
+    text-align: center !important;
+    padding: 6px 2px !important;
+  }
+
+  .live-table .diff-col {
+    width: 30px !important;
+    min-width: 30px !important;
+    max-width: 30px !important;
+    text-align: center !important;
+    padding: 6px 2px !important;
   }
 
   /* ========================================
