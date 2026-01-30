@@ -11,35 +11,28 @@ import Nav from "../components/Nav.astro";
       <p class="page-subtitle">See which players are owned by how many managers.</p>
     </header>
 
-    <div class="meta-row">
-      <span id="manager-count" class="badge">Loading...</span>
-      <a href="/managers" class="badge">⚙ Manage IDs</a>
+    <div class="meta-row-wide">
+      <span id="manager-count" class="badge badge-wide">Loading...</span>
+      <a href="/managers" class="badge badge-wide">⚙ Manage IDs</a>
     </div>
 
-    <section class="controls">
-      <div class="control">
+    <section class="controls-compact">
+      <div class="control-half">
         <label class="label" for="gw-filter">Gameweek</label>
-        <select class="select" id="gw-filter">
+        <select class="select select-compact" id="gw-filter">
           <option value="">Select GW</option>
         </select>
       </div>
 
-      <div class="control">
+      <div class="control-half">
         <label class="label" for="position-filter">Position</label>
-        <select class="select" id="position-filter">
+        <select class="select select-compact" id="position-filter">
           <option value="">All</option>
           <option value="GK">GK</option>
           <option value="DEF">DEF</option>
           <option value="MID">MID</option>
           <option value="FWD">FWD</option>
         </select>
-      </div>
-
-      <div class="control">
-        <label class="label">Actions</label>
-        <div class="control-actions">
-          <button id="refresh-btn" class="btn btn--primary" type="button">🔄 Refresh</button>
-        </div>
       </div>
     </section>
 
@@ -57,6 +50,43 @@ import Nav from "../components/Nav.astro";
 </Layout>
 
 <style>
+  .meta-row-wide {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .badge-wide {
+    flex: 1;
+    justify-content: center;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .controls-compact {
+    display: flex;
+    gap: var(--space-2);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3);
+  }
+
+  .control-half {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .control-half .label {
+    font-size: var(--text-xs);
+  }
+
+  .select-compact {
+    min-height: 36px;
+    padding: var(--space-2);
+    font-size: var(--text-sm);
+  }
+
   .modal-panel--compact {
     padding: var(--space-3);
     max-width: 320px;
@@ -84,37 +114,50 @@ import Nav from "../components/Nav.astro";
     font-size: var(--text-sm);
   }
 
+  .ownership-table td,
+  .ownership-table th {
+    padding: 4px 6px;
+    font-variant-numeric: tabular-nums;
+  }
+
   .ownership-table .player-cell {
     line-height: 1.2;
   }
 
   .ownership-table .player-name {
-    font-weight: 600;
+    font-weight: 700;
+    font-size: var(--text-sm);
   }
 
   .ownership-table .player-count {
-    font-size: var(--text-xs);
+    font-size: 10px;
     color: var(--color-text-muted);
   }
 
-  .ownership-table .pos-cell,
+  .ownership-table .pos-cell {
+    width: 24px;
+    font-size: 10px;
+    text-align: center;
+    color: var(--color-text-secondary);
+  }
+
   .ownership-table .team-cell {
-    font-size: var(--text-xs);
-    padding: var(--space-1);
+    width: 28px;
+    font-size: 10px;
+    text-align: center;
+    color: var(--color-text-secondary);
   }
 
   .ownership-table .pct-cell {
-    font-size: var(--text-sm);
-    font-weight: 700;
-  }
-
-  .ownership-table .pct-cell.pct-100 {
+    width: 32px;
     font-size: var(--text-xs);
+    font-weight: 700;
+    text-align: center;
   }
 
-  .ownership-table td,
-  .ownership-table th {
-    padding: var(--space-1) var(--space-2);
+  .ownership-table .view-cell {
+    width: 32px;
+    text-align: center;
   }
 </style>
 
@@ -153,7 +196,6 @@ import Nav from "../components/Nav.astro";
   const positionFilter = document.getElementById("position-filter");
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
-  const refreshBtn = document.getElementById("refresh-btn");
   const ownedByModal = document.getElementById("owned-by-modal");
   const ownedByContent = document.getElementById("owned-by-content");
   const closeOwnedModal = document.getElementById("close-owned-modal");
@@ -313,10 +355,10 @@ import Nav from "../components/Nav.astro";
             <thead>
               <tr>
                 <th>Player</th>
-                <th class="num pos-cell">Pos</th>
-                <th class="num team-cell">Team</th>
-                <th class="num">%</th>
-                <th class="num">👁</th>
+                <th class="pos-cell">Pos</th>
+                <th class="team-cell">Team</th>
+                <th class="pct-cell">%</th>
+                <th class="view-cell">👁</th>
               </tr>
             </thead>
             <tbody>
@@ -325,7 +367,6 @@ import Nav from "../components/Nav.astro";
     for (const player of filtered) {
       const ownershipPct = ((player.count / totalManagers) * 100).toFixed(0);
       const ownedByJson = JSON.stringify(player.ownedBy).replace(/"/g, '&quot;');
-      const pctClass = ownershipPct === "100" ? "pct-cell pct-100" : "pct-cell";
 
       html += `
         <tr>
@@ -333,16 +374,16 @@ import Nav from "../components/Nav.astro";
             <div class="player-name">${player.playerName}</div>
             <div class="player-count">${player.count} of ${totalManagers}</div>
           </td>
-          <td class="num pos-cell">${player.position}</td>
-          <td class="num team-cell">${player.teamName}</td>
-          <td class="num ${pctClass}">${ownershipPct}%</td>
-          <td class="num">
+          <td class="pos-cell">${player.position}</td>
+          <td class="team-cell">${player.teamName}</td>
+          <td class="pct-cell">${ownershipPct}%</td>
+          <td class="view-cell">
             <button 
               class="btn btn--neutral btn--small owned-by-btn" 
               type="button"
               data-player="${player.playerName}"
               data-owned="${ownedByJson}"
-              style="padding:2px 6px; min-height:28px;"
+              style="padding:2px 5px; min-height:24px; font-size:10px;"
             >👁</button>
           </td>
         </tr>
@@ -418,25 +459,20 @@ import Nav from "../components/Nav.astro";
     if (!authenticated) return;
 
     managerIds = ids;
-
-    await updateDisplay();
-  }
-
-  async function updateDisplay() {
     managerCountEl.textContent = `${managerIds.length} managers`;
+
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
       return;
     }
 
-    const gw = parseInt(gwFilterSelect.value) || latestGW;
-    await loadOwnership(managerIds, gw);
+    await loadOwnership(managerIds, latestGW);
   }
 
   gwFilterSelect.addEventListener('change', async () => {
     const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
-      loadOwnership(managerIds, gw);
+      await loadOwnership(managerIds, gw);
     }
   });
 
@@ -444,12 +480,6 @@ import Nav from "../components/Nav.astro";
     const posFilter = positionFilter.value;
     out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
     attachOwnedByButtons();
-  });
-
-  refreshBtn.addEventListener('click', async () => {
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
-    await updateDisplay();
   });
 
   init();
