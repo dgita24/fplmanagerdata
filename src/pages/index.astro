@@ -35,7 +35,7 @@ import Nav from "../components/Nav.astro";
           To start, add any manager's EntryID (up to a max of 50) on the Managers Page. They'll sync to your account across devices.
         </p>
         <div style="margin-top: var(--space-4);">
-          <a href="/managers" class="btn btn--primary">⚙ Go to Managers Page</a>
+          <a href="/managers" class="btn btn--primary btn--full-width">⚙ Go to Managers Page</a>
         </div>
       </div>
     </section>
@@ -77,6 +77,17 @@ import Nav from "../components/Nav.astro";
     display: flex;
     gap: var(--space-3);
     margin-top: var(--space-4);
+  }
+
+  .auth-buttons .btn {
+    flex: 1;  /* Equal width for both buttons */
+    text-align: center;  /* Center the text */
+  }
+
+  /* Full-width button for logged-in users */
+  .btn--full-width {
+    width: 100%;
+    text-align: center;
   }
 </style>
 
