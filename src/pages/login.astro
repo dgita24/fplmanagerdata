@@ -1,7 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 ---
-<Layout title="Login - FPL Manager Data">
+<Layout title="Login - FPL Manager Watch">
   <main class="auth-page">
     <div class="auth-card">
       <h1 class="auth-title">Login</h1>
@@ -15,6 +15,13 @@ import Layout from "../layouts/Layout.astro";
         <div class="control">
           <label class="label" for="password">Password</label>
           <input type="password" id="password" class="input" required />
+        </div>
+
+        <div class="remember-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="remember-me" checked />
+            <span>Remember me</span>
+          </label>
         </div>
 
         <button type="submit" class="btn btn--primary btn--full">Login</button>
@@ -66,6 +73,26 @@ import Layout from "../layouts/Layout.astro";
     width: 100%;
   }
 
+  .remember-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-primary);
+  }
+
   .auth-links {
     margin-top: var(--space-5);
     display: flex;
@@ -79,9 +106,9 @@ import Layout from "../layouts/Layout.astro";
 <script>
   import { supabase } from '../lib/supabase.ts'
 
-  const form = document.getElementById('login-form')
-  const errorMessage = document.getElementById('error-message')
-  const successMessage = document.getElementById('success-message')
+  const form = document.getElementById('login-form') as HTMLFormElement
+  const errorMessage = document.getElementById('error-message') as HTMLElement
+  const successMessage = document.getElementById('success-message') as HTMLElement
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault()
@@ -89,8 +116,8 @@ import Layout from "../layouts/Layout.astro";
     errorMessage.style.display = 'none'
     successMessage.style.display = 'none'
 
-    const email = document.getElementById('email').value
-    const password = document.getElementById('password').value
+    const email = (document.getElementById('email') as HTMLInputElement).value
+    const password = (document.getElementById('password') as HTMLInputElement).value
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -105,7 +132,7 @@ import Layout from "../layouts/Layout.astro";
       successMessage.style.display = 'block'
 
       setTimeout(() => {
-        window.location.href = '/'
+        window.location.href = '/managers'
       }, 1000)
     }
   })

@@ -2,7 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 ---
-<Layout title="Manager IDs Setup - FPL Manager Data">
+<Layout title="Manager IDs Setup - FPL Manager Watch">
   <Nav />
 
   <main class="page">
@@ -27,49 +27,48 @@ import Nav from "../components/Nav.astro";
     </div>
 
     <div id="auth-check" style="display: none;">
-      <!-- Quick Start FIRST -->
-      <section class="card">
-        <div class="card-body">
-          <h2 class="card-title">Quick Start</h2>
-          <ol class="help-list">
-            <li>Enter manager EntryIDs below (one per line). Enter up to a maximum of 50</li>
-            <li>Click "Save Manager IDs"</li>
-            <li>Your IDs sync across all your devices</li>
+      <!-- Quick Start - Compact -->
+      <section class="card card--compact">
+        <div class="card-body card-body--compact">
+          <h2 class="card-title card-title--small">Quick Start</h2>
+          <ol class="help-list help-list--compact">
+            <li>Enter manager EntryIDs (one per line, max 50)</li>
+            <li>Click "Save" — IDs sync across all devices</li>
           </ol>
-
-          <p class="tip">
-            <strong>Tip:</strong> Find a manager's EntryID in their FPL URL (the points tab of the official FPL Site):
+          <p class="tip tip--compact">
+            <strong>Tip:</strong> Find EntryID in the FPL URL: <code>fantasy.premierleague.com/entry/<strong>1234</strong>/event/01</code>
           </p>
-          <code class="code-block">
-            https://fantasy.premierleague.com/entry/<strong>1234</strong>/event/01
-          </code>
         </div>
       </section>
 
-      <!-- Entry IDs SECOND -->
+      <!-- Entry IDs -->
       <section class="card">
         <div class="card-body">
           <form id="manager-form">
             <div class="control">
-              <label class="label" for="ids">Manager EntryIDs (one per line, max 50)</label>
-              <textarea
-                id="ids"
-                class="textarea"
-                rows="12"
-                placeholder="4290&#10;200&#10;1320&#10;..."
-              ></textarea>
+              <label class="label" for="ids">Manager EntryIDs</label>
             </div>
 
-            <div class="meta-row" style="margin-top: var(--space-3);">
-              <span class="text-muted">Managers entered: <strong id="count">0</strong></span>
-            </div>
+            <div class="ids-layout">
+              <div class="ids-textarea-wrapper">
+                <textarea
+                  id="ids"
+                  class="textarea"
+                  rows="10"
+                  placeholder="44&#10;200&#10;1320&#10;..."
+                  disabled
+                ></textarea>
+              </div>
 
-            <div style="margin-top: var(--space-4);">
-              <button type="submit" class="btn btn--success">Save Manager IDs</button>
+              <div class="ids-actions">
+                <span class="ids-count">Managers: <strong id="count">0</strong></span>
+                <button type="button" id="edit-btn" class="btn btn--neutral">✏️ Edit</button>
+                <button type="submit" id="save-btn" class="btn btn--success" disabled>💾 Save</button>
+              </div>
             </div>
           </form>
 
-          <div id="status" style="margin-top: var(--space-4);"></div>
+          <div id="status" style="margin-top: var(--space-3);"></div>
         </div>
       </section>
     </div>
@@ -77,6 +76,39 @@ import Nav from "../components/Nav.astro";
 </Layout>
 
 <style>
+  .card--compact {
+    margin-bottom: var(--space-3);
+  }
+
+  .card-body--compact {
+    padding: var(--space-3);
+  }
+
+  .card-title--small {
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-2);
+  }
+
+  .help-list--compact {
+    padding-left: var(--space-4);
+    gap: var(--space-1);
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-2);
+  }
+
+  .tip--compact {
+    font-size: var(--text-xs);
+    margin-top: 0;
+  }
+
+  .tip--compact code {
+    font-size: var(--text-xs);
+    background: var(--color-surface-alt);
+    padding: 1px 4px;
+    border-radius: var(--radius-sm);
+  }
+
   .help-list {
     padding-left: var(--space-5);
     display: flex;
@@ -91,31 +123,75 @@ import Nav from "../components/Nav.astro";
     font-size: var(--text-sm);
   }
 
-  .code-block {
-    display: block;
+  .ids-layout {
+    display: flex;
+    gap: var(--space-3);
     margin-top: var(--space-2);
-    padding: var(--space-3);
-    font-family: var(--font-mono);
-    font-size: var(--text-xs);
+  }
+
+  .ids-textarea-wrapper {
+    flex: 1;
+    max-width: 200px;
+  }
+
+  .ids-textarea-wrapper .textarea {
+    width: 100%;
+    font-size: var(--text-sm);
+  }
+
+  .ids-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 100px;
+  }
+
+  .ids-count {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .ids-count strong {
+    color: var(--color-success);
+  }
+
+  .textarea:disabled {
     background: var(--color-surface-alt);
-    border-radius: var(--radius-md);
-    overflow-x: auto;
-    word-break: break-all;
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  @media (max-width: 400px) {
+    .ids-layout {
+      flex-direction: column;
+    }
+
+    .ids-textarea-wrapper {
+      max-width: 100%;
+    }
+
+    .ids-actions {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
   }
 </style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
 
-  const authCheckDiv = document.getElementById('auth-check')
-  const loadingDiv = document.getElementById('loading')
-  const requireLoginDiv = document.getElementById('require-login')
-  const form = document.getElementById('manager-form')
-  const textarea = document.getElementById('ids')
-  const status = document.getElementById('status')
-  const countEl = document.getElementById('count')
+  const authCheckDiv = document.getElementById('auth-check') as HTMLElement
+  const loadingDiv = document.getElementById('loading') as HTMLElement
+  const requireLoginDiv = document.getElementById('require-login') as HTMLElement
+  const form = document.getElementById('manager-form') as HTMLFormElement
+  const textarea = document.getElementById('ids') as HTMLTextAreaElement
+  const status = document.getElementById('status') as HTMLElement
+  const countEl = document.getElementById('count') as HTMLElement
+  const editBtn = document.getElementById('edit-btn') as HTMLButtonElement
+  const saveBtn = document.getElementById('save-btn') as HTMLButtonElement
 
-  let currentUser = null
+  let currentUser: any = null
+  let isEditing = false
 
   async function checkAuth() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -153,9 +229,9 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function saveManagerIds(ids) {
+  async function saveManagerIds(ids: number[]) {
     try {
-      const { data: existing, error: fetchError } = await supabase
+      const { data: existing } = await supabase
         .from('user_manager_lists')
         .select('id')
         .eq('user_id', currentUser.id)
@@ -191,28 +267,48 @@ import Nav from "../components/Nav.astro";
 
   function updateCount() {
     const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
-    countEl.textContent = ids.length
-    if (ids.length > 100) {
+    countEl.textContent = String(ids.length)
+    if (ids.length > 50) {
       countEl.style.color = "var(--color-danger)"
-      countEl.textContent = `${ids.length} (exceeds 100 limit!)`
+      countEl.textContent = `${ids.length} (max 50!)`
     } else {
       countEl.style.color = ids.length > 0 ? "var(--color-success)" : "var(--color-text-muted)"
     }
   }
 
+  function setEditMode(editing: boolean) {
+    isEditing = editing
+    textarea.disabled = !editing
+    saveBtn.disabled = !editing
+    editBtn.textContent = editing ? '❌ Cancel' : '✏️ Edit'
+    
+    if (!editing) {
+      // Reload original values on cancel
+      loadManagerIds()
+      status.innerHTML = ''
+    }
+  }
+
+  editBtn.addEventListener('click', () => {
+    setEditMode(!isEditing)
+  })
+
   textarea.addEventListener('input', updateCount)
 
   form.onsubmit = async (e) => {
     e.preventDefault()
+    
+    if (!isEditing) return
+
     const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
 
     if (ids.length === 0) {
-      status.innerHTML = "<p class='status status--error'>⚠️ Please enter at least one valid EntryID.</p>"
+      status.innerHTML = "<p class='status status--error'>⚠️ Enter at least one valid EntryID.</p>"
       return
     }
 
-    if (ids.length > 100) {
-      status.innerHTML = "<p class='status status--error'>⚠️ Maximum 100 managers allowed. Please remove some entries.</p>"
+    if (ids.length > 50) {
+      status.innerHTML = "<p class='status status--error'>⚠️ Maximum 50 managers allowed.</p>"
       return
     }
 
@@ -221,16 +317,17 @@ import Nav from "../components/Nav.astro";
     const success = await saveManagerIds(uniqueIds)
 
     if (success) {
-      let msg = `<p class='status status--success'>✅ Successfully saved ${uniqueIds.length} manager IDs to your account!</p>`
+      let msg = `<p class='status status--success'>✅ Saved ${uniqueIds.length} manager IDs!</p>`
 
       if (uniqueIds.length !== ids.length) {
         textarea.value = uniqueIds.join('\n')
         updateCount()
-        msg += `<p class='status status--warning' style='margin-top: var(--space-2);'>ℹ️ Removed ${ids.length - uniqueIds.length} duplicate(s).</p>`
+        msg += `<p class='status status--warning' style='margin-top: var(--space-2);'>Removed ${ids.length - uniqueIds.length} duplicate(s).</p>`
       }
       status.innerHTML = msg
+      setEditMode(false)
     } else {
-      status.innerHTML = "<p class='status status--error'>❌ Error saving manager IDs. Please try again.</p>"
+      status.innerHTML = "<p class='status status--error'>❌ Error saving. Please try again.</p>"
     }
   }
 

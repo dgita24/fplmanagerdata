@@ -1,8 +1,4 @@
 ---
-/**
- * Mobile-first responsive navigation.
- * Hamburger menu on mobile, horizontal nav on desktop.
- */
 const navLinks = [
   { href: "/", label: "Home", emoji: "🏠" },
   { href: "/live", label: "Live", emoji: "🔴" },
@@ -23,8 +19,11 @@ const navLinks = [
 
     <div id="nav-menu" class="nav-menu">
       <div class="nav-menu-header">
-        <a href="/" class="nav-brand">FPL Manager</a>
-        <button id="menu-close" class="menu-close" type="button" aria-label="Close menu">✕</button>
+        <a href="/" class="nav-brand">FPL Manager Watch</a>
+        <div class="nav-menu-header-actions">
+          <div id="nav-auth-mobile"></div>
+          <button id="menu-close" class="menu-close" type="button" aria-label="Close menu">✕</button>
+        </div>
       </div>
 
       <ul class="nav-links">
@@ -52,7 +51,7 @@ const navLinks = [
         </button>
       </div>
 
-      <div class="nav-divider"></div>
+      <div class="nav-divider nav-divider--desktop"></div>
 
       <div class="nav-auth" id="nav-auth">
         <a href="/login" class="btn btn--neutral btn--small">Login</a>
@@ -91,7 +90,6 @@ const navLinks = [
     text-decoration: none;
   }
 
-  /* Hamburger button */
   .menu-toggle {
     display: flex;
     align-items: center;
@@ -140,7 +138,6 @@ const navLinks = [
     transform: translateY(-7px) rotate(-45deg);
   }
 
-  /* Mobile menu - FULL SCREEN */
   .nav-menu {
     display: none;
     position: fixed;
@@ -163,9 +160,15 @@ const navLinks = [
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: var(--space-4);
+    padding-bottom: var(--space-3);
     border-bottom: 1px solid var(--color-border);
-    margin-bottom: var(--space-4);
+    margin-bottom: var(--space-3);
+  }
+
+  .nav-menu-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
 
   .menu-close {
@@ -189,7 +192,7 @@ const navLinks = [
     list-style: none;
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 0;
     flex: 1;
   }
 
@@ -197,7 +200,7 @@ const navLinks = [
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-3) var(--space-3);
+    padding: var(--space-2) var(--space-3);
     font-size: var(--text-base);
     font-weight: 500;
     color: var(--color-text);
@@ -220,7 +223,7 @@ const navLinks = [
   .nav-divider {
     height: 1px;
     background: var(--color-border);
-    margin: var(--space-3) 0;
+    margin: var(--space-2) 0;
   }
 
   .nav-auth {
@@ -236,12 +239,11 @@ const navLinks = [
     color: var(--color-text);
   }
 
-  /* Theme toggle row */
   .theme-toggle-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-2) 0;
+    padding: var(--space-1) 0;
   }
 
   .theme-toggle-btn {
@@ -297,9 +299,21 @@ const navLinks = [
     left: 3px;
   }
 
-  /* Desktop */
+  /* Hide mobile auth on desktop, show desktop auth */
+  #nav-auth-mobile {
+    display: block;
+  }
+
+  #nav-auth {
+    display: block;
+  }
+
   @media (min-width: 768px) {
     .menu-toggle {
+      display: none;
+    }
+
+    #nav-auth-mobile {
       display: none;
     }
 
@@ -339,6 +353,10 @@ const navLinks = [
       display: none;
     }
 
+    .nav-divider--desktop {
+      display: none;
+    }
+
     .theme-toggle-row {
       padding: 0;
     }
@@ -356,7 +374,6 @@ const navLinks = [
 <script>
   import { supabase } from '../lib/supabase.ts'
 
-  // Menu toggle
   const menuToggle = document.getElementById('menu-toggle');
   const menuClose = document.getElementById('menu-close');
   const navMenu = document.getElementById('nav-menu');
@@ -376,13 +393,11 @@ const navLinks = [
   menuToggle?.addEventListener('click', openMenu);
   menuClose?.addEventListener('click', closeMenu);
 
-  // Close menu when clicking a link (mobile)
   navMenu?.querySelectorAll('.nav-link').forEach(link => {
     if (link.closest('.theme-toggle-row')) return;
     link.addEventListener('click', closeMenu);
   });
 
-  // Theme toggle
   const themeToggle = document.getElementById('theme-toggle');
   
   function getStoredTheme() {
@@ -396,7 +411,6 @@ const navLinks = [
     localStorage.setItem('theme', theme);
   }
 
-  // Initialize theme on load
   setTheme(getStoredTheme());
 
   themeToggle?.addEventListener('click', () => {
@@ -405,14 +419,32 @@ const navLinks = [
     setTheme(newTheme);
   });
 
-  // Auth state
   const navAuth = document.getElementById('nav-auth');
+  const navAuthMobile = document.getElementById('nav-auth-mobile');
 
   async function updateAuthUI() {
     const { data: { user } } = await supabase.auth.getUser();
 
-    if (navAuth) {
-      if (user) {
+    const logoutHtml = `
+      <button id="logout-btn-mobile" class="btn btn--danger btn--small" type="button">Logout</button>
+    `;
+
+    const loginHtml = `
+      <a href="/login" class="btn btn--neutral btn--small">Login</a>
+    `;
+
+    if (user) {
+      // Mobile: show logout in header
+      if (navAuthMobile) {
+        navAuthMobile.innerHTML = logoutHtml;
+        document.getElementById('logout-btn-mobile')?.addEventListener('click', async () => {
+          await supabase.auth.signOut();
+          window.location.href = '/login';
+        });
+      }
+
+      // Desktop: show user + logout
+      if (navAuth) {
         navAuth.innerHTML = `
           <span class="nav-user">${user.email?.split('@')[0] || 'User'}</span>
           <button id="logout-btn" class="btn btn--neutral btn--small" type="button">Logout</button>
@@ -422,11 +454,10 @@ const navLinks = [
           await supabase.auth.signOut();
           window.location.href = '/login';
         });
-      } else {
-        navAuth.innerHTML = `
-          <a href="/login" class="btn btn--neutral btn--small">Login</a>
-        `;
       }
+    } else {
+      if (navAuthMobile) navAuthMobile.innerHTML = '';
+      if (navAuth) navAuth.innerHTML = loginHtml;
     }
   }
 
