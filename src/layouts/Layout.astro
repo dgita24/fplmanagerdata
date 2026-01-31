@@ -639,9 +639,9 @@ const { title = "FPL Manager Data" } = Astro.props;
     font-weight: 400;
   }
 
-  /* ========================================
+    /* ========================================
      OWNERSHIP TABLE - Balanced compact columns
-   ======================================== */
+     ======================================== */
   .ownership-table {
     font-size: 13px !important;
   }
@@ -656,12 +656,33 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .ownership-table .player-cell {
-    line-height: 1.3;
+    padding: 4px 8px !important;
+  }
+
+  .ownership-table .player-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    background: none;
+    border: none;
+    padding: 4px 0;
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+  }
+
+  .ownership-table .player-btn:hover .player-name {
+    color: var(--color-primary);
+    text-decoration: underline;
   }
 
   .ownership-table .player-name {
     font-weight: 700 !important;
     font-size: var(--text-sm) !important;
+    color: var(--color-primary);
+    transition: color var(--transition-fast);
   }
 
   .ownership-table .player-count {
@@ -685,17 +706,6 @@ const { title = "FPL Manager Data" } = Astro.props;
     font-weight: 700 !important;
   }
 
-  .ownership-table .view-cell {
-    text-align: center !important;
-    padding: 4px !important;
-  }
-
-  .ownership-table .view-btn {
-    min-height: 28px !important;
-    padding: 4px 6px !important;
-    font-size: var(--text-xs) !important;
-  }
-
   /* Mobile ONLY: fixed layout with explicit widths */
   @media (max-width: 639px) {
     .ownership-table {
@@ -704,33 +714,96 @@ const { title = "FPL Manager Data" } = Astro.props;
     }
 
     .ownership-table .pos-cell {
-      width: 40px !important;
-      min-width: 40px !important;
+      width: 42px !important;
+      min-width: 42px !important;
     }
 
     .ownership-table .team-cell {
-      width: 44px !important;
-      min-width: 44px !important;
-    }
-
-    .ownership-table .pct-cell {
       width: 46px !important;
       min-width: 46px !important;
     }
 
-    .ownership-table .view-cell {
-      width: 42px !important;
-      min-width: 42px !important;
+    .ownership-table .pct-cell {
+      width: 48px !important;
+      min-width: 48px !important;
     }
   }
 
-  /* Desktop ONLY: natural auto layout, no fixed widths */
+  /* Desktop ONLY: natural auto layout */
   @media (min-width: 640px) {
     .ownership-table {
       table-layout: auto !important;
     }
   }
 
+  /* ========================================
+     OWNERSHIP MODAL - Styled lists
+     ======================================== */
+  .ownership-section {
+    margin-bottom: var(--space-4);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .ownership-section--success {
+    border: 1px solid rgb(22 163 74 / 0.3);
+  }
+
+  .ownership-section--danger {
+    border: 1px solid rgb(220 38 38 / 0.3);
+  }
+
+  .ownership-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+
+  .ownership-section--success .ownership-section-header {
+    background: rgb(22 163 74 / 0.1);
+    color: var(--color-success);
+  }
+
+  .ownership-section--danger .ownership-section-header {
+    background: rgb(220 38 38 / 0.1);
+    color: var(--color-danger);
+  }
+
+  .ownership-section-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .ownership-section-count {
+    font-size: var(--text-xs);
+    opacity: 0.8;
+  }
+
+  .ownership-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .ownership-list-item {
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .ownership-list-item--owned {
+    background: rgb(22 163 74 / 0.03);
+  }
+
+  .ownership-list-item--not-owned {
+    background: rgb(220 38 38 / 0.03);
+  }
   /* ========================================
      CHIPS TABLE - Compact with chip badges
    ======================================== */

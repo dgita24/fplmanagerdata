@@ -39,11 +39,11 @@ import Nav from "../components/Nav.astro";
     <section id="ownership-output" aria-live="polite"></section>
   </main>
 
-  <!-- Owned By Modal -->
-  <div id="owned-by-modal" class="modal">
-    <div class="modal-panel" style="max-width:300px; padding:var(--space-3);">
-      <button id="close-owned-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
-      <div id="owned-by-content"></div>
+  <!-- Ownership Modal -->
+  <div id="ownership-modal" class="modal">
+    <div class="modal-panel">
+      <button id="close-ownership-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="ownership-modal-content"></div>
     </div>
   </div>
 </Layout>
@@ -78,7 +78,7 @@ import Nav from "../components/Nav.astro";
   }
 
   .label-small {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--color-text-secondary);
     text-align: center;
@@ -99,24 +99,6 @@ import Nav from "../components/Nav.astro";
   .select-small:focus {
     outline: none;
     border-color: var(--color-primary);
-  }
-
-  .owner-list {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    max-height: 50vh;
-    overflow-y: auto;
-    margin: 0;
-    padding: 0;
-  }
-
-  .owner-list li {
-    padding: 4px 8px;
-    background: var(--color-surface-alt);
-    border-radius: var(--radius-sm);
-    font-size: 13px;
   }
 </style>
 
@@ -155,9 +137,9 @@ import Nav from "../components/Nav.astro";
   const positionFilter = document.getElementById("position-filter");
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
-  const ownedByModal = document.getElementById("owned-by-modal");
-  const ownedByContent = document.getElementById("owned-by-content");
-  const closeOwnedModal = document.getElementById("close-owned-modal");
+  const ownershipModal = document.getElementById("ownership-modal");
+  const ownershipModalContent = document.getElementById("ownership-modal-content");
+  const closeOwnershipModal = document.getElementById("close-ownership-modal");
 
   let managerIds = [];
   let ownershipData = [];
@@ -166,8 +148,8 @@ import Nav from "../components/Nav.astro";
   let teamCache = new Map();
   let allManagerNames = [];
 
-  closeOwnedModal.addEventListener("click", () => {
-    ownedByModal.classList.remove("is-open");
+  closeOwnershipModal.addEventListener("click", () => {
+    ownershipModal.classList.remove("is-open");
   });
 
   function populateGWSelector(currentGW) {
@@ -263,29 +245,68 @@ import Nav from "../components/Nav.astro";
     return Array.from(ownership.values());
   }
 
-  function showOwnedByModal(playerName, ownedByList, totalManagers) {
+  function showOwnershipModal(playerName, position, teamName, ownedByList) {
+    const totalManagers = allManagerNames.length;
+    const notOwnedBy = allManagerNames.filter(n => !ownedByList.includes(n)).sort();
+    const ownedBySorted = [...ownedByList].sort();
+    const ownershipPct = ((ownedByList.length / totalManagers) * 100).toFixed(0);
+
     const allOwn = ownedByList.length === totalManagers;
-    
-    let html = `<h2 style="font-size:15px; font-weight:700; margin-bottom:8px; padding-right:32px;">${playerName}</h2>`;
-    html += `<p style="margin-bottom:8px; font-size:11px; color:var(--color-text-muted);">${ownedByList.length} of ${totalManagers} managers</p>`;
-    
+    const noneOwn = ownedByList.length === 0;
+
+    let html = `
+      <h2 class="modal-title" style="padding-right:40px;">
+        ${playerName}
+      </h2>
+      <p class="text-muted" style="margin-bottom:var(--space-4);">
+        ${position} · ${teamName} · <span class="text-success font-bold">${ownershipPct}%</span> ownership
+      </p>
+    `;
+
     if (allOwn) {
-      html += `<p style="color:var(--color-success); font-weight:700; font-size:13px;">✓ Owned by everyone</p>`;
+      html += `
+        <div class="ownership-section ownership-section--success">
+          <div class="ownership-section-header">
+            <span class="ownership-section-title">✓ Owned by everyone</span>
+            <span class="ownership-section-count">${totalManagers}/${totalManagers}</span>
+          </div>
+        </div>
+      `;
+    } else if (noneOwn) {
+      html += `
+        <div class="ownership-section ownership-section--danger">
+          <div class="ownership-section-header">
+            <span class="ownership-section-title">✗ Not owned by anyone</span>
+            <span class="ownership-section-count">0/${totalManagers}</span>
+          </div>
+        </div>
+      `;
     } else {
-      html += `<ul class="owner-list">`;
-      ownedByList.forEach(name => {
-        html += `<li>${name}</li>`;
-      });
-      html += `</ul>`;
-      
-      const notOwned = allManagerNames.filter(n => !ownedByList.includes(n));
-      if (notOwned.length > 0 && notOwned.length <= 5) {
-        html += `<p style="margin-top:12px; font-size:11px; color:var(--color-text-muted);"><strong>Not owned by:</strong> ${notOwned.join(", ")}</p>`;
-      }
+      html += `
+        <div class="ownership-section ownership-section--success">
+          <div class="ownership-section-header">
+            <span class="ownership-section-title">👍 Owned by</span>
+            <span class="ownership-section-count">${ownedBySorted.length}/${totalManagers}</span>
+          </div>
+          <ul class="ownership-list">
+            ${ownedBySorted.map(name => `<li class="ownership-list-item ownership-list-item--owned">${name}</li>`).join('')}
+          </ul>
+        </div>
+
+        <div class="ownership-section ownership-section--danger">
+          <div class="ownership-section-header">
+            <span class="ownership-section-title">👎 Not owned by</span>
+            <span class="ownership-section-count">${notOwnedBy.length}/${totalManagers}</span>
+          </div>
+          <ul class="ownership-list">
+            ${notOwnedBy.map(name => `<li class="ownership-list-item ownership-list-item--not-owned">${name}</li>`).join('')}
+          </ul>
+        </div>
+      `;
     }
-    
-    ownedByContent.innerHTML = html;
-    ownedByModal.classList.add("is-open");
+
+    ownershipModalContent.innerHTML = html;
+    ownershipModal.classList.add("is-open");
   }
 
   function makeOwnershipTable(ownership, positionFilterValue = "") {
@@ -317,7 +338,6 @@ import Nav from "../components/Nav.astro";
                 <th class="pos-cell">Pos</th>
                 <th class="team-cell">Team</th>
                 <th class="pct-cell">%</th>
-                <th class="view-cell"></th>
               </tr>
             </thead>
             <tbody>
@@ -330,20 +350,19 @@ import Nav from "../components/Nav.astro";
       html += `
         <tr>
           <td class="player-cell">
-            <div class="player-name">${player.playerName}</div>
-            <div class="player-count">${player.count} of ${totalManagers}</div>
+            <button type="button" class="player-btn"
+              data-player="${player.playerName}"
+              data-position="${player.position}"
+              data-team="${player.teamName}"
+              data-owned="${ownedByJson}"
+            >
+              <span class="player-name">${player.playerName}</span>
+              <span class="player-count">${player.count} of ${totalManagers}</span>
+            </button>
           </td>
           <td class="pos-cell">${player.position}</td>
           <td class="team-cell">${player.teamName}</td>
           <td class="pct-cell">${ownershipPct}%</td>
-          <td class="view-cell">
-            <button 
-              class="btn btn--neutral view-btn owned-by-btn" 
-              type="button"
-              data-player="${player.playerName}"
-              data-owned="${ownedByJson}"
-            >👁</button>
-          </td>
         </tr>
       `;
     }
@@ -358,13 +377,15 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
-  function attachOwnedByButtons() {
-    document.querySelectorAll('.owned-by-btn').forEach(btn => {
+  function attachPlayerButtons() {
+    document.querySelectorAll('.player-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const button = e.target.closest('.owned-by-btn');
+        const button = e.target.closest('.player-btn');
         const playerName = button.dataset.player;
+        const position = button.dataset.position;
+        const teamName = button.dataset.team;
         const ownedBy = JSON.parse(button.dataset.owned);
-        showOwnedByModal(playerName, ownedBy, allManagerNames.length);
+        showOwnershipModal(playerName, position, teamName, ownedBy);
       });
     });
   }
@@ -399,7 +420,7 @@ import Nav from "../components/Nav.astro";
           ownershipData = calculateOwnership(managerSquads);
           const posFilter = positionFilter.value;
           out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
-          attachOwnedByButtons();
+          attachPlayerButtons();
         }
       } catch (e) {
         console.error(`Failed to load manager ${id}:`, e);
@@ -438,7 +459,7 @@ import Nav from "../components/Nav.astro";
   positionFilter.addEventListener('change', () => {
     const posFilter = positionFilter.value;
     out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
-    attachOwnedByButtons();
+    attachPlayerButtons();
   });
 
   init();
