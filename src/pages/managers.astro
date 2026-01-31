@@ -163,6 +163,25 @@ import Nav from "../components/Nav.astro";
     cursor: not-allowed;
   }
 
+  /* Desktop ONLY: Wider layout for manager IDs */
+  @media (min-width: 640px) {
+    .ids-layout {
+      max-width: 500px;
+    }
+
+    .ids-textarea-wrapper {
+      width: 280px;
+    }
+
+    .ids-textarea-wrapper .textarea {
+      min-height: 300px;
+    } 
+
+    .ids-actions {
+      width: 160px;
+    }
+  }
+
   @media (max-width: 360px) {
     .ids-layout {
       flex-direction: column;
