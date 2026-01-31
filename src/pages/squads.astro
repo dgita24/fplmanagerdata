@@ -11,70 +11,131 @@ import Nav from "../components/Nav.astro";
       <p class="page-subtitle">View each manager's squad for any gameweek.</p>
     </header>
 
-    <div class="meta-row">
-      <span id="manager-count" class="badge">Loading...</span>
-      <a href="/managers" class="badge">⚙ Manage IDs</a>
+    <div class="meta-row-wide">
+      <span id="manager-count" class="badge badge-wide">Loading...</span>
+      <a href="/managers" class="badge badge-wide">⚙ Manage IDs</a>
     </div>
 
-    <section class="controls">
-      <div class="control">
-        <label class="label" for="gw-filter">Gameweek</label>
-        <select class="select" id="gw-filter">
+    <div class="controls-inline">
+      <div class="control-inline">
+        <label class="label-small" for="gw-filter">Gameweek</label>
+        <select class="select-small" id="gw-filter">
           <option value="">Select GW</option>
         </select>
       </div>
-
-      <div class="control">
-        <label class="label" for="manager-filter">Manager</label>
-        <select class="select" id="manager-filter">
-          <option value="">All Managers</option>
+      <div class="control-inline">
+        <label class="label-small" for="manager-filter">Manager</label>
+        <select class="select-small" id="manager-filter">
+          <option value="">All</option>
         </select>
       </div>
-
-      <div class="control">
-        <label class="label">Actions</label>
-        <div class="control-actions">
-          <button id="refresh-btn" class="btn btn--primary" type="button">🔄 Refresh</button>
-        </div>
+      <div class="control-inline">
+        <label class="label-small" for="view-filter">View</label>
+        <select class="select-small" id="view-filter">
+          <option value="all">All Players</option>
+          <option value="captain">Captains</option>
+          <option value="vice">Vice Captains</option>
+        </select>
       </div>
-    </section>
+    </div>
 
-    <div id="loading-status" class="meta-row"></div>
+    <div class="status-row">
+      <div id="loading-status" class="status-text"></div>
+      <button id="refresh-btn" class="btn-refresh" type="button">🔄 Refresh</button>
+    </div>
+
     <section id="squads-output" aria-live="polite"></section>
   </main>
 </Layout>
 
 <style>
-  .squad-table td,
-  .squad-table th {
-    padding: var(--space-1) var(--space-2);
-    font-size: var(--text-sm);
+  .meta-row-wide {
+    display: flex;
+    gap: var(--space-2);
   }
 
-  .squad-table .pos-num {
-    width: 24px;
-    font-size: var(--text-xs);
-    color: var(--color-text-muted);
+  .badge-wide {
+    flex: 1;
+    justify-content: center;
+    padding: var(--space-2) var(--space-3);
+    text-align: center;
   }
 
-  .squad-table .player-name {
+  .controls-inline {
+    display: flex;
+    gap: var(--space-2);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2);
+  }
+
+  .control-inline {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .label-small {
+    font-size: 11px;
     font-weight: 600;
+    color: var(--color-text-secondary);
+    text-align: center;
   }
 
-  .squad-table .team-col {
-    width: 36px;
-    font-size: var(--text-xs);
+  .select-small {
+    width: 100%;
+    min-height: 32px;
+    padding: 4px 6px;
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
   }
 
-  .squad-table .pts-col {
-    width: 36px;
-    font-weight: 700;
+  .select-small:focus {
+    outline: none;
+    border-color: var(--color-primary);
   }
 
-  .squad-table .cap-col {
-    width: 24px;
-    font-weight: 700;
-    font-size: var(--text-xs);
+  .status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  .status-text {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .btn-refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: var(--space-2) var(--space-3);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+    background: var(--color-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-refresh:hover {
+    background: var(--color-primary-hover);
+  }
+
+  .squad-card {
+    margin-bottom: var(--space-3);
   }
 
   .squad-header {
@@ -135,6 +196,7 @@ import Nav from "../components/Nav.astro";
   const out = document.getElementById("squads-output");
   const gwFilterSelect = document.getElementById("gw-filter");
   const managerFilter = document.getElementById("manager-filter");
+  const viewFilter = document.getElementById("view-filter");
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
@@ -489,7 +551,7 @@ import Nav from "../components/Nav.astro";
   }
 
   function populateManagerFilter() {
-    managerFilter.innerHTML = '<option value="">All Managers</option>';
+    managerFilter.innerHTML = '<option value="">All</option>';
 
     const sortedManagers = [...allSquadsData].sort((a, b) =>
       a.managerName.localeCompare(b.managerName)
@@ -501,6 +563,81 @@ import Nav from "../components/Nav.astro";
       option.textContent = manager.managerName;
       managerFilter.appendChild(option);
     }
+  }
+
+  function makeCaptainTable(squadsData, managerFilterValue = "", viewType = "captain") {
+    let filteredManagers = squadsData;
+
+    if (managerFilterValue) {
+      filteredManagers = squadsData.filter(m => m.entryId.toString() === managerFilterValue);
+    }
+
+    const isCaptainView = viewType === "captain";
+    const title = isCaptainView ? "Captains" : "Vice Captains";
+
+    // Collect captain/vc data
+    const rows = [];
+    for (const manager of filteredManagers) {
+      const target = manager.squad.find(p => isCaptainView ? p.isCaptain : p.isViceCaptain);
+      if (target) {
+        rows.push({
+          managerName: manager.managerName,
+          chipPlayed: manager.chipPlayed,
+          playerName: target.playerName,
+          teamName: target.teamName,
+          points: target.gwPointsCap ?? target.gwPoints,
+          rawPoints: target.gwPoints,
+          isCaptain: target.isCaptain,
+          isViceCaptain: target.isViceCaptain
+        });
+      }
+    }
+
+    // Sort by points descending
+    rows.sort((a, b) => b.points - a.points);
+
+    // Find highest scorer
+    const maxPoints = rows.length > 0 ? Math.max(...rows.map(r => r.points)) : 0;
+
+    let html = `
+      <div class="table-container">
+        <div class="table-scroll">
+          <table class="data-table captain-table">
+            <thead>
+              <tr>
+                <th>Manager</th>
+                <th>Player</th>
+                <th class="team-col">Team</th>
+                <th class="pts-col">Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+    `;
+
+    for (const row of rows) {
+      const isTopScorer = row.points === maxPoints;
+      const rowClass = isTopScorer ? 'top-scorer-row' : '';
+
+      const chipBadge = row.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:9px;padding:1px 4px;">${row.chipPlayed}</span>` : '';
+
+      html += `
+        <tr class="${rowClass}">
+          <td class="manager-cell">${row.managerName}${chipBadge}</td>
+          <td class="player-cell">${row.playerName}</td>
+          <td class="team-col">${row.teamName}</td>
+          <td class="pts-col">${row.points}</td>
+        </tr>
+      `;
+    }
+
+    html += `
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    return html;
   }
 
   function makeSquadsDisplay(squadsData, managerFilterValue = "") {
@@ -516,7 +653,7 @@ import Nav from "../components/Nav.astro";
       const squad = [...(manager.squad || [])].sort((a, b) => a.position - b.position);
 
       html += `
-        <div class="card" style="margin-bottom:var(--space-3);">
+        <div class="card squad-card">
           <div class="squad-header">
             <strong>${manager.managerName}</strong>
             <span class="text-muted"> — ${manager.teamName}</span>
@@ -579,6 +716,17 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
+  function renderOutput() {
+    const viewType = viewFilter.value;
+    const managerFilterValue = managerFilter.value;
+
+    if (viewType === "captain" || viewType === "vice") {
+      out.innerHTML = makeCaptainTable(allSquadsData, managerFilterValue, viewType);
+    } else {
+      out.innerHTML = makeSquadsDisplay(allSquadsData, managerFilterValue);
+    }
+  }
+
   async function loadSquads(ids, gw) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
@@ -613,7 +761,7 @@ import Nav from "../components/Nav.astro";
 
           loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
 
-          out.innerHTML = makeSquadsDisplay(allSquadsData, managerFilter.value);
+          renderOutput();
         }
       } catch (e) {
         console.error(`Failed to load manager ${id}:`, e);
@@ -650,7 +798,7 @@ import Nav from "../components/Nav.astro";
 
     if (managerParam) {
       const managerId = parseInt(managerParam);
-      loadSquads([managerId], gw);
+      await loadSquads([managerId], gw);
 
       const checkAndSetFilter = () => {
         if (managerFilter.options.length > 1) {
@@ -668,12 +816,16 @@ import Nav from "../components/Nav.astro";
   gwFilterSelect.addEventListener('change', async () => {
     const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
-      loadSquads(managerIds, gw);
+      await loadSquads(managerIds, gw);
     }
   });
 
   managerFilter.addEventListener('change', () => {
-    out.innerHTML = makeSquadsDisplay(allSquadsData, managerFilter.value);
+    renderOutput();
+  });
+
+  viewFilter.addEventListener('change', () => {
+    renderOutput();
   });
 
   refreshBtn.addEventListener('click', async () => {
