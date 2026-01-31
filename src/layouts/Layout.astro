@@ -756,6 +756,228 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ========================================
+     PLAYER STATS MODAL
+  ======================================== */
+  .modal-panel--compact {
+    max-width: 340px;
+  }
+
+  .player-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+
+  .player-modal-info {
+    flex: 1;
+  }
+
+  .player-modal-name {
+    font-size: var(--text-lg);
+    font-weight: 700;
+    color: var(--color-text);
+    margin: 0;
+  }
+
+  .player-modal-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: 4px;
+    font-size: 12px;
+  }
+
+  .player-modal-team {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+  }
+
+  .player-modal-pos {
+    color: var(--color-text-muted);
+  }
+
+  .player-modal-opp {
+    color: var(--color-text-muted);
+  }
+
+  .player-modal-points {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-primary);
+    border-radius: var(--radius-md);
+    color: white;
+  }
+
+  .player-modal-total {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .player-modal-pts-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+
+  .player-modal-match {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface-alt);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-3);
+  }
+
+  .player-modal-status {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+  }
+
+  .player-modal-status.status-live {
+    background: rgb(220 38 38 / 0.1);
+    color: var(--color-danger);
+  }
+
+  .player-modal-status.status-fin {
+    background: rgb(22 163 74 / 0.1);
+    color: var(--color-success);
+  }
+
+  .player-modal-status.status-ns {
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+  }
+
+  .player-modal-score {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  .player-modal-breakdown {
+    margin-bottom: var(--space-3);
+  }
+
+  .player-modal-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--space-2);
+  }
+
+  .breakdown-list {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .breakdown-row {
+    display: flex;
+    align-items: center;
+    padding: 6px var(--space-3);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 13px;
+  }
+
+  .breakdown-row:last-child {
+    border-bottom: none;
+  }
+
+  .breakdown-row--projected {
+    background: rgb(37 99 235 / 0.05);
+  }
+
+  .breakdown-label {
+    flex: 1;
+    color: var(--color-text-secondary);
+  }
+
+  .breakdown-value {
+    width: 40px;
+    text-align: center;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .breakdown-points {
+    width: 40px;
+    text-align: right;
+    font-weight: 700;
+  }
+
+  .breakdown-points.points-positive {
+    color: var(--color-success);
+  }
+
+  .breakdown-points.points-negative {
+    color: var(--color-danger);
+  }
+
+  .breakdown-points.points-projected {
+    color: var(--color-primary);
+    font-style: italic;
+  }
+
+  .player-modal-bps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    background: var(--color-surface-alt);
+    border-radius: var(--radius-md);
+  }
+
+  .bps-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+  }
+
+  .bps-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  /* Clickable player names in squad modal */
+  .player-name-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-weight: 600;
+    color: var(--color-primary);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .player-name-btn:hover {
+    color: var(--color-primary-hover);
+    text-decoration: underline;
+  }
+
+  .squad-modal-table .player-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  /* ========================================
      TRANSFERS TABLE - Highlights
      ======================================== */
   .transfers-table .hit-highlight {

@@ -8,7 +8,7 @@ import Nav from "../components/Nav.astro";
   <main class="page">
     <header class="page-header">
       <h1 class="page-title">🔴 Live Standings</h1>
-      <p class="page-subtitle">Real-time league table with live points and projected bonus.</p>
+      <p class="page-subtitle">Real-time league table with live points, projected bonus & auto subs.</p>
     </header>
 
     <div class="meta-row-wide">
@@ -46,6 +46,14 @@ import Nav from "../components/Nav.astro";
     <div class="modal-panel">
       <button id="close-squad-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
       <div id="squad-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- Player Stats Modal -->
+  <div id="player-modal" class="modal modal--nested">
+    <div class="modal-panel modal-panel--compact">
+      <button id="close-player-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="player-modal-content"></div>
     </div>
   </div>
 </Layout>
@@ -152,7 +160,7 @@ import Nav from "../components/Nav.astro";
 <script>
   import { supabase } from '../lib/supabase.ts'
 
-  let managerIds = []
+  let managerIds: number[] = []
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -181,61 +189,109 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  const out = document.getElementById("live-output");
-  const gwFilterSelect = document.getElementById("gw-filter");
-  const compareManagerSelect = document.getElementById("compare-manager");
-  const loadingStatus = document.getElementById("loading-status");
-  const lastUpdatedEl = document.getElementById("last-updated");
-  const managerCountEl = document.getElementById("manager-count");
-  const refreshBtn = document.getElementById("refresh-btn");
-  const autoRefreshBtn = document.getElementById("auto-refresh-btn");
-  const squadModal = document.getElementById("squad-modal");
-  const squadModalContent = document.getElementById("squad-modal-content");
-  const closeSquadModal = document.getElementById("close-squad-modal");
+  const out = document.getElementById("live-output")!;
+  const gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
+  const compareManagerSelect = document.getElementById("compare-manager") as HTMLSelectElement;
+  const loadingStatus = document.getElementById("loading-status")!;
+  const lastUpdatedEl = document.getElementById("last-updated")!;
+  const managerCountEl = document.getElementById("manager-count")!;
+  const refreshBtn = document.getElementById("refresh-btn")!;
+  const autoRefreshBtn = document.getElementById("auto-refresh-btn")!;
+  const squadModal = document.getElementById("squad-modal")!;
+  const squadModalContent = document.getElementById("squad-modal-content")!;
+  const closeSquadModal = document.getElementById("close-squad-modal")!;
+  const playerModal = document.getElementById("player-modal")!;
+  const playerModalContent = document.getElementById("player-modal-content")!;
+  const closePlayerModal = document.getElementById("close-player-modal")!;
 
-  let liveData = [];
-  let latestGW = null;
-  let playerCache = new Map();
-  let teamCache = new Map();
-  let livePointsCache = new Map();
-  let projectedBonusCache = new Map();
-  let teamStatusCache = new Map();
+  interface PlayerInfo {
+    name: string;
+    position: number;
+    team: number;
+  }
 
-  let autoRefreshInterval = null;
+  interface TeamInfo {
+    name: string;
+    shortName: string;
+  }
+
+  interface LiveStats {
+    points: number;
+    bonus: number;
+    minutes: number;
+    bps: number;
+    goals_scored: number;
+    assists: number;
+    clean_sheets: number;
+    goals_conceded: number;
+    own_goals: number;
+    penalties_saved: number;
+    penalties_missed: number;
+    yellow_cards: number;
+    red_cards: number;
+    saves: number;
+  }
+
+  interface FixtureInfo {
+    id: number;
+    team_h: number;
+    team_a: number;
+    team_h_score: number | null;
+    team_a_score: number | null;
+    started: boolean;
+    finished: boolean;
+    finished_provisional: boolean;
+  }
+
+  let liveData: any[] = [];
+  let latestGW: number = 1;
+  let playerCache = new Map<number, PlayerInfo>();
+  let teamCache = new Map<number, TeamInfo>();
+  let livePointsCache = new Map<number, LiveStats>();
+  let projectedBonusCache = new Map<string, number>();
+  let teamStatusCache = new Map<string, { started: boolean; finished: boolean }>();
+  let fixturesCache: FixtureInfo[] = [];
+  let playerFixtureCache = new Map<number, FixtureInfo>();
+
+  let autoRefreshInterval: ReturnType<typeof setInterval> | null = null;
   let autoRefreshEnabled = false;
 
   closeSquadModal.addEventListener("click", () => {
     squadModal.classList.remove("is-open");
   });
 
-  function populateGWSelector(currentGW) {
+  closePlayerModal.addEventListener("click", () => {
+    playerModal.classList.remove("is-open");
+  });
+
+  function populateGWSelector(currentGW: number) {
     gwFilterSelect.innerHTML = '';
     for (let i = 1; i <= 38; i++) {
       const option = document.createElement('option');
-      option.value = i;
+      option.value = String(i);
       option.textContent = `GW ${i}`;
       if (i === currentGW) option.selected = true;
       gwFilterSelect.appendChild(option);
     }
   }
 
-  function positionLabel(elementType) {
+  function positionLabel(elementType: number): string {
     if (elementType === 1) return "GK";
     if (elementType === 2) return "DEF";
     if (elementType === 3) return "MID";
     return "FWD";
   }
 
-  function getTeamGwStatus(teamId, gw) {
+  function getTeamGwStatus(teamId: number, gw: number) {
     return teamStatusCache.get(`${gw}:${teamId}`) || { started: false, finished: false };
   }
 
-  function bonusFromBpsRows(bpsRows) {
+  function bonusFromBpsRows(bpsRows: any[]): Map<number, number> {
     const rows = (bpsRows || [])
       .filter(r => r && Number.isFinite(r.value) && Number.isFinite(r.element))
       .sort((a, b) => b.value - a.value);
 
-    const out = new Map();
+    const out = new Map<number, number>();
     if (rows.length === 0) return out;
 
     const topVal = rows[0].value;
@@ -274,8 +330,13 @@ import Nav from "../components/Nav.astro";
     return out;
   }
 
-  function getPlayerLiveComputed(playerId, teamId, gw) {
-    const live = livePointsCache.get(playerId) || { points: 0, bonus: 0, minutes: 0 };
+  function getPlayerLiveComputed(playerId: number, teamId: number, gw: number) {
+    const live = livePointsCache.get(playerId) || { 
+      points: 0, bonus: 0, minutes: 0, bps: 0,
+      goals_scored: 0, assists: 0, clean_sheets: 0, goals_conceded: 0,
+      own_goals: 0, penalties_saved: 0, penalties_missed: 0,
+      yellow_cards: 0, red_cards: 0, saves: 0
+    };
     const { started, finished } = getTeamGwStatus(teamId, gw);
 
     const officialTotal = Number(live.points) || 0;
@@ -286,11 +347,11 @@ import Nav from "../components/Nav.astro";
     const projBonus = finished ? 0 : (Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0);
     const liveTotal = locked + projBonus;
 
-    const status = finished ? "Fin" : (started ? "Live" : "v");
-    return { locked, projBonus, liveTotal, status, minutes };
+    const status = finished ? "Fin" : (started ? "Live" : "NS");
+    return { locked, projBonus, liveTotal, status, minutes, confirmedBonus };
   }
 
-  function applyAutoSubsAndMultipliers(teamPicks, chipCode) {
+  function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) {
     const isBB = chipCode === "BB";
     const isTC = chipCode === "TC";
     const capFactor = isTC ? 3 : 2;
@@ -310,7 +371,7 @@ import Nav from "../components/Nav.astro";
     }
 
     let active = starters.filter(p => !(p.minutes === 0 && p.status === "Fin"));
-    const benchRemaining = [];
+    const benchRemaining: any[] = [];
 
     for (const cand of bench) {
       const needSub = active.length < 11;
@@ -373,7 +434,7 @@ import Nav from "../components/Nav.astro";
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
-      data.elements.forEach(player => {
+      data.elements.forEach((player: any) => {
         playerCache.set(player.id, {
           name: player.web_name,
           position: player.element_type,
@@ -381,14 +442,14 @@ import Nav from "../components/Nav.astro";
         });
       });
 
-      data.teams.forEach(team => {
+      data.teams.forEach((team: any) => {
         teamCache.set(team.id, {
           name: team.name,
           shortName: team.short_name
         });
       });
 
-      const currentEvent = data.events.find(e => e.is_current);
+      const currentEvent = data.events.find((e: any) => e.is_current);
       latestGW = currentEvent ? currentEvent.id : 1;
 
       populateGWSelector(latestGW);
@@ -400,17 +461,19 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchFixtures(gw) {
+  async function fetchFixtures(gw: number) {
     try {
       const res = await fetch(`/api/fpl/fixtures?event=${gw}`);
       if (!res.ok) throw new Error("Failed to fetch fixtures");
-      const fixtures = await res.json();
+      const fixtures: FixtureInfo[] = await res.json();
 
+      fixturesCache = fixtures;
       teamStatusCache.clear();
       projectedBonusCache.clear();
+      playerFixtureCache.clear();
 
-      const perTeam = new Map();
-      function upsertTeam(teamId, started, finished) {
+      const perTeam = new Map<number, { startedAny: boolean; finishedAll: boolean }>();
+      function upsertTeam(teamId: number, started: boolean, finished: boolean) {
         const cur = perTeam.get(teamId) || { startedAny: false, finishedAll: true };
         cur.startedAny = cur.startedAny || !!started || !!finished;
         cur.finishedAll = cur.finishedAll && !!finished;
@@ -423,8 +486,10 @@ import Nav from "../components/Nav.astro";
 
         if (!fx.started || fx.finished) continue;
 
-        const stats = Array.isArray(fx.stats) ? fx.stats : [];
-        const bpsStat = stats.find(s => s && s.identifier === "bps");
+        const stats = (fx as any).stats;
+        if (!Array.isArray(stats)) continue;
+        
+        const bpsStat = stats.find((s: any) => s && s.identifier === "bps");
         if (!bpsStat) continue;
 
         const h = Array.isArray(bpsStat.h) ? bpsStat.h : [];
@@ -455,7 +520,7 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchLiveGW(gw) {
+  async function fetchLiveGW(gw: number) {
     try {
       const res = await fetch(`/api/fpl/event/${gw}/live`);
       if (!res.ok) throw new Error("Failed to fetch live data");
@@ -470,7 +535,17 @@ import Nav from "../components/Nav.astro";
           points: Number(stats.total_points) || 0,
           bonus: Number(stats.bonus) || 0,
           minutes: Number(stats.minutes) || 0,
-          bps: Number(stats.bps) || 0
+          bps: Number(stats.bps) || 0,
+          goals_scored: Number(stats.goals_scored) || 0,
+          assists: Number(stats.assists) || 0,
+          clean_sheets: Number(stats.clean_sheets) || 0,
+          goals_conceded: Number(stats.goals_conceded) || 0,
+          own_goals: Number(stats.own_goals) || 0,
+          penalties_saved: Number(stats.penalties_saved) || 0,
+          penalties_missed: Number(stats.penalties_missed) || 0,
+          yellow_cards: Number(stats.yellow_cards) || 0,
+          red_cards: Number(stats.red_cards) || 0,
+          saves: Number(stats.saves) || 0
         });
       }
 
@@ -481,7 +556,7 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerLive(entryId, gw) {
+  async function fetchManagerLive(entryId: number, gw: number) {
     try {
       const [picksRes, summaryRes, historyRes] = await Promise.all([
         fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
@@ -497,7 +572,7 @@ import Nav from "../components/Nav.astro";
       const summaryData = await summaryRes.json();
       const historyData = await historyRes.json();
 
-      const chipName = (historyData.chips || []).find(c => c.event === gw)?.name || "";
+      const chipName = (historyData.chips || []).find((c: any) => c.event === gw)?.name || "";
       const chipCode =
         chipName === "bboost" ? "BB" :
         chipName === "3xc" ? "TC" :
@@ -507,8 +582,8 @@ import Nav from "../components/Nav.astro";
 
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
 
-      const picks = rawPicks.map(p => {
-        const player = playerCache.get(p.element) || {};
+      const picks = rawPicks.map((p: any) => {
+        const player = playerCache.get(p.element) || { name: "", position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
 
         const computed = getPlayerLiveComputed(p.element, teamId, gw);
@@ -538,13 +613,13 @@ import Nav from "../components/Nav.astro";
       const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
 
       const transferCost =
-        Number(historyRows.find(h => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
+        Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
 
       const liveNet = livePointsBeforeHits - transferCost;
 
       let startOverall = 0;
       if (Number(gw) > 1) {
-        const prev = historyRows.find(h => Number(h.event) === (Number(gw) - 1));
+        const prev = historyRows.find((h: any) => Number(h.event) === (Number(gw) - 1));
         startOverall = Number(prev?.total_points) || 0;
       }
 
@@ -566,7 +641,152 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function showSquadModal(entryId, managerName, teamName, chipPlayed, livePoints) {
+  function getPlayerFixture(teamId: number): FixtureInfo | null {
+    return fixturesCache.find(f => f.team_h === teamId || f.team_a === teamId) || null;
+  }
+
+  function showPlayerModal(playerId: number) {
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
+    const player = playerCache.get(playerId);
+    const liveStats = livePointsCache.get(playerId);
+
+    if (!player) {
+      playerModalContent.innerHTML = "<p class='status status--error'>Player not found.</p>";
+      playerModal.classList.add("is-open");
+      return;
+    }
+
+    const teamInfo = teamCache.get(player.team);
+    const fixture = getPlayerFixture(player.team);
+    const { started, finished } = getTeamGwStatus(player.team, gw);
+    const computed = getPlayerLiveComputed(playerId, player.team, gw);
+
+    // Determine opponent and home/away
+    let opponentStr = "";
+    let scoreStr = "";
+    if (fixture) {
+      const isHome = fixture.team_h === player.team;
+      const oppTeamId = isHome ? fixture.team_a : fixture.team_h;
+      const oppTeam = teamCache.get(oppTeamId);
+      opponentStr = isHome ? `vs ${oppTeam?.shortName || '???'}` : `@ ${oppTeam?.shortName || '???'}`;
+      
+      if (fixture.started) {
+        const homeScore = fixture.team_h_score ?? 0;
+        const awayScore = fixture.team_a_score ?? 0;
+        scoreStr = isHome ? `${homeScore} - ${awayScore}` : `${awayScore} - ${homeScore}`;
+      }
+    }
+
+    const statusText = finished ? "Full Time" : (started ? "🔴 Live" : "Not Started");
+    const statusClass = finished ? "status-fin" : (started ? "status-live" : "status-ns");
+
+    const stats = liveStats || {
+      points: 0, bonus: 0, minutes: 0, bps: 0,
+      goals_scored: 0, assists: 0, clean_sheets: 0, goals_conceded: 0,
+      own_goals: 0, penalties_saved: 0, penalties_missed: 0,
+      yellow_cards: 0, red_cards: 0, saves: 0
+    };
+
+    const projBonus = projectedBonusCache.get(`${gw}:${playerId}`) || 0;
+    const isGK = player.position === 1;
+    const isDef = player.position === 2;
+
+    // Build points breakdown
+    const breakdown: { label: string; value: number; points: number; show: boolean }[] = [
+      { label: "Minutes", value: stats.minutes, points: stats.minutes >= 60 ? 2 : (stats.minutes > 0 ? 1 : 0), show: true },
+      { label: "Goals", value: stats.goals_scored, points: getGoalPoints(player.position, stats.goals_scored), show: stats.goals_scored > 0 },
+      { label: "Assists", value: stats.assists, points: stats.assists * 3, show: stats.assists > 0 },
+      { label: "Clean Sheet", value: stats.clean_sheets, points: getCleanSheetPoints(player.position, stats.clean_sheets), show: (isGK || isDef) && stats.clean_sheets > 0 },
+      { label: "Goals Conceded", value: stats.goals_conceded, points: (isGK || isDef) ? -Math.floor(stats.goals_conceded / 2) : 0, show: (isGK || isDef) && stats.goals_conceded >= 2 },
+      { label: "Saves", value: stats.saves, points: Math.floor(stats.saves / 3), show: isGK && stats.saves > 0 },
+      { label: "Pen Saved", value: stats.penalties_saved, points: stats.penalties_saved * 5, show: stats.penalties_saved > 0 },
+      { label: "Pen Missed", value: stats.penalties_missed, points: stats.penalties_missed * -2, show: stats.penalties_missed > 0 },
+      { label: "Own Goals", value: stats.own_goals, points: stats.own_goals * -2, show: stats.own_goals > 0 },
+      { label: "Yellow Card", value: stats.yellow_cards, points: stats.yellow_cards * -1, show: stats.yellow_cards > 0 },
+      { label: "Red Card", value: stats.red_cards, points: stats.red_cards * -3, show: stats.red_cards > 0 },
+      { label: "Bonus", value: stats.bonus, points: stats.bonus, show: stats.bonus > 0 }
+    ];
+
+    let html = `
+      <div class="player-modal-header">
+        <div class="player-modal-info">
+          <h2 class="player-modal-name">${player.name}</h2>
+          <div class="player-modal-meta">
+            <span class="player-modal-team">${teamInfo?.shortName || '???'}</span>
+            <span class="player-modal-pos">${positionLabel(player.position)}</span>
+            ${opponentStr ? `<span class="player-modal-opp">${opponentStr}</span>` : ''}
+          </div>
+        </div>
+        <div class="player-modal-points">
+          <span class="player-modal-total">${computed.liveTotal}</span>
+          <span class="player-modal-pts-label">pts</span>
+        </div>
+      </div>
+
+      <div class="player-modal-match">
+        <span class="player-modal-status ${statusClass}">${statusText}</span>
+        ${scoreStr ? `<span class="player-modal-score">${scoreStr}</span>` : ''}
+      </div>
+
+      <div class="player-modal-breakdown">
+        <h3 class="player-modal-section-title">Points Breakdown</h3>
+        <div class="breakdown-list">
+    `;
+
+    for (const item of breakdown) {
+      if (!item.show) continue;
+      const pointsClass = item.points > 0 ? 'points-positive' : (item.points < 0 ? 'points-negative' : '');
+      const pointsDisplay = item.points > 0 ? `+${item.points}` : item.points;
+
+      html += `
+        <div class="breakdown-row">
+          <span class="breakdown-label">${item.label}</span>
+          <span class="breakdown-value">${item.value}</span>
+          <span class="breakdown-points ${pointsClass}">${pointsDisplay}</span>
+        </div>
+      `;
+    }
+
+    // Show projected bonus if applicable
+    if (!finished && projBonus > 0) {
+      html += `
+        <div class="breakdown-row breakdown-row--projected">
+          <span class="breakdown-label">Projected Bonus</span>
+          <span class="breakdown-value">—</span>
+          <span class="breakdown-points points-projected">+${projBonus}</span>
+        </div>
+      `;
+    }
+
+    html += `
+        </div>
+      </div>
+
+      <div class="player-modal-bps">
+        <span class="bps-label">BPS</span>
+        <span class="bps-value">${stats.bps}</span>
+      </div>
+    `;
+
+    playerModalContent.innerHTML = html;
+    playerModal.classList.add("is-open");
+  }
+
+  function getGoalPoints(position: number, goals: number): number {
+    if (goals === 0) return 0;
+    if (position === 1 || position === 2) return goals * 6; // GK/DEF
+    if (position === 3) return goals * 5; // MID
+    return goals * 4; // FWD
+  }
+
+  function getCleanSheetPoints(position: number, cleanSheets: number): number {
+    if (cleanSheets === 0) return 0;
+    if (position === 1 || position === 2) return cleanSheets * 4; // GK/DEF
+    if (position === 3) return cleanSheets * 1; // MID
+    return 0; // FWD
+  }
+
+  async function showSquadModal(entryId: number, managerName: string, teamName: string, chipPlayed: string, livePoints: number) {
     const gw = parseInt(gwFilterSelect.value) || latestGW;
 
     squadModalContent.innerHTML = `<p class="text-muted">Loading squad...</p>`;
@@ -581,8 +801,8 @@ import Nav from "../components/Nav.astro";
 
       const chipCode = chipPlayed || "None";
 
-      const picks = rawPicks.map(p => {
-        const player = playerCache.get(p.element) || {};
+      const picks = rawPicks.map((p: any) => {
+        const player = playerCache.get(p.element) || { name: "Unknown", position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
         const teamInfo = teamCache.get(teamId) || { shortName: "???" };
 
@@ -641,7 +861,7 @@ import Nav from "../components/Nav.astro";
         
         const mult = p.multiplier || 1;
         const displayPts = Math.round(p.liveTotal * mult);
-        const ptsText = mult > 1 ? `${p.liveTotal}×${mult}` : displayPts;
+        const ptsText = mult > 1 ? `${p.liveTotal}×${mult}` : String(displayPts);
 
         const isSubOn = p.position > 11 && mult > 0;
         const isSubOff = p.position <= 11 && mult === 0;
@@ -659,7 +879,7 @@ import Nav from "../components/Nav.astro";
           <tr class="${rowClass}">
             <td class="player-cell">
               <span class="player-pos">${p.playingPosition}</span>
-              <span class="player-name">${p.web_name}</span>
+              <button type="button" class="player-name-btn" data-player-id="${p.playerId}">${p.web_name}</button>
               ${capLabel}
               ${statusBadge}
             </td>
@@ -693,7 +913,7 @@ import Nav from "../components/Nav.astro";
           <tr class="${rowClass}">
             <td class="player-cell">
               <span class="player-pos">${p.playingPosition}</span>
-              <span class="player-name">${p.web_name}</span>
+              <button type="button" class="player-name-btn" data-player-id="${p.playerId}">${p.web_name}</button>
               ${statusBadge}
             </td>
             <td class="col-team">${p.teamShort}</td>
@@ -709,6 +929,15 @@ import Nav from "../components/Nav.astro";
       `;
 
       squadModalContent.innerHTML = html;
+
+      // Attach player click handlers
+      squadModalContent.querySelectorAll('.player-name-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const button = e.target as HTMLElement;
+          const playerId = parseInt(button.dataset.playerId || '0');
+          if (playerId) showPlayerModal(playerId);
+        });
+      });
 
     } catch (error) {
       console.error("Error loading squad:", error);
@@ -731,13 +960,12 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  function makeLiveTable(managers, compareToId = "") {
+  function makeLiveTable(managers: any[], compareToId = "") {
     const sorted = [...managers].sort((a, b) => b.totalPoints - a.totalPoints);
 
     const leader = sorted[0];
     const compareManager = compareToId ? sorted.find(m => m.entryId.toString() === compareToId) : leader;
 
-    // Find highest GW score (livePoints = net after hits)
     let maxGwPoints = -Infinity;
     sorted.forEach(m => {
       if (m.livePoints > maxGwPoints) {
@@ -765,7 +993,7 @@ import Nav from "../components/Nav.astro";
 
     let rank = 1;
     for (const m of sorted) {
-      const diffOverall = m.totalPoints - compareManager.totalPoints;
+      const diffOverall = m.totalPoints - (compareManager?.totalPoints || 0);
       const diffText = diffOverall > 0 ? `+${diffOverall}` : diffOverall === 0 ? "—" : `${diffOverall}`;
 
       const isTopScorer = m.livePoints === maxGwPoints;
@@ -807,18 +1035,18 @@ import Nav from "../components/Nav.astro";
   function attachManagerButtons() {
     document.querySelectorAll('.manager-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const button = e.target.closest('.manager-btn');
-        const entryId = button.dataset.entryId;
-        const managerName = button.dataset.managerName;
-        const teamName = button.dataset.teamName;
-        const chipPlayed = button.dataset.chip;
-        const livePoints = parseInt(button.dataset.livePoints);
+        const button = (e.target as HTMLElement).closest('.manager-btn') as HTMLElement;
+        const entryId = parseInt(button.dataset.entryId || '0');
+        const managerName = button.dataset.managerName || '';
+        const teamName = button.dataset.teamName || '';
+        const chipPlayed = button.dataset.chip || '';
+        const livePoints = parseInt(button.dataset.livePoints || '0');
         showSquadModal(entryId, managerName, teamName, chipPlayed, livePoints);
       });
     });
   }
 
-  async function loadLive(ids, gw) {
+  async function loadLive(ids: number[], gw: number) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
       return;
