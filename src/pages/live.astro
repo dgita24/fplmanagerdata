@@ -230,7 +230,6 @@ import Nav from "../components/Nav.astro";
     yellow_cards: number;
     red_cards: number;
     saves: number;
-    // DEFCON fields
     clearances_blocks_interceptions: number;
     recoveries: number;
     tackles: number;
@@ -254,7 +253,7 @@ import Nav from "../components/Nav.astro";
   let teamCache = new Map<number, TeamInfo>();
   let livePointsCache = new Map<number, LiveStats>();
   let projectedBonusCache = new Map<string, number>();
-  let teamStatusCache = new Map<string, { started: boolean; finished: boolean }>();
+  let teamStatusCache = new Map<string, { started: boolean; finished: boolean; finishedProvisional: boolean }>();
   let fixturesCache: FixtureInfo[] = [];
 
   let autoRefreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -287,7 +286,7 @@ import Nav from "../components/Nav.astro";
   }
 
   function getTeamGwStatus(teamId: number, gw: number) {
-    return teamStatusCache.get(`${gw}:${teamId}`) || { started: false, finished: false };
+    return teamStatusCache.get(`${gw}:${teamId}`) || { started: false, finished: false, finishedProvisional: false };
   }
 
   function bonusFromBpsRows(bpsRows: any[]): Map<number, number> {
@@ -342,17 +341,20 @@ import Nav from "../components/Nav.astro";
       yellow_cards: 0, red_cards: 0, saves: 0,
       clearances_blocks_interceptions: 0, recoveries: 0, tackles: 0, defensive_contribution: 0
     };
-    const { started, finished } = getTeamGwStatus(teamId, gw);
+    const { started, finished, finishedProvisional } = getTeamGwStatus(teamId, gw);
+    
+    // Treat finishedProvisional as finished for auto-sub and points purposes
+    const isFinished = finished || finishedProvisional;
 
     const officialTotal = Number(live.points) || 0;
     const confirmedBonus = Number(live.bonus) || 0;
     const minutes = Number(live.minutes) || 0;
 
-    const locked = finished ? officialTotal : (officialTotal - confirmedBonus);
-    const projBonus = finished ? 0 : (Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0);
+    const locked = isFinished ? officialTotal : (officialTotal - confirmedBonus);
+    const projBonus = isFinished ? 0 : (Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0);
     const liveTotal = locked + projBonus;
 
-    const status = finished ? "Fin" : (started ? "Live" : "NS");
+    const status = isFinished ? "Fin" : (started ? "Live" : "NS");
     return { locked, projBonus, liveTotal, status, minutes, confirmedBonus };
   }
 
@@ -375,54 +377,108 @@ import Nav from "../components/Nav.astro";
       }));
     }
 
+    // Build active team: starters who played OR whose match isn't finished yet
     let active = starters.filter(p => !(p.minutes === 0 && p.status === "Fin"));
     const benchRemaining: any[] = [];
 
-    for (const cand of bench) {
-      const needSub = active.length < 11;
-      if (!needSub) {
+    // Process bench in strict order (position 12, 13, 14, 15)
+    for (let i = 0; i < bench.length; i++) {
+      const cand = bench[i];
+      
+      // Do we need a sub?
+      if (active.length >= 11) {
         benchRemaining.push(cand);
         continue;
       }
 
-      const candViable = !(cand.minutes === 0 && cand.status === "Fin");
-      if (!candViable) {
+      // Check candidate's match status
+      const matchFinished = cand.status === "Fin";
+
+      // If candidate's match hasn't finished, STOP - they block all subsequent subs
+      if (!matchFinished) {
+        benchRemaining.push(cand);
+        for (let j = i + 1; j < bench.length; j++) {
+          benchRemaining.push(bench[j]);
+        }
+        break;
+      }
+
+      // Match is finished - did they play?
+      const candPlayed = cand.minutes > 0;
+      
+      if (!candPlayed) {
+        // DNP - skip them, try next bench player
         benchRemaining.push(cand);
         continue;
       }
 
-      const gkCount = active.filter(p => p.playingPosition === "GK").length;
-      const defCount = active.filter(p => p.playingPosition === "DEF").length;
-      const midCount = active.filter(p => p.playingPosition === "MID").length;
-      const fwdCount = active.filter(p => p.playingPosition === "FWD").length;
+      // Candidate played - check formation validity
+      const testTeam = [...active, cand];
+      const gkCount = testTeam.filter(p => p.playingPosition === "GK").length;
+      const defCount = testTeam.filter(p => p.playingPosition === "DEF").length;
+      const midCount = testTeam.filter(p => p.playingPosition === "MID").length;
+      const fwdCount = testTeam.filter(p => p.playingPosition === "FWD").length;
 
-      const candPos = cand.playingPosition;
-      const validGK = (candPos === "GK" && gkCount === 0);
-      const validDefSave = (candPos === "DEF" && defCount < 3);
-      const validMidSave = (candPos === "MID" && midCount < 2);
-      const validFwdSave = (candPos === "FWD" && fwdCount < 1);
+      const spotsLeft = 11 - testTeam.length;
 
-      const validGeneral =
-        (candPos !== "GK" &&
-        gkCount > 0 &&
-        defCount >= 3 &&
-        midCount >= 2 &&
-        fwdCount >= 1);
-
-      if (validGK || validDefSave || validMidSave || validFwdSave || validGeneral) {
-        active = [...active, cand];
+      if (spotsLeft === 0) {
+        // Team complete - verify valid formation
+        const isValid = gkCount === 1 && defCount >= 3 && midCount >= 2 && fwdCount >= 1;
+        if (isValid) {
+          active = testTeam;
+        } else {
+          benchRemaining.push(cand);
+        }
       } else {
-        benchRemaining.push(cand);
+        // Team not complete - check if remaining bench can fill requirements
+        const needGK = Math.max(0, 1 - gkCount);
+        const needDef = Math.max(0, 3 - defCount);
+        const needMid = Math.max(0, 2 - midCount);
+        const needFwd = Math.max(0, 1 - fwdCount);
+
+        // Find remaining usable bench (finished AND played, AND before any pending player)
+        let usableBench: any[] = [];
+        for (let j = i + 1; j < bench.length; j++) {
+          const p = bench[j];
+          if (p.status !== "Fin") break; // Stop at first pending player
+          if (p.minutes > 0) usableBench.push(p);
+        }
+
+        const availGK = usableBench.filter(p => p.playingPosition === "GK").length;
+        const availDef = usableBench.filter(p => p.playingPosition === "DEF").length;
+        const availMid = usableBench.filter(p => p.playingPosition === "MID").length;
+        const availFwd = usableBench.filter(p => p.playingPosition === "FWD").length;
+
+        const canComplete = availGK >= needGK && 
+                          availDef >= needDef && 
+                          availMid >= needMid && 
+                          availFwd >= needFwd &&
+                          usableBench.length >= spotsLeft;
+
+        if (canComplete) {
+          active = testTeam;
+        } else {
+          benchRemaining.push(cand);
+        }
       }
     }
 
+    // Captain logic
     const origCap = sorted.find(p => p.is_captain)?.playerId ?? null;
     const origVC = sorted.find(p => p.is_vice_captain)?.playerId ?? null;
 
-    const capActive = origCap !== null && active.some(p => p.playerId === origCap);
-    const vcActive = origVC !== null && active.some(p => p.playerId === origVC);
+    const capInActive = origCap !== null && active.some(p => p.playerId === origCap);
+    const vcInActive = origVC !== null && active.some(p => p.playerId === origVC);
 
-    const captainId = capActive ? origCap : (vcActive ? origVC : null);
+    // Captain played if in active AND (played OR match pending)
+    const capPlayed = capInActive && active.some(p => 
+      p.playerId === origCap && (p.minutes > 0 || p.status !== "Fin")
+    );
+    const vcPlayed = vcInActive && active.some(p => 
+      p.playerId === origVC && (p.minutes > 0 || p.status !== "Fin")
+    );
+
+    const captainId = capPlayed ? origCap : (vcPlayed ? origVC : null);
 
     const activeWithMult = active.map(p => ({
       ...p,
@@ -476,19 +532,21 @@ import Nav from "../components/Nav.astro";
       teamStatusCache.clear();
       projectedBonusCache.clear();
 
-      const perTeam = new Map<number, { startedAny: boolean; finishedAll: boolean }>();
-      function upsertTeam(teamId: number, started: boolean, finished: boolean) {
-        const cur = perTeam.get(teamId) || { startedAny: false, finishedAll: true };
-        cur.startedAny = cur.startedAny || !!started || !!finished;
+      const perTeam = new Map<number, { startedAny: boolean; finishedAll: boolean; finishedProvAll: boolean }>();
+      function upsertTeam(teamId: number, started: boolean, finished: boolean, finishedProvisional: boolean) {
+        const cur = perTeam.get(teamId) || { startedAny: false, finishedAll: true, finishedProvAll: true };
+        cur.startedAny = cur.startedAny || !!started || !!finished || !!finishedProvisional;
         cur.finishedAll = cur.finishedAll && !!finished;
+        cur.finishedProvAll = cur.finishedProvAll && (!!finished || !!finishedProvisional);
         perTeam.set(teamId, cur);
       }
 
       for (const fx of fixtures) {
-        upsertTeam(fx.team_h, fx.started, fx.finished);
-        upsertTeam(fx.team_a, fx.started, fx.finished);
+        upsertTeam(fx.team_h, fx.started, fx.finished, fx.finished_provisional);
+        upsertTeam(fx.team_a, fx.started, fx.finished, fx.finished_provisional);
 
-        if (!fx.started || fx.finished) continue;
+        // Only calculate projected bonus for truly live matches (not finished or provisional)
+        if (!fx.started || fx.finished || fx.finished_provisional) continue;
 
         const stats = (fx as any).stats;
         if (!Array.isArray(stats)) continue;
@@ -514,7 +572,11 @@ import Nav from "../components/Nav.astro";
       }
 
       for (const [teamId, st] of perTeam.entries()) {
-        teamStatusCache.set(`${gw}:${teamId}`, { started: st.startedAny, finished: st.finishedAll });
+        teamStatusCache.set(`${gw}:${teamId}`, { 
+          started: st.startedAny, 
+          finished: st.finishedAll,
+          finishedProvisional: st.finishedProvAll
+        });
       }
 
       return fixtures;
@@ -550,7 +612,6 @@ import Nav from "../components/Nav.astro";
           yellow_cards: Number(stats.yellow_cards) || 0,
           red_cards: Number(stats.red_cards) || 0,
           saves: Number(stats.saves) || 0,
-          // DEFCON fields
           clearances_blocks_interceptions: Number(stats.clearances_blocks_interceptions) || 0,
           recoveries: Number(stats.recoveries) || 0,
           tackles: Number(stats.tackles) || 0,
@@ -654,15 +715,10 @@ import Nav from "../components/Nav.astro";
     return fixturesCache.find(f => f.team_h === teamId || f.team_a === teamId) || null;
   }
 
-  // Calculate DEFCON points based on position and defensive actions
   function calculateDefcon(position: number, defensiveContribution: number): { points: number; threshold: number } {
-    // GKs don't get DEFCON
     if (position === 1) return { points: 0, threshold: 0 };
-    
-    // DEF: threshold 10, MID/FWD: threshold 12
     const threshold = position === 2 ? 10 : 12;
     const points = defensiveContribution >= threshold ? 2 : 0;
-    
     return { points, threshold };
   }
 
@@ -679,10 +735,10 @@ import Nav from "../components/Nav.astro";
 
     const teamInfo = teamCache.get(player.team);
     const fixture = getPlayerFixture(player.team);
-    const { started, finished } = getTeamGwStatus(player.team, gw);
+    const { started, finished, finishedProvisional } = getTeamGwStatus(player.team, gw);
+    const isFinished = finished || finishedProvisional;
     const computed = getPlayerLiveComputed(playerId, player.team, gw);
 
-    // Determine opponent and home/away
     let opponentStr = "";
     let scoreStr = "";
     if (fixture) {
@@ -698,8 +754,8 @@ import Nav from "../components/Nav.astro";
       }
     }
 
-    const statusText = finished ? "Full Time" : (started ? "🔴 Live" : "Not Started");
-    const statusClass = finished ? "status-fin" : (started ? "status-live" : "status-ns");
+    const statusText = isFinished ? "Full Time" : (started ? "🔴 Live" : "Not Started");
+    const statusClass = isFinished ? "status-fin" : (started ? "status-live" : "status-ns");
 
     const stats = liveStats || {
       points: 0, bonus: 0, minutes: 0, bps: 0,
@@ -712,12 +768,9 @@ import Nav from "../components/Nav.astro";
     const projBonus = projectedBonusCache.get(`${gw}:${playerId}`) || 0;
     const isGK = player.position === 1;
     const isDef = player.position === 2;
-    const isMidFwd = player.position === 3 || player.position === 4;
 
-    // Calculate DEFCON
     const defcon = calculateDefcon(player.position, stats.defensive_contribution);
 
-    // Build points breakdown
     const breakdown: { label: string; value: string | number; points: number; show: boolean; isProgress?: boolean }[] = [
       { label: "Minutes", value: stats.minutes, points: stats.minutes >= 60 ? 2 : (stats.minutes > 0 ? 1 : 0), show: true },
       { label: "Goals", value: stats.goals_scored, points: getGoalPoints(player.position, stats.goals_scored), show: stats.goals_scored > 0 },
@@ -731,7 +784,6 @@ import Nav from "../components/Nav.astro";
       { label: "Yellow Card", value: stats.yellow_cards, points: stats.yellow_cards * -1, show: stats.yellow_cards > 0 },
       { label: "Red Card", value: stats.red_cards, points: stats.red_cards * -3, show: stats.red_cards > 0 },
       { label: "Bonus", value: stats.bonus, points: stats.bonus, show: stats.bonus > 0 },
-      // DEFCON - show for outfield players (DEF, MID, FWD)
       { 
         label: "DEFCON", 
         value: `${stats.defensive_contribution}/${defcon.threshold}`, 
@@ -774,7 +826,6 @@ import Nav from "../components/Nav.astro";
       let pointsDisplay: string = item.points > 0 ? `+${item.points}` : String(item.points);
       let valueClass = '';
       
-      // Special styling for DEFCON progress
       if (item.isProgress) {
         const achieved = item.points > 0;
         pointsClass = achieved ? 'points-positive' : 'points-pending';
@@ -793,8 +844,7 @@ import Nav from "../components/Nav.astro";
       `;
     }
 
-    // Show projected bonus if applicable
-    if (!finished && projBonus > 0) {
+    if (!isFinished && projBonus > 0) {
       html += `
         <div class="breakdown-row breakdown-row--projected">
           <span class="breakdown-label">Proj. Bonus</span>
@@ -820,16 +870,16 @@ import Nav from "../components/Nav.astro";
 
   function getGoalPoints(position: number, goals: number): number {
     if (goals === 0) return 0;
-    if (position === 1 || position === 2) return goals * 6; // GK/DEF
-    if (position === 3) return goals * 5; // MID
-    return goals * 4; // FWD
+    if (position === 1 || position === 2) return goals * 6;
+    if (position === 3) return goals * 5;
+    return goals * 4;
   }
 
   function getCleanSheetPoints(position: number, cleanSheets: number): number {
     if (cleanSheets === 0) return 0;
-    if (position === 1 || position === 2) return cleanSheets * 4; // GK/DEF
-    if (position === 3) return cleanSheets * 1; // MID
-    return 0; // FWD
+    if (position === 1 || position === 2) return cleanSheets * 4;
+    if (position === 3) return cleanSheets * 1;
+    return 0;
   }
 
   async function showSquadModal(entryId: number, managerName: string, teamName: string, chipPlayed: string, livePoints: number) {
@@ -976,7 +1026,6 @@ import Nav from "../components/Nav.astro";
 
       squadModalContent.innerHTML = html;
 
-      // Attach player click handlers
       squadModalContent.querySelectorAll('.player-name-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           const button = e.target as HTMLElement;
