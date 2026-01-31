@@ -21,6 +21,16 @@ const { title = "FPL Manager Data" } = Astro.props;
       <slot />
     </div>
   </body>
+
+<script is:inline>
+  // Initialize theme immediately to prevent flash
+  (function() {
+    const stored = localStorage.getItem('theme');
+    const theme = stored || 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+  })();
+</script>
+
 </html>
 
 <style is:global>
@@ -1049,16 +1059,21 @@ const { title = "FPL Manager Data" } = Astro.props;
     margin-right: var(--space-6);
   }
 
+  /*
   .breakdown-row--defcon {
     background: rgb(37 99 235 / 0.05);
     border-left: 3px solid var(--color-primary);
-  }
+  }*/
 
-  .breakdown-row--defcon .breakdown-label {
+  /*.breakdown-row--defcon .breakdown-label {
     font-weight: 600;
     color: var(--color-primary);
+  }*/
+  
+  .breakdown-row--defcon {
+    /* No special styling - same as other rows */
   }
-
+ 
   .value-progress {
     color: var(--color-warning);
     font-weight: 600;
