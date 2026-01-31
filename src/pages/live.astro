@@ -230,6 +230,11 @@ import Nav from "../components/Nav.astro";
     yellow_cards: number;
     red_cards: number;
     saves: number;
+    // DEFCON fields
+    clearances_blocks_interceptions: number;
+    recoveries: number;
+    tackles: number;
+    defensive_contribution: number;
   }
 
   interface FixtureInfo {
@@ -251,7 +256,6 @@ import Nav from "../components/Nav.astro";
   let projectedBonusCache = new Map<string, number>();
   let teamStatusCache = new Map<string, { started: boolean; finished: boolean }>();
   let fixturesCache: FixtureInfo[] = [];
-  let playerFixtureCache = new Map<number, FixtureInfo>();
 
   let autoRefreshInterval: ReturnType<typeof setInterval> | null = null;
   let autoRefreshEnabled = false;
@@ -335,7 +339,8 @@ import Nav from "../components/Nav.astro";
       points: 0, bonus: 0, minutes: 0, bps: 0,
       goals_scored: 0, assists: 0, clean_sheets: 0, goals_conceded: 0,
       own_goals: 0, penalties_saved: 0, penalties_missed: 0,
-      yellow_cards: 0, red_cards: 0, saves: 0
+      yellow_cards: 0, red_cards: 0, saves: 0,
+      clearances_blocks_interceptions: 0, recoveries: 0, tackles: 0, defensive_contribution: 0
     };
     const { started, finished } = getTeamGwStatus(teamId, gw);
 
@@ -470,7 +475,6 @@ import Nav from "../components/Nav.astro";
       fixturesCache = fixtures;
       teamStatusCache.clear();
       projectedBonusCache.clear();
-      playerFixtureCache.clear();
 
       const perTeam = new Map<number, { startedAny: boolean; finishedAll: boolean }>();
       function upsertTeam(teamId: number, started: boolean, finished: boolean) {
@@ -545,7 +549,12 @@ import Nav from "../components/Nav.astro";
           penalties_missed: Number(stats.penalties_missed) || 0,
           yellow_cards: Number(stats.yellow_cards) || 0,
           red_cards: Number(stats.red_cards) || 0,
-          saves: Number(stats.saves) || 0
+          saves: Number(stats.saves) || 0,
+          // DEFCON fields
+          clearances_blocks_interceptions: Number(stats.clearances_blocks_interceptions) || 0,
+          recoveries: Number(stats.recoveries) || 0,
+          tackles: Number(stats.tackles) || 0,
+          defensive_contribution: Number(stats.defensive_contribution) || 0
         });
       }
 
@@ -645,6 +654,18 @@ import Nav from "../components/Nav.astro";
     return fixturesCache.find(f => f.team_h === teamId || f.team_a === teamId) || null;
   }
 
+  // Calculate DEFCON points based on position and defensive actions
+  function calculateDefcon(position: number, defensiveContribution: number): { points: number; threshold: number } {
+    // GKs don't get DEFCON
+    if (position === 1) return { points: 0, threshold: 0 };
+    
+    // DEF: threshold 10, MID/FWD: threshold 12
+    const threshold = position === 2 ? 10 : 12;
+    const points = defensiveContribution >= threshold ? 2 : 0;
+    
+    return { points, threshold };
+  }
+
   function showPlayerModal(playerId: number) {
     const gw = parseInt(gwFilterSelect.value) || latestGW;
     const player = playerCache.get(playerId);
@@ -684,15 +705,20 @@ import Nav from "../components/Nav.astro";
       points: 0, bonus: 0, minutes: 0, bps: 0,
       goals_scored: 0, assists: 0, clean_sheets: 0, goals_conceded: 0,
       own_goals: 0, penalties_saved: 0, penalties_missed: 0,
-      yellow_cards: 0, red_cards: 0, saves: 0
+      yellow_cards: 0, red_cards: 0, saves: 0,
+      clearances_blocks_interceptions: 0, recoveries: 0, tackles: 0, defensive_contribution: 0
     };
 
     const projBonus = projectedBonusCache.get(`${gw}:${playerId}`) || 0;
     const isGK = player.position === 1;
     const isDef = player.position === 2;
+    const isMidFwd = player.position === 3 || player.position === 4;
+
+    // Calculate DEFCON
+    const defcon = calculateDefcon(player.position, stats.defensive_contribution);
 
     // Build points breakdown
-    const breakdown: { label: string; value: number; points: number; show: boolean }[] = [
+    const breakdown: { label: string; value: string | number; points: number; show: boolean; isProgress?: boolean }[] = [
       { label: "Minutes", value: stats.minutes, points: stats.minutes >= 60 ? 2 : (stats.minutes > 0 ? 1 : 0), show: true },
       { label: "Goals", value: stats.goals_scored, points: getGoalPoints(player.position, stats.goals_scored), show: stats.goals_scored > 0 },
       { label: "Assists", value: stats.assists, points: stats.assists * 3, show: stats.assists > 0 },
@@ -704,7 +730,15 @@ import Nav from "../components/Nav.astro";
       { label: "Own Goals", value: stats.own_goals, points: stats.own_goals * -2, show: stats.own_goals > 0 },
       { label: "Yellow Card", value: stats.yellow_cards, points: stats.yellow_cards * -1, show: stats.yellow_cards > 0 },
       { label: "Red Card", value: stats.red_cards, points: stats.red_cards * -3, show: stats.red_cards > 0 },
-      { label: "Bonus", value: stats.bonus, points: stats.bonus, show: stats.bonus > 0 }
+      { label: "Bonus", value: stats.bonus, points: stats.bonus, show: stats.bonus > 0 },
+      // DEFCON - show for outfield players (DEF, MID, FWD)
+      { 
+        label: "DEFCON", 
+        value: `${stats.defensive_contribution}/${defcon.threshold}`, 
+        points: defcon.points, 
+        show: !isGK && stats.minutes > 0,
+        isProgress: true
+      }
     ];
 
     let html = `
@@ -735,13 +769,25 @@ import Nav from "../components/Nav.astro";
 
     for (const item of breakdown) {
       if (!item.show) continue;
-      const pointsClass = item.points > 0 ? 'points-positive' : (item.points < 0 ? 'points-negative' : '');
-      const pointsDisplay = item.points > 0 ? `+${item.points}` : item.points;
+      
+      let pointsClass = item.points > 0 ? 'points-positive' : (item.points < 0 ? 'points-negative' : '');
+      let pointsDisplay: string = item.points > 0 ? `+${item.points}` : String(item.points);
+      let valueClass = '';
+      
+      // Special styling for DEFCON progress
+      if (item.isProgress) {
+        const achieved = item.points > 0;
+        pointsClass = achieved ? 'points-positive' : 'points-pending';
+        valueClass = achieved ? 'value-achieved' : 'value-progress';
+        if (!achieved) {
+          pointsDisplay = '—';
+        }
+      }
 
       html += `
-        <div class="breakdown-row">
+        <div class="breakdown-row ${item.isProgress ? 'breakdown-row--defcon' : ''}">
           <span class="breakdown-label">${item.label}</span>
-          <span class="breakdown-value">${item.value}</span>
+          <span class="breakdown-value ${valueClass}">${item.value}</span>
           <span class="breakdown-points ${pointsClass}">${pointsDisplay}</span>
         </div>
       `;
@@ -751,7 +797,7 @@ import Nav from "../components/Nav.astro";
     if (!finished && projBonus > 0) {
       html += `
         <div class="breakdown-row breakdown-row--projected">
-          <span class="breakdown-label">Projected Bonus</span>
+          <span class="breakdown-label">Proj. Bonus</span>
           <span class="breakdown-value">—</span>
           <span class="breakdown-points points-projected">+${projBonus}</span>
         </div>

@@ -1016,6 +1016,52 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ========================================
+     PLAYER MODAL - DEFCON & fixes
+ ======================================== */
+  .modal-panel--compact {
+    max-width: 340px;
+    padding-top: var(--space-6);
+  }
+
+  .player-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+    padding-right: var(--space-2);
+  }
+
+  .breakdown-row--defcon {
+    background: rgb(37 99 235 / 0.05);
+    border-left: 3px solid var(--color-primary);
+  }
+
+  .breakdown-row--defcon .breakdown-label {
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .value-progress {
+    color: var(--color-warning);
+    font-weight: 600;
+  }
+
+  .value-achieved {
+    color: var(--color-success);
+    font-weight: 700;
+  }
+
+  .points-pending {
+    color: var(--color-text-muted);
+  }
+
+  .points-projected {
+    color: var(--color-primary);
+    font-style: italic;
+  }
+
+  /* ========================================
      TABLES - Mobile-first with column dividers
      ======================================== */
   .table-container {
