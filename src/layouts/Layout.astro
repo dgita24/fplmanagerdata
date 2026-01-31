@@ -1020,7 +1020,13 @@ const { title = "FPL Manager Data" } = Astro.props;
  ======================================== */
   .modal-panel--compact {
     max-width: 340px;
-    padding-top: var(--space-6);
+  }
+
+  .modal-panel--compact .modal-close {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    z-index: 10;
   }
 
   .player-modal-header {
@@ -1030,6 +1036,17 @@ const { title = "FPL Manager Data" } = Astro.props;
     gap: var(--space-3);
     margin-bottom: var(--space-3);
     padding-right: var(--space-2);
+  }
+
+  .player-modal-points {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-primary);
+    border-radius: var(--radius-md);
+    color: white;
+    margin-right: var(--space-6);
   }
 
   .breakdown-row--defcon {
