@@ -1005,6 +1005,33 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ========================================
+   TRANSFERS TABLE - FT-based row colors
+   ======================================== */
+  .transfers-table .ft-high-row td {
+    color: var(--color-warning) !important;  /* Yellow - FTs 3, 4, 5 */
+  }
+
+  .transfers-table .ft-high-row a {
+    color: var(--color-warning) !important;
+  }
+
+  .transfers-table .ft-medium-row td {
+    color: var(--color-primary) !important;  /* Blue - FTs 2 */
+  }
+
+  .transfers-table .ft-medium-row a {
+    color: var(--color-primary) !important;
+  }
+
+  .transfers-table .ft-low-row td {
+    color: var(--color-danger) !important;  /* Red - FTs 1 */
+  }
+
+  .transfers-table .ft-low-row a {
+    color: var(--color-danger) !important;
+  }
+
+  /* ========================================
      LIVE TABLE - Highlights
      ======================================== */
   .live-table .hit-highlight {

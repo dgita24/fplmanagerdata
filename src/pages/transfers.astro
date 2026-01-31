@@ -568,6 +568,17 @@ import Nav from "../components/Nav.astro";
       const rowClass = isTopScorer ? 'top-scorer-row' : '';
       const hitClass = r.transferCost > 0 ? 'hit-highlight' : '';
 
+      // Determine FT-based row class
+      let ftRowClass = '';
+      const fts = Number(r.FTsForNextGW);
+      if (fts >= 3 && fts <= 5) {
+        ftRowClass = 'ft-high-row';      // Yellow
+      } else if (fts === 2) {
+        ftRowClass = 'ft-medium-row';    // Blue
+      } else if (fts === 1) {
+        ftRowClass = 'ft-low-row';       // Red
+      }
+
       html += `
         <tr class="${rowClass}">
           <td class="strong nowrap">
