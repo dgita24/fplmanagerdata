@@ -692,6 +692,63 @@ const { title = "FPL Manager Data" } = Astro.props;
     font-size: var(--text-xs) !important;
   }
 
+  /* ========================================
+   CHIPS TABLE - Compact with chip badges
+   ======================================== */
+  .chips-table {
+    font-size: 13px !important;
+  }
+
+  .chips-table th,
+  .chips-table td {
+    padding: 8px 6px !important;
+    vertical-align: middle;
+  }
+
+  .chips-table .manager-cell {
+    white-space: nowrap;
+  }
+
+  .chips-table .chips-cell {
+    line-height: 1.6;
+  }
+
+  .chip-used {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 6px;
+    margin: 2px;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .chip-used .chip-gw {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--color-text-muted);
+    margin-left: 2px;
+  }
+
+  .chip-remaining {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 6px;
+    margin: 2px;
+    background: rgb(22 163 74 / 0.1);
+    border: 1px solid rgb(22 163 74 / 0.2);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-success);
+    white-space: nowrap;
+  }
+
   /* ===================================================
      LIVE TABLE - Balanced columns with wrapping manager
      =================================================== */
