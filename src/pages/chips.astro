@@ -23,6 +23,14 @@ import Nav from "../components/Nav.astro";
 
     <section id="chips-output" aria-live="polite"></section>
   </main>
+
+  <!-- Chip Squad Modal -->
+  <div id="chip-modal" class="modal">
+    <div class="modal-panel">
+      <button id="close-chip-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="chip-modal-content"></div>
+    </div>
+  </div>
 </Layout>
 
 <style>
@@ -106,8 +114,44 @@ import Nav from "../components/Nav.astro";
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
+  const chipModal = document.getElementById("chip-modal");
+  const chipModalContent = document.getElementById("chip-modal-content");
+  const closeChipModal = document.getElementById("close-chip-modal");
 
   let managerIds = [];
+  let playerCache = new Map();
+  let teamCache = new Map();
+
+  closeChipModal.addEventListener("click", () => {
+    chipModal.classList.remove("is-open");
+  });
+
+  async function fetchBootstrapData() {
+    try {
+      const res = await fetch('/api/fpl/bootstrap-static');
+      if (!res.ok) throw new Error("Failed to fetch bootstrap data");
+      const data = await res.json();
+
+      data.elements.forEach(player => {
+        playerCache.set(player.id, {
+          name: player.web_name,
+          position: player.element_type === 1 ? "GK" :
+                    player.element_type === 2 ? "DEF" :
+                    player.element_type === 3 ? "MID" : "FWD",
+          teamId: player.team
+        });
+      });
+
+      data.teams.forEach(team => {
+        teamCache.set(team.id, team.short_name);
+      });
+
+      return data;
+    } catch (e) {
+      console.error("Error fetching bootstrap data:", e);
+      return null;
+    }
+  }
 
   async function fetchManagerData(id) {
     const historyUrl = `/api/fpl/entry/${id}/history`;
@@ -125,15 +169,22 @@ import Nav from "../components/Nav.astro";
       const summaryData = await summaryRes.json();
 
       const chips = historyData.chips || [];
+      const current = historyData.current || [];
       const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
 
-      const chipsFormatted = chips.map(c => ({
-        name: c.name === "wildcard" ? "WC" :
-              c.name === "bboost" ? "BB" :
-              c.name === "3xc" ? "TC" :
-              c.name === "freehit" ? "FH" : c.name,
-        gw: c.event
-      }));
+      const chipsFormatted = chips.map(c => {
+        const gwData = current.find(gw => gw.event === c.event);
+        const points = gwData ? gwData.points : 0;
+
+        return {
+          name: c.name === "wildcard" ? "WC" :
+                c.name === "bboost" ? "BB" :
+                c.name === "3xc" ? "TC" :
+                c.name === "freehit" ? "FH" : c.name,
+          gw: c.event,
+          points: points
+        };
+      });
 
       return {
         entryId: Number(id),
@@ -146,7 +197,142 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  function formatChipsUsed(chips) {
+  async function showChipSquad(managerId, managerName, chipName, gw, points) {
+    const chipEmoji = chipName === "WC" ? "🃏" : 
+                      chipName === "BB" ? "🪑" : 
+                      chipName === "TC" ? "👑" : 
+                      chipName === "FH" ? "🎯" : "";
+    
+    const chipFull = chipName === "WC" ? "Wildcard" : 
+                     chipName === "BB" ? "Bench Boost" : 
+                     chipName === "TC" ? "Triple Captain" : 
+                     chipName === "FH" ? "Free Hit" : chipName;
+
+    chipModalContent.innerHTML = `<p class="text-muted">Loading squad...</p>`;
+    chipModal.classList.add("is-open");
+
+    try {
+      const [picksRes, liveRes] = await Promise.all([
+        fetch(`/api/fpl/entry/${managerId}/event/${gw}/picks`),
+        fetch(`/api/fpl/event/${gw}/live`)
+      ]);
+
+      if (!picksRes.ok || !liveRes.ok) throw new Error("Failed to fetch data");
+
+      const picksData = await picksRes.json();
+      const liveData = await liveRes.json();
+
+      const livePoints = new Map();
+      (liveData.elements || []).forEach(el => {
+        livePoints.set(el.id, el.stats?.total_points || 0);
+      });
+
+      const picks = (picksData.picks || []).map(pick => {
+        const player = playerCache.get(pick.element) || { name: "Unknown", position: "?", teamId: 0 };
+        const teamName = teamCache.get(player.teamId) || "???";
+        const pts = livePoints.get(pick.element) || 0;
+
+        let multiplier = pick.multiplier || 1;
+        let displayPts = pts * multiplier;
+
+        return {
+          position: pick.position,
+          name: player.name,
+          posLabel: player.position,
+          team: teamName,
+          points: displayPts,
+          rawPoints: pts,
+          multiplier: multiplier,
+          isCaptain: pick.is_captain,
+          isViceCaptain: pick.is_vice_captain
+        };
+      }).sort((a, b) => a.position - b.position);
+
+      const starters = picks.filter(p => p.position <= 11);
+      const bench = picks.filter(p => p.position > 11);
+
+      let html = `
+        <h2 class="modal-title" style="padding-right:40px;">
+          ${chipEmoji} ${chipFull}
+        </h2>
+        <p class="text-muted" style="margin-bottom:var(--space-3);">
+          <strong>${managerName}</strong> · GW${gw} · <span class="text-success font-bold">${points} pts</span>
+        </p>
+
+        <div class="chip-squad-section">
+          <h3 class="chip-squad-heading">Starting XI</h3>
+          <table class="chip-squad-table">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th class="col-team">Team</th>
+                <th class="col-pts">Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      for (const p of starters) {
+        const capLabel = p.isCaptain ? '<span class="cap-badge cap-c">C</span>' : 
+                         p.isViceCaptain ? '<span class="cap-badge cap-v">V</span>' : '';
+        const ptsDisplay = p.multiplier > 1 ? `${p.rawPoints}×${p.multiplier}=${p.points}` : p.points;
+
+        html += `
+          <tr>
+            <td class="player-cell">
+              <span class="player-pos">${p.posLabel}</span>
+              <span class="player-name">${p.name}</span>
+              ${capLabel}
+            </td>
+            <td class="col-team">${p.team}</td>
+            <td class="col-pts">${ptsDisplay}</td>
+          </tr>
+        `;
+      }
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+
+        <div class="chip-squad-section">
+          <h3 class="chip-squad-heading">Bench</h3>
+          <table class="chip-squad-table bench-table">
+            <tbody>
+      `;
+
+      for (const p of bench) {
+        const ptsDisplay = chipName === "BB" && p.multiplier > 0 ? p.points : 
+                           `<span class="text-muted">${p.rawPoints}</span>`;
+        const rowClass = chipName === "BB" ? "" : "bench-inactive";
+
+        html += `
+          <tr class="${rowClass}">
+            <td class="player-cell">
+              <span class="player-pos">${p.posLabel}</span>
+              <span class="player-name">${p.name}</span>
+            </td>
+            <td class="col-team">${p.team}</td>
+            <td class="col-pts">${ptsDisplay}</td>
+          </tr>
+        `;
+      }
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      chipModalContent.innerHTML = html;
+
+    } catch (error) {
+      console.error("Error loading chip squad:", error);
+      chipModalContent.innerHTML = "<p class='status status--error'>Error loading squad data.</p>";
+    }
+  }
+
+  function formatChipsUsed(chips, managerId, managerName) {
     if (chips.length === 0) {
       return '<span class="text-muted">None</span>';
     }
@@ -157,7 +343,14 @@ import Nav from "../components/Nav.astro";
                     c.name === "BB" ? "🪑" : 
                     c.name === "TC" ? "👑" : 
                     c.name === "FH" ? "🎯" : "";
-      return `<span class="chip-used">${emoji} ${c.name} <span class="chip-gw">GW${c.gw}</span></span>`;
+      return `<button type="button" class="chip-used-btn" 
+                data-manager-id="${managerId}" 
+                data-manager-name="${managerName}"
+                data-chip="${c.name}" 
+                data-gw="${c.gw}"
+                data-points="${c.points}">
+                ${emoji} ${c.name} <span class="chip-gw">GW${c.gw}</span> <span class="chip-pts">(${c.points})</span>
+              </button>`;
     }).join(' ');
   }
 
@@ -205,7 +398,7 @@ import Nav from "../components/Nav.astro";
     const sorted = [...managersData].sort((a, b) => a.managerName.localeCompare(b.managerName));
 
     for (const m of sorted) {
-      const usedHtml = formatChipsUsed(m.chips);
+      const usedHtml = formatChipsUsed(m.chips, m.entryId, m.managerName);
       const remainingHtml = formatChipsRemaining(m.chips);
 
       html += `
@@ -229,6 +422,20 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
+  function attachChipButtons() {
+    document.querySelectorAll('.chip-used-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const button = e.target.closest('.chip-used-btn');
+        const managerId = button.dataset.managerId;
+        const managerName = button.dataset.managerName;
+        const chipName = button.dataset.chip;
+        const gw = parseInt(button.dataset.gw);
+        const points = parseInt(button.dataset.points);
+        showChipSquad(managerId, managerName, chipName, gw, points);
+      });
+    });
+  }
+
   async function loadChips(ids) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
@@ -250,6 +457,7 @@ import Nav from "../components/Nav.astro";
           loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
 
           out.innerHTML = makeChipsTable(allData);
+          attachChipButtons();
         }
       } catch (e) {
         console.error(`Failed to load manager ${id}:`, e);
@@ -271,6 +479,9 @@ import Nav from "../components/Nav.astro";
   }
 
   (async function init() {
+    loadingStatus.textContent = "Loading player data...";
+    await fetchBootstrapData();
+    
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
 
