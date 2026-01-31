@@ -832,7 +832,7 @@ import Nav from "../components/Nav.astro";
       { label: "Own Goals", value: stats.own_goals, points: stats.own_goals * -2, show: stats.own_goals > 0 },
       { label: "Yellow Card", value: stats.yellow_cards, points: stats.yellow_cards * -1, show: stats.yellow_cards > 0 },
       { label: "Red Card", value: stats.red_cards, points: stats.red_cards * -3, show: stats.red_cards > 0 },
-      { label: "Bonus", value: stats.bonus, points: stats.bonus, show: stats.bonus > 0 },
+      { label: "Bonus", value: stats.bonus || projBonus, points: stats.bonus || projBonus, show: (stats.bonus > 0) || (projBonus > 0 && isFinished) },
       { 
         label: "DEFCON", 
         value: `${stats.defensive_contribution}/${defcon.threshold}`, 
@@ -1008,6 +1008,7 @@ import Nav from "../components/Nav.astro";
       
         const mult = p.multiplier || 0;
         const isSubbedOut = p.autoSubStatus === 'OUT';
+        const isNotStarted = p.status === "NS";  // NEW: detect not started
         const displayPts = isSubbedOut ? 0 : Math.round(p.liveTotal * (mult || 1));
         const ptsText = mult > 1 ? `${p.liveTotal}×${mult}` : String(displayPts);
 
@@ -1017,8 +1018,10 @@ import Nav from "../components/Nav.astro";
         if (isSubbedOut) {
           rowClass = "sub-off-row";
           statusBadge = `<span class="status-badge status-dnp">DNP</span>`;
+        } else if (isNotStarted) {
+          rowClass = "not-started-row";  // NEW: this line to
         }
-
+      
         html += `
           <tr class="${rowClass}">
             <td class="player-cell">
