@@ -493,12 +493,10 @@ import Nav from "../components/Nav.astro";
 
     // Find highest GW score for highlighting
     let maxGwPoints = -Infinity;
-    let maxGwEntryId = null;
     if (filterGW !== null && filterGW !== "") {
       rows.forEach(r => {
         if (r.gwPoints > maxGwPoints) {
           maxGwPoints = r.gwPoints;
-          maxGwEntryId = r.entryId;
         }
       });
     }
@@ -510,10 +508,10 @@ import Nav from "../components/Nav.astro";
             <thead>
               <tr>
                 <th>Manager</th>
-                <th class="num" style="width:40px;">Hit</th>
-                <th class="num" style="width:45px;">GW Pts</th>
-                <th class="num" style="width:50px;">Total</th>
-                <th class="num" style="width:45px;">FTs</th>
+                <th class="hit-col">Hit</th>
+                <th class="gwpts-col">GW Pts</th>
+                <th class="total-col">Total</th>
+                <th class="fts-col">FTs</th>
               </tr>
             </thead>
             <tbody>

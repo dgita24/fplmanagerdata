@@ -639,9 +639,9 @@ const { title = "FPL Manager Data" } = Astro.props;
     font-weight: 400;
   }
 
-    /* ========================================
+  /* ========================================
      CAPTAIN TABLE - Squads page captain/VC view
-     ======================================== */
+   ======================================== */
   .captain-table {
     font-size: 13px !important;
   }
@@ -666,39 +666,96 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .captain-table .team-col {
+    width: 50px !important;
     text-align: center !important;
     font-size: var(--text-xs) !important;
   }
 
   .captain-table .pts-col {
+    width: 50px !important;
     text-align: center !important;
     font-weight: 700 !important;
   }
 
-  /* Mobile ONLY: fixed layout with explicit widths */
+  /* Mobile ONLY: fixed layout */
   @media (max-width: 639px) {
     .captain-table {
       table-layout: fixed !important;
       width: 100% !important;
     }
-
-    .captain-table .team-col {
-      width: 50px !important;
-      min-width: 50px !important;
-    }
-
-    .captain-table .pts-col {
-      width: 50px !important;
-      min-width: 50px !important;
-    }
   }
 
-  /* Desktop ONLY: natural auto layout, NO width rules */
+  /* Desktop ONLY: natural auto layout with auto widths */
   @media (min-width: 640px) {
     .captain-table {
       table-layout: auto !important;
     }
-  }  
+
+    .captain-table .team-col,
+    .captain-table .pts-col {
+      width: auto !important;
+    }
+  }
+
+
+  /* ========================================
+     TRANSFERS TABLE - Balanced columns
+   ======================================== */
+  .transfers-table {
+    font-size: 13px !important;
+  }
+
+  .transfers-table th,
+  .transfers-table td {
+    padding: 6px 8px !important;
+  }
+
+  .transfers-table th {
+    white-space: nowrap !important;
+  }
+
+  .transfers-table .hit-col {
+    width: 40px !important;
+    text-align: center !important;
+  }
+
+  .transfers-table .gwpts-col {
+    width: 50px !important;
+    text-align: center !important;
+  }
+
+  .transfers-table .total-col {
+    width: 55px !important;
+    text-align: center !important;
+  }
+
+  .transfers-table .fts-col {
+    width: 45px !important;
+    text-align: center !important;
+    font-weight: 700 !important;
+  }
+
+  /* Mobile ONLY: fixed layout */
+  @media (max-width: 639px) {
+    .transfers-table {
+      table-layout: fixed !important;
+      width: 100% !important;
+    }
+  }
+
+  /* Desktop ONLY: natural auto layout with auto widths */
+  @media (min-width: 640px) {
+    .transfers-table {
+      table-layout: auto !important;
+    }
+
+    .transfers-table .hit-col,
+    .transfers-table .gwpts-col,
+    .transfers-table .total-col,
+    .transfers-table .fts-col {
+      width: auto !important;
+    }
+  }
 
   /* ========================================
      OWNERSHIP TABLE - Balanced compact columns
