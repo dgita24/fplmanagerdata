@@ -342,20 +342,43 @@ import Nav from "../components/Nav.astro";
       clearances_blocks_interceptions: 0, recoveries: 0, tackles: 0, defensive_contribution: 0
     };
     const { started, finished, finishedProvisional } = getTeamGwStatus(teamId, gw);
-    
-    // Treat finishedProvisional as finished for auto-sub and points purposes
-    const isFinished = finished || finishedProvisional;
+  
+    // For auto-subs, treat provisional as finished (player won't play more)
+    const isFinishedForSubs = finished || finishedProvisional;
+  
+    // For bonus points, only use confirmed bonus when FULLY finished (not provisional)
+    // Because FPL doesn't add bonus to total_points until fully confirmed
+    const bonusConfirmed = finished;
 
     const officialTotal = Number(live.points) || 0;
     const confirmedBonus = Number(live.bonus) || 0;
     const minutes = Number(live.minutes) || 0;
 
-    const locked = isFinished ? officialTotal : (officialTotal - confirmedBonus);
-    const projBonus = isFinished ? 0 : (Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0);
-    const liveTotal = locked + projBonus;
+    let liveTotal: number;
+    let projBonus: number;
 
-    const status = isFinished ? "Fin" : (started ? "Live" : "NS");
-    return { locked, projBonus, liveTotal, status, minutes, confirmedBonus };
+    if (bonusConfirmed) {
+      // Fully finished - official total includes bonus
+      liveTotal = officialTotal;
+      projBonus = 0;
+    } else if (finishedProvisional) {
+      // Provisional - bonus not yet in official total, use projected
+      const basePoints = officialTotal - confirmedBonus; // Remove any partial bonus
+      projBonus = Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0;
+      liveTotal = basePoints + projBonus;
+    } else if (started) {
+      // Live match - use projected bonus
+      const basePoints = officialTotal - confirmedBonus;
+      projBonus = Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0;
+      liveTotal = basePoints + projBonus;
+    } else {
+      // Not started
+      liveTotal = 0;
+      projBonus = 0;
+    }
+
+    const status = isFinishedForSubs ? "Fin" : (started ? "Live" : "NS");
+    return { locked: liveTotal - projBonus, projBonus, liveTotal, status, minutes, confirmedBonus };
   }
 
   function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) {
@@ -572,7 +595,7 @@ import Nav from "../components/Nav.astro";
         upsertTeam(fx.team_a, fx.started, fx.finished, fx.finished_provisional);
 
         // Only calculate projected bonus for truly live matches (not finished or provisional)
-        if (!fx.started || fx.finished || fx.finished_provisional) continue;
+        if (!fx.started || fx.finished) continue;
 
         const stats = (fx as any).stats;
         if (!Array.isArray(stats)) continue;
