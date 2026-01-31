@@ -20,8 +20,8 @@ const navLinks = [
     <div id="nav-menu" class="nav-menu">
       <div class="nav-menu-header">
         <a href="/" class="nav-brand">FPL Manager Watch</a>
-        <div class="nav-menu-header-actions">
-          <div id="nav-auth-mobile"></div>
+        <div class="nav-menu-header-right">
+          <span id="nav-auth-mobile"></span>
           <button id="menu-close" class="menu-close" type="button" aria-label="Close menu">✕</button>
         </div>
       </div>
@@ -37,10 +37,8 @@ const navLinks = [
         ))}
       </ul>
 
-      <div class="nav-divider"></div>
-
       <div class="theme-toggle-row">
-        <span class="nav-link">
+        <span class="nav-link nav-link--no-hover">
           <span class="nav-link-emoji">🎨</span>
           Theme
         </span>
@@ -51,9 +49,8 @@ const navLinks = [
         </button>
       </div>
 
-      <div class="nav-divider nav-divider--desktop"></div>
-
-      <div class="nav-auth" id="nav-auth">
+      <!-- Desktop only auth -->
+      <div class="nav-auth-desktop" id="nav-auth-desktop">
         <a href="/login" class="btn btn--neutral btn--small">Login</a>
       </div>
     </div>
@@ -162,10 +159,10 @@ const navLinks = [
     justify-content: space-between;
     padding-bottom: var(--space-3);
     border-bottom: 1px solid var(--color-border);
-    margin-bottom: var(--space-3);
+    margin-bottom: var(--space-2);
   }
 
-  .nav-menu-header-actions {
+  .nav-menu-header-right {
     display: flex;
     align-items: center;
     gap: var(--space-2);
@@ -193,7 +190,6 @@ const navLinks = [
     display: flex;
     flex-direction: column;
     gap: 0;
-    flex: 1;
   }
 
   .nav-link {
@@ -214,36 +210,23 @@ const navLinks = [
     text-decoration: none;
   }
 
+  .nav-link--no-hover:hover {
+    background: transparent;
+    cursor: default;
+  }
+
   .nav-link-emoji {
     font-size: var(--text-lg);
     width: 24px;
     text-align: center;
   }
 
-  .nav-divider {
-    height: 1px;
-    background: var(--color-border);
-    margin: var(--space-2) 0;
-  }
-
-  .nav-auth {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) var(--space-3);
-  }
-
-  .nav-user {
-    font-size: var(--text-base);
-    font-weight: 500;
-    color: var(--color-text);
-  }
-
   .theme-toggle-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-1) 0;
+    padding: var(--space-2) var(--space-3);
+    margin-top: 0;
   }
 
   .theme-toggle-btn {
@@ -292,28 +275,20 @@ const navLinks = [
     background: var(--color-surface);
     border-radius: 50%;
     box-shadow: var(--shadow-sm);
-    transition: transform var(--transition-base);
+    transition: left var(--transition-base);
   }
 
   :global([data-theme="light"]) .theme-toggle-slider {
     left: 3px;
   }
 
-  /* Hide mobile auth on desktop, show desktop auth */
-  #nav-auth-mobile {
-    display: block;
-  }
-
-  #nav-auth {
-    display: block;
+  /* Hide desktop auth on mobile */
+  .nav-auth-desktop {
+    display: none;
   }
 
   @media (min-width: 768px) {
     .menu-toggle {
-      display: none;
-    }
-
-    #nav-auth-mobile {
       display: none;
     }
 
@@ -335,7 +310,6 @@ const navLinks = [
     .nav-links {
       flex-direction: row;
       gap: var(--space-1);
-      flex: unset;
     }
 
     .nav-link {
@@ -349,14 +323,6 @@ const navLinks = [
       width: auto;
     }
 
-    .nav-divider {
-      display: none;
-    }
-
-    .nav-divider--desktop {
-      display: none;
-    }
-
     .theme-toggle-row {
       padding: 0;
     }
@@ -365,8 +331,10 @@ const navLinks = [
       display: none;
     }
 
-    .nav-auth {
-      padding: 0;
+    .nav-auth-desktop {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
     }
   }
 </style>
@@ -394,7 +362,7 @@ const navLinks = [
   menuClose?.addEventListener('click', closeMenu);
 
   navMenu?.querySelectorAll('.nav-link').forEach(link => {
-    if (link.closest('.theme-toggle-row')) return;
+    if (link.classList.contains('nav-link--no-hover')) return;
     link.addEventListener('click', closeMenu);
   });
 
@@ -419,45 +387,43 @@ const navLinks = [
     setTheme(newTheme);
   });
 
-  const navAuth = document.getElementById('nav-auth');
   const navAuthMobile = document.getElementById('nav-auth-mobile');
+  const navAuthDesktop = document.getElementById('nav-auth-desktop');
 
   async function updateAuthUI() {
     const { data: { user } } = await supabase.auth.getUser();
 
-    const logoutHtml = `
-      <button id="logout-btn-mobile" class="btn btn--danger btn--small" type="button">Logout</button>
-    `;
-
-    const loginHtml = `
-      <a href="/login" class="btn btn--neutral btn--small">Login</a>
-    `;
-
     if (user) {
-      // Mobile: show logout in header
+      // Mobile: logout button in header (next to X)
       if (navAuthMobile) {
-        navAuthMobile.innerHTML = logoutHtml;
+        navAuthMobile.innerHTML = `
+          <button id="logout-btn-mobile" class="btn btn--danger btn--small" type="button">Logout</button>
+        `;
         document.getElementById('logout-btn-mobile')?.addEventListener('click', async () => {
           await supabase.auth.signOut();
           window.location.href = '/login';
         });
       }
 
-      // Desktop: show user + logout
-      if (navAuth) {
-        navAuth.innerHTML = `
+      // Desktop: user + logout
+      if (navAuthDesktop) {
+        navAuthDesktop.innerHTML = `
           <span class="nav-user">${user.email?.split('@')[0] || 'User'}</span>
-          <button id="logout-btn" class="btn btn--neutral btn--small" type="button">Logout</button>
+          <button id="logout-btn-desktop" class="btn btn--neutral btn--small" type="button">Logout</button>
         `;
-
-        document.getElementById('logout-btn')?.addEventListener('click', async () => {
+        document.getElementById('logout-btn-desktop')?.addEventListener('click', async () => {
           await supabase.auth.signOut();
           window.location.href = '/login';
         });
       }
     } else {
-      if (navAuthMobile) navAuthMobile.innerHTML = '';
-      if (navAuth) navAuth.innerHTML = loginHtml;
+      // Not logged in
+      if (navAuthMobile) {
+        navAuthMobile.innerHTML = '';
+      }
+      if (navAuthDesktop) {
+        navAuthDesktop.innerHTML = `<a href="/login" class="btn btn--neutral btn--small">Login</a>`;
+      }
     }
   }
 

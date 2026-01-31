@@ -36,8 +36,9 @@ import Nav from "../components/Nav.astro";
             <li>Click "Save" — IDs sync across all devices</li>
           </ol>
           <p class="tip tip--compact">
-            <strong>Tip:</strong> Find EntryID in the FPL URL: <code>fantasy.premierleague.com/entry/<strong>1234</strong>/event/01</code>
+            <strong>Tip:</strong> Find EntryID in the FPL URL:
           </p>
+          <code class="code-block code-block--compact">fantasy.premierleague.com/entry/<strong>1234</strong>/event/01</code>
         </div>
       </section>
 
@@ -62,8 +63,8 @@ import Nav from "../components/Nav.astro";
 
               <div class="ids-actions">
                 <span class="ids-count">Managers: <strong id="count">0</strong></span>
-                <button type="button" id="edit-btn" class="btn btn--neutral">✏️ Edit</button>
-                <button type="submit" id="save-btn" class="btn btn--success" disabled>💾 Save</button>
+                <button type="button" id="edit-btn" class="btn btn--neutral btn--full-width">✏️ Edit</button>
+                <button type="submit" id="save-btn" class="btn btn--success btn--full-width" disabled>💾 Save</button>
               </div>
             </div>
           </form>
@@ -91,6 +92,8 @@ import Nav from "../components/Nav.astro";
 
   .help-list--compact {
     padding-left: var(--space-4);
+    display: flex;
+    flex-direction: column;
     gap: var(--space-1);
     font-size: var(--text-xs);
     color: var(--color-text-secondary);
@@ -100,59 +103,58 @@ import Nav from "../components/Nav.astro";
   .tip--compact {
     font-size: var(--text-xs);
     margin-top: 0;
+    margin-bottom: var(--space-1);
   }
 
-  .tip--compact code {
+  .code-block--compact {
+    display: block;
+    padding: var(--space-2);
+    font-family: var(--font-mono);
     font-size: var(--text-xs);
     background: var(--color-surface-alt);
-    padding: 1px 4px;
     border-radius: var(--radius-sm);
-  }
-
-  .help-list {
-    padding-left: var(--space-5);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    font-size: var(--text-sm);
-    color: var(--color-text-secondary);
-  }
-
-  .tip {
-    margin-top: var(--space-4);
-    font-size: var(--text-sm);
+    word-break: break-all;
+    overflow-wrap: break-word;
   }
 
   .ids-layout {
     display: flex;
-    gap: var(--space-3);
+    flex-direction: row;
+    gap: var(--space-4);
     margin-top: var(--space-2);
+    align-items: flex-start;
   }
 
   .ids-textarea-wrapper {
-    flex: 1;
-    max-width: 200px;
+    width: 140px;
+    flex-shrink: 0;
   }
 
   .ids-textarea-wrapper .textarea {
     width: 100%;
     font-size: var(--text-sm);
+    min-height: 200px;
   }
 
   .ids-actions {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    min-width: 100px;
+    width: 120px;
   }
 
   .ids-count {
     font-size: var(--text-sm);
     color: var(--color-text-secondary);
+    margin-bottom: var(--space-1);
   }
 
   .ids-count strong {
     color: var(--color-success);
+  }
+
+  .btn--full-width {
+    width: 100%;
   }
 
   .textarea:disabled {
@@ -161,18 +163,24 @@ import Nav from "../components/Nav.astro";
     cursor: not-allowed;
   }
 
-  @media (max-width: 400px) {
+  @media (max-width: 360px) {
     .ids-layout {
       flex-direction: column;
     }
 
     .ids-textarea-wrapper {
-      max-width: 100%;
+      width: 100%;
     }
 
     .ids-actions {
       flex-direction: row;
       flex-wrap: wrap;
+      width: 100%;
+    }
+
+    .ids-actions .btn--full-width {
+      flex: 1;
+      min-width: 80px;
     }
   }
 </style>
@@ -283,7 +291,6 @@ import Nav from "../components/Nav.astro";
     editBtn.textContent = editing ? '❌ Cancel' : '✏️ Edit'
     
     if (!editing) {
-      // Reload original values on cancel
       loadManagerIds()
       status.innerHTML = ''
     }
