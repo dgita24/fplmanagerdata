@@ -569,7 +569,7 @@ import Nav from "../components/Nav.astro";
       const hitClass = r.transferCost > 0 ? 'hit-highlight' : '';
 
       // Determine FT-based row class
-      let ftRowClass = '';
+      let RowClass = '';
       const fts = Number(r.FTsForNextGW);
       if (fts >= 3 && fts <= 5) {
         ftRowClass = 'ft-high-row';      // Yellow
