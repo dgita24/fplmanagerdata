@@ -564,6 +564,168 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ========================================
+     TRANSFER HISTORY MODAL - Compact list
+   ======================================== */
+  .transfer-history-list {
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .transfer-gw-row {
+    border-bottom: 1px solid var(--color-border);
+    padding: var(--space-2) 0;
+  }
+
+  .transfer-gw-row:last-child {
+    border-bottom: none;
+  }
+
+  .transfer-gw-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-1);
+  }
+
+  .transfer-gw-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .transfer-hit-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--color-danger);
+    background: rgb(220 38 38 / 0.1);
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+  }
+
+  .transfer-gw-content {
+    padding-left: var(--space-2);
+  }
+
+  .transfer-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 4px 0;
+    font-size: 13px;
+    flex-wrap: wrap;
+  }
+
+  .transfer-out {
+    color: var(--color-danger);
+    font-weight: 600;
+  }
+
+  .transfer-arrow {
+    color: var(--color-text-muted);
+    font-size: 11px;
+  }
+
+  .transfer-in {
+    color: var(--color-success);
+    font-weight: 600;
+  }
+
+  .transfer-chip-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .transfer-chip-btn:hover {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: white;
+  }
+
+  .transfer-chip-btn:hover .chip-view-text {
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .chip-view-text {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--color-text-muted);
+  }
+
+  /* Chip transfers modal grid */
+  .chip-transfers-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+  }
+
+  @media (max-width: 400px) {
+    .chip-transfers-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .chip-transfer-section {
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .chip-transfer-section--out {
+    border: 1px solid rgb(220 38 38 / 0.3);
+  }
+
+  .chip-transfer-section--in {
+    border: 1px solid rgb(22 163 74 / 0.3);
+  }
+
+  .chip-transfer-header {
+    padding: var(--space-2) var(--space-3);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .chip-transfer-section--out .chip-transfer-header {
+    background: rgb(220 38 38 / 0.1);
+    color: var(--color-danger);
+  }
+
+  .chip-transfer-section--in .chip-transfer-header {
+    background: rgb(22 163 74 / 0.1);
+    color: var(--color-success);
+  }
+
+  .chip-transfer-list {
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .chip-transfer-item {
+    padding: var(--space-1) var(--space-3);
+    font-size: 12px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .chip-transfer-section--out .chip-transfer-item {
+    color: var(--color-danger);
+  }
+
+  .chip-transfer-section--in .chip-transfer-item {
+    color: var(--color-success);
+  }
+
+  /* ========================================
      MODAL
      ======================================== */
   .modal {
