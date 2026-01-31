@@ -373,104 +373,119 @@ import Nav from "../components/Nav.astro";
 
       return sorted.map(p => ({
         ...p,
-        multiplier: capId && p.playerId === capId ? capFactor : 1
+        multiplier: capId && p.playerId === capId ? capFactor : 1,
+        autoSubStatus: null // No auto-subs with Bench Boost
       }));
     }
 
-    // Build active team: starters who played OR whose match isn't finished yet
-    let active = starters.filter(p => !(p.minutes === 0 && p.status === "Fin"));
-    const benchRemaining: any[] = [];
+    // Track which starters didn't play and which bench players subbed in
+    const dnpStarters: number[] = []; // playerIds of starters who didn't play
+    const subbedIn: number[] = []; // playerIds of bench players who subbed in
 
-    // Process bench in strict order (position 12, 13, 14, 15)
-    for (let i = 0; i < bench.length; i++) {
-      const cand = bench[i];
-      
-      // Do we need a sub?
-      if (active.length >= 11) {
-        benchRemaining.push(cand);
-        continue;
+    // Separate GK and outfield starters
+    const gkStarter = starters.find(p => p.playingPosition === "GK");
+    const outfieldStarters = starters.filter(p => p.playingPosition !== "GK");
+
+    // Separate GK and outfield bench
+    const gkBench = bench.filter(p => p.playingPosition === "GK");
+    const outfieldBench = bench.filter(p => p.playingPosition !== "GK");
+
+    // Check if GK played
+    let activeGK = gkStarter;
+    const gkDnp = gkStarter && gkStarter.minutes === 0 && gkStarter.status === "Fin";
+  
+    if (gkDnp && gkStarter) {
+      dnpStarters.push(gkStarter.playerId);
+      // Try to sub in bench GK
+      const benchGK = gkBench.find(p => !(p.minutes === 0 && p.status === "Fin"));
+      if (benchGK) {
+        activeGK = benchGK;
+        subbedIn.push(benchGK.playerId);
+      } else {
+        activeGK = null; // No valid GK sub
       }
+    }
+
+    // Process outfield starters - identify who didn't play
+    let activeOutfield = outfieldStarters.filter(p => !(p.minutes === 0 && p.status === "Fin"));
+    const outfieldDnp = outfieldStarters.filter(p => p.minutes === 0 && p.status === "Fin");
+  
+    for (const dnp of outfieldDnp) {
+      dnpStarters.push(dnp.playerId);
+    }
+
+    // Process outfield bench in order to fill spots
+    for (const cand of outfieldBench) {
+      // Do we need more outfield players? (10 outfield needed)
+      if (activeOutfield.length >= 10) break;
 
       // Check candidate's match status
       const matchFinished = cand.status === "Fin";
 
-      // If candidate's match hasn't finished, STOP - they block all subsequent subs
-      if (!matchFinished) {
-        benchRemaining.push(cand);
-        for (let j = i + 1; j < bench.length; j++) {
-          benchRemaining.push(bench[j]);
-        }
-        break;
-      }
+      // If match hasn't finished, STOP - they block subsequent subs
+      if (!matchFinished) break;
 
-      // Match is finished - did they play?
-      const candPlayed = cand.minutes > 0;
-      
-      if (!candPlayed) {
-        // DNP - skip them, try next bench player
-        benchRemaining.push(cand);
-        continue;
-      }
+      // Did they play?
+      if (cand.minutes === 0) continue; // DNP, skip to next
 
-      // Candidate played - check formation validity
-      const testTeam = [...active, cand];
-      const gkCount = testTeam.filter(p => p.playingPosition === "GK").length;
-      const defCount = testTeam.filter(p => p.playingPosition === "DEF").length;
-      const midCount = testTeam.filter(p => p.playingPosition === "MID").length;
-      const fwdCount = testTeam.filter(p => p.playingPosition === "FWD").length;
+      // Check formation validity
+      const testOutfield = [...activeOutfield, cand];
+      const defCount = testOutfield.filter(p => p.playingPosition === "DEF").length;
+      const midCount = testOutfield.filter(p => p.playingPosition === "MID").length;
+      const fwdCount = testOutfield.filter(p => p.playingPosition === "FWD").length;
 
-      const spotsLeft = 11 - testTeam.length;
+      const spotsLeft = 10 - testOutfield.length;
 
       if (spotsLeft === 0) {
-        // Team complete - verify valid formation
-        const isValid = gkCount === 1 && defCount >= 3 && midCount >= 2 && fwdCount >= 1;
+        // Would complete the outfield - verify valid formation
+        const isValid = defCount >= 3 && midCount >= 2 && fwdCount >= 1;
         if (isValid) {
-          active = testTeam;
-        } else {
-          benchRemaining.push(cand);
+          activeOutfield = testOutfield;
+          subbedIn.push(cand.playerId);
         }
       } else {
-        // Team not complete - check if remaining bench can fill requirements
-        const needGK = Math.max(0, 1 - gkCount);
+        // Still need more players - check if we can complete formation
         const needDef = Math.max(0, 3 - defCount);
         const needMid = Math.max(0, 2 - midCount);
         const needFwd = Math.max(0, 1 - fwdCount);
 
-        // Find remaining usable bench (finished AND played, AND before any pending player)
+        // Find remaining usable outfield bench
+        const remainingIdx = outfieldBench.indexOf(cand);
         let usableBench: any[] = [];
-        for (let j = i + 1; j < bench.length; j++) {
-          const p = bench[j];
-          if (p.status !== "Fin") break; // Stop at first pending player
+        for (let j = remainingIdx + 1; j < outfieldBench.length; j++) {
+          const p = outfieldBench[j];
+          if (p.status !== "Fin") break;
           if (p.minutes > 0) usableBench.push(p);
         }
 
-        const availGK = usableBench.filter(p => p.playingPosition === "GK").length;
         const availDef = usableBench.filter(p => p.playingPosition === "DEF").length;
         const availMid = usableBench.filter(p => p.playingPosition === "MID").length;
         const availFwd = usableBench.filter(p => p.playingPosition === "FWD").length;
 
-        const canComplete = availGK >= needGK && 
-                          availDef >= needDef && 
-                          availMid >= needMid && 
-                          availFwd >= needFwd &&
-                          usableBench.length >= spotsLeft;
+        const canComplete = availDef >= needDef && 
+                           availMid >= needMid && 
+                           availFwd >= needFwd &&
+                           usableBench.length >= spotsLeft;
 
         if (canComplete) {
-          active = testTeam;
-        } else {
-          benchRemaining.push(cand);
+          activeOutfield = testOutfield;
+          subbedIn.push(cand.playerId);
         }
       }
     }
 
-    // Captain logic
+    // Build final active team
+    const active: any[] = [];
+    if (activeGK) active.push(activeGK);
+    active.push(...activeOutfield);
+
+    // Determine captain
     const origCap = sorted.find(p => p.is_captain)?.playerId ?? null;
     const origVC = sorted.find(p => p.is_vice_captain)?.playerId ?? null;
 
     const capInActive = origCap !== null && active.some(p => p.playerId === origCap);
     const vcInActive = origVC !== null && active.some(p => p.playerId === origVC);
 
-    // Captain played if in active AND (played OR match pending)
     const capPlayed = capInActive && active.some(p => 
       p.playerId === origCap && (p.minutes > 0 || p.status !== "Fin")
     );
@@ -480,14 +495,25 @@ import Nav from "../components/Nav.astro";
 
     const captainId = capPlayed ? origCap : (vcPlayed ? origVC : null);
 
-    const activeWithMult = active.map(p => ({
-      ...p,
-      multiplier: captainId && p.playerId === captainId ? capFactor : 1
-    }));
+    // Return ALL players with their status
+    return sorted.map(p => {
+      const isActive = active.some(a => a.playerId === p.playerId);
+      const isDnpStarter = dnpStarters.includes(p.playerId);
+      const isSubbedIn = subbedIn.includes(p.playerId);
+    
+      let multiplier = 0;
+      if (isActive) {
+        multiplier = (captainId && p.playerId === captainId) ? capFactor : 1;
+      }
 
-    const benchWithMult = benchRemaining.map(p => ({ ...p, multiplier: 0 }));
-    return [...activeWithMult, ...benchWithMult];
+      return {
+        ...p,
+        multiplier,
+        autoSubStatus: isDnpStarter ? 'OUT' : (isSubbedIn ? 'IN' : null)
+      };
+    });
   }
+  
 
   async function fetchBootstrapData() {
     try {
@@ -882,6 +908,7 @@ import Nav from "../components/Nav.astro";
     return 0;
   }
 
+  
   async function showSquadModal(entryId: number, managerName: string, teamName: string, chipPlayed: string, livePoints: number) {
     const gw = parseInt(gwFilterSelect.value) || latestGW;
 
@@ -919,10 +946,11 @@ import Nav from "../components/Nav.astro";
       });
 
       const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+    
+      // Keep original positions for display
       const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
-
-      const starters = sorted.slice(0, 11);
-      const bench = sorted.slice(11);
+      const originalStarters = sorted.slice(0, 11);
+      const originalBench = sorted.slice(11);
 
       const chipEmoji = chipPlayed === "WC" ? "🃏" : 
                         chipPlayed === "BB" ? "🪑" : 
@@ -951,33 +979,50 @@ import Nav from "../components/Nav.astro";
             <tbody>
       `;
 
-      for (const p of starters) {
+      for (const p of originalStarters) {
         const capLabel = p.is_captain ? '<span class="cap-badge cap-c">C</span>' : 
                          p.is_vice_captain ? '<span class="cap-badge cap-v">V</span>' : '';
-        
-        const mult = p.multiplier || 1;
-        const displayPts = Math.round(p.liveTotal * mult);
+      
+        const mult = p.multiplier || 0;
+        const isSubbedOut = p.autoSubStatus === 'OUT';
+        const displayPts = isSubbedOut ? 0 : Math.round(p.liveTotal * (mult || 1));
         const ptsText = mult > 1 ? `${p.liveTotal}×${mult}` : String(displayPts);
 
-        const isSubOn = p.position > 11 && mult > 0;
-        const isSubOff = p.position <= 11 && mult === 0;
-        const isDnp = p.minutes === 0 && p.status === "Fin";
-
         let rowClass = "";
-        if (isSubOn) rowClass = "sub-on-row";
-        else if (isSubOff) rowClass = "sub-off-row";
-        else if (isDnp) rowClass = "dnp-row";
-
         let statusBadge = "";
-        if (isSubOn) statusBadge = `<span class="status-badge status-on">ON</span>`;
+      
+        if (isSubbedOut) {
+          rowClass = "sub-off-row";
+          statusBadge = `<span class="status-badge status-dnp">DNP</span>`;
+        }
 
         html += `
           <tr class="${rowClass}">
             <td class="player-cell">
               <span class="player-pos">${p.playingPosition}</span>
-              <button type="button" class="player-name-btn" data-player-id="${p.playerId}">${p.web_name}</button>
+              <button type="button" class="player-name-btn ${isSubbedOut ? 'player-dnp' : ''}" data-player-id="${p.playerId}">${p.web_name}</button>
               ${capLabel}
               ${statusBadge}
+            </td>
+            <td class="col-team">${p.teamShort}</td>
+            <td class="col-pts ${isSubbedOut ? 'text-muted' : ''}">${ptsText}</td>
+          </tr>
+        `;
+      }
+
+      // Show auto-subs who came on (from bench)
+      const subbedInPlayers = originalBench.filter(p => p.autoSubStatus === 'IN');
+      for (const p of subbedInPlayers) {
+        const mult = p.multiplier || 1;
+        const displayPts = Math.round(p.liveTotal * mult);
+        const ptsText = mult > 1 ? `${p.liveTotal}×${mult}` : String(displayPts);
+
+        html += `
+          <tr class="sub-on-row">
+            <td class="player-cell">
+              <span class="player-pos">${p.playingPosition}</span>
+              <button type="button" class="player-name-btn" data-player-id="${p.playerId}">${p.web_name}</button>
+              <span class="status-badge status-on">ON</span>
             </td>
             <td class="col-team">${p.teamShort}</td>
             <td class="col-pts">${ptsText}</td>
@@ -994,12 +1039,15 @@ import Nav from "../components/Nav.astro";
           <h3 class="squad-modal-heading">Bench</h3>
           <table class="squad-modal-table bench-table">
             <tbody>
-      `;
+    `  ;
 
-      for (const p of bench) {
-        const mult = p.multiplier || 0;
-        const displayPts = Math.round(p.liveTotal * (chipCode === "BB" ? 1 : mult));
+      for (const p of originalBench) {
+        const isSubbedIn = p.autoSubStatus === 'IN';
         const isDnp = p.minutes === 0 && p.status === "Fin";
+      
+        // Skip players who subbed in (they're shown above)
+        if (isSubbedIn) continue;
+      
         const rowClass = chipCode === "BB" ? "" : (isDnp ? "dnp-row" : "bench-inactive");
 
         let statusBadge = "";
@@ -1013,7 +1061,7 @@ import Nav from "../components/Nav.astro";
               ${statusBadge}
             </td>
             <td class="col-team">${p.teamShort}</td>
-            <td class="col-pts">${chipCode === "BB" ? displayPts : `<span class="text-muted">${p.liveTotal}</span>`}</td>
+            <td class="col-pts">${chipCode === "BB" ? p.liveTotal : `<span class="text-muted">${p.liveTotal}</span>`}</td>
           </tr>
         `;
       }
