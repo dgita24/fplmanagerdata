@@ -573,7 +573,6 @@ import Nav from "../components/Nav.astro";
     }
 
     const isCaptainView = viewType === "captain";
-    const title = isCaptainView ? "Captains" : "Vice Captains";
 
     // Collect captain/vc data
     const rows = [];
@@ -596,9 +595,6 @@ import Nav from "../components/Nav.astro";
     // Sort by points descending
     rows.sort((a, b) => b.points - a.points);
 
-    // Find highest scorer
-    const maxPoints = rows.length > 0 ? Math.max(...rows.map(r => r.points)) : 0;
-
     let html = `
       <div class="table-container">
         <div class="table-scroll">
@@ -615,13 +611,10 @@ import Nav from "../components/Nav.astro";
     `;
 
     for (const row of rows) {
-      const isTopScorer = row.points === maxPoints;
-      const rowClass = isTopScorer ? 'top-scorer-row' : '';
-
       const chipBadge = row.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:9px;padding:1px 4px;">${row.chipPlayed}</span>` : '';
 
       html += `
-        <tr class="${rowClass}">
+        <tr>
           <td class="manager-cell">${row.managerName}${chipBadge}</td>
           <td class="player-cell">${row.playerName}</td>
           <td class="team-col">${row.teamName}</td>

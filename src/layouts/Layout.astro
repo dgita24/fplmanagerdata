@@ -639,9 +639,9 @@ const { title = "FPL Manager Data" } = Astro.props;
     font-weight: 400;
   }
 
-  /* ========================================
+    /* ========================================
      CAPTAIN TABLE - Squads page captain/VC view
-   ======================================== */
+     ======================================== */
   .captain-table {
     font-size: 13px !important;
   }
@@ -666,23 +666,16 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .captain-table .team-col {
-    width: 50px !important;
     text-align: center !important;
     font-size: var(--text-xs) !important;
   }
 
   .captain-table .pts-col {
-    width: 50px !important;
     text-align: center !important;
     font-weight: 700 !important;
   }
 
-  .captain-table .top-scorer-row td {
-    color: var(--color-success) !important;
-    font-weight: 700 !important;
-  }
-
-  /* Mobile ONLY: fixed layout */
+  /* Mobile ONLY: fixed layout with explicit widths */
   @media (max-width: 639px) {
     .captain-table {
       table-layout: fixed !important;
@@ -700,12 +693,12 @@ const { title = "FPL Manager Data" } = Astro.props;
     }
   }
 
-  /* Desktop ONLY: natural layout */
+  /* Desktop ONLY: natural auto layout, NO width rules */
   @media (min-width: 640px) {
     .captain-table {
       table-layout: auto !important;
     }
-  }
+  }  
 
   /* ========================================
      OWNERSHIP TABLE - Balanced compact columns
