@@ -979,49 +979,19 @@ const { title = "FPL Manager Data" } = Astro.props;
     font-size: 13px !important;
   }
 
-  /* Mobile: fixed layout to prevent overflow */
-  @media (max-width: 639px) {
-    .live-table {
-      table-layout: fixed !important;
-      width: 100% !important;
-    }
-
-    .live-table .rank-col {
-      width: 26px !important;
-    }
-
-    .live-table .gw-col {
-      width: 34px !important;
-    }
-
-    .live-table .hit-col {
-      width: 28px !important;
-    }
-
-    .live-table .nett-col {
-      width: 36px !important;
-    }
-
-    .live-table .total-col {
-      width: 52px !important;
-    }
-
-    .live-table .diff-col {
-      width: 38px !important;
-    }
-  }
-
   .live-table th,
   .live-table td {
-    padding: 6px 8px !important;
+    padding: 6px 4px !important;
     font-variant-numeric: tabular-nums;
   }
 
   .live-table th {
     font-size: 11px !important;
+    white-space: nowrap !important;
   }
 
   .live-table .rank-col {
+    width: 28px !important;
     text-align: center !important;
     font-weight: 700;
   }
@@ -1036,24 +1006,54 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .live-table .gw-col {
+    width: 36px !important;
     text-align: center !important;
   }
 
   .live-table .hit-col {
+    width: 32px !important;
     text-align: center !important;
   }
 
   .live-table .nett-col {
+    width: 38px !important;
     text-align: center !important;
     font-weight: 700;
   }
 
   .live-table .total-col {
+    width: 54px !important;
     text-align: center !important;
   }
 
   .live-table .diff-col {
+    width: 42px !important;
     text-align: center !important;
+    white-space: nowrap !important;
+  }
+
+  /* Mobile: fixed layout to prevent overflow */
+  @media (max-width: 639px) {
+    .live-table {
+      table-layout: fixed !important;
+      width: 100% !important;
+    }
+  }
+
+  /* Desktop: natural layout */
+  @media (min-width: 640px) {
+    .live-table {
+      table-layout: auto !important;
+    }
+
+    .live-table .rank-col,
+    .live-table .gw-col,
+    .live-table .hit-col,
+    .live-table .nett-col,
+    .live-table .total-col,
+    .live-table .diff-col {
+      width: auto !important;
+    }
   }
 
   .live-table .hit-highlight {
