@@ -40,6 +40,14 @@ import Nav from "../components/Nav.astro";
     <div id="last-updated" class="meta-row"></div>
     <section id="live-output" aria-live="polite"></section>
   </main>
+
+  <!-- Squad Modal -->
+  <div id="squad-modal" class="modal">
+    <div class="modal-panel">
+      <button id="close-squad-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="squad-modal-content"></div>
+    </div>
+  </div>
 </Layout>
 
 <style>
@@ -72,7 +80,7 @@ import Nav from "../components/Nav.astro";
   }
 
   .label-small {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
     color: var(--color-text-secondary);
     text-align: center;
@@ -181,6 +189,9 @@ import Nav from "../components/Nav.astro";
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
   const autoRefreshBtn = document.getElementById("auto-refresh-btn");
+  const squadModal = document.getElementById("squad-modal");
+  const squadModalContent = document.getElementById("squad-modal-content");
+  const closeSquadModal = document.getElementById("close-squad-modal");
 
   let liveData = [];
   let latestGW = null;
@@ -192,6 +203,10 @@ import Nav from "../components/Nav.astro";
 
   let autoRefreshInterval = null;
   let autoRefreshEnabled = false;
+
+  closeSquadModal.addEventListener("click", () => {
+    squadModal.classList.remove("is-open");
+  });
 
   function populateGWSelector(currentGW) {
     gwFilterSelect.innerHTML = '';
@@ -538,6 +553,7 @@ import Nav from "../components/Nav.astro";
       return {
         entryId,
         managerName: `${summaryData.player_first_name || ""} ${summaryData.player_last_name || ""}`.trim(),
+        teamName: summaryData.name || "",
         chipPlayed: chipCode === "None" ? "" : chipCode,
         transferCost,
         livePointsBeforeHits,
@@ -547,6 +563,156 @@ import Nav from "../components/Nav.astro";
     } catch (e) {
       console.error(`Error fetching live data for manager ${entryId}:`, e);
       return null;
+    }
+  }
+
+  async function showSquadModal(entryId, managerName, teamName, chipPlayed, livePoints) {
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
+
+    squadModalContent.innerHTML = `<p class="text-muted">Loading squad...</p>`;
+    squadModal.classList.add("is-open");
+
+    try {
+      const picksRes = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
+      if (!picksRes.ok) throw new Error("Failed to fetch picks");
+
+      const picksData = await picksRes.json();
+      const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
+
+      const chipCode = chipPlayed || "None";
+
+      const picks = rawPicks.map(p => {
+        const player = playerCache.get(p.element) || {};
+        const teamId = Number(player.team) || 0;
+        const teamInfo = teamCache.get(teamId) || { shortName: "???" };
+
+        const computed = getPlayerLiveComputed(p.element, teamId, gw);
+
+        return {
+          playerId: Number(p.element),
+          position: Number(p.position),
+          is_captain: !!p.is_captain,
+          is_vice_captain: !!p.is_vice_captain,
+          web_name: player.name || "Unknown",
+          teamShort: teamInfo.shortName,
+          playingPosition: positionLabel(player.position),
+          minutes: computed.minutes,
+          status: computed.status,
+          liveTotal: computed.liveTotal
+        };
+      });
+
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+      const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
+
+      const starters = sorted.slice(0, 11);
+      const bench = sorted.slice(11);
+
+      const chipEmoji = chipPlayed === "WC" ? "🃏" : 
+                        chipPlayed === "BB" ? "🪑" : 
+                        chipPlayed === "TC" ? "👑" : 
+                        chipPlayed === "FH" ? "🎯" : "";
+
+      let html = `
+        <h2 class="modal-title" style="padding-right:40px;">
+          ${managerName}
+          ${chipPlayed ? `<span class="badge" style="margin-left:8px;">${chipEmoji} ${chipPlayed}</span>` : ""}
+        </h2>
+        <p class="text-muted" style="margin-bottom:var(--space-3);">
+          ${teamName} · GW${gw} · <span class="text-success font-bold">${livePoints} pts</span>
+        </p>
+
+        <div class="squad-modal-section">
+          <h3 class="squad-modal-heading">Starting XI</h3>
+          <table class="squad-modal-table">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th class="col-team">Team</th>
+                <th class="col-pts">Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      for (const p of starters) {
+        const capLabel = p.is_captain ? '<span class="cap-badge cap-c">C</span>' : 
+                         p.is_vice_captain ? '<span class="cap-badge cap-v">V</span>' : '';
+        
+        const mult = p.multiplier || 1;
+        const displayPts = Math.round(p.liveTotal * mult);
+        const ptsText = mult > 1 ? `${p.liveTotal}×${mult}` : displayPts;
+
+        const isSubOn = p.position > 11 && mult > 0;
+        const isSubOff = p.position <= 11 && mult === 0;
+        const isDnp = p.minutes === 0 && p.status === "Fin";
+
+        let rowClass = "";
+        if (isSubOn) rowClass = "sub-on-row";
+        else if (isSubOff) rowClass = "sub-off-row";
+        else if (isDnp) rowClass = "dnp-row";
+
+        let statusBadge = "";
+        if (isSubOn) statusBadge = `<span class="status-badge status-on">ON</span>`;
+
+        html += `
+          <tr class="${rowClass}">
+            <td class="player-cell">
+              <span class="player-pos">${p.playingPosition}</span>
+              <span class="player-name">${p.web_name}</span>
+              ${capLabel}
+              ${statusBadge}
+            </td>
+            <td class="col-team">${p.teamShort}</td>
+            <td class="col-pts">${ptsText}</td>
+          </tr>
+        `;
+      }
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+
+        <div class="squad-modal-section">
+          <h3 class="squad-modal-heading">Bench</h3>
+          <table class="squad-modal-table bench-table">
+            <tbody>
+      `;
+
+      for (const p of bench) {
+        const mult = p.multiplier || 0;
+        const displayPts = Math.round(p.liveTotal * (chipCode === "BB" ? 1 : mult));
+        const isDnp = p.minutes === 0 && p.status === "Fin";
+        const rowClass = chipCode === "BB" ? "" : (isDnp ? "dnp-row" : "bench-inactive");
+
+        let statusBadge = "";
+        if (isDnp) statusBadge = `<span class="status-badge status-dnp">DNP</span>`;
+
+        html += `
+          <tr class="${rowClass}">
+            <td class="player-cell">
+              <span class="player-pos">${p.playingPosition}</span>
+              <span class="player-name">${p.web_name}</span>
+              ${statusBadge}
+            </td>
+            <td class="col-team">${p.teamShort}</td>
+            <td class="col-pts">${chipCode === "BB" ? displayPts : `<span class="text-muted">${p.liveTotal}</span>`}</td>
+          </tr>
+        `;
+      }
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      squadModalContent.innerHTML = html;
+
+    } catch (error) {
+      console.error("Error loading squad:", error);
+      squadModalContent.innerHTML = "<p class='status status--error'>Error loading squad data.</p>";
     }
   }
 
@@ -610,7 +776,13 @@ import Nav from "../components/Nav.astro";
         <tr class="${rowClass}">
           <td class="rank-col">${rank}</td>
           <td class="manager-col">
-            <a href="/squads?manager=${m.entryId}">${m.managerName}</a>
+            <button type="button" class="manager-btn" 
+              data-entry-id="${m.entryId}"
+              data-manager-name="${m.managerName}"
+              data-team-name="${m.teamName}"
+              data-chip="${m.chipPlayed}"
+              data-live-points="${m.livePoints}"
+            >${m.managerName}</button>
             ${m.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${m.chipPlayed}</span>` : ""}
           </td>
           <td class="gw-col">${m.livePointsBeforeHits}</td>
@@ -630,6 +802,20 @@ import Nav from "../components/Nav.astro";
       </div>
     `;
     return html;
+  }
+
+  function attachManagerButtons() {
+    document.querySelectorAll('.manager-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const button = e.target.closest('.manager-btn');
+        const entryId = button.dataset.entryId;
+        const managerName = button.dataset.managerName;
+        const teamName = button.dataset.teamName;
+        const chipPlayed = button.dataset.chip;
+        const livePoints = parseInt(button.dataset.livePoints);
+        showSquadModal(entryId, managerName, teamName, chipPlayed, livePoints);
+      });
+    });
   }
 
   async function loadLive(ids, gw) {
@@ -664,6 +850,7 @@ import Nav from "../components/Nav.astro";
 
           const compareId = compareManagerSelect.value;
           out.innerHTML = makeLiveTable(liveData, compareId);
+          attachManagerButtons();
         }
       } catch (e) {
         console.error(`Failed to load manager ${id}:`, e);
@@ -704,6 +891,7 @@ import Nav from "../components/Nav.astro";
   compareManagerSelect.addEventListener('change', () => {
     const compareId = compareManagerSelect.value;
     out.innerHTML = makeLiveTable(liveData, compareId);
+    attachManagerButtons();
   });
 
   refreshBtn.addEventListener('click', async () => {
