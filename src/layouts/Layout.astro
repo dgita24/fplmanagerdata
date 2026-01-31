@@ -1980,11 +1980,27 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .squad-modal-table .not-started-row td {
-    color: var(--color-warning) !important;
+    color: var(--color-primary) !important;  /* Blue - yet to play */
   }
 
   .squad-modal-table .not-started-row .player-name-btn {
+    color: var(--color-primary) !important;
+  }
+
+  .squad-modal-table .match-live-row td {
+    color: var(--color-warning) !important;  /* Yellow - ongoing match */
+  }
+
+  .squad-modal-table .match-live-row .player-name-btn {
     color: var(--color-warning) !important;
+  }
+
+  .squad-modal-table .match-finished-row td {
+    color: var(--color-success) !important;  /* Green - completed match */
+  }
+
+  .squad-modal-table .match-finished-row .player-name-btn {
+    color: var(--color-success) !important;
   }
 
   .status-badge {

@@ -1009,6 +1009,8 @@ import Nav from "../components/Nav.astro";
         const mult = p.multiplier || 0;
         const isSubbedOut = p.autoSubStatus === 'OUT';
         const isNotStarted = p.status === "NS";  // NEW: detect not started
+        const isLive = p.status === "Live";
+        const isFinished = p.status === "Fin";
         const displayPts = isSubbedOut ? 0 : Math.round(p.liveTotal * (mult || 1));
         const ptsText = mult > 1 ? `${p.liveTotal}×${mult}` : String(displayPts);
 
@@ -1019,9 +1021,13 @@ import Nav from "../components/Nav.astro";
           rowClass = "sub-off-row";
           statusBadge = `<span class="status-badge status-dnp">DNP</span>`;
         } else if (isNotStarted) {
-          rowClass = "not-started-row";  // NEW: this line to
-        }
-      
+          rowClass = "not-started-row";  // Blue
+        } else if (isLive) {
+          rowClass = "match-live-row";       // Yellow
+        } else if (isFinished) {
+          rowClass = "match-finished-row";   // Green
+        }   
+   
         html += `
           <tr class="${rowClass}">
             <td class="player-cell">
