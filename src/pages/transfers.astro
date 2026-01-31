@@ -294,7 +294,7 @@ import Nav from "../components/Nav.astro";
     `;
   }
 
-    async function showTransferHistory(managerId, managerName) {
+  async function showTransferHistory(managerId, managerName) {
     modalContent.innerHTML = "<p class='text-muted'>Loading transfer history...</p>";
     transferModal.classList.add("is-open");
 
@@ -481,60 +481,7 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function showChipTransfers(managerId, gw, chipName) {
-    chipModalContent.innerHTML = "<p>Loading chip transfers...</p>";
-    chipModal.classList.add("is-open");
-
-    try {
-      const picksRes = await fetch(`/api/fpl/entry/${managerId}/event/${gw}/picks`);
-      const picks = await picksRes.json();
-
-      const prevGW = parseInt(gw) - 1;
-      let prevSquad = [];
-      if (prevGW > 0) {
-        try {
-          const prevPicksRes = await fetch(`/api/fpl/entry/${managerId}/event/${prevGW}/picks`);
-          const prevPicks = await prevPicksRes.json();
-          prevSquad = prevPicks.picks?.map(p => p.element) || [];
-        } catch (e) {
-          console.warn("Couldn't fetch previous squad");
-        }
-      }
-
-      const currentSquad = picks.picks?.map(p => p.element) || [];
-
-      const playersIn = currentSquad.filter(p => !prevSquad.includes(p));
-      const playersOut = prevSquad.filter(p => !currentSquad.includes(p));
-
-      const chipDisplay = chipName === 'wildcard' ? '🃏 Wildcard' : '🎯 Free Hit';
-
-      let html = `<h2 class="modal-title">${chipDisplay} - GW ${gw}</h2>`;
-      html += `<div style="display:grid; gap:var(--space-3);">`;
-
-      html += `<div style="border:1px solid rgb(220 38 38 / 0.35); border-radius:var(--radius-md); padding:var(--space-3); background:rgb(220 38 38 / 0.05);">`;
-      html += `<h3 class="text-danger" style="margin:0 0 var(--space-2) 0; font-size:var(--text-sm);">Out (${playersOut.length})</h3>`;
-      playersOut.forEach(pid => {
-        html += `<p style="margin:var(--space-1) 0; font-size:var(--text-sm);">▼ ${escapeHtml(allPlayersMap[pid] || `Player ${pid}`)}</p>`;
-      });
-      html += `</div>`;
-
-      html += `<div style="border:1px solid rgb(22 163 74 / 0.35); border-radius:var(--radius-md); padding:var(--space-3); background:rgb(22 163 74 / 0.05);">`;
-      html += `<h3 class="text-success" style="margin:0 0 var(--space-2) 0; font-size:var(--text-sm);">In (${playersIn.length})</h3>`;
-      playersIn.forEach(pid => {
-        html += `<p style="margin:var(--space-1) 0; font-size:var(--text-sm);">▲ ${escapeHtml(allPlayersMap[pid] || `Player ${pid}`)}</p>`;
-      });
-      html += `</div>`;
-
-      html += `</div>`;
-
-      chipModalContent.innerHTML = html;
-
-    } catch (error) {
-      console.error("Error loading chip transfers:", error);
-      chipModalContent.innerHTML = "<p class='status status--error'>Error loading chip transfers.</p>";
-    }
-  }
-
+  
   async function fetchHistory(id) {
     const historyUrl = `/api/fpl/entry/${id}/history`;
     const summaryUrl = `/api/fpl/entry/${id}`;
