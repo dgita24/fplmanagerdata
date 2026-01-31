@@ -8,9 +8,6 @@ import Nav from "../components/Nav.astro";
   <main class="page">
     <header class="page-header">
       <h1 class="page-title">Manager IDs Setup</h1>
-      <p class="page-subtitle">
-        Enter all manager EntryIDs here. These will be synced to your account and available across all your devices.
-      </p>
     </header>
 
     <div id="loading" class="card">
@@ -35,17 +32,16 @@ import Nav from "../components/Nav.astro";
         <div class="card-body">
           <h2 class="card-title">Quick Start</h2>
           <ol class="help-list">
-            <li>Enter your league's manager EntryIDs below (one per line)</li>
+            <li>Enter manager EntryIDs below (one per line). Enter up to a maximum of 50</li>
             <li>Click "Save Manager IDs"</li>
-            <li>Visit any other page — they'll automatically use these IDs</li>
             <li>Your IDs sync across all your devices</li>
           </ol>
 
           <p class="tip">
-            <strong>Tip:</strong> Find a manager's EntryID in their FPL URL:
+            <strong>Tip:</strong> Find a manager's EntryID in their FPL URL (the points tab of the official FPL Site):
           </p>
           <code class="code-block">
-            https://fantasy.premierleague.com/entry/<strong>4290</strong>/event/22
+            https://fantasy.premierleague.com/entry/<strong>1234</strong>/event/01
           </code>
         </div>
       </section>
@@ -55,7 +51,7 @@ import Nav from "../components/Nav.astro";
         <div class="card-body">
           <form id="manager-form">
             <div class="control">
-              <label class="label" for="ids">Manager EntryIDs (one per line, max 100)</label>
+              <label class="label" for="ids">Manager EntryIDs (one per line, max 50)</label>
               <textarea
                 id="ids"
                 class="textarea"
