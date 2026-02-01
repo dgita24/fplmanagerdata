@@ -127,7 +127,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
-  import { type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { applyAutoSubsAndMultipliers, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -254,22 +254,74 @@ import Nav from "../components/Nav.astro";
 
   async function fetchManagerLiveGwPoints(entryId: number, gw: number): Promise<number> {
     try {
-      const picksRes = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
+      // Fetch all required data in parallel
+      const [picksRes, historyRes] = await Promise.all([
+        fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
+        fetch(`/api/fpl/entry/${entryId}/history`)
+      ]);
+
       if (!picksRes.ok) {
         throw new Error("Failed to fetch picks data");
       }
 
       const picksData = await picksRes.json();
+      const historyData = historyRes.ok ? await historyRes.json() : null;
       
-      // The picks endpoint includes entry_history which has the official GW points.
-      // entry_history.points already includes transfer costs and matches the official FPL site display.
-      // Do NOT subtract event_transfers_cost again as it would create a mismatch.
-      const entryHistory = picksData.entry_history;
-      if (entryHistory) {
-        return Number(entryHistory.points) || 0;
-      }
+      // Get chip played this GW
+      const chips = historyData?.chips || [];
+      const chipThisGW = chips.find((c: any) => c.event === gw);
+      const chipCode = chipThisGW ?
+        (chipThisGW.name === "wildcard" ? "WC" :
+        chipThisGW.name === "bboost" ? "BB" :
+        chipThisGW.name === "3xc" ? "TC" :
+        chipThisGW.name === "freehit" ? "FH" : "None") : "None";
 
-      return 0;
+      // Get raw picks
+      const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
+
+      // Map picks with live data
+      const picks = rawPicks.map((p: any) => {
+        const player = playerCache.get(p.element);
+        const teamId = player?.team || 0;
+        
+        const computed = getPlayerLiveComputed({
+          playerId: Number(p.element),
+          teamId,
+          gw,
+          livePointsCache,
+          projectedBonusCache,
+          teamStatusCache,
+          bonusConfirmedOnProvisional: false,
+          projectedBonusDuringLive: true,
+          projectedBonusDuringProvisional: true
+        });
+
+        return {
+          playerId: Number(p.element),
+          position: Number(p.position),
+          is_captain: !!p.is_captain,
+          is_vice_captain: !!p.is_vice_captain,
+          playingPosition: player?.position === 1 ? "GK" : 
+                          player?.position === 2 ? "DEF" :
+                          player?.position === 3 ? "MID" : "FWD",
+          minutes: computed.minutes,
+          status: computed.status,
+          liveTotal: computed.liveTotal
+        };
+      });
+
+      // Apply auto-subs and multipliers
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+
+      // Calculate live points before transfer hits
+      const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
+
+      // Get transfer cost for this GW
+      const historyRows = Array.isArray(historyData?.current) ? historyData.current : [];
+      const transferCost = Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
+
+      // Return net live points (after transfer costs)
+      return livePointsBeforeHits - transferCost;
     } catch (e) {
       console.error(`Error fetching live data for manager ${entryId}:`, e);
       return 0;
@@ -592,11 +644,59 @@ import Nav from "../components/Nav.astro";
         chipThisGW.name === "3xc" ? "TC" :
         chipThisGW.name === "freehit" ? "FH" : "") : "";
 
-      // Get GW points from history. gwRow.points already includes transfer costs and matches
-      // the official FPL site display. Do NOT subtract event_transfers_cost again.
+      // Get GW points - for finished GWs use history, for live GWs calculate from player data
       const currentHistory = historyData.current || [];
       const gwRow = currentHistory.find((r: any) => Number(r.event) === Number(gw));
-      const livePoints = gwRow ? Number(gwRow.points) || 0 : 0;
+      
+      let livePoints = 0;
+      
+      // If it's the latest unfinished GW, calculate live points from player data
+      if (gw === latestGW && !currentGWFinished) {
+        // Calculate live points from individual players (same as fetchManagerLiveGwPoints)
+        const chipCode = chipThisGW ?
+          (chipThisGW.name === "wildcard" ? "WC" :
+          chipThisGW.name === "bboost" ? "BB" :
+          chipThisGW.name === "3xc" ? "TC" :
+          chipThisGW.name === "freehit" ? "FH" : "None") : "None";
+        
+        const picksWithLive = rawPicks.map((p: any) => {
+          const player = playerCache.get(p.element);
+          const teamId = player?.team || 0;
+          
+          const computed = getPlayerLiveComputed({
+            playerId: Number(p.element),
+            teamId,
+            gw,
+            livePointsCache,
+            projectedBonusCache,
+            teamStatusCache,
+            bonusConfirmedOnProvisional: false,
+            projectedBonusDuringLive: true,
+            projectedBonusDuringProvisional: true
+          });
+
+          return {
+            playerId: Number(p.element),
+            position: Number(p.position),
+            is_captain: !!p.is_captain,
+            is_vice_captain: !!p.is_vice_captain,
+            playingPosition: player?.position === 1 ? "GK" : 
+                            player?.position === 2 ? "DEF" :
+                            player?.position === 3 ? "MID" : "FWD",
+            minutes: computed.minutes,
+            status: computed.status,
+            liveTotal: computed.liveTotal
+          };
+        });
+
+        const finalTeam = applyAutoSubsAndMultipliers(picksWithLive, chipCode);
+        const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
+        const transferCost = Number(gwRow?.event_transfers_cost) || 0;
+        livePoints = livePointsBeforeHits - transferCost;
+      } else {
+        // For finished GWs, use the official points from history
+        livePoints = gwRow ? Number(gwRow.points) || 0 : 0;
+      }
 
       const picks = rawPicks.map((p: any) => {
         const player = playerCache.get(p.element);
@@ -862,6 +962,18 @@ import Nav from "../components/Nav.astro";
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
       return;
+    }
+
+    // If it's the latest unfinished GW, fetch live data first
+    if (gw === latestGW && !currentGWFinished) {
+      try {
+        await Promise.all([
+          fetchLiveGW({ gw, livePointsCache, includeExtendedStats: false }),
+          fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: true })
+        ]);
+      } catch (e) {
+        console.error("Error fetching live data:", e);
+      }
     }
 
     allManagerData = [];
