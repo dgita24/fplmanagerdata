@@ -879,9 +879,11 @@ import Nav from "../components/Nav.astro";
   const playerModal = document.getElementById("player-modal");
   const closePlayerModal = document.getElementById("close-player-modal");
   
-  closePlayerModal.addEventListener("click", () => {
-    playerModal.classList.remove("is-open");
-  });
+  if (playerModal && closePlayerModal) {
+    closePlayerModal.addEventListener("click", () => {
+      playerModal.classList.remove("is-open");
+    });
+  }
 
   init();
 </script>
