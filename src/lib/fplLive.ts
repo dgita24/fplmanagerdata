@@ -58,6 +58,8 @@ export interface GetPlayerLiveComputedOptions {
   projectedBonusCache: Map<string, number>;
   teamStatusCache: Map<string, TeamStatus>;
   bonusConfirmedOnProvisional?: boolean;
+  projectedBonusDuringLive?: boolean;
+  projectedBonusDuringProvisional?: boolean;
 }
 
 export function getTeamGwStatus(
@@ -149,7 +151,6 @@ export async function fetchFixtures({
       upsertTeam(fx.team_h, fx.started, fx.finished, finishedProvisional);
       upsertTeam(fx.team_a, fx.started, fx.finished, finishedProvisional);
 
-      // Only calculate projected bonus for truly live matches (not finished)
       if (!fx.started || fx.finished) continue;
 
       const stats = (fx as any).stats;
@@ -245,7 +246,9 @@ export function getPlayerLiveComputed({
   livePointsCache,
   projectedBonusCache,
   teamStatusCache,
-  bonusConfirmedOnProvisional = false
+  bonusConfirmedOnProvisional = false,
+  projectedBonusDuringLive = true,
+  projectedBonusDuringProvisional = true
 }: GetPlayerLiveComputedOptions) {
   const live = livePointsCache.get(playerId) || { 
     points: 0, bonus: 0, minutes: 0
@@ -265,14 +268,17 @@ export function getPlayerLiveComputed({
   if (bonusConfirmed) {
     liveTotal = officialTotal;
     projBonus = 0;
-  } else if (finishedProvisional) {
+  } else if (finishedProvisional && projectedBonusDuringProvisional) {
     const basePoints = officialTotal - confirmedBonus;
     projBonus = Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0;
     liveTotal = basePoints + projBonus;
-  } else if (started) {
+  } else if (started && projectedBonusDuringLive) {
     const basePoints = officialTotal - confirmedBonus;
     projBonus = Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0;
     liveTotal = basePoints + projBonus;
+  } else if (started || finishedProvisional) {
+    liveTotal = officialTotal - confirmedBonus;
+    projBonus = 0;
   } else {
     liveTotal = 0;
     projBonus = 0;

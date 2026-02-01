@@ -127,7 +127,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
-  import { applyAutoSubsAndMultipliers, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -273,10 +273,14 @@ import Nav from "../components/Nav.astro";
         chipName === "wildcard" ? "WC" :
         chipName === "freehit" ? "FH" :
         "None";
+      const capFactor = chipCode === "TC" ? 3 : 2;
 
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
+      const starters = rawPicks.filter((p: any) => Number(p.position) <= 11);
 
-      const picks = rawPicks.map((p: any) => {
+      let livePointsBeforeHits = 0;
+
+      for (const p of starters) {
         const player = playerCache.get(p.element) || { position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
 
@@ -287,24 +291,15 @@ import Nav from "../components/Nav.astro";
           livePointsCache,
           projectedBonusCache,
           teamStatusCache,
-          bonusConfirmedOnProvisional: true
+          bonusConfirmedOnProvisional: false,
+          projectedBonusDuringLive: false,
+          projectedBonusDuringProvisional: true
         });
 
-        return {
-          playerId: Number(p.element),
-          position: Number(p.position),
-          is_captain: !!p.is_captain,
-          is_vice_captain: !!p.is_vice_captain,
-          playingPosition: positionLabel(player.position),
-          minutes: computed.minutes,
-          status: computed.status,
-          liveTotal: computed.liveTotal
-        };
-      });
-
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
-
-      const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
+        const isCaptain = !!p.is_captain;
+        const multiplier = isCaptain ? capFactor : 1;
+        livePointsBeforeHits += (computed.liveTotal * multiplier);
+      }
 
       const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
       const transferCost =
