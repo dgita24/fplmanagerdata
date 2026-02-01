@@ -296,7 +296,9 @@ import Nav from "../components/Nav.astro";
       const gwRow = current.find((r: any) => Number(r.event) === Number(gw));
 
       let gwPoints = gwRow ? Number(gwRow.points) || 0 : 0;
-      if (gw === latestGW && !currentGWFinished) {
+      // For the current GW, always use the picks endpoint for the most up-to-date points
+      // The history endpoint can have stale/cached data
+      if (gw === latestGW) {
         gwPoints = await fetchManagerLiveGwPoints(id, gw);
       }
 
