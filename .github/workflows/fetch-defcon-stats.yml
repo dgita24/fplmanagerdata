@@ -1,0 +1,5 @@
+function calculateDefconPoints(position, defensiveContribution) {
+  if (position === 1) return 0;  // GKs not eligible
+  const threshold = position === 2 ? 10 : 12;  // DEF need 10+, MID/FWD need 12+
+  return defensiveContribution >= threshold ? 2 : 0;
+}
