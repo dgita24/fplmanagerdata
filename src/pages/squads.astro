@@ -654,7 +654,26 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
-  function showPlayerModal(playerId) {
+  async function fetchPlayerDefconStats(playerId: number): Promise<{ totalDefcon: number; gamesWithDefcon: number }> {
+    try {
+      const { data, error } = await supabase
+        .from('player_defensive_stats')
+        .select('defcon_points')
+        .eq('player_id', playerId);
+      
+      if (error || !data) return { totalDefcon: 0, gamesWithDefcon: 0 };
+      
+      const totalDefcon = data.reduce((sum, row) => sum + (row.defcon_points || 0), 0);
+      const gamesWithDefcon = data.filter(row => row.defcon_points > 0).length;
+      
+      return { totalDefcon, gamesWithDefcon };
+    } catch (e) {
+      console.error('Error fetching DEFCON stats:', e);
+      return { totalDefcon: 0, gamesWithDefcon: 0 };
+    }
+  }
+
+  async function showPlayerModal(playerId) {
     const player = playerCache.get(playerId);
     
     if (!player) {
@@ -666,6 +685,13 @@ import Nav from "../components/Nav.astro";
     }
 
     const teamName = teamCache.get(player.teamId) || "???";
+    
+    // Fetch DEFCON stats for outfield players
+    const isOutfieldPlayer = player.position !== "GK";
+    let defconStats = { totalDefcon: 0, gamesWithDefcon: 0 };
+    if (isOutfieldPlayer) {
+      defconStats = await fetchPlayerDefconStats(playerId);
+    }
 
     let html = `
       <div class="player-modal-header">
@@ -715,6 +741,13 @@ import Nav from "../components/Nav.astro";
             <span class="breakdown-label">Penalties Saved</span>
             <span class="breakdown-value">${player.penaltiesSaved || 0}</span>
             <span class="breakdown-points">—</span>
+          </div>
+          ` : ''}
+          ${isOutfieldPlayer && defconStats.totalDefcon > 0 ? `
+          <div class="breakdown-row">
+            <span class="breakdown-label">DEFCON Points</span>
+            <span class="breakdown-value">${defconStats.gamesWithDefcon} games</span>
+            <span class="breakdown-points points-positive">+${defconStats.totalDefcon}</span>
           </div>
           ` : ''}
           <div class="breakdown-row">
