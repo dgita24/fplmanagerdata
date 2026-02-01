@@ -261,13 +261,12 @@ import Nav from "../components/Nav.astro";
 
       const picksData = await picksRes.json();
       
-      // The picks endpoint includes entry_history which has the official GW points
-      // This is exactly what the FPL site displays
+      // The picks endpoint includes entry_history which has the official GW points.
+      // entry_history.points already includes transfer costs and matches the official FPL site display.
+      // Do NOT subtract event_transfers_cost again as it would create a mismatch.
       const entryHistory = picksData.entry_history;
       if (entryHistory) {
-        const points = Number(entryHistory.points) || 0;
-        const transferCost = Number(entryHistory.event_transfers_cost) || 0;
-        return points - transferCost;
+        return Number(entryHistory.points) || 0;
       }
 
       return 0;
@@ -593,10 +592,11 @@ import Nav from "../components/Nav.astro";
         chipThisGW.name === "3xc" ? "TC" :
         chipThisGW.name === "freehit" ? "FH" : "") : "";
 
-      // Get GW points
+      // Get GW points from history. gwRow.points already includes transfer costs and matches
+      // the official FPL site display. Do NOT subtract event_transfers_cost again.
       const currentHistory = historyData.current || [];
       const gwRow = currentHistory.find((r: any) => Number(r.event) === Number(gw));
-      const livePoints = gwRow ? Number(gwRow.points) - (Number(gwRow.event_transfers_cost) || 0) : 0;
+      const livePoints = gwRow ? Number(gwRow.points) || 0 : 0;
 
       const picks = rawPicks.map((p: any) => {
         const player = playerCache.get(p.element);
