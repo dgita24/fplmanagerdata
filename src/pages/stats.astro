@@ -127,6 +127,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
+  import { applyAutoSubsAndMultipliers, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -161,9 +162,9 @@ import Nav from "../components/Nav.astro";
   let allManagerData: ManagerData[] = [];
   let playerCache = new Map<number, { name: string; position: number; team: number }>();
   let teamCache = new Map<number, { name: string; shortName: string }>();
-  let livePointsCache = new Map<number, { points: number; bonus: number; minutes: number }>();
+  let livePointsCache = new Map<number, LiveStatLine>();
   let projectedBonusCache = new Map<string, number>();
-  let teamStatusCache = new Map<string, { started: boolean; finished: boolean; finishedProvisional: boolean }>();
+  let teamStatusCache = new Map<string, TeamStatus>();
   let fixturesCache: FixtureInfo[] = [];
 
   interface ManagerData {
@@ -178,17 +179,6 @@ import Nav from "../components/Nav.astro";
     bank: number;
     historyData: any;
     summaryData: any;
-  }
-
-  interface FixtureInfo {
-    id: number;
-    team_h: number;
-    team_a: number;
-    team_h_score: number | null;
-    team_a_score: number | null;
-    started: boolean;
-    finished: boolean;
-    finished_provisional: boolean;
   }
 
   const out = document.getElementById("stats-output")!;
@@ -229,306 +219,36 @@ import Nav from "../components/Nav.astro";
     return "FWD";
   }
 
-  function getTeamGwStatus(teamId: number, gw: number) {
-    return teamStatusCache.get(`${gw}:${teamId}`) || { started: false, finished: false, finishedProvisional: false };
-  }
-
-  function bonusFromBpsRows(bpsRows: any[]): Map<number, number> {
-    const rows = (bpsRows || [])
-      .filter(r => r && Number.isFinite(r.value) && Number.isFinite(r.element))
-      .sort((a, b) => b.value - a.value);
-
-    const out = new Map<number, number>();
-    if (rows.length === 0) return out;
-
-    const topVal = rows[0].value;
-    const top = rows.filter(r => r.value === topVal);
-
-    if (top.length >= 2) {
-      for (const r of top) out.set(r.element, 3);
-      if (top.length >= 3) return out;
-      const next = rows.find(r => r.value < topVal);
-      if (next) {
-        const nextVal = next.value;
-        for (const r of rows.filter(r => r.value === nextVal)) out.set(r.element, 1);
-      }
-      return out;
-    }
-
-    out.set(rows[0].element, 3);
-    const secondRow = rows.find(r => r.value < topVal);
-    if (!secondRow) return out;
-
-    const secondVal = secondRow.value;
-    const second = rows.filter(r => r.value === secondVal);
-
-    if (second.length >= 2) {
-      for (const r of second) out.set(r.element, 2);
-      return out;
-    }
-
-    out.set(second[0].element, 2);
-    const thirdRow = rows.find(r => r.value < secondVal);
-    if (!thirdRow) return out;
-
-    const thirdVal = thirdRow.value;
-    for (const r of rows.filter(r => r.value === thirdVal)) out.set(r.element, 1);
-
-    return out;
-  }
-
-  function getPlayerLiveComputed(playerId: number, teamId: number, gw: number) {
-    const live = livePointsCache.get(playerId) || { points: 0, bonus: 0, minutes: 0 };
-    const { started, finished, finishedProvisional } = getTeamGwStatus(teamId, gw);
-
-    const isFinishedForSubs = finished || finishedProvisional;
-    const bonusConfirmed = finished || finishedProvisional;
-
-    const officialTotal = Number(live.points) || 0;
-    const confirmedBonus = Number(live.bonus) || 0;
-    const minutes = Number(live.minutes) || 0;
-
-    let liveTotal: number;
-    let projBonus: number;
-
-    if (bonusConfirmed) {
-      liveTotal = officialTotal;
-      projBonus = 0;
-    } else if (started) {
-      const basePoints = officialTotal - confirmedBonus;
-      projBonus = Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0;
-      liveTotal = basePoints + projBonus;
-    } else {
-      liveTotal = 0;
-      projBonus = 0;
-    }
-
-    const status = isFinishedForSubs ? "Fin" : (started ? "Live" : "NS");
-    return { liveTotal, status, minutes };
-  }
-
-  function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) {
-    const isBB = chipCode === "BB";
-    const isTC = chipCode === "TC";
-    const capFactor = isTC ? 3 : 2;
-
-    const sorted = [...teamPicks].sort((a, b) => a.position - b.position);
-    const starters = sorted.slice(0, 11);
-    const bench = sorted.slice(11);
-
-    if (isBB) {
-      const captain = sorted.find(p => p.is_captain);
-      const capId = captain ? captain.playerId : null;
-
-      return sorted.map(p => ({
-        ...p,
-        multiplier: capId && p.playerId === capId ? capFactor : 1,
-        autoSubStatus: null
-      }));
-    }
-
-    const dnpStarters: number[] = [];
-    const subbedIn: number[] = [];
-
-    const gkStarter = starters.find(p => p.playingPosition === "GK");
-    const outfieldStarters = starters.filter(p => p.playingPosition !== "GK");
-
-    const gkBench = bench.filter(p => p.playingPosition === "GK");
-    const outfieldBench = bench.filter(p => p.playingPosition !== "GK");
-
-    let activeGK = gkStarter;
-    const gkDnp = gkStarter && gkStarter.minutes === 0 && gkStarter.status === "Fin";
-  
-    if (gkDnp && gkStarter) {
-      dnpStarters.push(gkStarter.playerId);
-      const benchGK = gkBench.find(p => !(p.minutes === 0 && p.status === "Fin"));
-      if (benchGK) {
-        activeGK = benchGK;
-        subbedIn.push(benchGK.playerId);
-      } else {
-        activeGK = null;
-      }
-    }
-
-    let activeOutfield = outfieldStarters.filter(p => !(p.minutes === 0 && p.status === "Fin"));
-    const outfieldDnp = outfieldStarters.filter(p => p.minutes === 0 && p.status === "Fin");
-  
-    for (const dnp of outfieldDnp) {
-      dnpStarters.push(dnp.playerId);
-    }
-
-    for (const cand of outfieldBench) {
-      if (activeOutfield.length >= 10) break;
-
-      const matchFinished = cand.status === "Fin";
-      if (!matchFinished) break;
-
-      if (cand.minutes === 0) continue;
-
-      const testOutfield = [...activeOutfield, cand];
-      const defCount = testOutfield.filter(p => p.playingPosition === "DEF").length;
-      const midCount = testOutfield.filter(p => p.playingPosition === "MID").length;
-      const fwdCount = testOutfield.filter(p => p.playingPosition === "FWD").length;
-
-      const spotsLeft = 10 - testOutfield.length;
-
-      if (spotsLeft === 0) {
-        const isValid = defCount >= 3 && midCount >= 2 && fwdCount >= 1;
-        if (isValid) {
-          activeOutfield = testOutfield;
-          subbedIn.push(cand.playerId);
-        }
-      } else {
-        const needDef = Math.max(0, 3 - defCount);
-        const needMid = Math.max(0, 2 - midCount);
-        const needFwd = Math.max(0, 1 - fwdCount);
-
-        const remainingIdx = outfieldBench.indexOf(cand);
-        let usableBench: any[] = [];
-        for (let j = remainingIdx + 1; j < outfieldBench.length; j++) {
-          const p = outfieldBench[j];
-          if (p.status !== "Fin") break;
-          if (p.minutes > 0) usableBench.push(p);
-        }
-
-        const availDef = usableBench.filter(p => p.playingPosition === "DEF").length;
-        const availMid = usableBench.filter(p => p.playingPosition === "MID").length;
-        const availFwd = usableBench.filter(p => p.playingPosition === "FWD").length;
-
-        const canComplete = availDef >= needDef && 
-                           availMid >= needMid && 
-                           availFwd >= needFwd &&
-                           usableBench.length >= spotsLeft;
-
-        if (canComplete) {
-          activeOutfield = testOutfield;
-          subbedIn.push(cand.playerId);
-        }
-      }
-    }
-
-    const active: any[] = [];
-    if (activeGK) active.push(activeGK);
-    active.push(...activeOutfield);
-
-    const origCap = sorted.find(p => p.is_captain)?.playerId ?? null;
-    const origVC = sorted.find(p => p.is_vice_captain)?.playerId ?? null;
-
-    const capInActive = origCap !== null && active.some(p => p.playerId === origCap);
-    const vcInActive = origVC !== null && active.some(p => p.playerId === origVC);
-
-    const capPlayed = capInActive && active.some(p => 
-      p.playerId === origCap && (p.minutes > 0 || p.status !== "Fin")
-    );
-    const vcPlayed = vcInActive && active.some(p => 
-      p.playerId === origVC && (p.minutes > 0 || p.status !== "Fin")
-    );
-
-    const captainId = capPlayed ? origCap : (vcPlayed ? origVC : null);
-
-    return sorted.map(p => {
-      const isActive = active.some(a => a.playerId === p.playerId);
-      const isDnpStarter = dnpStarters.includes(p.playerId);
-      const isSubbedIn = subbedIn.includes(p.playerId);
-    
-      let multiplier = 0;
-      if (isActive) {
-        multiplier = (captainId && p.playerId === captainId) ? capFactor : 1;
-      }
-
-      return {
-        ...p,
-        multiplier,
-        autoSubStatus: isDnpStarter ? 'OUT' : (isSubbedIn ? 'IN' : null)
-      };
-    });
-  }
-
-  async function fetchFixtures(gw: number) {
+  async function fetchBootstrapData() {
     try {
-      const res = await fetch(`/api/fpl/fixtures?event=${gw}`);
-      if (!res.ok) throw new Error("Failed to fetch fixtures");
-      const fixtures: FixtureInfo[] = await res.json();
-
-      fixturesCache = fixtures;
-      teamStatusCache.clear();
-      projectedBonusCache.clear();
-
-      const perTeam = new Map<number, { startedAny: boolean; finishedAll: boolean; finishedProvAll: boolean }>();
-      function upsertTeam(teamId: number, started: boolean, finished: boolean, finishedProvisional: boolean) {
-        const cur = perTeam.get(teamId) || { startedAny: false, finishedAll: true, finishedProvAll: true };
-        cur.startedAny = cur.startedAny || !!started || !!finished || !!finishedProvisional;
-        cur.finishedAll = cur.finishedAll && !!finished;
-        cur.finishedProvAll = cur.finishedProvAll && (!!finished || !!finishedProvisional);
-        perTeam.set(teamId, cur);
-      }
-
-      for (const fx of fixtures) {
-        upsertTeam(fx.team_h, fx.started, fx.finished, fx.finished_provisional);
-        upsertTeam(fx.team_a, fx.started, fx.finished, fx.finished_provisional);
-
-        if (!fx.started || fx.finished || fx.finished_provisional) continue;
-
-        const stats = (fx as any).stats;
-        if (!Array.isArray(stats)) continue;
-        
-        const bpsStat = stats.find((s: any) => s && s.identifier === "bps");
-        if (!bpsStat) continue;
-
-        const h = Array.isArray(bpsStat.h) ? bpsStat.h : [];
-        const a = Array.isArray(bpsStat.a) ? bpsStat.a : [];
-        const all = [...h, ...a]
-          .map(r => ({
-            element: Number(r.element),
-            value: Number(r.value)
-          }))
-          .filter(r => Number.isFinite(r.element) && Number.isFinite(r.value));
-
-        const bonusMap = bonusFromBpsRows(all);
-
-        for (const [playerId, bonus] of bonusMap.entries()) {
-          const key = `${gw}:${playerId}`;
-          projectedBonusCache.set(key, (projectedBonusCache.get(key) || 0) + bonus);
-        }
-      }
-
-      for (const [teamId, st] of perTeam.entries()) {
-        teamStatusCache.set(`${gw}:${teamId}`, { 
-          started: st.startedAny, 
-          finished: st.finishedAll,
-          finishedProvisional: st.finishedProvAll
-        });
-      }
-
-      return fixtures;
-    } catch (e) {
-      console.error("Error fetching fixtures:", e);
-      return [];
-    }
-  }
-
-  async function fetchLiveGW(gw: number) {
-    try {
-      const res = await fetch(`/api/fpl/event/${gw}/live`);
-      if (!res.ok) throw new Error("Failed to fetch live data");
+      const res = await fetch('/api/fpl/bootstrap-static');
+      if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
-      livePointsCache.clear();
-
-      const elements = Array.isArray(data.elements) ? data.elements : [];
-      for (const p of elements) {
-        const stats = p.stats || {};
-        livePointsCache.set(p.id, {
-          points: Number(stats.total_points) || 0,
-          bonus: Number(stats.bonus) || 0,
-          minutes: Number(stats.minutes) || 0
+      // Cache player names and team info
+      data.elements.forEach((p: any) => {
+        playerCache.set(p.id, {
+          name: p.web_name,
+          position: p.element_type,
+          team: p.team
         });
-      }
+      });
 
-      return data;
+      data.teams.forEach((t: any) => {
+        teamCache.set(t.id, {
+          name: t.name,
+          shortName: t.short_name
+        });
+      });
+
+      const currentEvent = (data.events || []).find((e: any) => e.is_current);
+      latestGW = currentEvent ? currentEvent.id : 1;
+      currentGWFinished = currentEvent ? currentEvent.finished : false;
+
+      populateGWSelector(latestGW);
     } catch (e) {
-      console.error("Error fetching live data:", e);
-      return null;
+      console.error("Error fetching bootstrap data:", e);
+      latestGW = 1;
     }
   }
 
@@ -560,7 +280,15 @@ import Nav from "../components/Nav.astro";
         const player = playerCache.get(p.element) || { position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
 
-        const computed = getPlayerLiveComputed(p.element, teamId, gw);
+        const computed = getPlayerLiveComputed({
+          playerId: p.element,
+          teamId,
+          gw,
+          livePointsCache,
+          projectedBonusCache,
+          teamStatusCache,
+          bonusConfirmedOnProvisional: true
+        });
 
         return {
           playerId: Number(p.element),
@@ -586,39 +314,6 @@ import Nav from "../components/Nav.astro";
     } catch (e) {
       console.error(`Error fetching live data for manager ${entryId}:`, e);
       return 0;
-    }
-  }
-
-  async function fetchBootstrapData() {
-    try {
-      const res = await fetch('/api/fpl/bootstrap-static');
-      if (!res.ok) throw new Error("Failed to fetch bootstrap data");
-      const data = await res.json();
-
-      // Cache player names and team info
-      data.elements.forEach((p: any) => {
-        playerCache.set(p.id, {
-          name: p.web_name,
-          position: p.element_type,
-          team: p.team
-        });
-      });
-
-      data.teams.forEach((t: any) => {
-        teamCache.set(t.id, {
-          name: t.name,
-          shortName: t.short_name
-        });
-      });
-
-      const currentEvent = (data.events || []).find((e: any) => e.is_current);
-      latestGW = currentEvent ? currentEvent.id : 1;
-      currentGWFinished = currentEvent ? currentEvent.finished : false;
-
-      populateGWSelector(latestGW);
-    } catch (e) {
-      console.error("Error fetching bootstrap data:", e);
-      latestGW = 1;
     }
   }
 
@@ -1184,7 +879,10 @@ import Nav from "../components/Nav.astro";
     }
 
     if (gw === latestGW && !currentGWFinished) {
-      await Promise.all([fetchFixtures(gw), fetchLiveGW(gw)]);
+      await Promise.all([
+        fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: true }),
+        fetchLiveGW({ gw, livePointsCache })
+      ]);
     }
 
     allManagerData = [];
