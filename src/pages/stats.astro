@@ -2,13 +2,13 @@
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 ---
-<Layout title="League Statistics - FPL Manager Data">
+<Layout title="Manager Squads - FPL Manager Data">
   <Nav />
 
   <main class="page">
     <header class="page-header">
-      <h1 class="page-title">League Statistics</h1>
-      <p class="page-subtitle">Manager performance, rankings, and detailed stats.</p>
+      <h1 class="page-title">Manager Squads</h1>
+      <p class="page-subtitle">View each manager's squad for any gameweek.</p>
     </header>
 
     <div class="meta-row-wide">
@@ -24,28 +24,34 @@ import Nav from "../components/Nav.astro";
         </select>
       </div>
       <div class="control-inline">
-        <label class="label-small">&nbsp;</label>
-        <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
+        <label class="label-small" for="manager-filter">Manager</label>
+        <select class="select-small" id="manager-filter">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="control-inline">
+        <label class="label-small" for="view-filter">View</label>
+        <select class="select-small" id="view-filter">
+          <option value="all">All Players</option>
+          <option value="captain">Captains</option>
+          <option value="vice">Vice Captains</option>
+        </select>
       </div>
     </div>
 
-    <div id="loading-status" class="meta-row"></div>
-    <section id="stats-output" aria-live="polite"></section>
+    <div class="status-row">
+      <div id="loading-status" class="status-text"></div>
+      <button id="refresh-btn" class="btn-refresh" type="button">🔄 Refresh</button>
+    </div>
+
+    <section id="squads-output" aria-live="polite"></section>
   </main>
 
-  <!-- Manager Stats Modal -->
-  <div id="stats-modal" class="modal">
-    <div class="modal-panel" style="max-width:550px;">
-      <button id="close-stats-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
-      <div id="stats-modal-content"></div>
-    </div>
-  </div>
-
-  <!-- Squad Modal (reused from Live page) -->
-  <div id="squad-modal" class="modal modal--nested">
-    <div class="modal-panel">
-      <button id="close-squad-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
-      <div id="squad-modal-content"></div>
+  <!-- Player Stats Modal -->
+  <div id="player-modal" class="modal modal--nested">
+    <div class="modal-panel modal-panel--compact">
+      <button id="close-player-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="player-modal-content"></div>
     </div>
   </div>
 </Layout>
@@ -80,7 +86,7 @@ import Nav from "../components/Nav.astro";
   }
 
   .label-small {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--color-text-secondary);
     text-align: center;
@@ -88,10 +94,10 @@ import Nav from "../components/Nav.astro";
 
   .select-small {
     width: 100%;
-    min-height: 36px;
-    padding: 6px 8px;
+    min-height: 32px;
+    padding: 4px 6px;
     font-family: inherit;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--color-text);
     background: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -103,12 +109,23 @@ import Nav from "../components/Nav.astro";
     border-color: var(--color-primary);
   }
 
-  .btn-row {
-    width: 100%;
+  .status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  .status-text {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .btn-refresh {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 36px;
+    min-height: 32px;
     padding: var(--space-2) var(--space-3);
     font-family: inherit;
     font-size: 13px;
@@ -118,16 +135,73 @@ import Nav from "../components/Nav.astro";
     border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
+    white-space: nowrap;
   }
 
-  .btn-row:hover {
+  .btn-refresh:hover {
     background: var(--color-primary-hover);
+  }
+
+  :global(.squad-card) {
+    margin-bottom: var(--space-4);
+  }
+
+  :global(.squad-header) {
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface-alt);
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--text-sm);
+    text-align: center;
+  }
+
+  :global(.bench-row) {
+    background: var(--color-surface-alt);
+  }
+
+  :global(.sub-on-row) {
+    background: rgb(22 163 74 / 0.1);
+  }
+
+  :global(.sub-off-row) {
+    background: rgb(220 38 38 / 0.1);
+  }
+
+  :global(.dnp-row) {
+    background: rgb(220 38 38 / 0.05);
+    opacity: 0.7;
+  }
+
+  :global(.squad-chip-indicator) {
+    text-align: center;
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-warning);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  :global(.player-name-btn) {
+    background: none;
+    border: none;
+    color: var(--color-primary);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+    padding: 0;
+    text-align: left;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color 0.2s;
+  }
+
+  :global(.player-name-btn:hover) {
+    text-decoration-color: var(--color-primary);
   }
 </style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
-  import { type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -156,67 +230,126 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  let latestGW = 1;
-  let currentGWFinished = false;
-  let managerIds: number[] = [];
-  let allManagerData: ManagerData[] = [];
-  let playerCache = new Map<number, { name: string; position: number; team: number }>();
-  let teamCache = new Map<number, { name: string; shortName: string }>();
+  const out = document.getElementById("squads-output");
+  const gwFilterSelect = document.getElementById("gw-filter");
+  const managerFilter = document.getElementById("manager-filter");
+  const viewFilter = document.getElementById("view-filter");
+  const loadingStatus = document.getElementById("loading-status");
+  const managerCountEl = document.getElementById("manager-count");
+  const refreshBtn = document.getElementById("refresh-btn");
+
+  let managerIds = [];
+  let allSquadsData = [];
+  let latestGW = null;
+
+  let playerCache = new Map();
+  let teamCache = new Map();
   let livePointsCache = new Map<number, LiveStatLine>();
-  let projectedBonusCache = new Map<string, number>();
   let teamStatusCache = new Map<string, TeamStatus>();
+  let projectedBonusCache = new Map<string, number>();
   let fixturesCache: FixtureInfo[] = [];
 
-  interface ManagerData {
-    entryId: number;
-    managerName: string;
-    teamName: string;
-    totalPoints: number;
-    overallRank: number;
-    gwPoints: number;
-    gwRank: number;
-    teamValue: number;
-    bank: number;
-    historyData: any;
-    summaryData: any;
-  }
-
-  const out = document.getElementById("stats-output")!;
-  const loadingStatus = document.getElementById("loading-status")!;
-  const managerCountEl = document.getElementById("manager-count")!;
-  const refreshBtn = document.getElementById("refresh-btn")!;
-  const gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
-  const statsModal = document.getElementById("stats-modal")!;
-  const statsModalContent = document.getElementById("stats-modal-content")!;
-  const closeStatsModal = document.getElementById("close-stats-modal")!;
-  const squadModal = document.getElementById("squad-modal")!;
-  const squadModalContent = document.getElementById("squad-modal-content")!;
-  const closeSquadModal = document.getElementById("close-squad-modal")!;
-
-  closeStatsModal.addEventListener("click", () => {
-    statsModal.classList.remove("is-open");
-  });
-
-  closeSquadModal.addEventListener("click", () => {
-    squadModal.classList.remove("is-open");
-  });
-
-  function populateGWSelector(currentGW: number) {
+  function populateGWSelector(currentGW) {
     gwFilterSelect.innerHTML = '';
     for (let i = 1; i <= 38; i++) {
       const option = document.createElement('option');
-      option.value = String(i);
+      option.value = i;
       option.textContent = `GW ${i}`;
       if (i === currentGW) option.selected = true;
       gwFilterSelect.appendChild(option);
     }
   }
 
-  function positionLabel(elementType: number): string {
-    if (elementType === 1) return "GK";
-    if (elementType === 2) return "DEF";
-    if (elementType === 3) return "MID";
-    return "FWD";
+  function getTeamGwStatusLocal(teamId, gw) {
+    return getTeamGwStatus(teamStatusCache, teamId, gw);
+  }
+
+  function getPlayerLiveComputedLocal(playerId, teamId, gw) {
+    return getPlayerLiveComputed({
+      playerId,
+      teamId,
+      gw,
+      livePointsCache,
+      projectedBonusCache,
+      teamStatusCache,
+      bonusConfirmedOnProvisional: false
+    });
+  }
+
+  function applyCaptaincyToSquadDisplay(teamPicks, chipCode) {
+    const capFactor = (chipCode === "TC") ? 3 : 2;
+
+    const cap = teamPicks.find(p => p.isCaptain);
+    const vc = teamPicks.find(p => p.isViceCaptain);
+
+    const capId = cap ? cap.playerId : null;
+    const vcId = vc ? vc.playerId : null;
+
+    const capDnp = cap ? !!cap.dnp : true;
+    const vcDnp = vc ? !!vc.dnp : true;
+
+    const actingCaptainId =
+      (!capDnp && capId !== null) ? capId :
+      (!vcDnp && vcId !== null) ? vcId :
+      null;
+
+    return teamPicks.map(p => {
+      const mult = (actingCaptainId !== null && p.playerId === actingCaptainId) ? capFactor : 1;
+      return { ...p, gwPointsCap: (Number(p.gwPoints) || 0) * mult };
+    });
+  }
+
+  function applyAutoSubsKeepAll(teamPicks, chipCode) {
+    const isBB = chipCode === "BB";
+
+    const sorted = [...teamPicks].sort((a, b) => a.position - b.position);
+    const starters = sorted.slice(0, 11);
+    const bench = sorted.slice(11);
+
+    if (isBB) {
+      return sorted.map(p => ({ ...p, subOn: false, subOff: false }));
+    }
+
+    let active = starters.filter(p => !p.dnp);
+    const benchRemaining = [];
+
+    for (const cand of bench) {
+      if (active.length >= 11) {
+        benchRemaining.push(cand);
+        continue;
+      }
+
+      if (cand.dnp) {
+        benchRemaining.push(cand);
+        continue;
+      }
+
+      const gkCount = active.filter(p => p.playerPosition === "GK").length;
+      const defCount = active.filter(p => p.playerPosition === "DEF").length;
+
+      const pos = cand.playerPosition;
+      const validGK = (pos === "GK" && gkCount === 0);
+      const validDefSave = (pos === "DEF" && defCount < 3);
+      const validGeneral = (pos !== "GK" && gkCount > 0 && defCount >= 3);
+
+      if (validGK || validDefSave || validGeneral) {
+        active = [...active, cand];
+      } else {
+        benchRemaining.push(cand);
+      }
+    }
+
+    const activeIds = new Set(active.map(p => p.playerId));
+
+    return sorted.map(p => {
+      const wasStarter = p.position <= 11;
+      const inXI = activeIds.has(p.playerId);
+      return {
+        ...p,
+        subOn: (!wasStarter && inXI),
+        subOff: (wasStarter && !inXI)
+      };
+    });
   }
 
   async function fetchBootstrapData() {
@@ -225,151 +358,211 @@ import Nav from "../components/Nav.astro";
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
-      // Cache player names and team info
-      data.elements.forEach((p: any) => {
-        playerCache.set(p.id, {
-          name: p.web_name,
-          position: p.element_type,
-          team: p.team
+      playerCache.clear();
+      teamCache.clear();
+
+      data.elements.forEach(player => {
+        playerCache.set(player.id, {
+          name: player.web_name,
+          position: player.element_type === 1 ? "GK" :
+                    player.element_type === 2 ? "DEF" :
+                    player.element_type === 3 ? "MID" : "FWD",
+          teamId: player.team,
+          // Season stats:
+          totalPoints: player.total_points,
+          selectedByPercent: player.selected_by_percent,
+          goalsScored: player.goals_scored,
+          assists: player.assists,
+          cleanSheets: player.clean_sheets,
+          penaltiesSaved: player.penalties_saved,
+          yellowCards: player.yellow_cards,
+          redCards: player.red_cards,
+          bonus: player.bonus
         });
       });
 
-      data.teams.forEach((t: any) => {
-        teamCache.set(t.id, {
-          name: t.name,
-          shortName: t.short_name
-        });
+      data.teams.forEach(team => {
+        teamCache.set(team.id, team.short_name);
       });
 
-      const currentEvent = (data.events || []).find((e: any) => e.is_current);
+      const currentEvent = data.events?.find(e => e.is_current);
       latestGW = currentEvent ? currentEvent.id : 1;
-      currentGWFinished = currentEvent ? currentEvent.finished : false;
 
       populateGWSelector(latestGW);
+
+      return data;
     } catch (e) {
       console.error("Error fetching bootstrap data:", e);
       latestGW = 1;
-    }
-  }
-
-  async function fetchManagerLiveGwPoints(entryId: number, gw: number): Promise<number> {
-    try {
-      const picksRes = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
-      if (!picksRes.ok) {
-        throw new Error("Failed to fetch picks data");
-      }
-
-      const picksData = await picksRes.json();
-      
-      // The picks endpoint includes entry_history which has the official GW points
-      // This is exactly what the FPL site displays
-      const entryHistory = picksData.entry_history;
-      if (entryHistory) {
-        const points = Number(entryHistory.points) || 0;
-        const transferCost = Number(entryHistory.event_transfers_cost) || 0;
-        return points - transferCost;
-      }
-
-      return 0;
-    } catch (e) {
-      console.error(`Error fetching live data for manager ${entryId}:`, e);
-      return 0;
-    }
-  }
-
-  async function fetchManagerData(id: number, gw: number): Promise<ManagerData | null> {
-    const summaryUrl = `/api/fpl/entry/${id}`;
-    const historyUrl = `/api/fpl/entry/${id}/history`;
-
-    try {
-      const [summaryRes, historyRes] = await Promise.all([
-        fetch(summaryUrl),
-        fetch(historyUrl)
-      ]);
-
-      if (!summaryRes.ok || !historyRes.ok) throw new Error("Load error");
-
-      const summaryData = await summaryRes.json();
-      const historyData = await historyRes.json();
-
-      const current = Array.isArray(historyData?.current) ? historyData.current : [];
-      const gwRow = current.find((r: any) => Number(r.event) === Number(gw));
-
-      let gwPoints = gwRow ? Number(gwRow.points) || 0 : 0;
-      if (gw === latestGW && !currentGWFinished) {
-        gwPoints = await fetchManagerLiveGwPoints(id, gw);
-      }
-
-      return {
-        entryId: Number(id),
-        managerName: `${summaryData.player_first_name} ${summaryData.player_last_name}`.trim(),
-        teamName: summaryData.name || "",
-        totalPoints: Number(summaryData.summary_overall_points) || 0,
-        overallRank: Number(summaryData.summary_overall_rank) || 0,
-        gwPoints,
-        gwRank: gwRow ? Number(gwRow.rank) || 0 : 0,
-        teamValue: Number(summaryData.last_deadline_value) || 0,
-        bank: Number(summaryData.last_deadline_bank) || 0,
-        historyData,
-        summaryData
-      };
-    } catch (e) {
-      console.error(`Error fetching manager ${id}:`, e);
       return null;
     }
   }
 
-  function formatRank(rank: number): string {
-    if (!rank || rank === 0) return "—";
-    return rank.toLocaleString();
+  async function fetchSquadForGW(entryId, gw) {
+    try {
+      const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
+      if (!res.ok) throw new Error("Failed to fetch picks");
+
+      const data = await res.json();
+      const picks = data.picks || [];
+
+      return picks.map(pick => {
+        const info = playerCache.get(pick.element) || { name: "Unknown", position: "?", teamId: 0 };
+        const teamName = teamCache.get(info.teamId) || "???";
+
+        const computed = getPlayerLiveComputedLocal(pick.element, info.teamId, gw);
+
+        return {
+          position: Number(pick.position),
+          playerId: Number(pick.element),
+          playerName: info.name,
+          playerPosition: info.position,
+          teamId: info.teamId,
+          teamName,
+
+          isCaptain: !!pick.is_captain,
+          isViceCaptain: !!pick.is_vice_captain,
+
+          minutes: computed.minutes,
+          status: computed.status,
+          dnp: (computed.minutes === 0 && computed.status === "Fin"),
+
+          gwPoints: Math.trunc(Number(computed.liveTotal) || 0),
+
+          subOn: false,
+          subOff: false
+        };
+      });
+    } catch (e) {
+      console.error(`Error fetching squad for ${entryId} GW${gw}:`, e);
+      return [];
+    }
   }
 
-  function formatValue(value: number): string {
-    return `£${(value / 10).toFixed(1)}m`;
+  async function fetchManagerData(entryId, gw) {
+    try {
+      const [summaryRes, historyRes] = await Promise.all([
+        fetch(`/api/fpl/entry/${entryId}`),
+        fetch(`/api/fpl/entry/${entryId}/history`)
+      ]);
+
+      if (!summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch manager data");
+
+      const summaryData = await summaryRes.json();
+      const historyData = await historyRes.json();
+
+      const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
+      const teamName = summaryData.name;
+
+      const chips = historyData.chips || [];
+      const chipThisGW = chips.find(c => c.event === gw);
+      const chipPlayed = chipThisGW ?
+        (chipThisGW.name === "wildcard" ? "WC" :
+        chipThisGW.name === "bboost" ? "BB" :
+        chipThisGW.name === "3xc" ? "TC" :
+        chipThisGW.name === "freehit" ? "FH" : chipThisGW.name) : "";
+
+      const squadRaw = await fetchSquadForGW(entryId, gw);
+      const squadWithIndicators = applyAutoSubsKeepAll(squadRaw, chipPlayed || "None");
+      const squad = applyCaptaincyToSquadDisplay(squadWithIndicators, chipPlayed || "None");
+
+      return {
+        entryId,
+        managerName,
+        teamName,
+        chipPlayed,
+        squad
+      };
+    } catch (e) {
+      console.error(`Error fetching manager ${entryId}:`, e);
+      return null;
+    }
   }
 
-  function makeStatsTable(managersData: ManagerData[], gw: number): string {
-    let maxGwPoints = -Infinity;
-    managersData.forEach(m => {
-      if (m.gwPoints > maxGwPoints) maxGwPoints = m.gwPoints;
-    });
+  function populateManagerFilter() {
+    managerFilter.innerHTML = '<option value="">All</option>';
+
+    const sortedManagers = [...allSquadsData].sort((a, b) =>
+      a.managerName.localeCompare(b.managerName)
+    );
+
+    for (const manager of sortedManagers) {
+      const option = document.createElement('option');
+      option.value = manager.entryId;
+      option.textContent = manager.managerName;
+      managerFilter.appendChild(option);
+    }
+  }
+
+  function getChipFullName(chipCode) {
+    switch (chipCode) {
+      case "WC": return "Wildcard";
+      case "FH": return "Free Hit";
+      case "BB": return "Bench Boost";
+      case "TC": return "Triple Captain";
+      default: return chipCode;
+    }
+  }
+
+  function makeCaptainTable(squadsData, managerFilterValue = "", viewType = "captain") {
+    let filteredManagers = squadsData;
+
+    if (managerFilterValue) {
+      filteredManagers = squadsData.filter(m => m.entryId.toString() === managerFilterValue);
+    }
+
+    const isCaptainView = viewType === "captain";
+
+    // Collect captain/vc data
+    const rows = [];
+    for (const manager of filteredManagers) {
+      const target = manager.squad.find(p => isCaptainView ? p.isCaptain : p.isViceCaptain);
+      if (target) {
+        rows.push({
+          managerName: manager.managerName,
+          chipPlayed: manager.chipPlayed,
+          playerId: target.playerId,
+          playerName: target.playerName,
+          teamName: target.teamName,
+          points: target.gwPointsCap ?? target.gwPoints,
+          rawPoints: target.gwPoints,
+          isCaptain: target.isCaptain,
+          isViceCaptain: target.isViceCaptain
+        });
+      }
+    }
+
+    // Sort by points descending
+    rows.sort((a, b) => b.points - a.points);
 
     let html = `
       <div class="table-container">
         <div class="table-scroll">
-          <table class="data-table stats-table">
+          <table class="data-table captain-table">
             <thead>
               <tr>
-                <th class="rank-col">#</th>
                 <th>Manager</th>
-                <th class="pts-col">GW</th>
-                <th class="total-col">Total</th>
-                <th class="or-col">OR</th>
+                <th>Player</th>
+                <th class="team-col">Team</th>
+                <th class="pts-col">Pts</th>
               </tr>
             </thead>
             <tbody>
     `;
 
-    let rank = 1;
-    for (const m of managersData) {
-      const isTopScorer = m.gwPoints === maxGwPoints && maxGwPoints > 0;
-      const rowClass = isTopScorer ? 'top-scorer-row' : '';
+    for (const row of rows) {
+      const chipBadge = row.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:9px;padding:1px 4px;">${row.chipPlayed}</span>` : '';
 
       html += `
-        <tr class="${rowClass}">
-          <td class="rank-col">${rank}</td>
-          <td class="manager-cell">
-            <button type="button" class="manager-btn" data-entry-id="${m.entryId}">
-              ${m.managerName}
-            </button>
-            <div class="team-name">${m.teamName}</div>
+        <tr>
+          <td class="manager-cell">${row.managerName}${chipBadge}</td>
+          <td class="player-cell">
+            <button type="button" class="player-name-btn" data-player-id="${row.playerId}">${row.playerName}</button>
           </td>
-          <td class="pts-col">${m.gwPoints}</td>
-          <td class="total-col">${m.totalPoints.toLocaleString()}</td>
-          <td class="or-col">${formatRank(m.overallRank)}</td>
+          <td class="team-col">${row.teamName}</td>
+          <td class="pts-col">${row.points}</td>
         </tr>
       `;
-      rank++;
     }
 
     html += `
@@ -382,505 +575,318 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
-  
-  function calculateSeasonStats(historyData: any, selectedGW: number) {
-    const current = Array.isArray(historyData?.current) ? historyData.current : [];
-    const chips = Array.isArray(historyData?.chips) ? historyData.chips : [];
+  function makeSquadsDisplay(squadsData, managerFilterValue = "") {
+    let filteredManagers = squadsData;
 
-    if (current.length === 0) {
-      return {
-        bestGw: { points: 0, gw: 0 },
-        worstGw: { points: 0, gw: 0 },
-        bestGwRank: { rank: 0, gw: 0 },
-        worstGwRank: { rank: 0, gw: 0 },
-        bestOverallRank: { rank: 0, gw: 0 },
-        worstOverallRank: { rank: 0, gw: 0 },
-        totalTransfers: 0,
-        hitCount: 0,
-        totalHitsCost: 0,
-        chipsUsed: []
-      };
+    if (managerFilterValue) {
+      filteredManagers = squadsData.filter(m => m.entryId.toString() === managerFilterValue);
     }
 
-    // Determine max GW to consider for worst score
-    // If current GW is not finished, exclude it from worst calculations
-    const maxGwForWorst = currentGWFinished ? selectedGW : selectedGW - 1;
+    let html = "";
 
-    let bestGw = { points: -Infinity, gw: 0 };
-    let worstGw = { points: Infinity, gw: 0 };
-    let bestGwRank = { rank: Infinity, gw: 0 };
-    let worstGwRank = { rank: -Infinity, gw: 0 };
-    let bestOverallRank = { rank: Infinity, gw: 0 };
-    let worstOverallRank = { rank: -Infinity, gw: 0 };
-    let totalTransfers = 0;
-    let hitCount = 0;
-    let totalHitsCost = 0;
+    for (const manager of filteredManagers) {
+      const squad = [...(manager.squad || [])].sort((a, b) => a.position - b.position);
 
-    for (const row of current) {
-      const pts = Number(row.points) || 0;
-      const rank = Number(row.rank) || 0;
-      const overallRank = Number(row.overall_rank) || 0;
-      const gw = Number(row.event) || 0;
-      const hitCost = Number(row.event_transfers_cost) || 0;
-
-      // Best GW - consider all GWs
-      if (pts > bestGw.points) {
-        bestGw = { points: pts, gw };
-      }
-
-      // Worst GW - only consider completed GWs
-      if (gw <= maxGwForWorst && pts < worstGw.points) {
-        worstGw = { points: pts, gw };
-      }
-
-      // Best GW rank - consider all GWs
-      if (rank > 0 && rank < bestGwRank.rank) {
-        bestGwRank = { rank, gw };
-      }
-
-      // Worst GW rank - only consider completed GWs
-      if (gw <= maxGwForWorst && rank > worstGwRank.rank) {
-        worstGwRank = { rank, gw };
-      }
-
-      // Best Overall Rank - consider all GWs (lower is better)
-      if (overallRank > 0 && overallRank < bestOverallRank.rank) {
-        bestOverallRank = { rank: overallRank, gw };
-      }
-
-      // Worst Overall Rank - only consider completed GWs (higher is worse)
-      if (gw <= maxGwForWorst && overallRank > worstOverallRank.rank) {
-        worstOverallRank = { rank: overallRank, gw };
-      }
-
-      totalTransfers += Number(row.event_transfers) || 0;
-    
-      if (hitCost > 0) {
-        hitCount++;
-        totalHitsCost += hitCost;
-      }
-    }
-
-    const chipsUsed = chips.map((c: any) => {
-      const chipName = c.name === "wildcard" ? "WC" :
-                       c.name === "bboost" ? "BB" :
-                       c.name === "3xc" ? "TC" :
-                       c.name === "freehit" ? "FH" : c.name;
-      return { name: chipName, gw: c.event };
-    });
-
-    return {
-      bestGw: bestGw.points === -Infinity ? { points: 0, gw: 0 } : bestGw,
-      worstGw: worstGw.points === Infinity ? { points: 0, gw: 0 } : worstGw,
-      bestGwRank: bestGwRank.rank === Infinity ? { rank: 0, gw: 0 } : bestGwRank,
-      worstGwRank: worstGwRank.rank === -Infinity ? { rank: 0, gw: 0 } : worstGwRank,
-      bestOverallRank: bestOverallRank.rank === Infinity ? { rank: 0, gw: 0 } : bestOverallRank,
-      worstOverallRank: worstOverallRank.rank === -Infinity ? { rank: 0, gw: 0 } : worstOverallRank,
-      totalTransfers,
-      hitCount,
-      totalHitsCost,
-      chipsUsed
-    };
-  }
-
-  async function fetchCaptainData(entryId: number, maxGw: number): Promise<Map<number, number>> {
-    const captainCounts = new Map<number, number>();
-
-    const promises = [];
-    for (let gw = 1; gw <= maxGw; gw++) {
-      promises.push(
-        fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`)
-          .then(res => res.ok ? res.json() : null)
-          .catch(() => null)
-      );
-    }
-
-    const results = await Promise.all(promises);
-
-    for (const data of results) {
-      if (!data || !data.picks) continue;
-      const captain = data.picks.find((p: any) => p.is_captain);
-      if (captain) {
-        const playerId = captain.element;
-        captainCounts.set(playerId, (captainCounts.get(playerId) || 0) + 1);
-      }
-    }
-
-    return captainCounts;
-  }
-
-  function formatCaptainList(captainCounts: Map<number, number>): string {
-    if (captainCounts.size === 0) {
-      return '<p class="text-muted">No captain data available</p>';
-    }
-
-    // Group by count
-    const countGroups = new Map<number, string[]>();
-    for (const [playerId, count] of captainCounts.entries()) {
-      const name = playerCache.get(playerId)?.name || `Player ${playerId}`;
-      if (!countGroups.has(count)) {
-        countGroups.set(count, []);
-      }
-      countGroups.get(count)!.push(name);
-    }
-
-    // Sort counts descending
-    const sortedCounts = Array.from(countGroups.keys()).sort((a, b) => b - a);
-
-    let html = '<div class="captain-list">';
-    let rank = 1;
-    let displayedPlayers = 0;
-
-    for (const count of sortedCounts) {
-      const players = countGroups.get(count)!;
-      const isTied = players.length > 1;
-      const rankDisplay = isTied ? `${rank}=` : `${rank}`;
-
-      // Show all players with same count in one row if tied
-      if (isTied) {
-        html += `
-          <div class="captain-item captain-item--tied">
-            <span class="captain-rank captain-rank--tied">${rankDisplay}</span>
-            <span class="captain-name">${players.join(', ')}</span>
-            <span class="captain-count">×${count}</span>
+      html += `
+        <div class="card squad-card">
+          <div class="squad-header">
+            <strong>${manager.managerName}</strong>
+            <span class="text-muted"> — ${manager.teamName}</span>
           </div>
-        `;
-      } else {
+          ${manager.chipPlayed ? `<div class="squad-chip-indicator">${getChipFullName(manager.chipPlayed)} played</div>` : ''}
+          <div class="table-scroll">
+            <table class="data-table squad-table">
+              <thead>
+                <tr>
+                  <th class="num pos-num">#</th>
+                  <th>Player</th>
+                  <th class="num team-col">Team</th>
+                  <th class="num pts-col">Pts</th>
+                  <th class="num cap-col">C</th>
+                </tr>
+              </thead>
+              <tbody>
+      `;
+
+      for (const player of squad) {
+        const isBench = player.position > 11;
+        
+        let rowClass = "";
+        if (player.subOn) rowClass = "sub-on-row";
+        else if (player.subOff) rowClass = "sub-off-row";
+        else if (player.dnp) rowClass = "dnp-row";
+        else if (isBench) rowClass = "bench-row";
+
+        const captainLabel = player.isCaptain ? "C" : (player.isViceCaptain ? "V" : "");
+        const captainClass = player.isCaptain ? "text-danger" : (player.isViceCaptain ? "text-primary" : "");
+
+        let statusBadge = "";
+        if (player.subOn) statusBadge = `<span class="badge badge--success" style="font-size:9px;padding:1px 4px;margin-left:4px;">ON</span>`;
+        else if (player.subOff) statusBadge = `<span class="badge badge--danger" style="font-size:9px;padding:1px 4px;margin-left:4px;">OFF</span>`;
+        else if (player.dnp) statusBadge = `<span class="badge" style="font-size:9px;padding:1px 4px;margin-left:4px;">DNP</span>`;
+
         html += `
-          <div class="captain-item">
-            <span class="captain-rank">${rank}</span>
-            <span class="captain-name">${players[0]}</span>
-            <span class="captain-count">×${count}</span>
-          </div>
+          <tr class="${rowClass}">
+            <td class="num pos-num">${player.position}</td>
+            <td class="player-name">
+              <button type="button" class="player-name-btn" data-player-id="${player.playerId}">${player.playerName}</button>
+              ${statusBadge}
+            </td>
+            <td class="num team-col">${player.teamName}</td>
+            <td class="num pts-col">${player.gwPointsCap ?? player.gwPoints}</td>
+            <td class="num cap-col ${captainClass}">${captainLabel}</td>
+          </tr>
         `;
       }
 
-      displayedPlayers += players.length;
-      rank += players.length;
-
-      // Stop after showing top 3 positions (but include all ties)
-      if (rank > 3 && displayedPlayers >= 3) break;
+      html += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
     }
 
-    html += '</div>';
+    if (!html) {
+      html = "<p class='text-muted'>No squads to display.</p>";
+    }
+
     return html;
   }
 
-  async function showSquadModal(entryId: number, managerName: string, teamName: string) {
-    const gw = parseInt(gwFilterSelect.value) || latestGW;
-
-    squadModalContent.innerHTML = `<p class="text-muted">Loading squad...</p>`;
-    squadModal.classList.add("is-open");
-
+  async function fetchPlayerDefconStats(playerId: number): Promise<{ totalDefcon: number; gamesWithDefcon: number }> {
     try {
-      const [picksRes, historyRes] = await Promise.all([
-        fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
-        fetch(`/api/fpl/entry/${entryId}/history`)
-      ]);
-
-      if (!picksRes.ok) throw new Error("Failed to fetch picks");
-
-      const picksData = await picksRes.json();
-      const historyData = await historyRes.json();
-      const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
-
-      // Get chip played
-      const chips = historyData.chips || [];
-      const chipThisGW = chips.find((c: any) => c.event === gw);
-      const chipPlayed = chipThisGW ?
-        (chipThisGW.name === "wildcard" ? "WC" :
-        chipThisGW.name === "bboost" ? "BB" :
-        chipThisGW.name === "3xc" ? "TC" :
-        chipThisGW.name === "freehit" ? "FH" : "") : "";
-
-      // Get GW points
-      const currentHistory = historyData.current || [];
-      const gwRow = currentHistory.find((r: any) => Number(r.event) === Number(gw));
-      const livePoints = gwRow ? Number(gwRow.points) - (Number(gwRow.event_transfers_cost) || 0) : 0;
-
-      const picks = rawPicks.map((p: any) => {
-        const player = playerCache.get(p.element);
-        const teamId = player?.team || 0;
-        const teamInfo = teamCache.get(teamId);
-
-        return {
-          playerId: Number(p.element),
-          position: Number(p.position),
-          is_captain: !!p.is_captain,
-          is_vice_captain: !!p.is_vice_captain,
-          web_name: player?.name || "Unknown",
-          teamShort: teamInfo?.shortName || "???",
-          playingPosition: positionLabel(player?.position || 4),
-          multiplier: p.multiplier || 1
-        };
-      });
-
-      const sorted = [...picks].sort((a, b) => a.position - b.position);
-      const starters = sorted.slice(0, 11);
-      const bench = sorted.slice(11);
-
-      const chipEmoji = chipPlayed === "WC" ? "🃏" : 
-                        chipPlayed === "BB" ? "🪑" : 
-                        chipPlayed === "TC" ? "👑" : 
-                        chipPlayed === "FH" ? "🎯" : "";
-
-      let html = `
-        <h2 class="modal-title" style="padding-right:40px;">
-          ${managerName}
-          ${chipPlayed ? `<span class="badge" style="margin-left:8px;">${chipEmoji} ${chipPlayed}</span>` : ""}
-        </h2>
-        <p class="text-muted" style="margin-bottom:var(--space-3);">
-          ${teamName} · GW${gw} · <span class="text-success font-bold">${livePoints} pts</span>
-        </p>
-
-        <div class="squad-modal-section">
-          <h3 class="squad-modal-heading">Starting XI</h3>
-          <table class="squad-modal-table">
-            <thead>
-              <tr>
-                <th>Player</th>
-                <th class="col-team">Team</th>
-              </tr>
-            </thead>
-            <tbody>
-      `;
-
-      for (const p of starters) {
-        const capLabel = p.is_captain ? '<span class="cap-badge cap-c">C</span>' : 
-                         p.is_vice_captain ? '<span class="cap-badge cap-v">V</span>' : '';
-
-        html += `
-          <tr>
-            <td class="player-cell">
-              <span class="player-pos">${p.playingPosition}</span>
-              <span class="player-name">${p.web_name}</span>
-              ${capLabel}
-            </td>
-            <td class="col-team">${p.teamShort}</td>
-          </tr>
-        `;
-      }
-
-      html += `
-            </tbody>
-          </table>
-        </div>
-
-        <div class="squad-modal-section">
-          <h3 class="squad-modal-heading">Bench</h3>
-          <table class="squad-modal-table bench-table">
-            <tbody>
-      `;
-
-      for (const p of bench) {
-        html += `
-          <tr class="bench-inactive">
-            <td class="player-cell">
-              <span class="player-pos">${p.playingPosition}</span>
-              <span class="player-name">${p.web_name}</span>
-            </td>
-            <td class="col-team">${p.teamShort}</td>
-          </tr>
-        `;
-      }
-
-      html += `
-            </tbody>
-          </table>
-        </div>
-      `;
-
-      squadModalContent.innerHTML = html;
-
-    } catch (error) {
-      console.error("Error loading squad:", error);
-      squadModalContent.innerHTML = "<p class='status status--error'>Error loading squad data.</p>";
+      const { data, error } = await supabase
+        .from('player_defensive_stats')
+        .select('defcon_points')
+        .eq('player_id', playerId);
+      
+      if (error || !data) return { totalDefcon: 0, gamesWithDefcon: 0 };
+      
+      const totalDefcon = data.reduce((sum, row) => sum + (row.defcon_points || 0), 0);
+      const gamesWithDefcon = data.filter(row => row.defcon_points > 0).length;
+      
+      return { totalDefcon, gamesWithDefcon };
+    } catch (e) {
+      console.error('Error fetching DEFCON stats:', e);
+      return { totalDefcon: 0, gamesWithDefcon: 0 };
     }
   }
 
-  async function showManagerModal(entryId: number) {
-    const manager = allManagerData.find(m => m.entryId === entryId);
-    if (!manager) return;
+  // FPL Point Calculation Helper Functions
+  function getGoalPoints(position, goals) {
+    if (!goals) return 0;
+    const pointsPerGoal = position === "GK" || position === "DEF" ? 6 :
+                          position === "MID" ? 5 : 4;
+    return goals * pointsPerGoal;
+  }
 
-    const gw = parseInt(gwFilterSelect.value) || latestGW;
+  function getAssistPoints(assists) {
+    return (assists || 0) * 3;
+  }
 
-    // Show loading state
-    statsModalContent.innerHTML = `
-      <h2 class="modal-title">
-        <button type="button" class="manager-name-btn" data-entry-id="${manager.entryId}">${manager.managerName}</button>
-      </h2>
-      <p class="text-muted">${manager.teamName}</p>
-      <div class="stats-loading">
-        <p class="text-muted">Loading detailed stats...</p>
-      </div>
-    `;
-    statsModal.classList.add("is-open");
+  function getCleanSheetPoints(position, cleanSheets) {
+    if (!cleanSheets) return 0;
+    const pointsPerCleanSheet = position === "GK" || position === "DEF" ? 4 :
+                                position === "MID" ? 1 : 0;
+    return cleanSheets * pointsPerCleanSheet;
+  }
 
-    // Calculate season stats
-    const stats = calculateSeasonStats(manager.historyData, gw);
+  function getPenaltySavedPoints(penaltiesSaved) {
+    return (penaltiesSaved || 0) * 5;
+  }
 
-    // Get current GW data
-    const current = manager.historyData?.current || [];
-    const gwRow = current.find((r: any) => Number(r.event) === Number(gw));
-    const gwRank = gwRow ? Number(gwRow.rank) || 0 : 0;
+  function getYellowCardPoints(yellowCards) {
+    return (yellowCards || 0) * -1;
+  }
 
-    // Fetch captain data
-    const captainCounts = await fetchCaptainData(entryId, gw);
-    const captainHtml = formatCaptainList(captainCounts);
+  function getRedCardPoints(redCards) {
+    return (redCards || 0) * -3;
+  }
 
-    // Build modal content
+  function formatPoints(points) {
+    if (points === 0) return "—";
+    return points > 0 ? `+${points}` : `${points}`;
+  }
+
+  function getPointsClass(points) {
+    if (points > 0) return "points-positive";
+    if (points < 0) return "points-negative";
+    return "";
+  }
+
+  async function showPlayerModal(playerId) {
+    const player = playerCache.get(playerId);
+    
+    if (!player) {
+      const playerModalContent = document.getElementById("player-modal-content");
+      const playerModal = document.getElementById("player-modal");
+      playerModalContent.innerHTML = "<p class='status status--error'>Player not found.</p>";
+      playerModal.classList.add("is-open");
+      return;
+    }
+
+    const teamName = teamCache.get(player.teamId) || "???";
+    
+    // Fetch DEFCON stats for outfield players
+    const isOutfieldPlayer = player.position !== "GK";
+    let defconStats = { totalDefcon: 0, gamesWithDefcon: 0 };
+    if (isOutfieldPlayer) {
+      defconStats = await fetchPlayerDefconStats(playerId);
+    }
+
+    // Calculate FPL points for each stat
+    const goalPoints = getGoalPoints(player.position, player.goalsScored);
+    const assistPoints = getAssistPoints(player.assists);
+    const cleanSheetPoints = getCleanSheetPoints(player.position, player.cleanSheets);
+    const penaltySavedPoints = getPenaltySavedPoints(player.penaltiesSaved);
+    const yellowCardPoints = getYellowCardPoints(player.yellowCards);
+    const redCardPoints = getRedCardPoints(player.redCards);
+    const bonusPoints = player.bonus || 0;
+
     let html = `
-      <h2 class="modal-title" style="margin-bottom: var(--space-1);">
-        <button type="button" class="manager-name-btn" data-entry-id="${manager.entryId}" data-manager-name="${manager.managerName}" data-team-name="${manager.teamName}">${manager.managerName}</button>
-      </h2>
-      <p class="text-muted" style="margin-bottom: var(--space-3); font-size: 12px;">${manager.teamName}</p>
-
-      <!-- Season Overview -->
-      <div class="stats-section">
-        <h3 class="stats-section-title">📊 Season Overview</h3>
-        <div class="stats-grid stats-grid--compact">
-          <div class="stat-item stat-item--compact">
-            <span class="stat-value">${manager.totalPoints.toLocaleString()}</span>
-            <span class="stat-label">Total Pts</span>
+      <div class="player-modal-header">
+        <div class="player-modal-info">
+          <h2 class="player-modal-name">${player.name}</h2>
+          <div class="player-modal-meta">
+            <span class="player-modal-team">${teamName}</span>
+            <span class="player-modal-pos">${player.position}</span>
           </div>
-          <div class="stat-item stat-item--compact">
-            <span class="stat-value">${formatRank(manager.overallRank)}</span>
-            <span class="stat-label">OR</span>
-          </div>
-          <div class="stat-item stat-item--compact">
-            <span class="stat-value">${formatValue(manager.teamValue)}</span>
-            <span class="stat-label">Value</span>
-          </div>
-          <div class="stat-item stat-item--compact">
-            <span class="stat-value">${formatValue(manager.bank)}</span>
-            <span class="stat-label">Bank</span>
-          </div>
+        </div>
+        <div class="player-modal-points">
+          <span class="player-modal-total">${player.totalPoints || 0}</span>
+          <span class="player-modal-pts-label">pts</span>
         </div>
       </div>
 
-      <!-- Current GW -->
-      <div class="stats-section">
-        <h3 class="stats-section-title">📅 Gameweek ${gw}</h3>
-        <div class="stats-grid stats-grid--compact stats-grid--half">
-          <div class="stat-item stat-item--compact">
-            <span class="stat-value">${manager.gwPoints}</span>
-            <span class="stat-label">GW Pts</span>
+      <div class="player-modal-breakdown">
+        <h3 class="player-modal-section-title">Season Statistics</h3>
+        <div class="breakdown-list">
+          <div class="breakdown-row">
+            <span class="breakdown-label">Total Points</span>
+            <span class="breakdown-value">${player.totalPoints || 0}</span>
+            <span class="breakdown-points">—</span>
           </div>
-          <div class="stat-item stat-item--compact">
-            <span class="stat-value">${formatRank(gwRank)}</span>
-            <span class="stat-label">GW Rank</span>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Selected By</span>
+            <span class="breakdown-value">${player.selectedByPercent || 0}%</span>
+            <span class="breakdown-points">—</span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Goals Scored</span>
+            <span class="breakdown-value">${player.goalsScored || 0}</span>
+            <span class="breakdown-points ${getPointsClass(goalPoints)}">${formatPoints(goalPoints)}</span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Assists</span>
+            <span class="breakdown-value">${player.assists || 0}</span>
+            <span class="breakdown-points ${getPointsClass(assistPoints)}">${formatPoints(assistPoints)}</span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Clean Sheets</span>
+            <span class="breakdown-value">${player.cleanSheets || 0}</span>
+            <span class="breakdown-points ${getPointsClass(cleanSheetPoints)}">${formatPoints(cleanSheetPoints)}</span>
+          </div>
+          ${player.position === "GK" ? `
+          <div class="breakdown-row">
+            <span class="breakdown-label">Penalties Saved</span>
+            <span class="breakdown-value">${player.penaltiesSaved || 0}</span>
+            <span class="breakdown-points ${getPointsClass(penaltySavedPoints)}">${formatPoints(penaltySavedPoints)}</span>
+          </div>
+          ` : ''}
+          ${isOutfieldPlayer && defconStats.totalDefcon > 0 ? `
+          <div class="breakdown-row">
+            <span class="breakdown-label">DEFCON Points</span>
+            <span class="breakdown-value">${defconStats.gamesWithDefcon} games</span>
+            <span class="breakdown-points points-positive">+${defconStats.totalDefcon}</span>
+          </div>
+          ` : ''}
+          <div class="breakdown-row">
+            <span class="breakdown-label">Yellow Cards</span>
+            <span class="breakdown-value">${player.yellowCards || 0}</span>
+            <span class="breakdown-points ${getPointsClass(yellowCardPoints)}">${formatPoints(yellowCardPoints)}</span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Red Cards</span>
+            <span class="breakdown-value">${player.redCards || 0}</span>
+            <span class="breakdown-points ${getPointsClass(redCardPoints)}">${formatPoints(redCardPoints)}</span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Bonus Points</span>
+            <span class="breakdown-value">${player.bonus || 0}</span>
+            <span class="breakdown-points ${getPointsClass(bonusPoints)}">${formatPoints(bonusPoints)}</span>
           </div>
         </div>
-      </div>
-
-      <!-- Highs & Lows -->
-      <div class="stats-section">
-        <h3 class="stats-section-title">📈 Highs & Lows</h3>
-        <div class="stats-grid stats-grid--compact">
-          <div class="stat-item stat-item--compact stat-item--success">
-            <span class="stat-value">${stats.bestGw.points}</span>
-            <span class="stat-label">Best (GW${stats.bestGw.gw})</span>
-          </div>
-          <div class="stat-item stat-item--compact stat-item--danger">
-            <span class="stat-value">${stats.worstGw.gw > 0 ? stats.worstGw.points : '—'}</span>
-            <span class="stat-label">${stats.worstGw.gw > 0 ? `Worst (GW${stats.worstGw.gw})` : 'Worst'}</span>
-          </div>
-          <div class="stat-item stat-item--compact stat-item--success">
-            <span class="stat-value">${formatRank(stats.bestGwRank.rank)}</span>
-            <span class="stat-label">Best GW Rank (GW${stats.bestGwRank.gw})</span>
-          </div>
-          <div class="stat-item stat-item--compact stat-item--danger">
-            <span class="stat-value">${stats.worstGwRank.gw > 0 ? formatRank(stats.worstGwRank.rank) : '—'}</span>
-            <span class="stat-label">${stats.worstGwRank.gw > 0 ? `Worst GW Rank (GW${stats.worstGwRank.gw})` : 'Worst GW Rank'}</span>
-          </div>
-          <div class="stat-item stat-item--compact stat-item--success">
-            <span class="stat-value">${formatRank(stats.bestOverallRank.rank)}</span>
-            <span class="stat-label">Highest OR (GW${stats.bestOverallRank.gw})</span>
-          </div>
-          <div class="stat-item stat-item--compact stat-item--danger">
-            <span class="stat-value">${stats.worstOverallRank.gw > 0 ? formatRank(stats.worstOverallRank.rank) : '—'}</span>
-            <span class="stat-label">${stats.worstOverallRank.gw > 0 ? `Lowest OR (GW${stats.worstOverallRank.gw})` : 'Lowest OR'}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Transfer Activity -->
-      <div class="stats-section">
-        <h3 class="stats-section-title">💸 Transfer Activity</h3>
-        <div class="stats-grid stats-grid--compact stats-grid--half">
-          <div class="stat-item stat-item--compact">
-            <span class="stat-value">${stats.totalTransfers}</span>
-            <span class="stat-label">Transfers</span>
-          </div>
-          <div class="stat-item stat-item--compact ${stats.hitCount > 0 ? 'stat-item--danger' : ''}">
-            <span class="stat-value">${stats.hitCount > 0 ? `${stats.hitCount} (-${stats.totalHitsCost})` : '0'}</span>
-            <span class="stat-label">Hits</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Chips -->
-      <div class="stats-section">
-        <h3 class="stats-section-title">🎮 Chips Used</h3>
-        <div class="chips-row">
-          ${stats.chipsUsed.length > 0 
-            ? stats.chipsUsed.map((c: any) => `<span class="chip-badge">${c.name} <span class="chip-gw">GW${c.gw}</span></span>`).join('')
-            : '<span class="text-muted" style="font-size:12px;">No chips used yet</span>'
-          }
-        </div>
-      </div>
-
-      <!-- Captaincy -->
-      <div class="stats-section">
-        <h3 class="stats-section-title">👑 Most Captained</h3>
-        ${captainHtml}
       </div>
     `;
 
-    statsModalContent.innerHTML = html;
-
-    // Attach click handler for manager name
-    const managerNameBtn = statsModalContent.querySelector('.manager-name-btn');
-    if (managerNameBtn) {
-      managerNameBtn.addEventListener('click', () => {
-        showSquadModal(manager.entryId, manager.managerName, manager.teamName);
-      });
-    }
+    const playerModalContent = document.getElementById("player-modal-content");
+    const playerModal = document.getElementById("player-modal");
+    playerModalContent.innerHTML = html;
+    playerModal.classList.add("is-open");
   }
 
-  function attachManagerButtons() {
-    document.querySelectorAll('.manager-btn').forEach(btn => {
+  function attachPlayerButtons() {
+    document.querySelectorAll('.player-name-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const button = e.target as HTMLElement;
-        const entryId = parseInt(button.dataset.entryId || '0');
-        if (entryId) showManagerModal(entryId);
+        const playerId = parseInt(button.dataset.playerId || '0');
+        if (playerId) showPlayerModal(playerId);
       });
     });
   }
 
-  async function loadStats(ids: number[], gw: number) {
+  function renderOutput() {
+    const viewType = viewFilter.value;
+    const managerFilterValue = managerFilter.value;
+
+    if (viewType === "captain" || viewType === "vice") {
+      out.innerHTML = makeCaptainTable(allSquadsData, managerFilterValue, viewType);
+    } else {
+      out.innerHTML = makeSquadsDisplay(allSquadsData, managerFilterValue);
+    }
+    
+    attachPlayerButtons();
+  }
+
+  async function loadSquads(ids, gw) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
       return;
     }
 
-    allManagerData = [];
+    if (!gw) {
+      out.innerHTML = "<p class='status status--warning'>Please select a gameweek.</p>";
+      return;
+    }
+
+    allSquadsData = [];
     out.innerHTML = "";
-    loadingStatus.textContent = `Loading 0 of ${ids.length}...`;
+    loadingStatus.textContent = `Loading GW${gw} data...`;
+
+    try {
+      await Promise.all([
+        fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: false }),
+        fetchLiveGW({ gw, livePointsCache })
+      ]);
+    } catch (e) {
+      console.error("Failed to load live caches:", e);
+      out.innerHTML = "<p class='status status--error'>Failed to load live data. Try refresh.</p>";
+      loadingStatus.textContent = "";
+      return;
+    }
 
     let loaded = 0;
     for (const id of ids) {
       try {
         const data = await fetchManagerData(id, gw);
         if (data) {
-          allManagerData.push(data);
+          allSquadsData.push(data);
           loaded++;
 
           loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
 
-          allManagerData.sort((a, b) => b.totalPoints - a.totalPoints);
-          out.innerHTML = makeStatsTable(allManagerData, gw);
-          attachManagerButtons();
+          renderOutput();
         }
       } catch (e) {
         console.error(`Failed to load manager ${id}:`, e);
@@ -888,7 +894,19 @@ import Nav from "../components/Nav.astro";
       }
     }
 
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
+    populateManagerFilter();
+
+    loadingStatus.innerHTML = `<span class="text-success font-bold">✅ Loaded ${loaded} managers for GW${gw}</span>`;
+  }
+
+  async function init() {
+    loadingStatus.textContent = "Loading player data...";
+    await fetchBootstrapData();
+
+    const { managerIds: ids } = await loadManagerIdsFromSupabase();
+    managerIds = ids;
+
+    await updateDisplay();
   }
 
   async function updateDisplay() {
@@ -898,24 +916,41 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const managerParam = urlParams.get('manager');
+
     const gw = parseInt(gwFilterSelect.value) || latestGW;
-    await loadStats(managerIds, gw);
+
+    if (managerParam) {
+      const managerId = parseInt(managerParam);
+      await loadSquads([managerId], gw);
+
+      const checkAndSetFilter = () => {
+        if (managerFilter.options.length > 1) {
+          managerFilter.value = managerId.toString();
+        } else {
+          setTimeout(checkAndSetFilter, 50);
+        }
+      };
+      setTimeout(checkAndSetFilter, 50);
+    } else {
+      await loadSquads(managerIds, gw);
+    }
   }
-
-  (async function init() {
-    await fetchBootstrapData();
-
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
-
-    await updateDisplay();
-  })();
 
   gwFilterSelect.addEventListener('change', async () => {
     const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
-      await loadStats(managerIds, gw);
+      await loadSquads(managerIds, gw);
     }
+  });
+
+  managerFilter.addEventListener('change', () => {
+    renderOutput();
+  });
+
+  viewFilter.addEventListener('change', () => {
+    renderOutput();
   });
 
   refreshBtn.addEventListener('click', async () => {
@@ -923,4 +958,16 @@ import Nav from "../components/Nav.astro";
     managerIds = ids;
     await updateDisplay();
   });
+
+  // Player modal close handler
+  const playerModal = document.getElementById("player-modal");
+  const closePlayerModal = document.getElementById("close-player-modal");
+  
+  if (playerModal && closePlayerModal) {
+    closePlayerModal.addEventListener("click", () => {
+      playerModal.classList.remove("is-open");
+    });
+  }
+
+  init();
 </script>
