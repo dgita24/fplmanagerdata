@@ -673,6 +673,48 @@ import Nav from "../components/Nav.astro";
     }
   }
 
+  // FPL Point Calculation Helper Functions
+  function getGoalPoints(position, goals) {
+    if (!goals) return 0;
+    const pointsPerGoal = position === "GK" || position === "DEF" ? 6 :
+                          position === "MID" ? 5 : 4;
+    return goals * pointsPerGoal;
+  }
+
+  function getAssistPoints(assists) {
+    return (assists || 0) * 3;
+  }
+
+  function getCleanSheetPoints(position, cleanSheets) {
+    if (!cleanSheets) return 0;
+    const pointsPerCleanSheet = position === "GK" || position === "DEF" ? 4 :
+                                position === "MID" ? 1 : 0;
+    return cleanSheets * pointsPerCleanSheet;
+  }
+
+  function getPenaltySavedPoints(penaltiesSaved) {
+    return (penaltiesSaved || 0) * 5;
+  }
+
+  function getYellowCardPoints(yellowCards) {
+    return (yellowCards || 0) * -1;
+  }
+
+  function getRedCardPoints(redCards) {
+    return (redCards || 0) * -3;
+  }
+
+  function formatPoints(points) {
+    if (points === 0) return "—";
+    return points > 0 ? `+${points}` : `${points}`;
+  }
+
+  function getPointsClass(points) {
+    if (points > 0) return "points-positive";
+    if (points < 0) return "points-negative";
+    return "";
+  }
+
   async function showPlayerModal(playerId) {
     const player = playerCache.get(playerId);
     
@@ -692,6 +734,15 @@ import Nav from "../components/Nav.astro";
     if (isOutfieldPlayer) {
       defconStats = await fetchPlayerDefconStats(playerId);
     }
+
+    // Calculate FPL points for each stat
+    const goalPoints = getGoalPoints(player.position, player.goalsScored);
+    const assistPoints = getAssistPoints(player.assists);
+    const cleanSheetPoints = getCleanSheetPoints(player.position, player.cleanSheets);
+    const penaltySavedPoints = getPenaltySavedPoints(player.penaltiesSaved);
+    const yellowCardPoints = getYellowCardPoints(player.yellowCards);
+    const redCardPoints = getRedCardPoints(player.redCards);
+    const bonusPoints = player.bonus || 0;
 
     let html = `
       <div class="player-modal-header">
@@ -724,23 +775,23 @@ import Nav from "../components/Nav.astro";
           <div class="breakdown-row">
             <span class="breakdown-label">Goals Scored</span>
             <span class="breakdown-value">${player.goalsScored || 0}</span>
-            <span class="breakdown-points">—</span>
+            <span class="breakdown-points ${getPointsClass(goalPoints)}">${formatPoints(goalPoints)}</span>
           </div>
           <div class="breakdown-row">
             <span class="breakdown-label">Assists</span>
             <span class="breakdown-value">${player.assists || 0}</span>
-            <span class="breakdown-points">—</span>
+            <span class="breakdown-points ${getPointsClass(assistPoints)}">${formatPoints(assistPoints)}</span>
           </div>
           <div class="breakdown-row">
             <span class="breakdown-label">Clean Sheets</span>
             <span class="breakdown-value">${player.cleanSheets || 0}</span>
-            <span class="breakdown-points">—</span>
+            <span class="breakdown-points ${getPointsClass(cleanSheetPoints)}">${formatPoints(cleanSheetPoints)}</span>
           </div>
           ${player.position === "GK" ? `
           <div class="breakdown-row">
             <span class="breakdown-label">Penalties Saved</span>
             <span class="breakdown-value">${player.penaltiesSaved || 0}</span>
-            <span class="breakdown-points">—</span>
+            <span class="breakdown-points ${getPointsClass(penaltySavedPoints)}">${formatPoints(penaltySavedPoints)}</span>
           </div>
           ` : ''}
           ${isOutfieldPlayer && defconStats.totalDefcon > 0 ? `
@@ -753,17 +804,17 @@ import Nav from "../components/Nav.astro";
           <div class="breakdown-row">
             <span class="breakdown-label">Yellow Cards</span>
             <span class="breakdown-value">${player.yellowCards || 0}</span>
-            <span class="breakdown-points">—</span>
+            <span class="breakdown-points ${getPointsClass(yellowCardPoints)}">${formatPoints(yellowCardPoints)}</span>
           </div>
           <div class="breakdown-row">
             <span class="breakdown-label">Red Cards</span>
             <span class="breakdown-value">${player.redCards || 0}</span>
-            <span class="breakdown-points">—</span>
+            <span class="breakdown-points ${getPointsClass(redCardPoints)}">${formatPoints(redCardPoints)}</span>
           </div>
           <div class="breakdown-row">
             <span class="breakdown-label">Bonus Points</span>
             <span class="breakdown-value">${player.bonus || 0}</span>
-            <span class="breakdown-points">—</span>
+            <span class="breakdown-points ${getPointsClass(bonusPoints)}">${formatPoints(bonusPoints)}</span>
           </div>
         </div>
       </div>
