@@ -127,7 +127,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
-  import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -254,58 +254,23 @@ import Nav from "../components/Nav.astro";
 
   async function fetchManagerLiveGwPoints(entryId: number, gw: number): Promise<number> {
     try {
-      const [picksRes, historyRes] = await Promise.all([
-        fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
-        fetch(`/api/fpl/entry/${entryId}/history`)
-      ]);
-
-      if (!picksRes.ok || !historyRes.ok) {
-        throw new Error("Failed to fetch manager data");
+      const picksRes = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
+      if (!picksRes.ok) {
+        throw new Error("Failed to fetch picks data");
       }
 
       const picksData = await picksRes.json();
-      const historyData = await historyRes.json();
-
-      const chipName = (historyData.chips || []).find((c: any) => c.event === gw)?.name || "";
-      const chipCode =
-        chipName === "bboost" ? "BB" :
-        chipName === "3xc" ? "TC" :
-        chipName === "wildcard" ? "WC" :
-        chipName === "freehit" ? "FH" :
-        "None";
-      const capFactor = chipCode === "TC" ? 3 : 2;
-
-      const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
-      const starters = rawPicks.filter((p: any) => Number(p.position) <= 11);
-
-      let livePointsBeforeHits = 0;
-
-      for (const p of starters) {
-        const player = playerCache.get(p.element) || { position: 4, team: 0 };
-        const teamId = Number(player.team) || 0;
-
-        const computed = getPlayerLiveComputed({
-          playerId: p.element,
-          teamId,
-          gw,
-          livePointsCache,
-          projectedBonusCache,
-          teamStatusCache,
-          bonusConfirmedOnProvisional: false,
-          projectedBonusDuringLive: false,
-          projectedBonusDuringProvisional: false
-        });
-
-        const isCaptain = !!p.is_captain;
-        const multiplier = isCaptain ? capFactor : 1;
-        livePointsBeforeHits += (computed.liveTotal * multiplier);
+      
+      // The picks endpoint includes entry_history which has the official GW points
+      // This is exactly what the FPL site displays
+      const entryHistory = picksData.entry_history;
+      if (entryHistory) {
+        const points = Number(entryHistory.points) || 0;
+        const transferCost = Number(entryHistory.event_transfers_cost) || 0;
+        return points - transferCost;
       }
 
-      const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
-      const transferCost =
-        Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
-
-      return livePointsBeforeHits - transferCost;
+      return 0;
     } catch (e) {
       console.error(`Error fetching live data for manager ${entryId}:`, e);
       return 0;
@@ -897,13 +862,6 @@ import Nav from "../components/Nav.astro";
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
       return;
-    }
-
-    if (gw === latestGW && !currentGWFinished) {
-      await Promise.all([
-        fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: true }),
-        fetchLiveGW({ gw, livePointsCache })
-      ]);
     }
 
     allManagerData = [];
