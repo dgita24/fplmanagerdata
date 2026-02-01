@@ -127,7 +127,6 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
-  import { type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -162,10 +161,6 @@ import Nav from "../components/Nav.astro";
   let allManagerData: ManagerData[] = [];
   let playerCache = new Map<number, { name: string; position: number; team: number }>();
   let teamCache = new Map<number, { name: string; shortName: string }>();
-  let livePointsCache = new Map<number, LiveStatLine>();
-  let projectedBonusCache = new Map<string, number>();
-  let teamStatusCache = new Map<string, TeamStatus>();
-  let fixturesCache: FixtureInfo[] = [];
 
   interface ManagerData {
     entryId: number;
