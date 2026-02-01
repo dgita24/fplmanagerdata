@@ -46,6 +46,14 @@ import Nav from "../components/Nav.astro";
 
     <section id="squads-output" aria-live="polite"></section>
   </main>
+
+  <!-- Player Stats Modal -->
+  <div id="player-modal" class="modal modal--nested">
+    <div class="modal-panel modal-panel--compact">
+      <button id="close-player-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="player-modal-content"></div>
+    </div>
+  </div>
 </Layout>
 
 <style>
@@ -170,6 +178,24 @@ import Nav from "../components/Nav.astro";
     font-weight: 600;
     color: var(--color-warning);
     border-bottom: 1px solid var(--color-border);
+  }
+
+  :global(.player-name-btn) {
+    background: none;
+    border: none;
+    color: var(--color-primary);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+    padding: 0;
+    text-align: left;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color 0.2s;
+  }
+
+  :global(.player-name-btn:hover) {
+    text-decoration-color: var(--color-primary);
   }
 </style>
 
@@ -341,7 +367,17 @@ import Nav from "../components/Nav.astro";
           position: player.element_type === 1 ? "GK" :
                     player.element_type === 2 ? "DEF" :
                     player.element_type === 3 ? "MID" : "FWD",
-          teamId: player.team
+          teamId: player.team,
+          // Season stats:
+          totalPoints: player.total_points,
+          selectedByPercent: player.selected_by_percent,
+          goalsScored: player.goals_scored,
+          assists: player.assists,
+          cleanSheets: player.clean_sheets,
+          penaltiesSaved: player.penalties_saved,
+          yellowCards: player.yellow_cards,
+          redCards: player.red_cards,
+          bonus: player.bonus
         });
       });
 
@@ -485,6 +521,7 @@ import Nav from "../components/Nav.astro";
         rows.push({
           managerName: manager.managerName,
           chipPlayed: manager.chipPlayed,
+          playerId: target.playerId,
           playerName: target.playerName,
           teamName: target.teamName,
           points: target.gwPointsCap ?? target.gwPoints,
@@ -519,7 +556,9 @@ import Nav from "../components/Nav.astro";
       html += `
         <tr>
           <td class="manager-cell">${row.managerName}${chipBadge}</td>
-          <td class="player-cell">${row.playerName}</td>
+          <td class="player-cell">
+            <button type="button" class="player-name-btn" data-player-id="${row.playerId}">${row.playerName}</button>
+          </td>
           <td class="team-col">${row.teamName}</td>
           <td class="pts-col">${row.points}</td>
         </tr>
@@ -589,7 +628,10 @@ import Nav from "../components/Nav.astro";
         html += `
           <tr class="${rowClass}">
             <td class="num pos-num">${player.position}</td>
-            <td class="player-name">${player.playerName}${statusBadge}</td>
+            <td class="player-name">
+              <button type="button" class="player-name-btn" data-player-id="${player.playerId}">${player.playerName}</button>
+              ${statusBadge}
+            </td>
             <td class="num team-col">${player.teamName}</td>
             <td class="num pts-col">${player.gwPointsCap ?? player.gwPoints}</td>
             <td class="num cap-col ${captainClass}">${captainLabel}</td>
@@ -612,6 +654,104 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
+  function showPlayerModal(playerId) {
+    const player = playerCache.get(playerId);
+    
+    if (!player) {
+      const playerModalContent = document.getElementById("player-modal-content");
+      const playerModal = document.getElementById("player-modal");
+      playerModalContent.innerHTML = "<p class='status status--error'>Player not found.</p>";
+      playerModal.classList.add("is-open");
+      return;
+    }
+
+    const teamName = teamCache.get(player.teamId) || "???";
+
+    let html = `
+      <div class="player-modal-header">
+        <div class="player-modal-info">
+          <h2 class="player-modal-name">${player.name}</h2>
+          <div class="player-modal-meta">
+            <span class="player-modal-team">${teamName}</span>
+            <span class="player-modal-pos">${player.position}</span>
+          </div>
+        </div>
+        <div class="player-modal-points">
+          <span class="player-modal-total">${player.totalPoints || 0}</span>
+          <span class="player-modal-pts-label">pts</span>
+        </div>
+      </div>
+
+      <div class="player-modal-breakdown">
+        <h3 class="player-modal-section-title">Season Statistics</h3>
+        <div class="breakdown-list">
+          <div class="breakdown-row">
+            <span class="breakdown-label">Total Points</span>
+            <span class="breakdown-value">${player.totalPoints || 0}</span>
+            <span class="breakdown-points">—</span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Selected By</span>
+            <span class="breakdown-value">${player.selectedByPercent || 0}%</span>
+            <span class="breakdown-points">—</span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Goals Scored</span>
+            <span class="breakdown-value">${player.goalsScored || 0}</span>
+            <span class="breakdown-points">—</span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Assists</span>
+            <span class="breakdown-value">${player.assists || 0}</span>
+            <span class="breakdown-points">—</span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Clean Sheets</span>
+            <span class="breakdown-value">${player.cleanSheets || 0}</span>
+            <span class="breakdown-points">—</span>
+          </div>
+          ${player.position === "GK" ? `
+          <div class="breakdown-row">
+            <span class="breakdown-label">Penalties Saved</span>
+            <span class="breakdown-value">${player.penaltiesSaved || 0}</span>
+            <span class="breakdown-points">—</span>
+          </div>
+          ` : ''}
+          <div class="breakdown-row">
+            <span class="breakdown-label">Yellow Cards</span>
+            <span class="breakdown-value">${player.yellowCards || 0}</span>
+            <span class="breakdown-points">—</span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Red Cards</span>
+            <span class="breakdown-value">${player.redCards || 0}</span>
+            <span class="breakdown-points">—</span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Bonus Points</span>
+            <span class="breakdown-value">${player.bonus || 0}</span>
+            <span class="breakdown-points">—</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const playerModalContent = document.getElementById("player-modal-content");
+    const playerModal = document.getElementById("player-modal");
+    playerModalContent.innerHTML = html;
+    playerModal.classList.add("is-open");
+  }
+
+  function attachPlayerButtons() {
+    document.querySelectorAll('.player-name-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const button = e.target as HTMLElement;
+        const playerId = parseInt(button.dataset.playerId || '0');
+        if (playerId) showPlayerModal(playerId);
+      });
+    });
+  }
+
   function renderOutput() {
     const viewType = viewFilter.value;
     const managerFilterValue = managerFilter.value;
@@ -621,6 +761,8 @@ import Nav from "../components/Nav.astro";
     } else {
       out.innerHTML = makeSquadsDisplay(allSquadsData, managerFilterValue);
     }
+    
+    attachPlayerButtons();
   }
 
   async function loadSquads(ids, gw) {
@@ -731,6 +873,14 @@ import Nav from "../components/Nav.astro";
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();
+  });
+
+  // Player modal close handler
+  const playerModal = document.getElementById("player-modal");
+  const closePlayerModal = document.getElementById("close-player-modal");
+  
+  closePlayerModal.addEventListener("click", () => {
+    playerModal.classList.remove("is-open");
   });
 
   init();
