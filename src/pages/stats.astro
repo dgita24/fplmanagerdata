@@ -417,6 +417,7 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
+  
   function calculateSeasonStats(historyData: any, selectedGW: number) {
     const current = Array.isArray(historyData?.current) ? historyData.current : [];
     const chips = Array.isArray(historyData?.chips) ? historyData.chips : [];
@@ -427,6 +428,8 @@ import Nav from "../components/Nav.astro";
         worstGw: { points: 0, gw: 0 },
         bestGwRank: { rank: 0, gw: 0 },
         worstGwRank: { rank: 0, gw: 0 },
+        bestOverallRank: { rank: 0, gw: 0 },
+        worstOverallRank: { rank: 0, gw: 0 },
         totalTransfers: 0,
         hitCount: 0,
         totalHitsCost: 0,
@@ -442,6 +445,8 @@ import Nav from "../components/Nav.astro";
     let worstGw = { points: Infinity, gw: 0 };
     let bestGwRank = { rank: Infinity, gw: 0 };
     let worstGwRank = { rank: -Infinity, gw: 0 };
+    let bestOverallRank = { rank: Infinity, gw: 0 };
+    let worstOverallRank = { rank: -Infinity, gw: 0 };
     let totalTransfers = 0;
     let hitCount = 0;
     let totalHitsCost = 0;
@@ -449,6 +454,7 @@ import Nav from "../components/Nav.astro";
     for (const row of current) {
       const pts = Number(row.points) || 0;
       const rank = Number(row.rank) || 0;
+      const overallRank = Number(row.overall_rank) || 0;
       const gw = Number(row.event) || 0;
       const hitCost = Number(row.event_transfers_cost) || 0;
 
@@ -462,18 +468,28 @@ import Nav from "../components/Nav.astro";
         worstGw = { points: pts, gw };
       }
 
-      // Best rank - consider all GWs
+      // Best GW rank - consider all GWs
       if (rank > 0 && rank < bestGwRank.rank) {
         bestGwRank = { rank, gw };
       }
 
-      // Worst rank - only consider completed GWs
+      // Worst GW rank - only consider completed GWs
       if (gw <= maxGwForWorst && rank > worstGwRank.rank) {
         worstGwRank = { rank, gw };
       }
 
+      // Best Overall Rank - consider all GWs (lower is better)
+      if (overallRank > 0 && overallRank < bestOverallRank.rank) {
+        bestOverallRank = { rank: overallRank, gw };
+      }
+
+      // Worst Overall Rank - only consider completed GWs (higher is worse)
+      if (gw <= maxGwForWorst && overallRank > worstOverallRank.rank) {
+        worstOverallRank = { rank: overallRank, gw };
+      }
+
       totalTransfers += Number(row.event_transfers) || 0;
-      
+    
       if (hitCost > 0) {
         hitCount++;
         totalHitsCost += hitCost;
@@ -493,6 +509,8 @@ import Nav from "../components/Nav.astro";
       worstGw: worstGw.points === Infinity ? { points: 0, gw: 0 } : worstGw,
       bestGwRank: bestGwRank.rank === Infinity ? { rank: 0, gw: 0 } : bestGwRank,
       worstGwRank: worstGwRank.rank === -Infinity ? { rank: 0, gw: 0 } : worstGwRank,
+      bestOverallRank: bestOverallRank.rank === Infinity ? { rank: 0, gw: 0 } : bestOverallRank,
+      worstOverallRank: worstOverallRank.rank === -Infinity ? { rank: 0, gw: 0 } : worstOverallRank,
       totalTransfers,
       hitCount,
       totalHitsCost,
@@ -804,11 +822,19 @@ import Nav from "../components/Nav.astro";
           </div>
           <div class="stat-item stat-item--compact stat-item--success">
             <span class="stat-value">${formatRank(stats.bestGwRank.rank)}</span>
-            <span class="stat-label">Best Rank (GW${stats.bestGwRank.gw})</span>
+            <span class="stat-label">Best GW Rank (GW${stats.bestGwRank.gw})</span>
           </div>
           <div class="stat-item stat-item--compact stat-item--danger">
             <span class="stat-value">${stats.worstGwRank.gw > 0 ? formatRank(stats.worstGwRank.rank) : '—'}</span>
-            <span class="stat-label">${stats.worstGwRank.gw > 0 ? `Worst Rank (GW${stats.worstGwRank.gw})` : 'Worst Rank'}</span>
+            <span class="stat-label">${stats.worstGwRank.gw > 0 ? `Worst GW Rank (GW${stats.worstGwRank.gw})` : 'Worst GW Rank'}</span>
+          </div>
+          <div class="stat-item stat-item--compact stat-item--success">
+            <span class="stat-value">${formatRank(stats.bestOverallRank.rank)}</span>
+            <span class="stat-label">Highest OR (GW${stats.bestOverallRank.gw})</span>
+          </div>
+          <div class="stat-item stat-item--compact stat-item--danger">
+            <span class="stat-value">${stats.worstOverallRank.gw > 0 ? formatRank(stats.worstOverallRank.rank) : '—'}</span>
+            <span class="stat-label">${stats.worstOverallRank.gw > 0 ? `Lowest OR (GW${stats.worstOverallRank.gw})` : 'Lowest OR'}</span>
           </div>
         </div>
       </div>

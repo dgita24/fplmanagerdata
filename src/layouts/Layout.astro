@@ -452,9 +452,11 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .stats-table .rank-col {
-    width: 28px !important;
+    width: 32px !important;
+    min-width: 32px !important;
     text-align: center !important;
     font-weight: 700;
+    white-space: nowrap !important;
   }
 
   .stats-table .manager-cell {
@@ -484,13 +486,15 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .stats-table .pts-col {
-    width: 45px !important;
+    width: 38px !important;
+    in-width: 38px !important;
     text-align: center !important;
     font-weight: 700 !important;
   }
 
   .stats-table .total-col {
-    width: 56px !important;
+    width: 52px !important;
+    min-width: 52px !important;
     text-align: center !important;
     font-weight: 700 !important;
   }
