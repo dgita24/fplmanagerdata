@@ -123,17 +123,17 @@ import Nav from "../components/Nav.astro";
     background: var(--color-primary-hover);
   }
 
-  /* Chip links in transfer modal */
   .chip-link {
-    background: none;
-    border: none;
-    padding: 0;
-    font: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 13px;
     font-weight: 600;
     color: var(--color-primary);
+    background: none;
+    border: none;
+    padding: 0;
     cursor: pointer;
-    text-align: left;
   }
 
   .chip-link:hover {
@@ -148,6 +148,10 @@ import Nav from "../components/Nav.astro";
   .chip-link--static:hover {
     color: var(--color-primary);
     text-decoration: none;
+  }
+
+  .chip-row {
+    margin-bottom: var(--space-2);
   }
 
   /* Highlight styles for table */
@@ -357,7 +361,7 @@ import Nav from "../components/Nav.astro";
       const allGWs = [...new Set([
         ...Object.keys(transfersByGW).map(Number),
         ...Object.keys(chipsUsed).map(Number)
-      ])].sort((a, b) => b - a); // Reverse order - most recent first
+      ])].sort((a, b) => b - a);
 
       for (const gw of allGWs) {
         const chip = chipsUsed[gw];
@@ -385,12 +389,14 @@ import Nav from "../components/Nav.astro";
 
           if (isClickableChip) {
             html += `
-              <button class="chip-link chip-btn" data-gw="${gw}" data-manager="${managerId}" data-chip="${chip}" type="button">
-                ${chipDisplay}
-              </button>
+              <div class="chip-row">
+                <button class="chip-link chip-btn" data-gw="${gw}" data-manager="${managerId}" data-chip="${chip}" type="button">
+                  ${chipDisplay}
+                </button>
+              </div>
             `;
           } else {
-            html += `<span class="chip-link chip-link--static">${chipDisplay}</span>`;
+            html += `<div class="chip-row"><span class="chip-link chip-link--static">${chipDisplay}</span></div>`;
           }
         }
 
