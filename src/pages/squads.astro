@@ -46,6 +46,14 @@ import Nav from "../components/Nav.astro";
 
     <section id="squads-output" aria-live="polite"></section>
   </main>
+
+  <!-- Player Stats Modal -->
+  <div id="player-modal" class="modal">
+    <div class="modal-panel modal-panel--compact">
+      <button id="close-player-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="player-modal-content"></div>
+    </div>
+  </div>
 </Layout>
 
 <style>
@@ -211,6 +219,9 @@ import Nav from "../components/Nav.astro";
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
+  const playerModal = document.getElementById("player-modal");
+  const playerModalContent = document.getElementById("player-modal-content");
+  const closePlayerModal = document.getElementById("close-player-modal");
 
   let managerIds = [];
   let allSquadsData = [];
@@ -336,13 +347,7 @@ import Nav from "../components/Nav.astro";
       teamCache.clear();
 
       data.elements.forEach(player => {
-        playerCache.set(player.id, {
-          name: player.web_name,
-          position: player.element_type === 1 ? "GK" :
-                    player.element_type === 2 ? "DEF" :
-                    player.element_type === 3 ? "MID" : "FWD",
-          teamId: player.team
-        });
+        playerCache.set(player.id, player);
       });
 
       data.teams.forEach(team => {
@@ -371,7 +376,16 @@ import Nav from "../components/Nav.astro";
       const picks = data.picks || [];
 
       return picks.map(pick => {
-        const info = playerCache.get(pick.element) || { name: "Unknown", position: "?", teamId: 0 };
+        const player = playerCache.get(pick.element);
+        if (!player) return null;
+        
+        const info = {
+          name: player.web_name,
+          position: player.element_type === 1 ? "GK" :
+                    player.element_type === 2 ? "DEF" :
+                    player.element_type === 3 ? "MID" : "FWD",
+          teamId: player.team
+        };
         const teamName = teamCache.get(info.teamId) || "???";
 
         const computed = getPlayerLiveComputedLocal(pick.element, info.teamId, gw);
@@ -396,7 +410,7 @@ import Nav from "../components/Nav.astro";
           subOn: false,
           subOff: false
         };
-      });
+      }).filter(Boolean);
     } catch (e) {
       console.error(`Error fetching squad for ${entryId} GW${gw}:`, e);
       return [];
@@ -485,6 +499,7 @@ import Nav from "../components/Nav.astro";
         rows.push({
           managerName: manager.managerName,
           chipPlayed: manager.chipPlayed,
+          playerId: target.playerId,
           playerName: target.playerName,
           teamName: target.teamName,
           points: target.gwPointsCap ?? target.gwPoints,
@@ -519,7 +534,7 @@ import Nav from "../components/Nav.astro";
       html += `
         <tr>
           <td class="manager-cell">${row.managerName}${chipBadge}</td>
-          <td class="player-cell">${row.playerName}</td>
+          <td class="player-cell"><button class="player-name-btn" data-player-id="${row.playerId}">${row.playerName}</button></td>
           <td class="team-col">${row.teamName}</td>
           <td class="pts-col">${row.points}</td>
         </tr>
@@ -589,7 +604,7 @@ import Nav from "../components/Nav.astro";
         html += `
           <tr class="${rowClass}">
             <td class="num pos-num">${player.position}</td>
-            <td class="player-name">${player.playerName}${statusBadge}</td>
+            <td class="player-name"><button class="player-name-btn" data-player-id="${player.playerId}">${player.playerName}</button>${statusBadge}</td>
             <td class="num team-col">${player.teamName}</td>
             <td class="num pts-col">${player.gwPointsCap ?? player.gwPoints}</td>
             <td class="num cap-col ${captainClass}">${captainLabel}</td>
@@ -621,6 +636,93 @@ import Nav from "../components/Nav.astro";
     } else {
       out.innerHTML = makeSquadsDisplay(allSquadsData, managerFilterValue);
     }
+  }
+
+  function showPlayerModal(playerId) {
+    const player = playerCache.get(playerId);
+    
+    if (!player) {
+      playerModalContent.innerHTML = "<p class='status status--error'>Player not found.</p>";
+      playerModal.classList.add("is-open");
+      return;
+    }
+
+    const teamShortName = teamCache.get(player.team) || "???";
+    const positionLabel = player.element_type === 1 ? "GK" :
+                          player.element_type === 2 ? "DEF" :
+                          player.element_type === 3 ? "MID" : "FWD";
+
+    // Season stats from bootstrap-static
+    const totalPoints = player.total_points || 0;
+    const selectedBy = player.selected_by_percent || "0.0";
+    const goalsScored = player.goals_scored || 0;
+    const assists = player.assists || 0;
+    const cleanSheets = player.clean_sheets || 0;
+    const bonus = player.bonus || 0;
+    const yellowCards = player.yellow_cards || 0;
+    const redCards = player.red_cards || 0;
+    const penaltiesSaved = player.penalties_saved || 0;
+
+    const isGK = player.element_type === 1;
+
+    let html = `
+      <div class="player-modal-header">
+        <div class="player-modal-info">
+          <h2 class="player-modal-name">${player.web_name}</h2>
+          <div class="player-modal-meta">
+            <span class="player-modal-team">${teamShortName}</span>
+            <span class="player-modal-pos">${positionLabel}</span>
+          </div>
+        </div>
+        <div class="player-modal-points">
+          <span class="player-modal-total">${totalPoints}</span>
+          <span class="player-modal-pts-label">pts</span>
+        </div>
+      </div>
+
+      <div class="player-modal-breakdown">
+        <h3 class="player-modal-section-title">Season Statistics</h3>
+        <div class="breakdown-list">
+          <div class="breakdown-item">
+            <span class="breakdown-label">Goals Scored</span>
+            <span class="breakdown-value">${goalsScored}</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Assists</span>
+            <span class="breakdown-value">${assists}</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Clean Sheets</span>
+            <span class="breakdown-value">${cleanSheets}</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Bonus Points</span>
+            <span class="breakdown-value">${bonus}</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Yellow Cards</span>
+            <span class="breakdown-value">${yellowCards}</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="breakdown-label">Red Cards</span>
+            <span class="breakdown-value">${redCards}</span>
+          </div>
+          ${isGK ? `
+          <div class="breakdown-item">
+            <span class="breakdown-label">Penalties Saved</span>
+            <span class="breakdown-value">${penaltiesSaved}</span>
+          </div>
+          ` : ''}
+          <div class="breakdown-item">
+            <span class="breakdown-label">Selected By</span>
+            <span class="breakdown-value">${selectedBy}%</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    playerModalContent.innerHTML = html;
+    playerModal.classList.add("is-open");
   }
 
   async function loadSquads(ids, gw) {
@@ -731,6 +833,29 @@ import Nav from "../components/Nav.astro";
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();
+  });
+
+  // Event delegation for player name buttons
+  out.addEventListener("click", (e) => {
+    const btn = e.target.closest(".player-name-btn");
+    if (btn) {
+      const playerId = parseInt(btn.dataset.playerId);
+      if (playerId) {
+        showPlayerModal(playerId);
+      }
+    }
+  });
+
+  // Close player modal
+  closePlayerModal.addEventListener("click", () => {
+    playerModal.classList.remove("is-open");
+  });
+
+  // Close modal when clicking outside
+  playerModal.addEventListener("click", (e) => {
+    if (e.target === playerModal) {
+      playerModal.classList.remove("is-open");
+    }
   });
 
   init();
