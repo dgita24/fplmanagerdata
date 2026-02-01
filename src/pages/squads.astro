@@ -134,32 +134,42 @@ import Nav from "../components/Nav.astro";
     background: var(--color-primary-hover);
   }
 
-  .squad-card {
-    margin-bottom: var(--space-3);
+  :global(.squad-card) {
+    margin-bottom: var(--space-4);
   }
 
-  .squad-header {
+  :global(.squad-header) {
     padding: var(--space-2) var(--space-3);
     background: var(--color-surface-alt);
     border-bottom: 1px solid var(--color-border);
     font-size: var(--text-sm);
+    text-align: center;
   }
 
-  .bench-row {
+  :global(.bench-row) {
     background: var(--color-surface-alt);
   }
 
-  .sub-on-row {
+  :global(.sub-on-row) {
     background: rgb(22 163 74 / 0.1);
   }
 
-  .sub-off-row {
+  :global(.sub-off-row) {
     background: rgb(220 38 38 / 0.1);
   }
 
-  .dnp-row {
+  :global(.dnp-row) {
     background: rgb(220 38 38 / 0.05);
     opacity: 0.7;
+  }
+
+  :global(.squad-chip-indicator) {
+    text-align: center;
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--color-warning);
+    border-bottom: 1px solid var(--color-border);
   }
 </style>
 
@@ -448,6 +458,16 @@ import Nav from "../components/Nav.astro";
     }
   }
 
+  function getChipFullName(chipCode) {
+    switch (chipCode) {
+      case "WC": return "Wildcard";
+      case "FH": return "Free Hit";
+      case "BB": return "Bench Boost";
+      case "TC": return "Triple Captain";
+      default: return chipCode;
+    }
+  }
+
   function makeCaptainTable(squadsData, managerFilterValue = "", viewType = "captain") {
     let filteredManagers = squadsData;
 
@@ -533,8 +553,8 @@ import Nav from "../components/Nav.astro";
           <div class="squad-header">
             <strong>${manager.managerName}</strong>
             <span class="text-muted"> — ${manager.teamName}</span>
-            ${manager.chipPlayed ? `<span class="badge" style="margin-left:var(--space-2);">${manager.chipPlayed}</span>` : ''}
           </div>
+          ${manager.chipPlayed ? `<div class="squad-chip-indicator">${getChipFullName(manager.chipPlayed)} played</div>` : ''}
           <div class="table-scroll">
             <table class="data-table squad-table">
               <thead>
