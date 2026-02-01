@@ -123,31 +123,29 @@ import Nav from "../components/Nav.astro";
     background: var(--color-primary-hover);
   }
 
-  .chip-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
+  /* Chip headings */
+  .chip-text {
     font-size: 13px;
     font-weight: 600;
-    color: var(--color-primary);
+    font-family: inherit;
+    color: var(--color-text);
     background: none;
     border: none;
     padding: 0;
+    margin: 0;
+    display: inline;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  .chip-text--clickable {
+    color: var(--color-primary);
     cursor: pointer;
   }
 
-  .chip-link:hover {
+  .chip-text--clickable:hover {
     color: var(--color-primary-hover);
     text-decoration: underline;
-  }
-
-  .chip-link--static {
-    cursor: default;
-  }
-
-  .chip-link--static:hover {
-    color: var(--color-primary);
-    text-decoration: none;
   }
 
   .chip-row {
@@ -390,13 +388,13 @@ import Nav from "../components/Nav.astro";
           if (isClickableChip) {
             html += `
               <div class="chip-row">
-                <button class="chip-link chip-btn" data-gw="${gw}" data-manager="${managerId}" data-chip="${chip}" type="button">
+                <button class="chip-text chip-text--clickable chip-btn" data-gw="${gw}" data-manager="${managerId}" data-chip="${chip}" type="button">
                   ${chipDisplay}
                 </button>
               </div>
             `;
           } else {
-            html += `<div class="chip-row"><span class="chip-link chip-link--static">${chipDisplay}</span></div>`;
+            html += `<div class="chip-row"><span class="chip-text">${chipDisplay}</span></div>`;
           }
         }
 
