@@ -116,11 +116,13 @@ jobs:
                   gameweek: gameweek,
                   position: position,
                   minutes: minutes,
-                  clearances: 0, // FPL API provides combined clearances_blocks_interceptions
+                  // FPL API provides combined clearances_blocks_interceptions
+                  // We store it in clearances for simplicity
+                  clearances: clearancesBlocksInterceptions,
                   recoveries: recoveries,
                   tackles: tackles,
-                  interceptions: 0, // FPL API provides combined clearances_blocks_interceptions
-                  blocks: 0, // FPL API provides combined clearances_blocks_interceptions
+                  interceptions: 0,
+                  blocks: 0,
                   defensive_contribution: defensiveContribution,
                   defcon_points: defconPoints
                 });

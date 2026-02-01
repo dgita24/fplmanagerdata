@@ -71,9 +71,15 @@ The `player_defensive_stats` table stores:
 - `gameweek`: Gameweek number (1-38)
 - `position`: Player position (1=GK, 2=DEF, 3=MID, 4=FWD)
 - `minutes`: Minutes played
-- `defensive_contribution`: Total defensive actions
+- `defensive_contribution`: Total defensive actions (provided by FPL API)
 - `defcon_points`: DEFCON points earned (0 or 2)
-- Additional defensive stats (clearances, recoveries, tackles, etc.)
+- `clearances`: Combined clearances + blocks + interceptions (FPL API provides these combined)
+- `recoveries`: Ball recoveries
+- `tackles`: Tackles made
+- `interceptions`: Set to 0 (included in clearances)
+- `blocks`: Set to 0 (included in clearances)
+
+**Note:** The FPL API provides `clearances_blocks_interceptions` as a single combined value. This is stored in the `clearances` column, while `interceptions` and `blocks` are set to 0.
 
 ## Troubleshooting
 
