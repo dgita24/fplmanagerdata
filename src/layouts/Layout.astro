@@ -1328,6 +1328,35 @@ const { title = "FPL Manager Data" } = Astro.props;
     color: var(--color-text-muted);
   }
 
+  /* Chip text for transfers modal - plain text style for WC/FH */
+  .chip-text {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--color-text);
+    background: none !important;
+    border: none !important;
+    padding: 0;
+    margin: 0;
+    display: inline;
+    appearance: none;
+    -webkit-appearance: none;
+    box-shadow: none;
+    outline: none;
+    line-height: inherit;
+    text-align: left;
+  }
+
+  .chip-text--clickable {
+    color: var(--color-primary) !important;
+    cursor: pointer;
+  }
+
+  .chip-text--clickable:hover {
+    color: var(--color-primary-hover) !important;
+    text-decoration: underline;
+  }
+
   /* Chip transfers modal grid */
   .chip-transfers-grid {
     display: grid;
