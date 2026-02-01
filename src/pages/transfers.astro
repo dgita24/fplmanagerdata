@@ -123,6 +123,33 @@ import Nav from "../components/Nav.astro";
     background: var(--color-primary-hover);
   }
 
+  /* Chip links in transfer modal */
+  .chip-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-primary);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .chip-link:hover {
+    color: var(--color-primary-hover);
+    text-decoration: underline;
+  }
+
+  .chip-link--static {
+    cursor: default;
+  }
+
+  .chip-link--static:hover {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
   /* Highlight styles for table */
   .hit-highlight {
     color: var(--color-danger) !important;
@@ -349,30 +376,42 @@ import Nav from "../components/Nav.astro";
         html += `<div class="transfer-gw-content">`;
 
         if (chip) {
-          const chipDisplay = chip === 'wildcard' ? '🃏 Wildcard' : 
-                              chip === 'freehit' ? '🎯 Free Hit' : 
-                              chip === 'bboost' ? '🪑 Bench Boost' :
-                              chip === '3xc' ? '👑 Triple Captain' : chip;
-          html += `
-            <button class="chip-btn transfer-chip-btn" data-gw="${gw}" data-manager="${managerId}" data-chip="${chip}" type="button">
-              ${chipDisplay}
-              <span class="chip-view-text">view →</span>
-            </button>
-          `;
-        } else if (gwTransfers.length > 0) {
-          for (const t of gwTransfers) {
-            const playerIn = allPlayersMap[t.element_in] || `Player ${t.element_in}`;
-            const playerOut = allPlayersMap[t.element_out] || `Player ${t.element_out}`;
+          const chipDisplay = chip === 'wildcard' ? 'Wildcard' : 
+                              chip === 'freehit' ? 'Free Hit' : 
+                              chip === 'bboost' ? 'Bench Boost' :
+                              chip === '3xc' ? 'Triple Captain' : chip;
+
+          const isClickableChip = chip === 'wildcard' || chip === 'freehit';
+
+          if (isClickableChip) {
             html += `
-              <div class="transfer-row">
-                <span class="transfer-out">▼ ${escapeHtml(playerOut)}</span>
-                <span class="transfer-arrow">→</span>
-                <span class="transfer-in">▲ ${escapeHtml(playerIn)}</span>
-              </div>
+              <button class="chip-link chip-btn" data-gw="${gw}" data-manager="${managerId}" data-chip="${chip}" type="button">
+                ${chipDisplay}
+              </button>
             `;
+          } else {
+            html += `<span class="chip-link chip-link--static">${chipDisplay}</span>`;
           }
-        } else {
-          html += `<span class="text-muted" style="font-size:12px;">No transfers</span>`;
+        }
+
+        const shouldShowTransfers = !chip || (chip !== 'wildcard' && chip !== 'freehit');
+
+        if (shouldShowTransfers) {
+          if (gwTransfers.length > 0) {
+            for (const t of gwTransfers) {
+              const playerIn = allPlayersMap[t.element_in] || `Player ${t.element_in}`;
+              const playerOut = allPlayersMap[t.element_out] || `Player ${t.element_out}`;
+              html += `
+                <div class="transfer-row">
+                  <span class="transfer-out">▼ ${escapeHtml(playerOut)}</span>
+                  <span class="transfer-arrow">→</span>
+                  <span class="transfer-in">▲ ${escapeHtml(playerIn)}</span>
+                </div>
+              `;
+            }
+          } else {
+            html += `<span class="text-muted" style="font-size:12px;">No transfers</span>`;
+          }
         }
 
         html += `</div></div>`;
