@@ -67,11 +67,13 @@ export function getTeamGwStatus(
   teamId: number,
   gw: number
 ) {
-  return teamStatusCache.get(`${gw}:${teamId}`) || {
-    started: false,
-    finished: false,
-    finishedProvisional: false
-  };
+  return (
+    teamStatusCache.get(`${gw}:${teamId}`) || {
+      started: false,
+      finished: false,
+      finishedProvisional: false
+    }
+  );
 }
 
 export function bonusFromBpsRows(bpsRows: any[]): Map<number, number> {
@@ -136,9 +138,22 @@ export async function fetchFixtures({
     teamStatusCache.clear();
     projectedBonusCache.clear();
 
-    const perTeam = new Map<number, { startedAny: boolean; finishedAll: boolean; finishedProvAll: boolean }>();
-    function upsertTeam(teamId: number, started: boolean, finished: boolean, finishedProvisional: boolean) {
-      const cur = perTeam.get(teamId) || { startedAny: false, finishedAll: true, finishedProvAll: true };
+    const perTeam = new Map<
+      number,
+      { startedAny: boolean; finishedAll: boolean; finishedProvAll: boolean }
+    >();
+    function upsertTeam(
+      teamId: number,
+      started: boolean,
+      finished: boolean,
+      finishedProvisional: boolean
+    ) {
+      const cur =
+        perTeam.get(teamId) || {
+          startedAny: false,
+          finishedAll: true,
+          finishedProvAll: true
+        };
       cur.startedAny = cur.startedAny || !!started || !!finished || !!finishedProvisional;
       cur.finishedAll = cur.finishedAll && !!finished;
       cur.finishedProvAll = cur.finishedProvAll && (!!finished || !!finishedProvisional);
@@ -155,7 +170,7 @@ export async function fetchFixtures({
 
       const stats = (fx as any).stats;
       if (!Array.isArray(stats)) continue;
-      
+
       const bpsStat = stats.find((s: any) => s && s.identifier === "bps");
       if (!bpsStat) continue;
 
@@ -177,8 +192,8 @@ export async function fetchFixtures({
     }
 
     for (const [teamId, st] of perTeam.entries()) {
-      teamStatusCache.set(`${gw}:${teamId}`, { 
-        started: st.startedAny, 
+      teamStatusCache.set(`${gw}:${teamId}`, {
+        started: st.startedAny,
         finished: st.finishedAll,
         finishedProvisional: includeFinishedProvisional ? st.finishedProvAll : false
       });
@@ -250,8 +265,10 @@ export function getPlayerLiveComputed({
   projectedBonusDuringLive = true,
   projectedBonusDuringProvisional = true
 }: GetPlayerLiveComputedOptions) {
-  const live = livePointsCache.get(playerId) || { 
-    points: 0, bonus: 0, minutes: 0
+  const live = livePointsCache.get(playerId) || {
+    points: 0,
+    bonus: 0,
+    minutes: 0
   };
   const { started, finished, finishedProvisional } = getTeamGwStatus(teamStatusCache, teamId, gw);
 
@@ -284,7 +301,7 @@ export function getPlayerLiveComputed({
     projBonus = 0;
   }
 
-  const status = isFinishedForSubs ? "Fin" : (started ? "Live" : "NS");
+  const status = isFinishedForSubs ? "Fin" : started ? "Live" : "NS";
   return { locked: liveTotal - projBonus, projBonus, liveTotal, status, minutes, confirmedBonus };
 }
 
@@ -297,13 +314,24 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   const starters = sorted.slice(0, 11);
   const bench = sorted.slice(11);
 
-  if (isBB) {
-    const captain = sorted.find(p => p.is_captain);
-    const capId = captain ? captain.playerId : null;
+  // SAFETY/FPL RULE ENFORCEMENT:
+  // Captain/vice-captain must be from original starting XI.
+  const starterCapId = starters.find(p => p.is_captain)?.playerId ?? null;
+  const starterVcId = starters.find(p => p.is_vice_captain)?.playerId ?? null;
 
+  // Treat "played" as >0 minutes. If captain and vice both didn't play, no doubling.
+  const starterCapPlayed =
+    starterCapId !== null && starters.some(p => p.playerId === starterCapId && p.minutes > 0);
+  const starterVcPlayed =
+    starterVcId !== null && starters.some(p => p.playerId === starterVcId && p.minutes > 0);
+
+  const eligibleCaptainId = starterCapPlayed ? starterCapId : starterVcPlayed ? starterVcId : null;
+
+  if (isBB) {
+    // Bench Boost: all 15 score; no autosubs. Captaincy still restricted to XI.
     return sorted.map(p => ({
       ...p,
-      multiplier: capId && p.playerId === capId ? capFactor : 1,
+      multiplier: eligibleCaptainId && p.playerId === eligibleCaptainId ? capFactor : 1,
       autoSubStatus: null
     }));
   }
@@ -376,10 +404,11 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
       const availMid = usableBench.filter(p => p.playingPosition === "MID").length;
       const availFwd = usableBench.filter(p => p.playingPosition === "FWD").length;
 
-      const canComplete = availDef >= needDef && 
-                         availMid >= needMid && 
-                         availFwd >= needFwd &&
-                         usableBench.length >= spotsLeft;
+      const canComplete =
+        availDef >= needDef &&
+        availMid >= needMid &&
+        availFwd >= needFwd &&
+        usableBench.length >= spotsLeft;
 
       if (canComplete) {
         activeOutfield = testOutfield;
@@ -392,35 +421,20 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   if (activeGK) active.push(activeGK);
   active.push(...activeOutfield);
 
-  const origCap = sorted.find(p => p.is_captain)?.playerId ?? null;
-  const origVC = sorted.find(p => p.is_vice_captain)?.playerId ?? null;
-
-  const capInActive = origCap !== null && active.some(p => p.playerId === origCap);
-  const vcInActive = origVC !== null && active.some(p => p.playerId === origVC);
-
-  const capPlayed = capInActive && active.some(p => 
-    p.playerId === origCap && (p.minutes > 0 || p.status !== "Fin")
-  );
-  const vcPlayed = vcInActive && active.some(p => 
-    p.playerId === origVC && (p.minutes > 0 || p.status !== "Fin")
-  );
-
-  const captainId = capPlayed ? origCap : (vcPlayed ? origVC : null);
-
   return sorted.map(p => {
     const isActive = active.some(a => a.playerId === p.playerId);
     const isDnpStarter = dnpStarters.includes(p.playerId);
     const isSubbedIn = subbedIn.includes(p.playerId);
-  
+
     let multiplier = 0;
     if (isActive) {
-      multiplier = (captainId && p.playerId === captainId) ? capFactor : 1;
+      multiplier = eligibleCaptainId && p.playerId === eligibleCaptainId ? capFactor : 1;
     }
 
     return {
       ...p,
       multiplier,
-      autoSubStatus: isDnpStarter ? 'OUT' : (isSubbedIn ? 'IN' : null)
+      autoSubStatus: isDnpStarter ? "OUT" : isSubbedIn ? "IN" : null
     };
   });
 }
