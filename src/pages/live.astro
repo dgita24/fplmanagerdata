@@ -657,8 +657,9 @@ import Nav from "../components/Nav.astro";
         const isNotStarted = p.status === "NS";
         const isLive = p.status === "Live";
         const isFinished = p.status === "Fin";
-        const displayPts = isSubbedOut ? 0 : Math.round(p.liveTotal * (mult || 1));
-        const ptsText = mult > 1 ? `${p.liveTotal}×${mult}` : String(displayPts);
+        const effMult = p.multiplier ?? 0;
+        const displayPts = (isSubbedOut || effMult === 0) ? 0 : Math.round(p.liveTotal * effMult);
+        const ptsText = effMult > 1 ? `${p.liveTotal}×${effMult}` : String(displayPts);
 
         let rowClass = "";
         let statusBadge = "";
@@ -738,7 +739,13 @@ import Nav from "../components/Nav.astro";
               ${statusBadge}
             </td>
             <td class="col-team">${p.teamShort}</td>
-            <td class="col-pts">${chipCode === "BB" ? p.liveTotal : `<span class="text-muted">${p.liveTotal}</span>`}</td>
+            <td class="col-pts">${
+              (p.multiplier || 0) === 0
+                ? `<span class="text-muted">0</span>`
+                : ((p.multiplier || 1) > 1
+                    ? `${p.liveTotal}×${p.multiplier}`
+                    : `${Math.round(p.liveTotal * (p.multiplier || 1))}`)
+            }</td>
           </tr>
         `;
       }
