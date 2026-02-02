@@ -127,7 +127,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
-  import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, applyAutoSubsAndMultipliers, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -266,26 +266,24 @@ import Nav from "../components/Nav.astro";
       const picksData = await picksRes.json();
       const historyData = await historyRes.json();
 
-      const chipName = (historyData.chips || []).find((c: any) => c.event === gw)?.name || "";
+      // Determine chip for this GW (needed for BB / TC logic)
+      const chipName = (historyData.chips || []).find((c: any) => Number(c.event) === Number(gw))?.name || "";
       const chipCode =
         chipName === "bboost" ? "BB" :
         chipName === "3xc" ? "TC" :
         chipName === "wildcard" ? "WC" :
         chipName === "freehit" ? "FH" :
         "None";
-      const capFactor = chipCode === "TC" ? 3 : 2;
 
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
-      const starters = rawPicks.filter((p: any) => Number(p.position) <= 11);
 
-      let livePointsBeforeHits = 0;
-
-      for (const p of starters) {
-        const player = playerCache.get(p.element) || { position: 4, team: 0 };
+      // Build team picks with live computed info (minutes/status/liveTotal)
+      const teamPicks = rawPicks.map((p: any) => {
+        const player = playerCache.get(p.element) || { position: 4, team: 0, name: "Unknown" };
         const teamId = Number(player.team) || 0;
 
         const computed = getPlayerLiveComputed({
-          playerId: p.element,
+          playerId: Number(p.element),
           teamId,
           gw,
           livePointsCache,
@@ -296,11 +294,34 @@ import Nav from "../components/Nav.astro";
           projectedBonusDuringProvisional: true
         });
 
-        const isCaptain = !!p.is_captain;
-        const multiplier = isCaptain ? capFactor : 1;
-        livePointsBeforeHits += (computed.liveTotal * multiplier);
+        return {
+          playerId: Number(p.element),
+          position: Number(p.position),
+          is_captain: !!p.is_captain,
+          is_vice_captain: !!p.is_vice_captain,
+          playingPosition: positionLabel(player.position || 4),
+
+          // live computation fields used by applyAutoSubsAndMultipliers()
+          minutes: Number(computed.minutes) || 0,
+          status: computed.status,
+          liveTotal: Number(computed.liveTotal) || 0,
+
+          // NOTE: We do NOT use API multiplier directly here.
+          // applyAutoSubsAndMultipliers will set multiplier based on chip/captain/subs.
+          multiplier: 1
+        };
+      });
+
+      // Apply official-ish subs + captaincy + BB/TC multipliers
+      const applied = applyAutoSubsAndMultipliers(teamPicks, chipCode);
+
+      // Sum effective points (bench will have multiplier 0 unless BB)
+      let livePointsBeforeHits = 0;
+      for (const p of applied) {
+        livePointsBeforeHits += (Number(p.liveTotal) || 0) * (Number(p.multiplier) || 0);
       }
 
+      // Subtract transfer hit cost for this GW to match official "net" GW score
       const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
       const transferCost =
         Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
@@ -330,9 +351,23 @@ import Nav from "../components/Nav.astro";
       const current = Array.isArray(historyData?.current) ? historyData.current : [];
       const gwRow = current.find((r: any) => Number(r.event) === Number(gw));
 
-      let gwPoints = gwRow ? Number(gwRow.points) || 0 : 0;
+      // GW points/rank logic:
+      // - If selected GW is the current GW and it's NOT finished: compute live (with autosubs/BB/VC/TC)
+      // - If selected GW is the current GW and it IS finished: use entry summary snapshot fields (Excel parity)
+      // - Otherwise: use history row for that GW
+      let gwPoints = 0;
+      let gwRank = 0;
+
       if (gw === latestGW && !currentGWFinished) {
         gwPoints = await fetchManagerLiveGwPoints(id, gw);
+        // live GW rank isn't directly computable here; keep from history snapshot if present
+        gwRank = gwRow ? Number(gwRow.rank) || 0 : 0;
+      } else if (gw === latestGW && currentGWFinished) {
+        gwPoints = Number(summaryData.summary_event_points) || 0;
+        gwRank = Number(summaryData.summary_event_rank) || 0;
+      } else {
+        gwPoints = gwRow ? Number(gwRow.points) || 0 : 0;
+        gwRank = gwRow ? Number(gwRow.rank) || 0 : 0;
       }
 
       return {
@@ -342,7 +377,7 @@ import Nav from "../components/Nav.astro";
         totalPoints: Number(summaryData.summary_overall_points) || 0,
         overallRank: Number(summaryData.summary_overall_rank) || 0,
         gwPoints,
-        gwRank: gwRow ? Number(gwRow.rank) || 0 : 0,
+        gwRank,
         teamValue: Number(summaryData.last_deadline_value) || 0,
         bank: Number(summaryData.last_deadline_bank) || 0,
         historyData,
@@ -629,9 +664,22 @@ import Nav from "../components/Nav.astro";
         chipThisGW.name === "freehit" ? "FH" : "") : "";
 
       // Get GW points
-      const currentHistory = historyData.current || [];
-      const gwRow = currentHistory.find((r: any) => Number(r.event) === Number(gw));
-      const livePoints = gwRow ? Number(gwRow.points) - (Number(gwRow.event_transfers_cost) || 0) : 0;
+      // Get GW points (match stats table logic as closely as possible)
+      let livePoints = 0;
+
+      if (gw === latestGW && !currentGWFinished) {
+        // Ensure caches exist for live scoring (same requirement as stats table)
+        await Promise.all([
+          fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: true }),
+          fetchLiveGW({ gw, livePointsCache })
+        ]);
+
+        livePoints = await fetchManagerLiveGwPoints(entryId, gw);
+      } else {
+        const currentHistory = historyData.current || [];
+        const gwRow = currentHistory.find((r: any) => Number(r.event) === Number(gw));
+        livePoints = gwRow ? Number(gwRow.points) - (Number(gwRow.event_transfers_cost) || 0) : 0;
+      }
 
       const picks = rawPicks.map((p: any) => {
         const player = playerCache.get(p.element);
@@ -754,10 +802,8 @@ import Nav from "../components/Nav.astro";
     // Calculate season stats
     const stats = calculateSeasonStats(manager.historyData, gw);
 
-    // Get current GW data
-    const current = manager.historyData?.current || [];
-    const gwRow = current.find((r: any) => Number(r.event) === Number(gw));
-    const gwRank = gwRow ? Number(gwRow.rank) || 0 : 0;
+    // Get GW rank (already computed in fetchManagerData using live/summary/history rules)
+    const gwRank = Number(manager.gwRank) || 0;
 
     // Fetch captain data
     const captainCounts = await fetchCaptainData(entryId, gw);
@@ -920,7 +966,19 @@ import Nav from "../components/Nav.astro";
 
           loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
 
-          allManagerData.sort((a, b) => b.totalPoints - a.totalPoints);
+          allManagerData.sort((a, b) => {
+            const ar = Number(a.overallRank) || 0;
+            const br = Number(b.overallRank) || 0;
+
+            // push 0 / missing ranks to bottom
+            const aBad = ar <= 0;
+            const bBad = br <= 0;
+            if (aBad && bBad) return 0;
+            if (aBad) return 1;
+            if (bBad) return -1;
+
+            return ar - br; // lower (better) overall rank first
+          });
           out.innerHTML = makeStatsTable(allManagerData, gw);
           attachManagerButtons();
         }
