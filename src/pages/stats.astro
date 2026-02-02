@@ -127,7 +127,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
-  import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, applyAutoSubsAndMultipliers, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -273,14 +273,11 @@ import Nav from "../components/Nav.astro";
         chipName === "wildcard" ? "WC" :
         chipName === "freehit" ? "FH" :
         "None";
-      const capFactor = chipCode === "TC" ? 3 : 2;
 
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
-      const starters = rawPicks.filter((p: any) => Number(p.position) <= 11);
 
-      let livePointsBeforeHits = 0;
-
-      for (const p of starters) {
+      // Build team picks with live computed points and required metadata
+      const teamPicks = rawPicks.map((p: any) => {
         const player = playerCache.get(p.element) || { position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
 
@@ -296,11 +293,28 @@ import Nav from "../components/Nav.astro";
           projectedBonusDuringProvisional: true
         });
 
-        const isCaptain = !!p.is_captain;
-        const multiplier = isCaptain ? capFactor : 1;
-        livePointsBeforeHits += (computed.liveTotal * multiplier);
+        return {
+          playerId: p.element,
+          position: Number(p.position),
+          is_captain: !!p.is_captain,
+          is_vice_captain: !!p.is_vice_captain,
+          playingPosition: positionLabel(player.position),
+          liveTotal: computed.liveTotal,
+          minutes: computed.minutes,
+          status: computed.status
+        };
+      });
+
+      // Apply FPL rules: auto-subs, bench boost, captaincy fallback, TC multiplier
+      const withMultipliers = applyAutoSubsAndMultipliers(teamPicks, chipCode);
+
+      // Sum points: liveTotal * multiplier for each player
+      let livePointsBeforeHits = 0;
+      for (const p of withMultipliers) {
+        livePointsBeforeHits += (p.liveTotal * p.multiplier);
       }
 
+      // Subtract transfer hits to match official FPL net GW score
       const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
       const transferCost =
         Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
