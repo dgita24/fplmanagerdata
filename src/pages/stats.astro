@@ -344,9 +344,23 @@ import Nav from "../components/Nav.astro";
       const current = Array.isArray(historyData?.current) ? historyData.current : [];
       const gwRow = current.find((r: any) => Number(r.event) === Number(gw));
 
-      let gwPoints = gwRow ? Number(gwRow.points) || 0 : 0;
-      if (gw === latestGW && !currentGWFinished) {
+      let gwPoints = 0;
+      let gwRank = 0;
+
+      // For current GW when finished, prefer summary fields to match ManagerSummary sheet
+      if (gw === latestGW && currentGWFinished) {
+        gwPoints = Number(summaryData.summary_event_points) || 0;
+        gwRank = Number(summaryData.summary_event_rank) || 0;
+      } 
+      // For current GW when not finished, use live calculation
+      else if (gw === latestGW && !currentGWFinished) {
         gwPoints = await fetchManagerLiveGwPoints(id, gw);
+        gwRank = gwRow ? Number(gwRow.rank) || 0 : 0;
+      }
+      // For non-current GWs, use history row
+      else {
+        gwPoints = gwRow ? Number(gwRow.points) || 0 : 0;
+        gwRank = gwRow ? Number(gwRow.rank) || 0 : 0;
       }
 
       return {
@@ -356,7 +370,7 @@ import Nav from "../components/Nav.astro";
         totalPoints: Number(summaryData.summary_overall_points) || 0,
         overallRank: Number(summaryData.summary_overall_rank) || 0,
         gwPoints,
-        gwRank: gwRow ? Number(gwRow.rank) || 0 : 0,
+        gwRank,
         teamValue: Number(summaryData.last_deadline_value) || 0,
         bank: Number(summaryData.last_deadline_bank) || 0,
         historyData,
