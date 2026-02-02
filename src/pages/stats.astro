@@ -934,7 +934,21 @@ import Nav from "../components/Nav.astro";
 
           loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
 
-          allManagerData.sort((a, b) => b.totalPoints - a.totalPoints);
+          // Sort by Overall Rank ascending (lower is better)
+          // Push rank 0 / missing ranks to the bottom
+          allManagerData.sort((a, b) => {
+            const rankA = a.overallRank || 0;
+            const rankB = b.overallRank || 0;
+            
+            // If both have no rank, maintain order
+            if (rankA === 0 && rankB === 0) return 0;
+            // If only A has no rank, B comes first
+            if (rankA === 0) return 1;
+            // If only B has no rank, A comes first
+            if (rankB === 0) return -1;
+            // Both have ranks: lower rank is better (ascending)
+            return rankA - rankB;
+          });
           out.innerHTML = makeStatsTable(allManagerData, gw);
           attachManagerButtons();
         }
