@@ -127,7 +127,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
-  import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, applyAutoSubsAndMultipliers, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -266,7 +266,6 @@ import Nav from "../components/Nav.astro";
       const picksData = await picksRes.json();
       const historyData = await historyRes.json();
 
-      // Determine chip for this GW (needed for BB / TC logic)
       const chipName = (historyData.chips || []).find((c: any) => Number(c.event) === Number(gw))?.name || "";
       const chipCode =
         chipName === "bboost" ? "BB" :
@@ -275,11 +274,16 @@ import Nav from "../components/Nav.astro";
         chipName === "freehit" ? "FH" :
         "None";
 
-      const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
+      const isBenchBoost = chipCode === "BB";
+      const capFactor = chipCode === "TC" ? 3 : 2;
 
-      // Build team picks with live computed info (minutes/status/liveTotal)
-      const teamPicks = rawPicks.map((p: any) => {
-        const player = playerCache.get(p.element) || { position: 4, team: 0, name: "Unknown" };
+      const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
+      const picksToScore = isBenchBoost ? rawPicks : rawPicks.filter((p: any) => Number(p.position) <= 11);
+
+      let livePointsBeforeHits = 0;
+
+      for (const p of picksToScore) {
+        const player = playerCache.get(p.element) || { position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
 
         const computed = getPlayerLiveComputed({
@@ -294,34 +298,11 @@ import Nav from "../components/Nav.astro";
           projectedBonusDuringProvisional: true
         });
 
-        return {
-          playerId: Number(p.element),
-          position: Number(p.position),
-          is_captain: !!p.is_captain,
-          is_vice_captain: !!p.is_vice_captain,
-          playingPosition: positionLabel(player.position || 4),
-
-          // live computation fields used by applyAutoSubsAndMultipliers()
-          minutes: Number(computed.minutes) || 0,
-          status: computed.status,
-          liveTotal: Number(computed.liveTotal) || 0,
-
-          // NOTE: We do NOT use API multiplier directly here.
-          // applyAutoSubsAndMultipliers will set multiplier based on chip/captain/subs.
-          multiplier: 1
-        };
-      });
-
-      // Apply official-ish subs + captaincy + BB/TC multipliers
-      const applied = applyAutoSubsAndMultipliers(teamPicks, chipCode);
-
-      // Sum effective points (bench will have multiplier 0 unless BB)
-      let livePointsBeforeHits = 0;
-      for (const p of applied) {
-        livePointsBeforeHits += (Number(p.liveTotal) || 0) * (Number(p.multiplier) || 0);
+        const isCaptain = !!p.is_captain;
+        const multiplier = isCaptain ? capFactor : 1;
+        livePointsBeforeHits += (Number(computed.liveTotal) || 0) * multiplier;
       }
 
-      // Subtract transfer hit cost for this GW to match official "net" GW score
       const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
       const transferCost =
         Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
@@ -332,7 +313,6 @@ import Nav from "../components/Nav.astro";
       return 0;
     }
   }
-
   async function fetchManagerData(id: number, gw: number): Promise<ManagerData | null> {
     const summaryUrl = `/api/fpl/entry/${id}`;
     const historyUrl = `/api/fpl/entry/${id}/history`;
