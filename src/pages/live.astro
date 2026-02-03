@@ -632,7 +632,7 @@ import Nav from "../components/Nav.astro";
           ${chipPlayed ? `<span class="badge" style="margin-left:8px;">${chipEmoji} ${chipPlayed}</span>` : ""}
         </h2>
         <p class="text-muted" style="margin-bottom:var(--space-3);">
-          ${teamName} · GW${gw} · <span class="text-success font-bold">${livePoints} pts</span>
+          ${teamName} · GW${gw} · <span class="text-success font-bold">${finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0)} pts</span>
         </p>
 
         <div class="squad-modal-section">
