@@ -617,9 +617,9 @@ import Nav from "../components/Nav.astro";
                 <tr>
                   <th class="num pos-num">#</th>
                   <th>Player</th>
-                  <th class="num team-col">Team</th>
-                  <th class="num pts-col">Pts</th>
                   <th class="num cap-col">C</th>
+                  <th class="num team-col">Team</th>
+                  <th class="num pts-col">Pts</th>                 
                 </tr>
               </thead>
               <tbody>
@@ -649,9 +649,9 @@ import Nav from "../components/Nav.astro";
               <button type="button" class="player-name-btn" data-player-id="${player.playerId}">${player.playerName}</button>
               ${statusBadge}
             </td>
+            <td class="num cap-col ${captainClass}">${captainLabel}</td>
             <td class="num team-col">${player.teamName}</td>
             <td class="num pts-col">${player.gwPointsCap ?? player.gwPoints}</td>
-            <td class="num cap-col ${captainClass}">${captainLabel}</td>
           </tr>
         `;
       }
