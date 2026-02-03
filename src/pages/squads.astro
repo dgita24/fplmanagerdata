@@ -5,7 +5,7 @@ import Nav from "../components/Nav.astro";
 <Layout title="Manager Squads - FPL Manager Data">
   <Nav />
 
-  <main class="page">
+  <main class="page squads-page-v1">
     <header class="page-header">
       <h1 class="page-title">Manager Squads</h1>
       <p class="page-subtitle">View each manager's squad for any gameweek.</p>
@@ -197,6 +197,23 @@ import Nav from "../components/Nav.astro";
   :global(.player-name-btn:hover) {
     text-decoration-color: var(--color-primary);
   }
+
+  @media (min-width: 640px) {
+    :global(.squads-page-v1 table.squad-table) {
+      table-layout: fixed !important;
+      width: 100% !important;
+    }
+
+    :global(.squads-page-v1 .squad-table .pos-num) { width: 32px !important; }
+    :global(.squads-page-v1 .squad-table .team-col) { width: 50px !important; }
+    :global(.squads-page-v1 .squad-table .pts-col) { width: 44px !important; }
+    :global(.squads-page-v1 .squad-table .cap-col) { width: 32px !important; }
+
+    :global(.squads-page-v1 .squad-table td) {
+      overflow-wrap: anywhere;
+    }
+  }
+
 </style>
 
 <script>
