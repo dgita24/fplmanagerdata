@@ -307,7 +307,7 @@ import Nav from "../components/Nav.astro";
       const transferCost =
         Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
 
-      return livePointsBeforeHits - transferCost;
+      return livePointsBeforeHits;
     } catch (e) {
       console.error(`Error fetching live data for manager ${entryId}:`, e);
       return 0;
@@ -339,9 +339,16 @@ import Nav from "../components/Nav.astro";
       let gwRank = 0;
 
       if (gw === latestGW && !currentGWFinished) {
-        gwPoints = await fetchManagerLiveGwPoints(id, gw);
-        // live GW rank isn't directly computable here; keep from history snapshot if present
-        gwRank = gwRow ? Number(gwRow.rank) || 0 : 0;
+        const historyPoints = gwRow ? Number(gwRow.points) || 0 : 0;
+        const historyRank = gwRow ? Number(gwRow.rank) || 0 : 0;
+
+        if (historyPoints > 0 || historyRank > 0) {
+          gwPoints = historyPoints;  // ← Net after hit (from FPL)
+          gwRank = historyRank;
+        } else {
+          gwPoints = await fetchManagerLiveGwPoints(id, gw);  // ← Gross (no hit yet)
+          gwRank = 0;
+        }
       } else if (gw === latestGW && currentGWFinished) {
         gwPoints = Number(summaryData.summary_event_points) || 0;
         gwRank = Number(summaryData.summary_event_rank) || 0;
