@@ -147,6 +147,10 @@ import Nav from "../components/Nav.astro";
   let playerCache = new Map();
   let teamCache = new Map();
   let allManagerNames = [];
+  // Names of managers who played Free Hit in the currently selected GW.
+  // (Uses the same 🎯 FH indicator you already use on the Chips page.)
+  let freeHitManagers = new Set();
+
 
   closeOwnershipModal.addEventListener("click", () => {
     ownershipModal.classList.remove("is-open");
@@ -194,21 +198,27 @@ import Nav from "../components/Nav.astro";
 
   async function fetchManagerSquad(entryId, gw) {
     try {
-      const [picksRes, summaryRes] = await Promise.all([
+      const [picksRes, summaryRes, historyRes] = await Promise.all([
         fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
-        fetch(`/api/fpl/entry/${entryId}`)
+        fetch(`/api/fpl/entry/${entryId}`),
+        fetch(`/api/fpl/entry/${entryId}/history`)
       ]);
 
-      if (!picksRes.ok || !summaryRes.ok) throw new Error("Failed to fetch data");
+      if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch data");
 
       const picksData = await picksRes.json();
       const summaryData = await summaryRes.json();
+      const historyData = await historyRes.json();
 
       const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
+
+      const chips = historyData?.chips || [];
+      const isFreeHit = chips.some(c => c.name === 'freehit' && Number(c.event) === Number(gw));
 
       return {
         entryId,
         managerName,
+        isFreeHit,
         picks: picksData.picks.map(p => p.element)
       };
     } catch (e) {
@@ -216,6 +226,7 @@ import Nav from "../components/Nav.astro";
       return null;
     }
   }
+
 
   function calculateOwnership(managerSquads) {
     const ownership = new Map();
@@ -253,6 +264,15 @@ import Nav from "../components/Nav.astro";
 
     const allOwn = ownedByList.length === totalManagers;
     const noneOwn = ownedByList.length === 0;
+    const fhCount = freeHitManagers.size;
+
+
+    const nameWithFH = (name) => {
+      return freeHitManagers.has(name)
+        ? `${name} <span class="text-muted" title="Played Free Hit in this GW">🎯 FH</span>`
+        : name;
+    };
+
 
     let html = `
       <h2 class="modal-title" style="padding-right:40px;">
@@ -262,6 +282,15 @@ import Nav from "../components/Nav.astro";
         ${position} · ${teamName} · <span class="text-success font-bold">${ownershipPct}%</span> ownership
       </p>
     `;
+    
+    if (fhCount > 0) {
+      html += `
+        <p class="text-muted" style="margin-top:-12px; margin-bottom:var(--space-4);">
+          🎯 FH indicates the manager played Free Hit in GW${gwFilterSelect.value}.
+        </p>
+      `;
+    }
+
 
     if (allOwn) {
       html += `
@@ -289,7 +318,7 @@ import Nav from "../components/Nav.astro";
             <span class="ownership-section-count">${ownedBySorted.length}/${totalManagers}</span>
           </div>
           <ul class="ownership-list">
-            ${ownedBySorted.map(name => `<li class="ownership-list-item ownership-list-item--owned">${name}</li>`).join('')}
+            ${ownedBySorted.map(name => `<li class="ownership-list-item ownership-list-item--owned">${nameWithFH(name)}</li>`).join('')}
           </ul>
         </div>
 
@@ -299,7 +328,7 @@ import Nav from "../components/Nav.astro";
             <span class="ownership-section-count">${notOwnedBy.length}/${totalManagers}</span>
           </div>
           <ul class="ownership-list">
-            ${notOwnedBy.map(name => `<li class="ownership-list-item ownership-list-item--not-owned">${name}</li>`).join('')}
+            ${notOwnedBy.map(name => `<li class="ownership-list-item ownership-list-item--not-owned">${nameWithFH(name)}</li>`).join('')}
           </ul>
         </div>
       `;
@@ -403,6 +432,7 @@ import Nav from "../components/Nav.astro";
 
     const managerSquads = [];
     allManagerNames = [];
+    freeHitManagers = new Set();
     out.innerHTML = "";
     loadingStatus.textContent = `Loading 0 of ${ids.length}...`;
 
@@ -413,6 +443,7 @@ import Nav from "../components/Nav.astro";
         if (data) {
           managerSquads.push(data);
           allManagerNames.push(data.managerName);
+          if (data.isFreeHit) freeHitManagers.add(data.managerName);
           loaded++;
 
           loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
