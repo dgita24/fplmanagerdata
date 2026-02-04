@@ -218,6 +218,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
+  import { getBootstrapData } from '../lib/bootstrapCache.ts'
   import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
   async function loadManagerIdsFromSupabase() {
@@ -971,6 +972,10 @@ import Nav from "../components/Nav.astro";
   });
 
   refreshBtn.addEventListener('click', async () => {
+    // Force reload bootstrap data on refresh
+    loadingStatus.textContent = "Refreshing data...";
+    await fetchBootstrapData(true);
+    
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();

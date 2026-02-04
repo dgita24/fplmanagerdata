@@ -82,6 +82,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
+  import { getBootstrapData } from '../lib/bootstrapCache.ts'
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -126,12 +127,16 @@ import Nav from "../components/Nav.astro";
     chipModal.classList.remove("is-open");
   });
 
-  async function fetchBootstrapData() {
+  /**
+   * Fetches and caches bootstrap data, populating player and team caches.
+   * @param forceReload - If true, bypasses cache and fetches fresh data
+   */
+  async function fetchBootstrapData(forceReload = false) {
     try {
-      const res = await fetch('/api/fpl/bootstrap-static');
-      if (!res.ok) throw new Error("Failed to fetch bootstrap data");
-      const data = await res.json();
+      const data = await getBootstrapData(forceReload);
+      if (!data) throw new Error("Failed to fetch bootstrap data");
 
+      // Populate player cache
       data.elements.forEach(player => {
         playerCache.set(player.id, {
           name: player.web_name,
@@ -142,6 +147,7 @@ import Nav from "../components/Nav.astro";
         });
       });
 
+      // Populate team cache
       data.teams.forEach(team => {
         teamCache.set(team.id, team.short_name);
       });
@@ -489,6 +495,10 @@ import Nav from "../components/Nav.astro";
   })();
 
   refreshBtn.addEventListener('click', async () => {
+    // Force reload bootstrap data on refresh
+    loadingStatus.textContent = "Refreshing data...";
+    await fetchBootstrapData(true);
+    
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();

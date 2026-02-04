@@ -229,6 +229,7 @@ import Nav from "../components/Nav.astro";
   }
 
   import { supabase } from '../lib/supabase.ts'
+  import { getBootstrapData } from '../lib/bootstrapCache.ts'
 
   let managerIds = []
 
@@ -289,11 +290,16 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchPlayers() {
+  /**
+   * Fetches and caches bootstrap data, populating player map and latest GW.
+   * @param forceReload - If true, bypasses cache and fetches fresh data
+   */
+  async function fetchPlayers(forceReload = false) {
     try {
-      const res = await fetch('/api/fpl/bootstrap-static');
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await getBootstrapData(forceReload);
+      if (!data) return;
+      
+      // Populate players map
       data.elements.forEach(p => {
         allPlayersMap[p.id] = p.web_name;
       });
@@ -722,6 +728,10 @@ import Nav from "../components/Nav.astro";
   gwFilterSelect.addEventListener('change', filterByGW);
 
   refreshBtn.addEventListener('click', async () => {
+    // Force reload bootstrap data on refresh
+    loadingStatus.innerHTML = '<span class="text-muted">Refreshing data...</span>';
+    await fetchPlayers(true);
+    
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     loadManagers(managerIds);
