@@ -370,15 +370,19 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  async function fetchBootstrapData() {
+  /**
+   * Fetches and caches bootstrap data, populating player and team caches.
+   * @param forceReload - If true, bypasses cache and fetches fresh data
+   */
+  async function fetchBootstrapData(forceReload = false) {
     try {
-      const res = await fetch('/api/fpl/bootstrap-static');
-      if (!res.ok) throw new Error("Failed to fetch bootstrap data");
-      const data = await res.json();
+      const data = await getBootstrapData(forceReload);
+      if (!data) throw new Error("Failed to fetch bootstrap data");
 
       playerCache.clear();
       teamCache.clear();
 
+      // Populate player cache with season stats
       data.elements.forEach(player => {
         playerCache.set(player.id, {
           name: player.web_name,
@@ -399,6 +403,7 @@ import Nav from "../components/Nav.astro";
         });
       });
 
+      // Populate team cache
       data.teams.forEach(team => {
         teamCache.set(team.id, team.short_name);
       });

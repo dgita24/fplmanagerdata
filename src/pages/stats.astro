@@ -220,11 +220,14 @@ import Nav from "../components/Nav.astro";
     return "FWD";
   }
 
-  async function fetchBootstrapData() {
+  /**
+   * Fetches and caches bootstrap data, populating player and team caches.
+   * @param forceReload - If true, bypasses cache and fetches fresh data
+   */
+  async function fetchBootstrapData(forceReload = false) {
     try {
-      const res = await fetch('/api/fpl/bootstrap-static');
-      if (!res.ok) throw new Error("Failed to fetch bootstrap data");
-      const data = await res.json();
+      const data = await getBootstrapData(forceReload);
+      if (!data) throw new Error("Failed to fetch bootstrap data");
 
       // Cache player names and team info
       data.elements.forEach((p: any) => {
@@ -235,6 +238,7 @@ import Nav from "../components/Nav.astro";
         });
       });
 
+      // Cache team info
       data.teams.forEach((t: any) => {
         teamCache.set(t.id, {
           name: t.name,
