@@ -6,11 +6,19 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^12.6.12",
     "@supabase/supabase-js": "^2.91.1",
     "astro": "^5.16.12"
+  },
+  "devDependencies": {
+    "@vitest/ui": "^4.0.18",
+    "happy-dom": "^20.5.0",
+    "vitest": "^4.0.18"
   }
 }
