@@ -42,7 +42,8 @@ export async function GET({ params, url, locals }) {
         headers: {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
-          "Cache-Control": "public, s-maxage=60",
+          "Cache-Control": "public, max-age=60, s-maxage=60",
+          "CDN-Cache-Control": "max-age=60",
         },
       });
     } catch (error) {
