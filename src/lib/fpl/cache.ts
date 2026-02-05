@@ -1,14 +1,14 @@
 /**
- * Generic cache-aside wrapper for FPL API responses
+ * KV-based cache wrapper for FPL API responses
  * 
- * This module provides caching infrastructure with a feature flag.
+ * This module provides caching infrastructure using Cloudflare Workers KV.
  * When FPL_CACHE_ENABLED is false (default), it acts as a passthrough.
- * When enabled in Cloudflare Workers runtime, it uses caches.default.
+ * When enabled, it uses the FPL_CACHE KV namespace.
  */
 
 export interface CacheMetrics {
   key: string;
-  type: 'hit' | 'miss' | 'stale' | 'error';
+  type: 'hit' | 'miss' | 'stale' | 'error' | 'skip';
   timestamp: number;
   ttl?: number;
 }
@@ -17,110 +17,97 @@ export interface CacheMetrics {
  * Check if caching is enabled via environment variable
  * Default: false (passthrough mode)
  */
-function isCacheEnabled(): boolean {
-  // Check runtime environment
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env.FPL_CACHE_ENABLED === 'true';
-  }
-  
-  // Check Cloudflare Workers environment
-  if (typeof globalThis !== 'undefined' && (globalThis as any).FPL_CACHE_ENABLED) {
-    return (globalThis as any).FPL_CACHE_ENABLED === 'true';
-  }
-  
-  return false;
+function isCacheEnabled(env: any): boolean {
+  return env?.FPL_CACHE_ENABLED === 'true';
 }
 
 /**
- * Check if running in Cloudflare Workers runtime with cache API
+ * Check if KV namespace is available
  */
-function hasCloudflareCache(): boolean {
-  return typeof caches !== 'undefined' && caches.default !== undefined;
+function hasKVNamespace(env: any): boolean {
+  return env?.FPL_CACHE !== undefined;
 }
 
 /**
- * Log cache metrics (hit/miss/stale/error)
- * Only logs at cache boundary to avoid altering other logs
+ * Log cache metrics (hit/miss/stale/error/skip)
  */
 function logCacheMetric(metric: CacheMetrics): void {
-  if (!isCacheEnabled()) {
-    return; // Don't log if caching is disabled
-  }
-  
   const timestamp = new Date(metric.timestamp).toISOString();
   console.log(`[CACHE ${metric.type.toUpperCase()}] ${metric.key} at ${timestamp}${metric.ttl ? ` (TTL: ${metric.ttl}s)` : ''}`);
 }
 
 /**
- * Generic cache-aside wrapper
+ * KV cache-aside wrapper
  * 
  * @param key - Cache key (should include full path + query string)
- * @param ttlSeconds - Time-to-live in seconds
+ * @param ttlSeconds - Time-to-live in seconds (0 = don't cache, -1 = cache forever)
  * @param fetcher - Async function that fetches the data (returns Response)
+ * @param env - Cloudflare environment object with FPL_CACHE binding
  * @returns Promise<Response>
  * 
  * When FPL_CACHE_ENABLED is false: Always calls fetcher (passthrough)
- * When FPL_CACHE_ENABLED is true: Checks cache first, falls back to fetcher
+ * When FPL_CACHE_ENABLED is true: Checks KV first, falls back to fetcher
+ * When ttlSeconds is 0: Always calls fetcher (cache skip)
  */
 export async function getOrSet(
   key: string,
   ttlSeconds: number,
-  fetcher: () => Promise<Response>
+  fetcher: () => Promise<Response>,
+  env: any
 ): Promise<Response> {
-  const enabled = isCacheEnabled();
+  const enabled = isCacheEnabled(env);
   
   // Passthrough mode when caching is disabled
   if (!enabled) {
     return await fetcher();
   }
   
-  // Caching enabled - check if we have Cloudflare cache available
-  if (!hasCloudflareCache()) {
-    // Log warning but continue with passthrough
-    console.warn('[CACHE] Caching enabled but Cloudflare cache API not available, using passthrough');
+  // Skip cache if TTL is 0 (explicit no-cache for current GW data)
+  if (ttlSeconds === 0) {
+    logCacheMetric({
+      key,
+      type: 'skip',
+      timestamp: Date.now(),
+      ttl: ttlSeconds,
+    });
     return await fetcher();
   }
   
-  const cache = caches.default;
-  const cacheKey = new Request(`https://cache.internal/${key}`);
+  // Check if KV namespace is available
+  if (!hasKVNamespace(env)) {
+    console.warn('[CACHE] Caching enabled but FPL_CACHE KV namespace not available, using passthrough');
+    return await fetcher();
+  }
+  
+  const kv = env.FPL_CACHE;
   
   try {
-    // Try to get from cache
-    const cached = await cache.match(cacheKey);
+    // Try to get from KV
+    const cachedText = await kv.get(key, { type: 'text' });
     
-    if (cached) {
-      // Check if cache is stale
-      const cacheTime = cached.headers.get('X-Cache-Time');
-      const now = Date.now();
+    if (cachedText) {
+      // Cache hit
+      logCacheMetric({
+        key,
+        type: 'hit',
+        timestamp: Date.now(),
+        ttl: ttlSeconds,
+      });
       
-      if (cacheTime) {
-        const age = (now - parseInt(cacheTime, 10)) / 1000;
-        if (age > ttlSeconds) {
-          logCacheMetric({
-            key,
-            type: 'stale',
-            timestamp: now,
-            ttl: ttlSeconds,
-          });
-          // Cache is stale, fetch fresh data
-        } else {
-          logCacheMetric({
-            key,
-            type: 'hit',
-            timestamp: now,
-            ttl: ttlSeconds,
-          });
-          return cached;
-        }
-      } else {
-        // No cache time header, return cached response
-        logCacheMetric({
-          key,
-          type: 'hit',
-          timestamp: now,
-          ttl: ttlSeconds,
+      // Parse cached data and reconstruct Response
+      try {
+        const cachedData = JSON.parse(cachedText);
+        return new Response(JSON.stringify(cachedData), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "X-Cache-Status": "HIT",
+          },
         });
-        return cached;
+      } catch (parseError) {
+        console.error('[CACHE] Failed to parse cached data:', parseError);
+        // Fall through to fetch fresh data
       }
     }
     
@@ -136,23 +123,27 @@ export async function getOrSet(
     
     // Only cache successful responses (status 200-299)
     if (response.ok) {
-      // Clone the response to cache it
-      const responseToCache = response.clone();
+      // Clone and extract JSON
+      const dataToCache = await response.clone().json();
       
-      // Add cache metadata headers
-      const headers = new Headers(responseToCache.headers);
-      headers.set('X-Cache-Time', Date.now().toString());
-      headers.set('X-Cache-TTL', ttlSeconds.toString());
+      // Store in KV
+      const putOptions = ttlSeconds > 0 
+        ? { expirationTtl: ttlSeconds }  // TTL in seconds
+        : {};  // No expiration (cache forever)
       
-      const cachedResponse = new Response(responseToCache.body, {
-        status: responseToCache.status,
-        statusText: responseToCache.statusText,
-        headers,
+      // Fire and forget - don't wait for KV write
+      kv.put(key, JSON.stringify(dataToCache), putOptions).catch((err: any) => {
+        console.error('[CACHE] Failed to store in KV:', err);
       });
       
-      // Store in cache (fire and forget)
-      cache.put(cacheKey, cachedResponse).catch((err) => {
-        console.error('[CACHE] Failed to store in cache:', err);
+      // Return response with cache status header
+      return new Response(JSON.stringify(dataToCache), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "X-Cache-Status": "MISS",
+        },
       });
     }
     
@@ -165,7 +156,7 @@ export async function getOrSet(
       timestamp: Date.now(),
       ttl: ttlSeconds,
     });
-    console.error('[CACHE] Error accessing cache:', error);
+    console.error('[CACHE] Error accessing KV:', error);
     return await fetcher();
   }
 }
@@ -173,16 +164,14 @@ export async function getOrSet(
 /**
  * Clear cache for a specific key (optional utility for testing)
  */
-export async function clearCache(key: string): Promise<boolean> {
-  if (!isCacheEnabled() || !hasCloudflareCache()) {
+export async function clearCache(key: string, env: any): Promise<boolean> {
+  if (!isCacheEnabled(env) || !hasKVNamespace(env)) {
     return false;
   }
   
-  const cache = caches.default;
-  const cacheKey = new Request(`https://cache.internal/${key}`);
-  
   try {
-    return await cache.delete(cacheKey);
+    await env.FPL_CACHE.delete(key);
+    return true;
   } catch (error) {
     console.error('[CACHE] Error clearing cache:', error);
     return false;

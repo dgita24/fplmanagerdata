@@ -3,7 +3,7 @@ import { computeCacheKey, getTTLForPath, isPathAllowedForCache } from '../../../
 
 export const prerender = false;
 
-export async function GET({ params, url }) {
+export async function GET({ params, url, platform }) {
   const { path } = params;
   
   // Build the FPL API path from the URL segments
@@ -42,7 +42,6 @@ export async function GET({ params, url }) {
         headers: {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
-          "Cache-Control": "public, s-maxage=60",
         },
       });
     } catch (error) {
@@ -61,7 +60,11 @@ export async function GET({ params, url }) {
   if (useCache) {
     const cacheKey = computeCacheKey(fplPath, url.search);
     const ttl = getTTLForPath(fplPath);
-    return await getOrSet(cacheKey, ttl, fetcher);
+    
+    // Pass Cloudflare environment (contains KV binding)
+    const env = platform?.env || {};
+    
+    return await getOrSet(cacheKey, ttl, fetcher, env);
   } else {
     return await fetcher();
   }
