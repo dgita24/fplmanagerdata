@@ -3,7 +3,7 @@ import { computeCacheKey, getTTLForPath, isPathAllowedForCache } from '../../../
 
 export const prerender = false;
 
-export async function GET({ params, url }) {
+export async function GET({ params, url, locals }) {
   const { path } = params;
   
   // Build the FPL API path from the URL segments
@@ -61,7 +61,7 @@ export async function GET({ params, url }) {
   if (useCache) {
     const cacheKey = computeCacheKey(fplPath, url.search);
     const ttl = getTTLForPath(fplPath);
-    return await getOrSet(cacheKey, ttl, fetcher);
+    return await getOrSet(cacheKey, ttl, fetcher, locals?.runtime?.env);
   } else {
     return await fetcher();
   }

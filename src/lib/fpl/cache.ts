@@ -17,17 +17,22 @@ export interface CacheMetrics {
  * Check if caching is enabled via environment variable
  * Default: false (passthrough mode)
  */
-function isCacheEnabled(): boolean {
+function isCacheEnabled(env?: any): boolean {
+  // Check passed environment (from Cloudflare Pages context)
+  if (env && env.FPL_CACHE_ENABLED === 'true') {
+    return true;
+  }
+
   // Check runtime environment
   if (typeof process !== 'undefined' && process.env) {
     return process.env.FPL_CACHE_ENABLED === 'true';
   }
-  
+
   // Check Cloudflare Workers environment
   if (typeof globalThis !== 'undefined' && (globalThis as any).FPL_CACHE_ENABLED) {
     return (globalThis as any).FPL_CACHE_ENABLED === 'true';
   }
-  
+
   return false;
 }
 
@@ -65,9 +70,10 @@ function logCacheMetric(metric: CacheMetrics): void {
 export async function getOrSet(
   key: string,
   ttlSeconds: number,
-  fetcher: () => Promise<Response>
+  fetcher: () => Promise<Response>,
+  env?: any
 ): Promise<Response> {
-  const enabled = isCacheEnabled();
+  const enabled = isCacheEnabled(env);
   
   // Passthrough mode when caching is disabled
   if (!enabled) {
