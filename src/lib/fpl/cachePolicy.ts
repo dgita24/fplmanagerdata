@@ -48,7 +48,7 @@ export function getTTLForPath(path: string): number {
     return DEFAULT_TTLS.EVENT_LIVE;
   }
   
-  if (normalizedPath === 'fixtures' || normalizedPath.startsWith('fixtures?')) {
+  if (normalizedPath === 'fixtures') {
     return DEFAULT_TTLS.FIXTURES;
   }
   
