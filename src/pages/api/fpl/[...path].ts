@@ -4,7 +4,14 @@ import { computeCacheKey, getTTLForPath, isPathAllowedForCache } from '../../../
 export const prerender = false;
 
 export async function GET({ params, url, locals }) {
+  // Diagnostic logging
+  console.log('[DEBUG] locals:', JSON.stringify(locals, null, 2));
+  console.log('[DEBUG] locals.runtime:', locals?.runtime);
+  console.log('[DEBUG] locals.runtime.env:', locals?.runtime?.env);
+  console.log('[DEBUG] import.meta.env:', import.meta.env);
+  
   const { path } = params;
+  // ... rest of the function
   
   // Build the FPL API path from the URL segments
   const fplPath = path || '';
