@@ -19,7 +19,7 @@ export interface CacheMetrics {
  */
 function isCacheEnabled(env?: any): boolean {
   // First check: import.meta.env (Astro provides this everywhere)
-  if (import.meta.env.FPL_CACHE_ENABLED === true || import.meta.env.FPL_CACHE_ENABLED === 'true') {
+  if (import.meta.env.PUBLIC_FPL_CACHE_ENABLED === true || import.meta.env.PUBLIC_FPL_CACHE_ENABLED === 'true') {
     return true;
   }
 
