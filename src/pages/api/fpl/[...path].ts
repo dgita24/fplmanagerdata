@@ -6,26 +6,6 @@ export const prerender = false;
 export async function GET({ params, url, locals }) {
   const { path } = params;
 
-  // TEMPORARY: Return diagnostic info for bootstrap-static only
-  if (path === 'bootstrap-static') {
-    const diagnostics = {
-      debug: 'Environment diagnostic',
-      locals_exists: !!locals,
-      locals_keys: locals ? Object.keys(locals) : [],
-      runtime_exists: !!locals?.runtime,
-      runtime_keys: locals?.runtime ? Object.keys(locals.runtime) : [],
-      env_exists: !!locals?.runtime?.env,
-      env_keys: locals?.runtime?.env ? Object.keys(locals.runtime.env) : [],
-      FPL_CACHE_ENABLED: locals?.runtime?.env?.FPL_CACHE_ENABLED,
-      import_meta_env: import.meta.env,
-    };
-    
-    return new Response(JSON.stringify(diagnostics, null, 2), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
   // Build the FPL API path from the URL segments
   const fplPath = path || '';
   const target = `https://fantasy.premierleague.com/api/${fplPath}${url.search}`;
