@@ -155,7 +155,7 @@ import Nav from "../components/Nav.astro";
   }
 
   :global(.squad-header) {
-    display: flex; /* Align items in a row */
+    display: flex;
     justify-content: center;
     align-items: center;
     gap: 8px;
@@ -214,61 +214,105 @@ import Nav from "../components/Nav.astro";
     text-decoration-color: var(--color-primary);
   }
 
-  /* NEW: Specific colors for Captain/Vice */
-  /* FIXED: Matched these class names to the script */
   :global(.cap-text-c) {
-    color: #22c55e; /* Bold Green */
+    color: #22c55e;
     font-weight: 800;
   }
   
   :global(.cap-text-vc) {
-    color: #f97316; /* Bold Orange */
+    color: #f97316;
     font-weight: 800;
   }
 
-  /* UPDATED: Manager Link */
+  /* UPDATED: Manager Link - Yellow colour, slightly bigger font */
   :global(.manager-link-btn) {
     background: none;
     border: none;
     cursor: pointer;
     font-family: inherit;
-    font-size: 14px;
+    font-size: 15px;
     padding: 0;
     text-decoration: underline;
     text-decoration-color: transparent;
     transition: color 0.2s;
-    color: var(--color-primary); /* Brighter Blue */
+    color: var(--color-warning);
     font-weight: 700;
   }
   
   :global(.manager-link-btn:hover) {
-    color: var(--color-primary);
-    text-decoration-color: var(--color-primary);
+    color: var(--color-warning);
+    text-decoration-color: var(--color-warning);
   }
 
-  /* Table Columns */
+  /* ========================================
+     SQUAD TABLE - Column header + entry fixes
+     All headers: bold, same size, same style
+     #, Pos entries: same font size/style as Team entries
+     ======================================== */
+  :global(.squads-page-v1 .squad-table th) {
+    font-weight: 700 !important;
+    font-size: 13px !important;
+    text-align: center !important;
+  }
+
+  /* Player header left-aligned */
+  :global(.squads-page-v1 .squad-table th.player-header) {
+    text-align: left !important;
+  }
+
+  /* #, Pos column entries: match Team column font size/style */
+  :global(.squads-page-v1 .squad-table .pos-num) {
+    font-size: 13px !important;
+    color: var(--color-text-secondary) !important;
+    font-weight: 400 !important;
+    text-align: center !important;
+  }
+
   :global(.pos-col) {
-    font-size: 10px;
-    font-weight: 600;
-    /* REMOVED: text-transform: uppercase; (This was forcing POS) */
-    color: var(--color-text-secondary);
-    text-align: center;
-    width: 45px; /* Fixed width for mobile */
-    white-space: nowrap !important; /* Prevents wrapping */
+    font-size: 13px !important;
+    font-weight: 400 !important;
+    color: var(--color-text-secondary) !important;
+    text-align: center !important;
+    white-space: nowrap !important;
   }
 
-  /* FIX: Ensure Pos column is centered */
   :global(.squads-page-v1 .squad-table th.pos-col),
   :global(.squads-page-v1 .squad-table td.pos-col) {
     text-align: center !important;
   }
 
-  /* FIX: Ensure Cap column is centered */
   :global(.squads-page-v1 .squad-table th.cap-col),
   :global(.squads-page-v1 .squad-table td.cap-col) {
     text-align: center !important;
   }
 
+  /* ========================================
+     MOBILE ONLY - Squad table adjustments
+     ======================================== */
+  @media (max-width: 639px) {
+    /* Narrow #, Pos, C/VC, Pts columns to give Player more room */
+    :global(.squads-page-v1 .squad-table .pos-num) { width: 24px !important; min-width: 24px !important; }
+    :global(.squads-page-v1 .squad-table .pos-col) { width: 34px !important; min-width: 34px !important; }
+    :global(.squads-page-v1 .squad-table .cap-col) { width: 30px !important; min-width: 30px !important; }
+    :global(.squads-page-v1 .squad-table .pts-col) { width: 34px !important; min-width: 34px !important; }
+    :global(.squads-page-v1 .squad-table .team-col) { width: 38px !important; min-width: 38px !important; }
+
+    /* C/VC header: reduced font size on mobile */
+    :global(.squads-page-v1 .squad-table th.cap-col) {
+      font-size: 11px !important;
+    }
+
+    /* Player column wraps if name is too long */
+    :global(.squads-page-v1 .squad-table td.player-name) {
+      white-space: normal !important;
+      word-wrap: break-word !important;
+      overflow-wrap: break-word !important;
+    }
+  }
+
+  /* ========================================
+     DESKTOP ONLY - Squad table
+     ======================================== */
   @media (min-width: 640px) {
     :global(.squads-page-v1 table.squad-table) {
       table-layout: fixed !important;
@@ -277,14 +321,68 @@ import Nav from "../components/Nav.astro";
 
     :global(.squads-page-v1 .squad-table .pos-num) { width: 60px !important; }
     :global(.squads-page-v1 .squad-table .pos-col) { width: 70px !important; }
-    
-    /* REDUCED WIDTHS as requested */
-    :global(.squads-page-v1 .squad-table .team-col) { width: 70px !important; } /* Reduced from 90 */
-    :global(.squads-page-v1 .squad-table .pts-col) { width: 60px !important; }  /* Reduced from 70 */
+    :global(.squads-page-v1 .squad-table .team-col) { width: 70px !important; }
+    :global(.squads-page-v1 .squad-table .pts-col) { width: 60px !important; }
     :global(.squads-page-v1 .squad-table .cap-col) { width: 50px !important; }
 
     :global(.squads-page-v1 .squad-table td) {
       overflow-wrap: anywhere;
+    }
+  }
+
+  /* ========================================
+     MANAGER HISTORY MODAL TABLE - Desktop
+     Pos, Games, Pts Earned headers centered
+     ======================================== */
+  :global(.manager-history-table th) {
+    font-weight: 700 !important;
+    font-size: 13px !important;
+  }
+
+  :global(.manager-history-table th.hist-pos-col) {
+    text-align: center !important;
+  }
+
+  :global(.manager-history-table th.hist-games-col) {
+    text-align: center !important;
+  }
+
+  :global(.manager-history-table th.hist-pts-col) {
+    text-align: center !important;
+  }
+
+  :global(.manager-history-table td.hist-pos-col) {
+    text-align: center !important;
+  }
+
+  :global(.manager-history-table td.hist-games-col) {
+    text-align: center !important;
+  }
+
+  :global(.manager-history-table td.hist-pts-col) {
+    text-align: center !important;
+  }
+
+  /* ========================================
+     MOBILE ONLY - Manager History Modal
+     ======================================== */
+  @media (max-width: 639px) {
+    /* Games column: reduced to fit header width */
+    :global(.manager-history-table .hist-games-col) {
+      width: 50px !important;
+      min-width: 50px !important;
+    }
+
+    /* Pos column: reduced width */
+    :global(.manager-history-table .hist-pos-col) {
+      width: 40px !important;
+      min-width: 40px !important;
+    }
+
+    /* Pts Earned column */
+    :global(.manager-history-table .hist-pts-col) {
+      width: 55px !important;
+      min-width: 55px !important;
     }
   }
 
@@ -702,8 +800,8 @@ import Nav from "../components/Nav.astro";
               <thead>
                 <tr>
                   <th class="num pos-num">#</th>
-                  <th class="pos-col">Pos</th> <!-- Explicit "Pos" text -->
-                  <th>Player</th>
+                  <th class="pos-col">Pos</th>
+                  <th class="player-header">Player</th>
                   <th class="num cap-col">C/VC</th>
                   <th class="num team-col">Team</th>
                   <th class="num pts-col">Pts</th>                 
@@ -910,7 +1008,7 @@ import Nav from "../components/Nav.astro";
             }
         }
 
-        // 6. Build UI
+        // 6. Build UI - UPDATED: Added class names for CSS targeting
         const rows = Array.from(playerTotals.values());
         
         rows.sort((a, b) => b.points - a.points);
@@ -925,13 +1023,13 @@ import Nav from "../components/Nav.astro";
             </p>
             
             <div class="table-container" style="max-height: 50vh; overflow-y:auto;">
-                <table class="data-table">
+                <table class="data-table manager-history-table">
                     <thead>
                         <tr>
                             <th>Player</th>
-                            <th>Pos</th>
-                            <th>Games</th>
-                            <th>Pts Earned</th>
+                            <th class="hist-pos-col">Pos</th>
+                            <th class="hist-games-col">Games</th>
+                            <th class="hist-pts-col">Pts Earned</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -948,9 +1046,9 @@ import Nav from "../components/Nav.astro";
                         ${r.name} 
                         <span class="text-muted" style="font-size:10px;">${r.team}</span>
                     </td>
-                    <td>${r.pos}</td>
-                    <td style="text-align:center;">${r.games}</td>
-                    <td style="text-align:center;" class="points-positive">${r.points}</td>
+                    <td class="hist-pos-col">${r.pos}</td>
+                    <td class="hist-games-col">${r.games}</td>
+                    <td class="hist-pts-col points-positive">${r.points}</td>
                 </tr>
             `;
         }
