@@ -1,8 +1,8 @@
-const CACHE_IMPL_VERSION = "2026-02-06-v3";
+const CACHE_IMPL_VERSION = "2026-02-06-kv-debug-readback";
 
 type AnyEnv = Record<string, any>;
 
-function readFlag(env: AnyEnv | undefined, name: string): string | undefined {
+function readVar(env: AnyEnv | undefined, name: string): string | undefined {
   const fromEnv = env?.[name];
   const fromProcess = (typeof process !== "undefined" ? process.env?.[name] : undefined);
   const v = (fromEnv ?? fromProcess) as any;
@@ -13,7 +13,11 @@ function readFlag(env: AnyEnv | undefined, name: string): string | undefined {
 }
 
 function isCacheEnabled(env: AnyEnv | undefined): boolean {
-  return readFlag(env, "FPL_CACHE_ENABLED") === "true";
+  return readVar(env, "FPL_CACHE_ENABLED") === "true";
+}
+
+function debugHeadersEnabled(env: AnyEnv | undefined): boolean {
+  return readVar(env, "DEBUG_HEADERS") === "true";
 }
 
 function getKV(env: AnyEnv | undefined): KVNamespace | null {
@@ -36,15 +40,19 @@ export async function getOrSet(
   fetcher: () => Promise<Response>,
   env?: AnyEnv
 ): Promise<Response> {
-  const flag = readFlag(env, "FPL_CACHE_ENABLED") ?? "unset";
+  const flag = readVar(env, "FPL_CACHE_ENABLED") ?? "unset";
   const kvPresent = env?.FPL_CACHE ? "present" : "missing";
   const envDebug = `flag=${flag};kv=${kvPresent};ttl=${ttlSeconds}`;
+  const dbg = debugHeadersEnabled(env);
 
-  const baseHeaders = {
+  const baseHeaders: Record<string, string> = {
     "X-Cache-Impl": CACHE_IMPL_VERSION,
     "X-Cache-Env": envDebug,
-    "X-Cache-Key": key,
   };
+
+  if (dbg) {
+    baseHeaders["X-Cache-Key"] = key;
+  }
 
   // TTL=0 => never cache
   if (ttlSeconds === 0) {
@@ -66,15 +74,14 @@ export async function getOrSet(
   try {
     const cached = await kv.get(key, { type: "text" });
     if (cached) {
-      return new Response(cached, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*",
-          ...baseHeaders,
-          "X-Cache-Status": "HIT",
-        },
-      });
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        ...baseHeaders,
+        "X-Cache-Status": "HIT",
+      };
+
+      return new Response(cached, { status: 200, headers });
     }
 
     const upstream = await fetcher();
@@ -82,11 +89,17 @@ export async function getOrSet(
     if (upstream.ok) {
       const text = await upstream.clone().text();
 
-      // IMPORTANT: awaited write
+      // WRITE (await)
       if (ttlSeconds > 0) {
         await kv.put(key, text, { expirationTtl: ttlSeconds });
       } else {
         await kv.put(key, text);
+      }
+
+      // READ-BACK verification (only when DEBUG_HEADERS=true)
+      if (dbg) {
+        const verify = await kv.get(key, { type: "text" });
+        baseHeaders["X-KV-Verify"] = verify ? "present" : "missing";
       }
 
       return withHeaders(upstream, { ...baseHeaders, "X-Cache-Status": "MISS" });
