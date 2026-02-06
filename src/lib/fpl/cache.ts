@@ -1,179 +1,100 @@
 /**
- * KV-based cache wrapper for FPL API responses
- * 
- * This module provides caching infrastructure using Cloudflare Workers KV.
- * When FPL_CACHE_ENABLED is false (default), it acts as a passthrough.
- * When enabled, it uses the FPL_CACHE KV namespace.
+ * KV-based cache wrapper for FPL API responses (Cloudflare Pages-safe)
+ *
+ * Guarantees:
+ * - If caching is disabled or KV missing, behaves as passthrough.
+ * - TTL=0 always bypasses cache (live-sensitive).
+ * - Adds X-Cache-Status + X-Cache-Env for runtime verification.
  */
 
-export interface CacheMetrics {
-  key: string;
-  type: 'hit' | 'miss' | 'stale' | 'error' | 'skip';
-  timestamp: number;
-  ttl?: number;
+type AnyEnv = Record<string, any>;
+
+function readFlag(env: AnyEnv | undefined, name: string): string | undefined {
+  const fromPlatformEnv = env?.[name];
+  const fromProcessEnv = (typeof process !== "undefined" ? process.env?.[name] : undefined);
+  const v = (fromPlatformEnv ?? fromProcessEnv) as any;
+  return typeof v === "string" ? v : undefined;
 }
 
-/**
- * Check if caching is enabled via environment variable
- * Default: false (passthrough mode)
- */
-function isCacheEnabled(env: any): boolean {
-  return env?.FPL_CACHE_ENABLED === 'true';
+function isCacheEnabled(env: AnyEnv | undefined): boolean {
+  return readFlag(env, "FPL_CACHE_ENABLED") === "true";
 }
 
-/**
- * Check if KV namespace is available
- */
-function hasKVNamespace(env: any): boolean {
-  return env?.FPL_CACHE !== undefined;
+function getKV(env: AnyEnv | undefined): KVNamespace | null {
+  const kv = env?.FPL_CACHE as KVNamespace | undefined;
+  if (!kv) return null;
+  if (typeof (kv as any).get !== "function" || typeof (kv as any).put !== "function") return null;
+  return kv;
 }
 
-/**
- * Log cache metrics (hit/miss/stale/error/skip)
- */
-function logCacheMetric(metric: CacheMetrics): void {
-  const timestamp = new Date(metric.timestamp).toISOString();
-  console.log(`[CACHE ${metric.type.toUpperCase()}] ${metric.key} at ${timestamp}${metric.ttl ? ` (TTL: ${metric.ttl}s)` : ''}`);
+function withHeaders(res: Response, extra: Record<string, string>): Response {
+  const h = new Headers(res.headers);
+  for (const [k, v] of Object.entries(extra)) h.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
 }
 
-/**
- * KV cache-aside wrapper
- * 
- * @param key - Cache key (should include full path + query string)
- * @param ttlSeconds - Time-to-live in seconds (0 = don't cache, -1 = cache forever)
- * @param fetcher - Async function that fetches the data (returns Response)
- * @param env - Cloudflare environment object with FPL_CACHE binding
- * @returns Promise<Response>
- * 
- * When FPL_CACHE_ENABLED is false: Always calls fetcher (passthrough)
- * When FPL_CACHE_ENABLED is true: Checks KV first, falls back to fetcher
- * When ttlSeconds is 0: Always calls fetcher (cache skip)
- */
 export async function getOrSet(
   key: string,
   ttlSeconds: number,
   fetcher: () => Promise<Response>,
-  env: any
+  env?: AnyEnv
 ): Promise<Response> {
-  const enabled = isCacheEnabled(env);
-  
-  // Passthrough mode when caching is disabled
-  if (!enabled) {
-    return await fetcher();
-  }
-  
-  // Skip cache if TTL is 0 (explicit no-cache for current GW data)
+  const flag = readFlag(env, "FPL_CACHE_ENABLED") ?? "unset";
+  const kvPresent = env?.FPL_CACHE ? "present" : "missing";
+  const envDebug = `flag=${flag};kv=${kvPresent};ttl=${ttlSeconds}`;
+
+  // Never cache live-sensitive requests
   if (ttlSeconds === 0) {
-    logCacheMetric({
-      key,
-      type: 'skip',
-      timestamp: Date.now(),
-      ttl: ttlSeconds,
-    });
-    return await fetcher();
+    const res = await fetcher();
+    return withHeaders(res, { "X-Cache-Status": "SKIP", "X-Cache-Env": envDebug });
   }
-  
-  // Check if KV namespace is available
-  if (!hasKVNamespace(env)) {
-    console.warn('[CACHE] Caching enabled but FPL_CACHE KV namespace not available, using passthrough');
-    return await fetcher();
+
+  // If not enabled, passthrough
+  if (!isCacheEnabled(env)) {
+    const res = await fetcher();
+    return withHeaders(res, { "X-Cache-Status": "BYPASS", "X-Cache-Env": envDebug });
   }
-  
-  const kv = env.FPL_CACHE;
-  
+
+  const kv = getKV(env);
+  if (!kv) {
+    const res = await fetcher();
+    return withHeaders(res, { "X-Cache-Status": "NO_KV", "X-Cache-Env": envDebug });
+  }
+
   try {
-    // Try to get from KV
-    const cachedText = await kv.get(key, { type: 'text' });
-    
-    if (cachedText) {
-      // Cache hit
-      logCacheMetric({
-        key,
-        type: 'hit',
-        timestamp: Date.now(),
-        ttl: ttlSeconds,
-      });
-      
-      // Parse cached data and reconstruct Response
-      try {
-        const cachedData = JSON.parse(cachedText);
-        return new Response(JSON.stringify(cachedData), {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "X-Cache-Status": "HIT",
-          },
-        });
-      } catch (parseError) {
-        console.error('[CACHE] Failed to parse cached data:', parseError);
-        // Fall through to fetch fresh data
-      }
-    }
-    
-    // Cache miss - fetch fresh data
-    logCacheMetric({
-      key,
-      type: 'miss',
-      timestamp: Date.now(),
-      ttl: ttlSeconds,
-    });
-    
-    const response = await fetcher();
-    
-    // Only cache successful responses (status 200-299)
-    if (response.ok) {
-      // Clone and extract JSON
-      const dataToCache = await response.clone().json();
-      
-      // Store in KV
-      const putOptions = ttlSeconds > 0 
-        ? { expirationTtl: ttlSeconds }  // TTL in seconds
-        : {};  // No expiration (cache forever)
-      
-      // Fire and forget - don't wait for KV write
-      kv.put(key, JSON.stringify(dataToCache), putOptions).catch((err: any) => {
-        console.error('[CACHE] Failed to store in KV:', err);
-      });
-      
-      // Return response with cache status header
-      return new Response(JSON.stringify(dataToCache), {
+    const cached = await kv.get(key, { type: "text" });
+    if (cached) {
+      return new Response(cached, {
         status: 200,
         headers: {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
-          "X-Cache-Status": "MISS",
+          "X-Cache-Status": "HIT",
+          "X-Cache-Env": envDebug,
         },
       });
     }
-    
-    return response;
-  } catch (error) {
-    // Log cache error and fall back to fetcher
-    logCacheMetric({
-      key,
-      type: 'error',
-      timestamp: Date.now(),
-      ttl: ttlSeconds,
-    });
-    console.error('[CACHE] Error accessing KV:', error);
-    return await fetcher();
-  }
-}
 
-/**
- * Clear cache for a specific key (optional utility for testing)
- */
-export async function clearCache(key: string, env: any): Promise<boolean> {
-  if (!isCacheEnabled(env) || !hasKVNamespace(env)) {
-    return false;
-  }
-  
-  try {
-    await env.FPL_CACHE.delete(key);
-    return true;
-  } catch (error) {
-    console.error('[CACHE] Error clearing cache:', error);
-    return false;
+    const upstream = await fetcher();
+
+    // Only cache successful responses
+    if (upstream.ok) {
+      const text = await upstream.clone().text();
+
+      // ttlSeconds < 0 means "forever" in your policy -> KV put with no expiration
+      if (ttlSeconds > 0) {
+        await kv.put(key, text, { expirationTtl: ttlSeconds });
+      } else {
+        await kv.put(key, text);
+      }
+
+      return withHeaders(upstream, { "X-Cache-Status": "MISS", "X-Cache-Env": envDebug });
+    }
+
+    return withHeaders(upstream, { "X-Cache-Status": "MISS_NO_STORE", "X-Cache-Env": envDebug });
+  } catch (err) {
+    console.error("[CACHE] KV error:", err);
+    const res = await fetcher();
+    return withHeaders(res, { "X-Cache-Status": "ERROR", "X-Cache-Env": envDebug });
   }
 }
