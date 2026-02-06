@@ -8,7 +8,7 @@ import Nav from "../components/Nav.astro";
   <main class="page">
     <header class="page-header">
       <h1 class="page-title">League Statistics</h1>
-      <p class="page-subtitle">Manager performance, rankings, and detailed stats.</p>
+      <p class="page-subtitle">Official FPL standings and performance stats.</p>
     </header>
 
     <div class="meta-row-wide">
@@ -41,7 +41,7 @@ import Nav from "../components/Nav.astro";
     </div>
   </div>
 
-  <!-- Squad Modal (reused from Live page) -->
+  <!-- Squad Modal -->
   <div id="squad-modal" class="modal modal--nested">
     <div class="modal-panel">
       <button id="close-squad-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
@@ -127,6 +127,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
+  // We only need fetchLiveGW/fetchFixtures for the Modal details now, not the main table
   import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
   const managerStatsCache = new Map<string, any>();
@@ -253,77 +254,9 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerLiveGwPoints(entryId: number, gw: number): Promise<number> {
-    try {
-      const cacheKey = `${entryId}:${gw}:picks`;
-      let picksData = managerStatsCache.get(cacheKey);
-      
-      let historyData = managerStatsCache.get(`${entryId}:history`);
-
-      if (!picksData || !historyData) {
-         const [picksRes, historyRes] = await Promise.all([
-          !picksData ? fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`) : Promise.resolve(null),
-          !historyData ? fetch(`/api/fpl/entry/${entryId}/history`) : Promise.resolve(null)
-        ]);
-
-        if (picksRes && picksRes.ok) {
-           picksData = await picksRes.json();
-           managerStatsCache.set(cacheKey, picksData);
-        }
-        if (historyRes && historyRes.ok) {
-           historyData = await historyRes.json();
-           managerStatsCache.set(`${entryId}:history`, historyData);
-        }
-      }
-
-      if (!picksData || !historyData) return 0;
-
-      const chipName = (historyData.chips || []).find((c: any) => Number(c.event) === Number(gw))?.name || "";
-      const chipCode =
-        chipName === "bboost" ? "BB" :
-        chipName === "3xc" ? "TC" :
-        chipName === "wildcard" ? "WC" :
-        chipName === "freehit" ? "FH" :
-        "None";
-
-      const isBenchBoost = chipCode === "BB";
-      const capFactor = chipCode === "TC" ? 3 : 2;
-
-      const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
-      const picksToScore = isBenchBoost ? rawPicks : rawPicks.filter((p: any) => Number(p.position) <= 11);
-
-      let livePointsBeforeHits = 0;
-
-      for (const p of picksToScore) {
-        const player = playerCache.get(p.element) || { position: 4, team: 0 };
-        const teamId = Number(player.team) || 0;
-
-        const computed = getPlayerLiveComputed({
-          playerId: Number(p.element),
-          teamId,
-          gw,
-          livePointsCache,
-          projectedBonusCache,
-          teamStatusCache,
-          bonusConfirmedOnProvisional: false,
-          projectedBonusDuringLive: false,
-          projectedBonusDuringProvisional: true
-        });
-
-        const isCaptain = !!p.is_captain;
-        const multiplier = isCaptain ? capFactor : 1;
-        livePointsBeforeHits += (Number(computed.liveTotal) || 0) * multiplier;
-      }
-
-      return livePointsBeforeHits; // This returns GROSS points
-    } catch (e) {
-      console.error(`Error fetching live data for manager ${entryId}:`, e);
-      return 0;
-    }
-  }
-
   async function fetchManagerData(id: number, gw: number): Promise<ManagerData | null> {
     try {
+      // 1. Fetch Basic Summary and History
       let summaryData = managerStatsCache.get(`${id}:summary`);
       let historyData = managerStatsCache.get(`${id}:history`);
 
@@ -345,44 +278,44 @@ import Nav from "../components/Nav.astro";
         }
       }
 
+      // 2. Determine Points Logic based on Official FPL Site methodology
+      // If we are looking at the CURRENT gameweek, we trust summary_overall_points
+      // If we are looking at a PAST gameweek, we look at the history array.
+      
       const current = Array.isArray(historyData?.current) ? historyData.current : [];
-      const gwRow = current.find((r: any) => Number(r.event) === Number(gw));
-
+      
       let gwPoints = 0;
       let gwRank = 0;
+      let totalPoints = 0;
+      let overallRank = 0;
+      let teamValue = 0;
+      let bank = 0;
 
-      // Handle Live vs Historical
-      if (gw === latestGW && !currentGWFinished) {
-        const historyPoints = gwRow ? Number(gwRow.points) || 0 : 0;
-        const historyRank = gwRow ? Number(gwRow.rank) || 0 : 0;
-
-        if (historyPoints > 0 || historyRank > 0) {
-          gwPoints = historyPoints;
-          gwRank = historyRank;
-        } else {
-          gwPoints = await fetchManagerLiveGwPoints(id, gw);
-          gwRank = 0;
-        }
-      } else if (gw === latestGW && currentGWFinished) {
+      if (gw === latestGW) {
+        // === CURRENT GAMEWEEK ===
+        // Always use the summary object. This reflects what is on the FPL site "right now".
+        // It accounts for hits naturally as FPL updates.
+        
         gwPoints = Number(summaryData.summary_event_points) || 0;
         gwRank = Number(summaryData.summary_event_rank) || 0;
-      } else {
-        gwPoints = gwRow ? Number(gwRow.points) || 0 : 0;
-        gwRank = gwRow ? Number(gwRow.rank) || 0 : 0;
-      }
+        totalPoints = Number(summaryData.summary_overall_points) || 0;
+        overallRank = Number(summaryData.summary_overall_rank) || 0;
+        teamValue = Number(summaryData.last_deadline_value) || 0;
+        bank = Number(summaryData.last_deadline_bank) || 0;
 
-      let totalPoints = Number(summaryData.summary_overall_points) || 0;
-      
-      // FIX: LIVE TOTAL CALCULATION (Same as Live Page)
-      if (gw === latestGW && !currentGWFinished) {
-         const officialOverall = Number(summaryData.summary_overall_points) || 0;
-         const officialEvent = Number(summaryData.summary_event_points) || 0;
-         
-         const liveGross = await fetchManagerLiveGwPoints(id, gw);
-         
-         // Total = OfficialOverall - OfficialEvent + LiveGross
-         // We do NOT subtract hit cost here, because OfficialOverall already has it.
-         totalPoints = officialOverall - officialEvent + liveGross;
+      } else {
+        // === PAST GAMEWEEK ===
+        // Find the specific row in history
+        const gwRow = current.find((r: any) => Number(r.event) === Number(gw));
+        
+        if (gwRow) {
+            gwPoints = Number(gwRow.points) || 0; // Note: In history, this is usually points *after* hits
+            gwRank = Number(gwRow.rank) || 0;
+            totalPoints = Number(gwRow.total_points) || 0;
+            overallRank = Number(gwRow.overall_rank) || 0;
+            teamValue = Number(gwRow.value) || 0;
+            bank = Number(gwRow.bank) || 0;
+        }
       }
 
       return {
@@ -390,11 +323,11 @@ import Nav from "../components/Nav.astro";
         managerName: `${summaryData.player_first_name} ${summaryData.player_last_name}`.trim(),
         teamName: summaryData.name || "",
         totalPoints,
-        overallRank: Number(summaryData.summary_overall_rank) || 0,
+        overallRank,
         gwPoints,
         gwRank,
-        teamValue: Number(summaryData.last_deadline_value) || 0,
-        bank: Number(summaryData.last_deadline_bank) || 0,
+        teamValue,
+        bank,
         historyData,
         summaryData
       };
@@ -414,6 +347,10 @@ import Nav from "../components/Nav.astro";
   }
 
   function makeStatsTable(managersData: ManagerData[], gw: number): string {
+    // Sort by Total Points (descending) as default for Stats page
+    managersData.sort((a, b) => b.totalPoints - a.totalPoints);
+
+    // Find max for highlighting
     let maxGwPoints = -Infinity;
     managersData.forEach(m => {
       if (m.gwPoints > maxGwPoints) maxGwPoints = m.gwPoints;
@@ -467,6 +404,7 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
+  // ... (Calculation functions remain largely same, but focus on reading history) ...
   
   function calculateSeasonStats(historyData: any, selectedGW: number) {
     const current = Array.isArray(historyData?.current) ? historyData.current : [];
@@ -487,7 +425,7 @@ import Nav from "../components/Nav.astro";
       };
     }
 
-    const maxGwForWorst = currentGWFinished ? selectedGW : selectedGW - 1;
+    const maxGwForWorst = selectedGW; // Allow worst to be current GW
 
     let bestGw = { points: -Infinity, gw: 0 };
     let worstGw = { points: Infinity, gw: 0 };
@@ -506,29 +444,13 @@ import Nav from "../components/Nav.astro";
       const gw = Number(row.event) || 0;
       const hitCost = Number(row.event_transfers_cost) || 0;
 
-      if (pts > bestGw.points) {
-        bestGw = { points: pts, gw };
-      }
-
-      if (gw <= maxGwForWorst && pts < worstGw.points) {
-        worstGw = { points: pts, gw };
-      }
-
-      if (rank > 0 && rank < bestGwRank.rank) {
-        bestGwRank = { rank, gw };
-      }
-
-      if (gw <= maxGwForWorst && rank > worstGwRank.rank) {
-        worstGwRank = { rank, gw };
-      }
-
-      if (overallRank > 0 && overallRank < bestOverallRank.rank) {
-        bestOverallRank = { rank: overallRank, gw };
-      }
-
-      if (gw <= maxGwForWorst && overallRank > worstOverallRank.rank) {
-        worstOverallRank = { rank: overallRank, gw };
-      }
+      // Stats aggregation
+      if (pts > bestGw.points) { bestGw = { points: pts, gw }; }
+      if (gw <= maxGwForWorst && pts < worstGw.points) { worstGw = { points: pts, gw }; }
+      if (rank > 0 && rank < bestGwRank.rank) { bestGwRank = { rank, gw }; }
+      if (gw <= maxGwForWorst && rank > 0 && rank > worstGwRank.rank) { worstGwRank = { rank, gw }; }
+      if (overallRank > 0 && overallRank < bestOverallRank.rank) { bestOverallRank = { rank: overallRank, gw }; }
+      if (gw <= maxGwForWorst && overallRank > 0 && overallRank > worstOverallRank.rank) { worstOverallRank = { rank: overallRank, gw }; }
 
       totalTransfers += Number(row.event_transfers) || 0;
     
@@ -562,8 +484,9 @@ import Nav from "../components/Nav.astro";
 
   async function fetchCaptainData(entryId: number, maxGw: number): Promise<Map<number, number>> {
     const captainCounts = new Map<number, number>();
-
     const promises = [];
+    
+    // Limit requests to avoid rate limits if history is long
     for (let gw = 1; gw <= maxGw; gw++) {
       const cacheKey = `${entryId}:${gw}:picks`;
       const cached = managerStatsCache.get(cacheKey);
@@ -601,16 +524,12 @@ import Nav from "../components/Nav.astro";
   }
 
   function formatCaptainList(captainCounts: Map<number, number>): string {
-    if (captainCounts.size === 0) {
-      return '<p class="text-muted">No captain data available</p>';
-    }
+    if (captainCounts.size === 0) return '<p class="text-muted">No captain data available</p>';
 
     const countGroups = new Map<number, string[]>();
     for (const [playerId, count] of captainCounts.entries()) {
       const name = playerCache.get(playerId)?.name || `Player ${playerId}`;
-      if (!countGroups.has(count)) {
-        countGroups.set(count, []);
-      }
+      if (!countGroups.has(count)) countGroups.set(count, []);
       countGroups.get(count)!.push(name);
     }
 
@@ -645,7 +564,6 @@ import Nav from "../components/Nav.astro";
 
       displayedPlayers += players.length;
       rank += players.length;
-
       if (rank > 3 && displayedPlayers >= 3) break;
     }
 
@@ -653,158 +571,69 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
+  // Keep Squad Modal for drill-down viewing (still helpful to see team)
   async function showSquadModal(entryId: number, managerName: string, teamName: string) {
     const gw = parseInt(gwFilterSelect.value) || latestGW;
-
     squadModalContent.innerHTML = `<p class="text-muted">Loading squad...</p>`;
     squadModal.classList.add("is-open");
 
     try {
       let picksData = managerStatsCache.get(`${entryId}:${gw}:picks`);
-      let historyData = managerStatsCache.get(`${entryId}:history`);
-
-      if (!picksData || !historyData) {
-        const [picksRes, historyRes] = await Promise.all([
-          !picksData ? fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`) : Promise.resolve(null),
-          !historyData ? fetch(`/api/fpl/entry/${entryId}/history`) : Promise.resolve(null)
-        ]);
-
-        if (picksRes && !picksRes.ok) throw new Error("Failed to fetch picks");
-        
-        if (picksRes) {
-          picksData = await picksRes.json();
-          managerStatsCache.set(`${entryId}:${gw}:picks`, picksData);
-        }
-        if (historyRes) {
-          historyData = await historyRes.json();
-          managerStatsCache.set(`${entryId}:history`, historyData);
+      if (!picksData) {
+        const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
+        if (res.ok) {
+            picksData = await res.json();
+            managerStatsCache.set(`${entryId}:${gw}:picks`, picksData);
         }
       }
 
-      const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
-
-      const chips = historyData.chips || [];
-      const chipThisGW = chips.find((c: any) => c.event === gw);
-      const chipPlayed = chipThisGW ?
-        (chipThisGW.name === "wildcard" ? "WC" :
-        chipThisGW.name === "bboost" ? "BB" :
-        chipThisGW.name === "3xc" ? "TC" :
-        chipThisGW.name === "freehit" ? "FH" : "") : "";
-
-      let livePoints = 0;
-
-      if (gw === latestGW && !currentGWFinished) {
-        await Promise.all([
-          fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: true }),
-          fetchLiveGW({ gw, livePointsCache })
-        ]);
-
-        const grossPoints = await fetchManagerLiveGwPoints(entryId, gw);
-        const hitCost = Number(historyData.current.find((r:any) => Number(r.event) === gw)?.event_transfers_cost) || 0;
-        livePoints = grossPoints - hitCost;
-      } else {
-        const currentHistory = historyData.current || [];
-        const gwRow = currentHistory.find((r: any) => Number(r.event) === Number(gw));
-        livePoints = gwRow ? Number(gwRow.points) - (Number(gwRow.event_transfers_cost) || 0) : 0;
-      }
-
+      const rawPicks = picksData && picksData.picks ? picksData.picks : [];
+      
       const picks = rawPicks.map((p: any) => {
         const player = playerCache.get(p.element);
         const teamId = player?.team || 0;
         const teamInfo = teamCache.get(teamId);
-
         return {
-          playerId: Number(p.element),
-          position: Number(p.position),
-          is_captain: !!p.is_captain,
-          is_vice_captain: !!p.is_vice_captain,
           web_name: player?.name || "Unknown",
           teamShort: teamInfo?.shortName || "???",
+          position: p.position,
           playingPosition: positionLabel(player?.position || 4),
-          multiplier: p.multiplier || 1
+          is_captain: p.is_captain,
+          is_vice_captain: p.is_vice_captain
         };
       });
 
-      const sorted = [...picks].sort((a, b) => a.position - b.position);
-      const starters = sorted.slice(0, 11);
-      const bench = sorted.slice(11);
-
-      const chipEmoji = chipPlayed === "WC" ? "🃏" : 
-                        chipPlayed === "BB" ? "🪑" : 
-                        chipPlayed === "TC" ? "👑" : 
-                        chipPlayed === "FH" ? "🎯" : "";
+      const starters = picks.filter((p:any) => p.position <= 11);
+      const bench = picks.filter((p:any) => p.position > 11);
 
       let html = `
-        <h2 class="modal-title" style="padding-right:40px;">
-          ${managerName}
-          ${chipPlayed ? `<span class="badge" style="margin-left:8px;">${chipEmoji} ${chipPlayed}</span>` : ""}
-        </h2>
-        <p class="text-muted" style="margin-bottom:var(--space-3);">
-          ${teamName} · GW${gw} · <span class="text-success font-bold">${livePoints} pts</span>
-        </p>
-
+        <h2 class="modal-title" style="padding-right:40px;">${managerName}</h2>
+        <p class="text-muted" style="margin-bottom:var(--space-3);">${teamName} · GW${gw}</p>
         <div class="squad-modal-section">
           <h3 class="squad-modal-heading">Starting XI</h3>
           <table class="squad-modal-table">
-            <thead>
-              <tr>
-                <th>Player</th>
-                <th class="col-team">Team</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Player</th><th class="col-team">Team</th></tr></thead>
             <tbody>
       `;
-
       for (const p of starters) {
-        const capLabel = p.is_captain ? '<span class="cap-badge cap-c">C</span>' : 
-                         p.is_vice_captain ? '<span class="cap-badge cap-v">V</span>' : '';
-
-        html += `
-          <tr>
-            <td class="player-cell">
-              <span class="player-pos">${p.playingPosition}</span>
-              <span class="player-name">${p.web_name}</span>
-              ${capLabel}
-            </td>
-            <td class="col-team">${p.teamShort}</td>
-          </tr>
-        `;
+        const cap = p.is_captain ? '<span class="cap-badge cap-c">C</span>' : p.is_vice_captain ? '<span class="cap-badge cap-v">V</span>' : '';
+        html += `<tr><td class="player-cell"><span class="player-pos">${p.playingPosition}</span><span class="player-name">${p.web_name}</span>${cap}</td><td class="col-team">${p.teamShort}</td></tr>`;
       }
-
+      html += `</tbody></table></div>`;
+      
       html += `
-            </tbody>
-          </table>
-        </div>
-
         <div class="squad-modal-section">
           <h3 class="squad-modal-heading">Bench</h3>
-          <table class="squad-modal-table bench-table">
-            <tbody>
+          <table class="squad-modal-table bench-table"><tbody>
       `;
-
       for (const p of bench) {
-        html += `
-          <tr class="bench-inactive">
-            <td class="player-cell">
-              <span class="player-pos">${p.playingPosition}</span>
-              <span class="player-name">${p.web_name}</span>
-            </td>
-            <td class="col-team">${p.teamShort}</td>
-          </tr>
-        `;
+        html += `<tr class="bench-inactive"><td class="player-cell"><span class="player-pos">${p.playingPosition}</span><span class="player-name">${p.web_name}</span></td><td class="col-team">${p.teamShort}</td></tr>`;
       }
-
-      html += `
-            </tbody>
-          </table>
-        </div>
-      `;
+      html += `</tbody></table></div>`;
 
       squadModalContent.innerHTML = html;
-
     } catch (error) {
-      console.error("Error loading squad:", error);
-      squadModalContent.innerHTML = "<p class='status status--error'>Error loading squad data.</p>";
+      squadModalContent.innerHTML = "<p class='status status--error'>Error loading squad.</p>";
     }
   }
 
@@ -814,26 +643,20 @@ import Nav from "../components/Nav.astro";
 
     const gw = parseInt(gwFilterSelect.value) || latestGW;
 
-    // Show loading state
+    // Show loading
     statsModalContent.innerHTML = `
-      <h2 class="modal-title">
-        <button type="button" class="manager-name-btn" data-entry-id="${manager.entryId}">${manager.managerName}</button>
-      </h2>
-      <p class="text-muted">${manager.teamName}</p>
-      <div class="stats-loading">
-        <p class="text-muted">Loading detailed stats...</p>
-      </div>
+      <h2 class="modal-title">${manager.managerName}</h2>
+      <div class="stats-loading"><p class="text-muted">Loading detailed stats...</p></div>
     `;
     statsModal.classList.add("is-open");
 
     const stats = calculateSeasonStats(manager.historyData, gw);
-    const gwRank = Number(manager.gwRank) || 0;
     const captainCounts = await fetchCaptainData(entryId, gw);
     const captainHtml = formatCaptainList(captainCounts);
 
     let html = `
       <h2 class="modal-title" style="margin-bottom: var(--space-1);">
-        <button type="button" class="manager-name-btn" data-entry-id="${manager.entryId}" data-manager-name="${manager.managerName}" data-team-name="${manager.teamName}">${manager.managerName}</button>
+        <button type="button" class="manager-name-btn" data-entry-id="${manager.entryId}">${manager.managerName}</button>
       </h2>
       <p class="text-muted" style="margin-bottom: var(--space-3); font-size: 12px;">${manager.teamName}</p>
 
@@ -869,7 +692,7 @@ import Nav from "../components/Nav.astro";
             <span class="stat-label">GW Pts</span>
           </div>
           <div class="stat-item stat-item--compact">
-            <span class="stat-value">${formatRank(gwRank)}</span>
+            <span class="stat-value">${formatRank(manager.gwRank)}</span>
             <span class="stat-label">GW Rank</span>
           </div>
         </div>
@@ -889,19 +712,11 @@ import Nav from "../components/Nav.astro";
           </div>
           <div class="stat-item stat-item--compact stat-item--success">
             <span class="stat-value">${formatRank(stats.bestGwRank.rank)}</span>
-            <span class="stat-label">Best GW Rank (GW${stats.bestGwRank.gw})</span>
+            <span class="stat-label">Best Rank (GW${stats.bestGwRank.gw})</span>
           </div>
           <div class="stat-item stat-item--compact stat-item--danger">
             <span class="stat-value">${stats.worstGwRank.gw > 0 ? formatRank(stats.worstGwRank.rank) : '—'}</span>
-            <span class="stat-label">${stats.worstGwRank.gw > 0 ? `Worst GW Rank (GW${stats.worstGwRank.gw})` : 'Worst GW Rank'}</span>
-          </div>
-          <div class="stat-item stat-item--compact stat-item--success">
-            <span class="stat-value">${formatRank(stats.bestOverallRank.rank)}</span>
-            <span class="stat-label">Highest OR (GW${stats.bestOverallRank.gw})</span>
-          </div>
-          <div class="stat-item stat-item--compact stat-item--danger">
-            <span class="stat-value">${stats.worstOverallRank.gw > 0 ? formatRank(stats.worstOverallRank.rank) : '—'}</span>
-            <span class="stat-label">${stats.worstOverallRank.gw > 0 ? `Lowest OR (GW${stats.worstOverallRank.gw})` : 'Lowest OR'}</span>
+            <span class="stat-label">Worst Rank</span>
           </div>
         </div>
       </div>
@@ -916,7 +731,7 @@ import Nav from "../components/Nav.astro";
           </div>
           <div class="stat-item stat-item--compact ${stats.hitCount > 0 ? 'stat-item--danger' : ''}">
             <span class="stat-value">${stats.hitCount > 0 ? `${stats.hitCount} (-${stats.totalHitsCost})` : '0'}</span>
-            <span class="stat-label">Hits</span>
+            <span class="stat-label">Hits Taken</span>
           </div>
         </div>
       </div>
@@ -940,12 +755,11 @@ import Nav from "../components/Nav.astro";
     `;
 
     statsModalContent.innerHTML = html;
-
-    const managerNameBtn = statsModalContent.querySelector('.manager-name-btn');
-    if (managerNameBtn) {
-      managerNameBtn.addEventListener('click', () => {
-        showSquadModal(manager.entryId, manager.managerName, manager.teamName);
-      });
+    
+    // Re-attach squad click inside modal
+    const squadBtn = statsModalContent.querySelector('.manager-name-btn');
+    if(squadBtn) {
+        squadBtn.addEventListener('click', () => showSquadModal(manager.entryId, manager.managerName, manager.teamName));
     }
   }
 
@@ -961,21 +775,8 @@ import Nav from "../components/Nav.astro";
 
   async function loadStats(ids: number[], gw: number) {
     if (ids.length === 0) {
-      out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
+      out.innerHTML = "<p class='status status--error'>No manager IDs found.</p>";
       return;
-    }
-
-    if (gw === latestGW && !currentGWFinished) {
-      // 1. CLEAR CACHES to ensure fresh data
-      fixturesCache = [];
-      livePointsCache.clear();
-      projectedBonusCache.clear();
-      teamStatusCache.clear();
-
-      await Promise.all([
-        fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: true }),
-        fetchLiveGW({ gw, livePointsCache })
-      ]);
     }
 
     allManagerData = [];
@@ -984,26 +785,16 @@ import Nav from "../components/Nav.astro";
 
     let loaded = 0;
     for (const id of ids) {
-      try {
-        const data = await fetchManagerData(id, gw);
-        if (data) {
-          allManagerData.push(data);
-          loaded++;
-
-          loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
-
-          allManagerData.sort((a, b) => {
-            // Sort by Total Points first during live, otherwise OR
-            // But stats page is usually ranked by OR.
-            // Let's stick to Total Points which is safer for live.
-            return b.totalPoints - a.totalPoints;
-          });
-          out.innerHTML = makeStatsTable(allManagerData, gw);
-          attachManagerButtons();
-        }
-      } catch (e) {
-        console.error(`Failed to load manager ${id}:`, e);
+      const data = await fetchManagerData(id, gw);
+      if (data) {
+        allManagerData.push(data);
         loaded++;
+        loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
+        
+        // Sorting
+        allManagerData.sort((a, b) => b.totalPoints - a.totalPoints);
+        out.innerHTML = makeStatsTable(allManagerData, gw);
+        attachManagerButtons();
       }
     }
 
@@ -1013,32 +804,27 @@ import Nav from "../components/Nav.astro";
   async function updateDisplay() {
     managerCountEl.textContent = `${managerIds.length} managers`;
     if (managerIds.length === 0) {
-      out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
+      out.innerHTML = "<p class='status status--error'>No manager IDs configured.</p>";
       return;
     }
-
     const gw = parseInt(gwFilterSelect.value) || latestGW;
     await loadStats(managerIds, gw);
   }
 
   (async function init() {
     await fetchBootstrapData();
-
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
-
     await updateDisplay();
   })();
 
   gwFilterSelect.addEventListener('change', async () => {
     const gw = parseInt(gwFilterSelect.value);
-    if (gw && gw >= 1 && gw <= 38) {
-      await loadStats(managerIds, gw);
-    }
+    if (gw) await loadStats(managerIds, gw);
   });
 
   refreshBtn.addEventListener('click', async () => {
-    managerStatsCache.clear(); // Clear local cache on manual refresh
+    managerStatsCache.clear();
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();
