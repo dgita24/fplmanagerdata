@@ -900,11 +900,20 @@ import Nav from "../components/Nav.astro";
     out.innerHTML = "";
     loadingStatus.textContent = `Loading GW${gw}...`;
 
+    // 1. CLEAR CACHES to ensure fresh data
+    fixturesCache = [];
+    livePointsCache.clear();
+    projectedBonusCache.clear();
+    teamStatusCache.clear();
+
+    // 2. Fetch Fixtures & Live Data in parallel
+    // NOTE: fixturesCache is mutated in place by fetchFixtures, but we pass the reference
     await Promise.all([
       fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: true }),
       fetchLiveGW({ gw, livePointsCache, includeExtendedStats: true })
     ]);
 
+    // 3. Process managers AFTER caches are populated
     let loaded = 0;
     for (const id of ids) {
       try {
