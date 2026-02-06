@@ -309,8 +309,9 @@ import Nav from "../components/Nav.astro";
         });
       });
 
-      const currentEvent = data.events.find((e: any) => e.is_current);
-      latestGW = currentEvent ? currentEvent.id : 1;
+      // Find the last event where the deadline has passed
+      const activeEvent = data.events.filter((e: any) => new Date(e.deadline_time) < new Date()).pop();
+      latestGW = activeEvent ? activeEvent.id : 1;
 
       populateGWSelector(latestGW);
 
