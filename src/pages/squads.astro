@@ -155,7 +155,7 @@ import Nav from "../components/Nav.astro";
   }
 
   :global(.squad-header) {
-    display: flex; /* NEW: Align items in a row */
+    display: flex; /* Align items in a row */
     justify-content: center;
     align-items: center;
     gap: 8px;
@@ -167,7 +167,7 @@ import Nav from "../components/Nav.astro";
 
   :global(.team-name-span) {
     color: var(--color-text-secondary);
-    font-size: 13px; /* Increased from 11px */
+    font-size: 13px;
   }
 
   :global(.bench-row) {
@@ -215,12 +215,13 @@ import Nav from "../components/Nav.astro";
   }
 
   /* NEW: Specific colors for Captain/Vice */
-  :global(.cap-c) {
+  /* FIXED: Matched these class names to the script */
+  :global(.cap-text-c) {
     color: #22c55e; /* Bold Green */
     font-weight: 800;
   }
   
-  :global(.cap-vc) {
+  :global(.cap-text-vc) {
     color: #f97316; /* Bold Orange */
     font-weight: 800;
   }
@@ -249,7 +250,7 @@ import Nav from "../components/Nav.astro";
   :global(.pos-col) {
     font-size: 10px;
     font-weight: 600;
-    text-transform: uppercase;
+    /* REMOVED: text-transform: uppercase; (This was forcing POS) */
     color: var(--color-text-secondary);
     text-align: center;
     width: 45px; /* Fixed width for mobile */
@@ -262,6 +263,12 @@ import Nav from "../components/Nav.astro";
     text-align: center !important;
   }
 
+  /* FIX: Ensure Cap column is centered */
+  :global(.squads-page-v1 .squad-table th.cap-col),
+  :global(.squads-page-v1 .squad-table td.cap-col) {
+    text-align: center !important;
+  }
+
   @media (min-width: 640px) {
     :global(.squads-page-v1 table.squad-table) {
       table-layout: fixed !important;
@@ -270,8 +277,10 @@ import Nav from "../components/Nav.astro";
 
     :global(.squads-page-v1 .squad-table .pos-num) { width: 60px !important; }
     :global(.squads-page-v1 .squad-table .pos-col) { width: 70px !important; }
-    :global(.squads-page-v1 .squad-table .team-col) { width: 90px !important; }
-    :global(.squads-page-v1 .squad-table .pts-col) { width: 70px !important; }
+    
+    /* REDUCED WIDTHS as requested */
+    :global(.squads-page-v1 .squad-table .team-col) { width: 70px !important; } /* Reduced from 90 */
+    :global(.squads-page-v1 .squad-table .pts-col) { width: 60px !important; }  /* Reduced from 70 */
     :global(.squads-page-v1 .squad-table .cap-col) { width: 50px !important; }
 
     :global(.squads-page-v1 .squad-table td) {
@@ -283,7 +292,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
-  import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive'
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -769,7 +778,7 @@ import Nav from "../components/Nav.astro";
       <h2 class="modal-title">${managerName}</h2>
       <div class="stats-loading">
         <p class="text-muted">Calculating points breakdown...</p>
-        <p class="text-muted" style="font-size:11px;">Fetching history for GW1 to GW${latestGW - 1}...</p>
+        <p class="text-muted" style="font-size:11px;">Fetching history for GW1 to GW${latestGW}...</p>
       </div>
     `;
     historyModal.classList.add("is-open");
