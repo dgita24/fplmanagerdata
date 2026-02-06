@@ -613,8 +613,9 @@ import Nav from "../components/Nav.astro";
       const chipCode = chipPlayed || "None";
 
       const picks = rawPicks.map((p: any) => {
-        const player = playerCache.get(p.element) || { name: "", position: 4, team: 0 };
+        const player = playerCache.get(p.element) || { name: "Unknown", position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
+        const teamInfo = teamCache.get(teamId) || { shortName: "???" };
 
         const computed = getPlayerLiveComputedLocal(p.element, teamId, gw);
 
@@ -623,15 +624,11 @@ import Nav from "../components/Nav.astro";
           position: Number(p.position),
           is_captain: !!p.is_captain,
           is_vice_captain: !!p.is_vice_captain,
-
-          web_name: player.name || "",
-          teamId,
+          web_name: player.name || "Unknown",
+          teamShort: teamInfo.shortName,
           playingPosition: positionLabel(player.position),
-
           minutes: computed.minutes,
           status: computed.status,
-          lockedPoints: computed.locked,
-          projBonus: computed.projBonus,
           liveTotal: computed.liveTotal
         };
       });
