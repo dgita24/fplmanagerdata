@@ -33,7 +33,6 @@ import Nav from "../components/Nav.astro";
 
     <div class="buttons-row">
       <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
-      <button id="auto-refresh-btn" class="btn-row btn-row--neutral" type="button">⏱ Auto: OFF</button>
     </div>
 
     <div id="loading-status" class="meta-row"></div>
@@ -162,6 +161,11 @@ import Nav from "../components/Nav.astro";
   import { applyAutoSubsAndMultipliers, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
   let managerIds: number[] = []
+  
+  // OPTIMIZATION: Cache manager static data (Picks, Name, History Snapshot)
+  // Key: `${entryId}:${gw}`
+  // This data DOES NOT CHANGE during a live gameweek (picks are locked).
+  const managerDataCache = new Map<string, any>();
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -197,7 +201,6 @@ import Nav from "../components/Nav.astro";
   const lastUpdatedEl = document.getElementById("last-updated")!;
   const managerCountEl = document.getElementById("manager-count")!;
   const refreshBtn = document.getElementById("refresh-btn")!;
-  const autoRefreshBtn = document.getElementById("auto-refresh-btn")!;
   const squadModal = document.getElementById("squad-modal")!;
   const squadModalContent = document.getElementById("squad-modal-content")!;
   const closeSquadModal = document.getElementById("close-squad-modal")!;
@@ -242,9 +245,6 @@ import Nav from "../components/Nav.astro";
   let projectedBonusCache = new Map<string, number>();
   let teamStatusCache = new Map<string, TeamStatus>();
   let fixturesCache: FixtureInfo[] = [];
-
-  let autoRefreshInterval: ReturnType<typeof setInterval> | null = null;
-  let autoRefreshEnabled = false;
 
   closeSquadModal.addEventListener("click", () => {
     squadModal.classList.remove("is-open");
@@ -323,19 +323,30 @@ import Nav from "../components/Nav.astro";
 
   async function fetchManagerLive(entryId: number, gw: number) {
     try {
-      const [picksRes, summaryRes, historyRes] = await Promise.all([
-        fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
-        fetch(`/api/fpl/entry/${entryId}`),
-        fetch(`/api/fpl/entry/${entryId}/history`)
-      ]);
+      // OPTIMIZATION: Check Cache First
+      const cacheKey = `${entryId}:${gw}`;
+      let rawData = managerDataCache.get(cacheKey);
 
-      if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) {
-        throw new Error("Failed to fetch manager data");
+      if (!rawData) {
+         const [picksRes, summaryRes, historyRes] = await Promise.all([
+          fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
+          fetch(`/api/fpl/entry/${entryId}`),
+          fetch(`/api/fpl/entry/${entryId}/history`)
+        ]);
+
+        if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) {
+          throw new Error("Failed to fetch manager data");
+        }
+
+        const picksData = await picksRes.json();
+        const summaryData = await summaryRes.json();
+        const historyData = await historyRes.json();
+        
+        rawData = { picksData, summaryData, historyData };
+        managerDataCache.set(cacheKey, rawData);
       }
 
-      const picksData = await picksRes.json();
-      const summaryData = await summaryRes.json();
-      const historyData = await historyRes.json();
+      const { picksData, summaryData, historyData } = rawData;
 
       const chipName = (historyData.chips || []).find((c: any) => c.event === gw)?.name || "";
       const chipCode =
@@ -950,32 +961,12 @@ import Nav from "../components/Nav.astro";
   });
 
   refreshBtn.addEventListener('click', async () => {
+    // Clear manager data cache on manual refresh
+    managerDataCache.clear();
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     const gw = parseInt(gwFilterSelect.value) || latestGW;
     loadLive(managerIds, gw);
-  });
-
-  autoRefreshBtn.addEventListener('click', () => {
-    autoRefreshEnabled = !autoRefreshEnabled;
-
-    if (autoRefreshEnabled) {
-      autoRefreshBtn.textContent = "⏱ Auto: ON";
-      autoRefreshBtn.className = "btn-row btn-row--success";
-
-      autoRefreshInterval = setInterval(async () => {
-        const gw = parseInt(gwFilterSelect.value) || latestGW;
-        loadLive(managerIds, gw);
-      }, 120000);
-    } else {
-      autoRefreshBtn.textContent = "⏱ Auto: OFF";
-      autoRefreshBtn.className = "btn-row btn-row--neutral";
-
-      if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
-        autoRefreshInterval = null;
-      }
-    }
   });
 
   init();
