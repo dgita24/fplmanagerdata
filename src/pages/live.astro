@@ -162,9 +162,7 @@ import Nav from "../components/Nav.astro";
 
   let managerIds: number[] = []
   
-  // OPTIMIZATION: Cache manager static data (Picks, Name, History Snapshot)
-  // Key: `${entryId}:${gw}`
-  // This data DOES NOT CHANGE during a live gameweek (picks are locked).
+  // OPTIMIZATION: Cache manager static data
   const managerDataCache = new Map<string, any>();
 
   async function loadManagerIdsFromSupabase() {
@@ -309,7 +307,6 @@ import Nav from "../components/Nav.astro";
         });
       });
 
-      // Find the last event where the deadline has passed
       const activeEvent = data.events.filter((e: any) => new Date(e.deadline_time) < new Date()).pop();
       latestGW = activeEvent ? activeEvent.id : 1;
 
@@ -324,7 +321,6 @@ import Nav from "../components/Nav.astro";
 
   async function fetchManagerLive(entryId: number, gw: number) {
     try {
-      // OPTIMIZATION: Check Cache First
       const cacheKey = `${entryId}:${gw}`;
       let rawData = managerDataCache.get(cacheKey);
 
@@ -388,19 +384,23 @@ import Nav from "../components/Nav.astro";
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
 
       const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
-
       const transferCost =
         Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
 
+      // Nett = GW Points (Gross) - Hit
+      // This is purely for the "Nett" column display
       const liveNet = livePointsBeforeHits - transferCost;
 
-      let startOverall = 0;
-      if (Number(gw) > 1) {
-        const prev = historyRows.find((h: any) => Number(h.event) === (Number(gw) - 1));
-        startOverall = Number(prev?.total_points) || 0;
-      }
-
-      const liveOverall = startOverall + liveNet;
+      // FIX: Calculate Total Points using Summary Base
+      // We trust that 'summary_overall_points' from the API already has the hit subtracted.
+      // We subtract 'summary_event_points' (Official GW score) to get the "Start of GW Total".
+      // Then we add 'liveNet' (Our calculated GW score).
+      // Since both 'summary_event_points' (usually) and 'liveNet' (definitely) account for the hit,
+      // the math works out to replace the "old" GW score with the "live" GW score.
+      const officialOverall = Number(summaryData.summary_overall_points) || 0;
+      const officialEvent = Number(summaryData.summary_event_points) || 0;
+      
+      const liveOverall = officialOverall - officialEvent + liveNet;
 
       return {
         entryId,
@@ -408,8 +408,8 @@ import Nav from "../components/Nav.astro";
         teamName: summaryData.name || "",
         chipPlayed: chipCode === "None" ? "" : chipCode,
         transferCost,
-        livePointsBeforeHits,
-        livePoints: liveNet,
+        livePointsBeforeHits, // Gross points for GW column
+        livePoints: liveNet,  // Net points for Nett column
         totalPoints: liveOverall
       };
     } catch (e) {

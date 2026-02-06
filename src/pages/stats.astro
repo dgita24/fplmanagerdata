@@ -129,8 +129,7 @@ import Nav from "../components/Nav.astro";
   import { supabase } from '../lib/supabase.ts'
   import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
-  // OPTIMIZATION: Cache manager data (History/Summary/Picks) to prevent re-fetching on sort/filter
-  const managerStatsCache = new Map<string, any>(); // Key: `${entryId}` or `${entryId}:${gw}`
+  const managerStatsCache = new Map<string, any>();
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -228,7 +227,6 @@ import Nav from "../components/Nav.astro";
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
-      // Cache player names and team info
       data.elements.forEach((p: any) => {
         playerCache.set(p.id, {
           name: p.web_name,
@@ -257,7 +255,6 @@ import Nav from "../components/Nav.astro";
 
   async function fetchManagerLiveGwPoints(entryId: number, gw: number): Promise<number> {
     try {
-      // OPTIMIZATION: Use cached picks if available
       const cacheKey = `${entryId}:${gw}:picks`;
       let picksData = managerStatsCache.get(cacheKey);
       
@@ -318,11 +315,7 @@ import Nav from "../components/Nav.astro";
         livePointsBeforeHits += (Number(computed.liveTotal) || 0) * multiplier;
       }
 
-      const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
-      const transferCost =
-        Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
-
-      return livePointsBeforeHits;
+      return livePointsBeforeHits; // This returns GROSS points
     } catch (e) {
       console.error(`Error fetching live data for manager ${entryId}:`, e);
       return 0;
@@ -331,7 +324,6 @@ import Nav from "../components/Nav.astro";
 
   async function fetchManagerData(id: number, gw: number): Promise<ManagerData | null> {
     try {
-      // OPTIMIZATION: Check cache for summary and history
       let summaryData = managerStatsCache.get(`${id}:summary`);
       let historyData = managerStatsCache.get(`${id}:history`);
 
@@ -359,15 +351,18 @@ import Nav from "../components/Nav.astro";
       let gwPoints = 0;
       let gwRank = 0;
 
+      // Handle Live vs Historical
       if (gw === latestGW && !currentGWFinished) {
         const historyPoints = gwRow ? Number(gwRow.points) || 0 : 0;
         const historyRank = gwRow ? Number(gwRow.rank) || 0 : 0;
 
+        // If FPL API has updated stats for this GW (Net pts, Rank), use them.
         if (historyPoints > 0 || historyRank > 0) {
-          gwPoints = historyPoints;  // Net after hit (from FPL)
+          gwPoints = historyPoints;
           gwRank = historyRank;
         } else {
-          gwPoints = await fetchManagerLiveGwPoints(id, gw);  // Gross (no hit yet)
+          // Otherwise, calculate gross live points manually
+          gwPoints = await fetchManagerLiveGwPoints(id, gw);
           gwRank = 0;
         }
       } else if (gw === latestGW && currentGWFinished) {
@@ -378,22 +373,26 @@ import Nav from "../components/Nav.astro";
         gwRank = gwRow ? Number(gwRow.rank) || 0 : 0;
       }
 
-      // Calculate Total Points dynamically if we are in live mode
-      // Otherwise use the static summary value
       let totalPoints = Number(summaryData.summary_overall_points) || 0;
+      
+      // FIX: LIVE TOTAL CALCULATION
       if (gw === latestGW && !currentGWFinished) {
-         // Live Total = Start Overall + Live GW Points - Hits
-         // We approximate "Start Overall" by taking Total Points from previous GW in history
-         // Or just subtracting the "official" event points from overall and adding our live ones
+         // Get official Overall (Hit already deducted)
+         const officialOverall = Number(summaryData.summary_overall_points) || 0;
+         // Get official Event Points (Net, usually)
+         const officialEvent = Number(summaryData.summary_event_points) || 0;
          
-         // Better method: Find previous GW total
-         const prevGwRow = current.find((r: any) => Number(r.event) === (gw - 1));
-         const startPoints = prevGwRow ? Number(prevGwRow.total_points) : 0;
-         
-         // Hit cost for current GW
+         // Get Hit Cost for this week
          const currentHitCost = Number(historyData.current.find((h:any) => Number(h.event) === gw)?.event_transfers_cost) || 0;
          
-         totalPoints = startPoints + gwPoints - currentHitCost;
+         // Calculate Live Gross Points
+         const liveGross = await fetchManagerLiveGwPoints(id, gw);
+         
+         // Calculate Live Net Points
+         const liveNet = liveGross - currentHitCost;
+         
+         // Correct Total = Official Total - Official Event Pts + Live Net Pts
+         totalPoints = officialOverall - officialEvent + liveNet;
       }
 
       return {
@@ -576,7 +575,6 @@ import Nav from "../components/Nav.astro";
 
     const promises = [];
     for (let gw = 1; gw <= maxGw; gw++) {
-      // OPTIMIZATION: Check cache for picks first
       const cacheKey = `${entryId}:${gw}:picks`;
       const cached = managerStatsCache.get(cacheKey);
       
@@ -672,7 +670,6 @@ import Nav from "../components/Nav.astro";
     squadModal.classList.add("is-open");
 
     try {
-      // OPTIMIZATION: Check cache
       let picksData = managerStatsCache.get(`${entryId}:${gw}:picks`);
       let historyData = managerStatsCache.get(`${entryId}:history`);
 
@@ -712,7 +709,11 @@ import Nav from "../components/Nav.astro";
           fetchLiveGW({ gw, livePointsCache })
         ]);
 
-        livePoints = await fetchManagerLiveGwPoints(entryId, gw);
+        // Note: fetchManagerLiveGwPoints returns GROSS points (hit NOT subtracted)
+        // If we want to show NET points in the modal title, we subtract the hit here.
+        const grossPoints = await fetchManagerLiveGwPoints(entryId, gw);
+        const hitCost = Number(historyData.current.find((r:any) => Number(r.event) === gw)?.event_transfers_cost) || 0;
+        livePoints = grossPoints - hitCost;
       } else {
         const currentHistory = historyData.current || [];
         const gwRow = currentHistory.find((r: any) => Number(r.event) === Number(gw));
@@ -977,6 +978,12 @@ import Nav from "../components/Nav.astro";
     }
 
     if (gw === latestGW && !currentGWFinished) {
+      // 1. CLEAR CACHES to ensure fresh data
+      fixturesCache = [];
+      livePointsCache.clear();
+      projectedBonusCache.clear();
+      teamStatusCache.clear();
+
       await Promise.all([
         fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: true }),
         fetchLiveGW({ gw, livePointsCache })
@@ -998,16 +1005,10 @@ import Nav from "../components/Nav.astro";
           loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
 
           allManagerData.sort((a, b) => {
-            const ar = Number(a.overallRank) || 0;
-            const br = Number(b.overallRank) || 0;
-
-            const aBad = ar <= 0;
-            const bBad = br <= 0;
-            if (aBad && bBad) return 0;
-            if (aBad) return 1;
-            if (bBad) return -1;
-
-            return ar - br; 
+            // Sort by Total Points first during live, otherwise OR
+            // But stats page is usually ranked by OR.
+            // Let's stick to Total Points which is safer for live.
+            return b.totalPoints - a.totalPoints;
           });
           out.innerHTML = makeStatsTable(allManagerData, gw);
           attachManagerButtons();
