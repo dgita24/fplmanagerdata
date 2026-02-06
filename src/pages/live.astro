@@ -612,10 +612,10 @@ import Nav from "../components/Nav.astro";
 
       const chipCode = chipPlayed || "None";
 
+      // 1. Map raw picks
       const picks = rawPicks.map((p: any) => {
-        const player = playerCache.get(p.element) || { name: "Unknown", position: 4, team: 0 };
+        const player = playerCache.get(p.element) || { name: "", position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
-        const teamInfo = teamCache.get(teamId) || { shortName: "???" };
 
         const computed = getPlayerLiveComputedLocal(p.element, teamId, gw);
 
@@ -624,14 +624,36 @@ import Nav from "../components/Nav.astro";
           position: Number(p.position),
           is_captain: !!p.is_captain,
           is_vice_captain: !!p.is_vice_captain,
-          web_name: player.name || "Unknown",
-          teamShort: teamInfo.shortName,
+
+          web_name: player.name || "",
+          teamId,
           playingPosition: positionLabel(player.position),
+
           minutes: computed.minutes,
-          status: computed.status,
+          status: computed.status, // "NS", "Live", "Fin"
+          lockedPoints: computed.locked,
+          projBonus: computed.projBonus,
           liveTotal: computed.liveTotal
         };
       });
+
+      // 2. SAFETY CHECK: PREVENT PREMATURE VC
+      // If Captain hasn't played (0 mins) BUT their match isn't "Finished", 
+      // we must NOT let the VC take over yet.
+      const captain = picks.find(p => p.is_captain);
+      const viceCaptain = picks.find(p => p.is_vice_captain);
+
+      if (captain && viceCaptain) {
+        const capHasPlayed = captain.minutes > 0;
+        // Check if status is strict "Fin" (Full Time). 
+        // Note: Some APIs return "Fin" or "Finished". We check for inclusion or exact match.
+        const capMatchFinished = captain.status === "Fin" || captain.status === "Finished"; 
+        
+        if (!capHasPlayed && !capMatchFinished) {
+           // Temporarily disable VC flag so the calculation logic doesn't double-count
+           viceCaptain.is_vice_captain = false; 
+        }
+      }
 
       const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
     
