@@ -224,7 +224,8 @@ import Nav from "../components/Nav.astro";
 
   async function fetchBootstrapData() {
     try {
-      const res = await fetch('/api/fpl/bootstrap-static');
+      const v = Date.now();
+      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
@@ -260,10 +261,12 @@ import Nav from "../components/Nav.astro";
       let summaryData = managerStatsCache.get(`${id}:summary`);
       let historyData = managerStatsCache.get(`${id}:history`);
 
+      const v = Date.now();
+
       if (!summaryData || !historyData) {
         const [summaryRes, historyRes] = await Promise.all([
-          !summaryData ? fetch(`/api/fpl/entry/${id}`) : Promise.resolve(null),
-          !historyData ? fetch(`/api/fpl/entry/${id}/history`) : Promise.resolve(null)
+          !summaryData ? fetch(`/api/fpl/entry/${id}?v=${v}`) : Promise.resolve(null),
+          !historyData ? fetch(`/api/fpl/entry/${id}/history?v=${v}`) : Promise.resolve(null)
         ]);
 
         if ((summaryRes && !summaryRes.ok) || (historyRes && !historyRes.ok)) throw new Error("Load error");
@@ -404,7 +407,6 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
-  // ... (Calculation functions remain largely same, but focus on reading history) ...
   
   function calculateSeasonStats(historyData: any, selectedGW: number) {
     const current = Array.isArray(historyData?.current) ? historyData.current : [];
@@ -491,11 +493,13 @@ import Nav from "../components/Nav.astro";
       const cacheKey = `${entryId}:${gw}:picks`;
       const cached = managerStatsCache.get(cacheKey);
       
+      const v = Date.now();
+
       if (cached) {
         promises.push(Promise.resolve(cached));
       } else {
         promises.push(
-          fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`)
+          fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`)
             .then(async res => {
               if (res.ok) {
                 const data = await res.json();
@@ -579,8 +583,10 @@ import Nav from "../components/Nav.astro";
 
     try {
       let picksData = managerStatsCache.get(`${entryId}:${gw}:picks`);
+      const v = Date.now();
+
       if (!picksData) {
-        const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
+        const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`);
         if (res.ok) {
             picksData = await res.json();
             managerStatsCache.set(`${entryId}:${gw}:picks`, picksData);

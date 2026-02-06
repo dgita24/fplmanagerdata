@@ -286,7 +286,9 @@ import Nav from "../components/Nav.astro";
 
   async function fetchBootstrapData() {
     try {
-      const res = await fetch('/api/fpl/bootstrap-static');
+      // Add version param to force refresh of bootstrap data
+      const v = Date.now();
+      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
@@ -322,11 +324,14 @@ import Nav from "../components/Nav.astro";
       const cacheKey = `${entryId}:${gw}`;
       let rawData = managerDataCache.get(cacheKey);
 
+      // Version timestamp to bust API cache
+      const v = Date.now();
+
       if (!rawData) {
          const [picksRes, summaryRes, historyRes] = await Promise.all([
-          fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
-          fetch(`/api/fpl/entry/${entryId}`),
-          fetch(`/api/fpl/entry/${entryId}/history`)
+          fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`),
+          fetch(`/api/fpl/entry/${entryId}?v=${v}`),
+          fetch(`/api/fpl/entry/${entryId}/history?v=${v}`)
         ]);
 
         if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) {
@@ -379,7 +384,7 @@ import Nav from "../components/Nav.astro";
 
       const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
 
-      // This contains GROSS live points (sum of players, hit NOT subtracted)
+      // GROSS live points (sum of players, hit NOT subtracted)
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
 
       const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
@@ -387,48 +392,20 @@ import Nav from "../components/Nav.astro";
         Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
 
       // Nett = GW Points (Gross) - Hit
-      // This is purely for the "Nett" column display in the table
       const liveNet = livePointsBeforeHits - transferCost;
 
-      // === CRITICAL FIX FOR TOTAL POINTS ===
+      // === TOTAL POINTS CALCULATION (CRITICAL FIX) ===
       // summary_overall_points: Official Total from API (Includes hit deduction already)
-      // summary_event_points: Official Event Points from API (Includes hit deduction already, usually)
+      // summary_event_points: Official Event Points from API (Includes hit deduction already)
       
       const officialOverall = Number(summaryData.summary_overall_points) || 0;
       const officialEvent = Number(summaryData.summary_event_points) || 0;
       
-      // Since officialOverall ALREADY has the hit subtracted, we should NOT subtract transferCost again.
-      // We start with Official Overall.
-      // We subtract the Official Event Points (Net) to get back to "Start of GW Total (Post-Hit)".
-      // Then we add our calculated Net Points (liveNet) which is (Gross - Hit).
-      
-      // Wait... if Official Overall has hit subtracted, and Official Event has hit subtracted...
-      // StartTotal = OfficialOverall - OfficialEvent.
-      // LiveTotal = StartTotal + LiveNet.
-      // LiveNet = Gross - Hit.
-      // So LiveTotal = (OfficialOverall - OfficialEvent) + (Gross - Hit).
-      
-      // BUT if OfficialOverall = 1405 (hit deducted)
-      // And OfficialEvent = -4 (hit deducted)
-      // And Gross = 0
-      // And Hit = 4
-      
-      // StartTotal = 1405 - (-4) = 1409. (Matches your expectation!)
-      // LiveTotal = 1409 + (0 - 4) = 1405.
-      
-      // If you want 1409, you want the total BEFORE the hit is applied?
-      // No, FPL rules say total includes hit.
-      // IF you see 1409 on the site, then 1409 IS the score WITH the hit (or hit hasn't applied yet visually).
-      
-      // If the API says 1405, then the API has applied the hit.
-      // If you want to force it to match your 1409 calculation:
-      // You want: OfficialOverall - OfficialEvent + Gross.
-      // 1405 - (-4) + 0 = 1409.
-      
-      // THIS MATCHES YOUR NUMBER. 
-      // It implies: Total Points = Official Base (Pre-GW) + Live GROSS Points.
-      // It effectively ignores the hit in the Total calculation.
-      
+      // We calculate Live Total Points by starting with Official Total, subtracting Official Event (Net),
+      // and adding our calculated Live Gross points. This removes the "double deduction" of hits.
+      // Math: (Start Total) + Live Gross.
+      // Since Start Total = Official Overall - Official Event (Net, which includes hits),
+      // And Live Gross doesn't have hits, we end up with a Total that effectively ignores the hit visually until next GW.
       const liveOverall = officialOverall - officialEvent + livePointsBeforeHits;
 
       return {
@@ -439,7 +416,7 @@ import Nav from "../components/Nav.astro";
         transferCost,
         livePointsBeforeHits, // Gross points for GW column
         livePoints: liveNet,  // Net points for Nett column
-        totalPoints: liveOverall // Calculated Total matching 1409 logic
+        totalPoints: liveOverall // Corrected Total Points
       };
     } catch (e) {
       console.error(`Error fetching live data for manager ${entryId}:`, e);
@@ -626,7 +603,8 @@ import Nav from "../components/Nav.astro";
     squadModal.classList.add("is-open");
 
     try {
-      const picksRes = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
+      const v = Date.now();
+      const picksRes = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`);
       if (!picksRes.ok) throw new Error("Failed to fetch picks");
 
       const picksData = await picksRes.json();
@@ -936,7 +914,8 @@ import Nav from "../components/Nav.astro";
     teamStatusCache.clear();
 
     // 2. Fetch Fixtures & Live Data in parallel
-    // NOTE: fixturesCache is mutated in place by fetchFixtures, but we pass the reference
+    // Added timestamp 'v' to bootstrap as well
+    const v = Date.now();
     await Promise.all([
       fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: true }),
       fetchLiveGW({ gw, livePointsCache, includeExtendedStats: true })
