@@ -156,12 +156,18 @@ import Nav from "../components/Nav.astro";
 
   :global(.squad-header) {
     display: flex; /* NEW: Align items in a row */
-    justify-content: space-between; /* NEW: Push name left, team right */
+    justify-content: center;
     align-items: center;
+    gap: 8px;
     padding: var(--space-2) var(--space-3);
     background: var(--color-surface-alt);
     border-bottom: 1px solid var(--color-border);
     font-size: var(--text-sm);
+  }
+
+  :global(.team-name-span) {
+    color: var(--color-text-secondary);
+    font-size: 13px; /* Increased from 11px */
   }
 
   :global(.bench-row) {
@@ -219,20 +225,18 @@ import Nav from "../components/Nav.astro";
     font-weight: 800;
   }
 
+  /* UPDATED: Manager Link */
   :global(.manager-link-btn) {
     background: none;
     border: none;
-    color: var(--color-text);
     cursor: pointer;
     font-family: inherit;
-    font-size: inherit;
+    font-size: 14px;
     padding: 0;
-    text-align: center;
-    font-weight: 700;
     text-decoration: underline;
     text-decoration-color: transparent;
     transition: color 0.2s;
-    color: var(--color-primary); /* Brighter default color */
+    color: var(--color-primary); /* Brighter Blue */
     font-weight: 700;
   }
   
@@ -248,7 +252,8 @@ import Nav from "../components/Nav.astro";
     text-transform: uppercase;
     color: var(--color-text-secondary);
     text-align: center;
-    width: 35px; /* Fixed width for mobile */
+    width: 45px; /* Fixed width for mobile */
+    white-space: nowrap !important; /* Prevents wrapping */
   }
 
   /* FIX: Ensure Pos column is centered */
@@ -264,7 +269,7 @@ import Nav from "../components/Nav.astro";
     }
 
     :global(.squads-page-v1 .squad-table .pos-num) { width: 60px !important; }
-    :global(.squads-page-v1 .squad-table .pos-col) { width: 80px !important; }
+    :global(.squads-page-v1 .squad-table .pos-col) { width: 70px !important; }
     :global(.squads-page-v1 .squad-table .team-col) { width: 90px !important; }
     :global(.squads-page-v1 .squad-table .pts-col) { width: 70px !important; }
     :global(.squads-page-v1 .squad-table .cap-col) { width: 50px !important; }
@@ -677,10 +682,10 @@ import Nav from "../components/Nav.astro";
 
       html += `
         <div class="card squad-card">
-          <!-- UPDATED: Single line header -->
+          <!-- UPDATED HEADER: Centered with Dash -->
           <div class="squad-header">
             <button class="manager-link-btn" data-manager-id="${manager.entryId}">${manager.managerName}</button>
-            <span class="text-muted" style="font-size:11px;">${manager.teamName}</span>
+            <span class="team-name-span">— ${manager.teamName}</span>
           </div>
           ${manager.chipPlayed ? `<div class="squad-chip-indicator">${getChipFullName(manager.chipPlayed)} played</div>` : ''}
           <div class="table-scroll">
@@ -688,9 +693,9 @@ import Nav from "../components/Nav.astro";
               <thead>
                 <tr>
                   <th class="num pos-num">#</th>
-                  <th class="pos-col">Pos</th> <!-- Ensure this says Pos -->
+                  <th class="pos-col">Pos</th> <!-- Explicit "Pos" text -->
                   <th>Player</th>
-                  <th class="num cap-col">C/VC</th> <!-- UPDATED: Column Header -->
+                  <th class="num cap-col">C/VC</th>
                   <th class="num team-col">Team</th>
                   <th class="num pts-col">Pts</th>                 
                 </tr>
@@ -707,16 +712,15 @@ import Nav from "../components/Nav.astro";
         else if (player.dnp) rowClass = "dnp-row";
         else if (isBench) rowClass = "bench-row";
 
-        // UPDATED: C/VC Logic and Styling
         let captainLabel = "";
         let captainClass = "";
         
         if (player.isCaptain) {
             captainLabel = "C";
-            captainClass = "cap-c"; // Green
+            captainClass = "cap-text-c";
         } else if (player.isViceCaptain) {
             captainLabel = "VC";
-            captainClass = "cap-vc"; // Orange
+            captainClass = "cap-text-vc";
         }
 
         let statusBadge = "";
@@ -753,7 +757,6 @@ import Nav from "../components/Nav.astro";
 
     return html;
   }
-
   // --- UPGRADE 2: Manager History Modal (Optimized) ---
   async function showManagerHistoryModal(managerId) {
     const managerNameBtn = document.querySelector(`.manager-link-btn[data-manager-id="${managerId}"]`);
