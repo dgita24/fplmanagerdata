@@ -155,11 +155,13 @@ import Nav from "../components/Nav.astro";
   }
 
   :global(.squad-header) {
+    display: flex; /* NEW: Align items in a row */
+    justify-content: space-between; /* NEW: Push name left, team right */
+    align-items: center;
     padding: var(--space-2) var(--space-3);
     background: var(--color-surface-alt);
     border-bottom: 1px solid var(--color-border);
     font-size: var(--text-sm);
-    text-align: center;
   }
 
   :global(.bench-row) {
@@ -206,6 +208,17 @@ import Nav from "../components/Nav.astro";
     text-decoration-color: var(--color-primary);
   }
 
+  /* NEW: Specific colors for Captain/Vice */
+  :global(.cap-c) {
+    color: #22c55e; /* Bold Green */
+    font-weight: 800;
+  }
+  
+  :global(.cap-vc) {
+    color: #f97316; /* Bold Orange */
+    font-weight: 800;
+  }
+
   :global(.manager-link-btn) {
     background: none;
     border: none;
@@ -219,6 +232,8 @@ import Nav from "../components/Nav.astro";
     text-decoration: underline;
     text-decoration-color: transparent;
     transition: color 0.2s;
+    color: var(--color-primary); /* Brighter default color */
+    font-weight: 700;
   }
   
   :global(.manager-link-btn:hover) {
@@ -236,6 +251,12 @@ import Nav from "../components/Nav.astro";
     width: 35px; /* Fixed width for mobile */
   }
 
+  /* FIX: Ensure Pos column is centered */
+  :global(.squads-page-v1 .squad-table th.pos-col),
+  :global(.squads-page-v1 .squad-table td.pos-col) {
+    text-align: center !important;
+  }
+
   @media (min-width: 640px) {
     :global(.squads-page-v1 table.squad-table) {
       table-layout: fixed !important;
@@ -243,7 +264,7 @@ import Nav from "../components/Nav.astro";
     }
 
     :global(.squads-page-v1 .squad-table .pos-num) { width: 60px !important; }
-    :global(.squads-page-v1 .squad-table .pos-col) { width: 60px !important; }
+    :global(.squads-page-v1 .squad-table .pos-col) { width: 80px !important; }
     :global(.squads-page-v1 .squad-table .team-col) { width: 90px !important; }
     :global(.squads-page-v1 .squad-table .pts-col) { width: 70px !important; }
     :global(.squads-page-v1 .squad-table .cap-col) { width: 50px !important; }
@@ -656,9 +677,10 @@ import Nav from "../components/Nav.astro";
 
       html += `
         <div class="card squad-card">
+          <!-- UPDATED: Single line header -->
           <div class="squad-header">
             <button class="manager-link-btn" data-manager-id="${manager.entryId}">${manager.managerName}</button>
-            <span class="text-muted" style="display:block; font-size:11px; margin-top:2px;">${manager.teamName}</span>
+            <span class="text-muted" style="font-size:11px;">${manager.teamName}</span>
           </div>
           ${manager.chipPlayed ? `<div class="squad-chip-indicator">${getChipFullName(manager.chipPlayed)} played</div>` : ''}
           <div class="table-scroll">
@@ -666,9 +688,9 @@ import Nav from "../components/Nav.astro";
               <thead>
                 <tr>
                   <th class="num pos-num">#</th>
-                  <th class="pos-col">Pos</th>
+                  <th class="pos-col">Pos</th> <!-- Ensure this says Pos -->
                   <th>Player</th>
-                  <th class="num cap-col">C</th>
+                  <th class="num cap-col">C/VC</th> <!-- UPDATED: Column Header -->
                   <th class="num team-col">Team</th>
                   <th class="num pts-col">Pts</th>                 
                 </tr>
@@ -685,8 +707,17 @@ import Nav from "../components/Nav.astro";
         else if (player.dnp) rowClass = "dnp-row";
         else if (isBench) rowClass = "bench-row";
 
-        const captainLabel = player.isCaptain ? "C" : (player.isViceCaptain ? "V" : "");
-        const captainClass = player.isCaptain ? "text-danger" : (player.isViceCaptain ? "text-primary" : "");
+        // UPDATED: C/VC Logic and Styling
+        let captainLabel = "";
+        let captainClass = "";
+        
+        if (player.isCaptain) {
+            captainLabel = "C";
+            captainClass = "cap-c"; // Green
+        } else if (player.isViceCaptain) {
+            captainLabel = "VC";
+            captainClass = "cap-vc"; // Orange
+        }
 
         let statusBadge = "";
         if (player.subOn) statusBadge = `<span class="badge badge--success" style="font-size:9px;padding:1px 4px;margin-left:4px;">ON</span>`;
@@ -741,7 +772,7 @@ import Nav from "../components/Nav.astro";
     historyModal.classList.add("is-open");
 
     try {
-        const maxGw = latestGW - 1; 
+        const maxGw = latestGW; 
         if (maxGw < 1) throw new Error("Season not started");
 
         // 1. Fetch ALL picks for this manager (Parallel & Cached)
