@@ -54,6 +54,14 @@ import Nav from "../components/Nav.astro";
       <div id="player-modal-content"></div>
     </div>
   </div>
+
+  <!-- Manager History Modal -->
+  <div id="manager-history-modal" class="modal modal--nested">
+    <div class="modal-panel">
+      <button id="close-history-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="history-modal-content"></div>
+    </div>
+  </div>
 </Layout>
 
 <style>
@@ -198,16 +206,47 @@ import Nav from "../components/Nav.astro";
     text-decoration-color: var(--color-primary);
   }
 
+  :global(.manager-link-btn) {
+    background: none;
+    border: none;
+    color: var(--color-text);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: inherit;
+    padding: 0;
+    text-align: center;
+    font-weight: 700;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: color 0.2s;
+  }
+  
+  :global(.manager-link-btn:hover) {
+    color: var(--color-primary);
+    text-decoration-color: var(--color-primary);
+  }
+
+  /* Table Columns */
+  :global(.pos-col) {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    text-align: center;
+    width: 35px; /* Fixed width for mobile */
+  }
+
   @media (min-width: 640px) {
     :global(.squads-page-v1 table.squad-table) {
       table-layout: fixed !important;
       width: 100% !important;
     }
 
-    :global(.squads-page-v1 .squad-table .pos-num) { width: 90px !important; }
+    :global(.squads-page-v1 .squad-table .pos-num) { width: 60px !important; }
+    :global(.squads-page-v1 .squad-table .pos-col) { width: 60px !important; }
     :global(.squads-page-v1 .squad-table .team-col) { width: 90px !important; }
-    :global(.squads-page-v1 .squad-table .pts-col) { width: 90px !important; }
-    :global(.squads-page-v1 .squad-table .cap-col) { width: 90px !important; }
+    :global(.squads-page-v1 .squad-table .pts-col) { width: 70px !important; }
+    :global(.squads-page-v1 .squad-table .cap-col) { width: 50px !important; }
 
     :global(.squads-page-v1 .squad-table td) {
       overflow-wrap: anywhere;
@@ -257,7 +296,7 @@ import Nav from "../components/Nav.astro";
 
   let managerIds = [];
   let allSquadsData = [];
-  let latestGW = null;
+  let latestGW = 1;
 
   let playerCache = new Map();
   let teamCache = new Map();
@@ -265,6 +304,10 @@ import Nav from "../components/Nav.astro";
   let teamStatusCache = new Map<string, TeamStatus>();
   let projectedBonusCache = new Map<string, number>();
   let fixturesCache: FixtureInfo[] = [];
+
+  // NEW CACHES FOR OPTIMIZATION
+  const playerHistoryCache = new Map(); // Global cache for element-summary (playerId -> historyArray)
+  const managerPicksCache = new Map(); // Cache for manager picks (managerId:gw -> picksData)
 
   function populateGWSelector(currentGW) {
     gwFilterSelect.innerHTML = '';
@@ -417,10 +460,17 @@ import Nav from "../components/Nav.astro";
 
   async function fetchSquadForGW(entryId, gw) {
     try {
-      const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
-      if (!res.ok) throw new Error("Failed to fetch picks");
+      // OPTIMIZATION: Check cache for squad picks
+      const cacheKey = `${entryId}:${gw}`;
+      let data = managerPicksCache.get(cacheKey);
 
-      const data = await res.json();
+      if (!data) {
+        const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
+        if (!res.ok) throw new Error("Failed to fetch picks");
+        data = await res.json();
+        managerPicksCache.set(cacheKey, data);
+      }
+
       const picks = data.picks || [];
 
       return picks.map(pick => {
@@ -607,8 +657,8 @@ import Nav from "../components/Nav.astro";
       html += `
         <div class="card squad-card">
           <div class="squad-header">
-            <strong>${manager.managerName}</strong>
-            <span class="text-muted"> — ${manager.teamName}</span>
+            <button class="manager-link-btn" data-manager-id="${manager.entryId}">${manager.managerName}</button>
+            <span class="text-muted" style="display:block; font-size:11px; margin-top:2px;">${manager.teamName}</span>
           </div>
           ${manager.chipPlayed ? `<div class="squad-chip-indicator">${getChipFullName(manager.chipPlayed)} played</div>` : ''}
           <div class="table-scroll">
@@ -616,6 +666,7 @@ import Nav from "../components/Nav.astro";
               <thead>
                 <tr>
                   <th class="num pos-num">#</th>
+                  <th class="pos-col">Pos</th>
                   <th>Player</th>
                   <th class="num cap-col">C</th>
                   <th class="num team-col">Team</th>
@@ -645,6 +696,7 @@ import Nav from "../components/Nav.astro";
         html += `
           <tr class="${rowClass}">
             <td class="num pos-num">${player.position}</td>
+            <td class="pos-col">${player.playerPosition}</td>
             <td class="player-name">
               <button type="button" class="player-name-btn" data-player-id="${player.playerId}">${player.playerName}</button>
               ${statusBadge}
@@ -669,6 +721,209 @@ import Nav from "../components/Nav.astro";
     }
 
     return html;
+  }
+
+  // --- UPGRADE 2: Manager History Modal (Optimized) ---
+  async function showManagerHistoryModal(managerId) {
+    const managerNameBtn = document.querySelector(`.manager-link-btn[data-manager-id="${managerId}"]`);
+    const managerName = managerNameBtn ? managerNameBtn.textContent : "Manager";
+    
+    const historyModalContent = document.getElementById("history-modal-content");
+    const historyModal = document.getElementById("manager-history-modal");
+    
+    historyModalContent.innerHTML = `
+      <h2 class="modal-title">${managerName}</h2>
+      <div class="stats-loading">
+        <p class="text-muted">Calculating points breakdown...</p>
+        <p class="text-muted" style="font-size:11px;">Fetching history for GW1 to GW${latestGW - 1}...</p>
+      </div>
+    `;
+    historyModal.classList.add("is-open");
+
+    try {
+        const maxGw = latestGW - 1; 
+        if (maxGw < 1) throw new Error("Season not started");
+
+        // 1. Fetch ALL picks for this manager (Parallel & Cached)
+        const pickPromises = [];
+        for(let i=1; i<=maxGw; i++) {
+            const cacheKey = `${managerId}:${i}`;
+            if (managerPicksCache.has(cacheKey)) {
+                pickPromises.push(Promise.resolve(managerPicksCache.get(cacheKey)));
+            } else {
+                pickPromises.push(
+                    fetch(`/api/fpl/entry/${managerId}/event/${i}/picks`)
+                    .then(r => {
+                        if (r.ok) return r.json();
+                        return null;
+                    })
+                    .then(data => {
+                        if (data) managerPicksCache.set(cacheKey, data);
+                        return data;
+                    })
+                );
+            }
+        }
+        
+        // 2. Fetch Manager History
+        const historyPromise = fetch(`/api/fpl/entry/${managerId}/history`).then(r => r.ok ? r.json() : null);
+
+        const [picksResults, historyData] = await Promise.all([Promise.all(pickPromises), historyPromise]);
+        
+        // 3. Identify ALL unique players owned
+        const uniquePlayerIds = new Set();
+        picksResults.forEach(p => {
+            if(p && p.picks) p.picks.forEach(pick => uniquePlayerIds.add(pick.element));
+        });
+
+        // 4. Fetch per-gameweek stats for ONLY these players (Parallel & Cached)
+        const playerHistoryMap = new Map(); // key: playerId, val: array of GW stats
+        const playerPromises = [];
+        
+        for (const pid of uniquePlayerIds) {
+            if (playerHistoryCache.has(pid)) {
+                playerHistoryMap.set(pid, playerHistoryCache.get(pid));
+            } else {
+                playerPromises.push(
+                    fetch(`/api/fpl/element-summary/${pid}`)
+                    .then(r => r.ok ? r.json() : null)
+                    .then(data => {
+                        if (data && data.history) {
+                            playerHistoryCache.set(pid, data.history); // Cache it globally
+                            playerHistoryMap.set(pid, data.history);
+                        }
+                    })
+                );
+            }
+        }
+        
+        await Promise.all(playerPromises);
+
+        // 5. THE CALCULATION LOOP
+        const playerTotals = new Map(); // key: pid, val: { games, points, name, team, pos }
+
+        for (const pid of uniquePlayerIds) {
+            const pInfo = playerCache.get(pid);
+            if(pInfo) {
+                playerTotals.set(pid, {
+                    name: pInfo.name,
+                    pos: pInfo.position,
+                    team: teamCache.get(pInfo.teamId) || "",
+                    games: 0,
+                    points: 0,
+                    currentlyOwned: false
+                });
+            }
+        }
+
+        for(let i=0; i<picksResults.length; i++) {
+            const gw = i + 1;
+            const pickData = picksResults[i];
+            if (!pickData) continue;
+
+            const chipName = (historyData.chips || []).find(c => c.event === gw)?.name;
+            const isBB = chipName === "bboost";
+            const isTC = chipName === "3xc";
+
+            const teamPicks = pickData.picks.map(p => {
+                const pHist = playerHistoryMap.get(p.element);
+                const gwStats = pHist ? pHist.find(h => h.round === gw) : null;
+                const minutes = gwStats ? gwStats.minutes : 0;
+                
+                return {
+                    position: p.position,
+                    playerId: p.element,
+                    isCaptain: p.is_captain,
+                    isViceCaptain: p.is_vice_captain,
+                    playerPosition: playerCache.get(p.element)?.position || "MID",
+                    dnp: minutes === 0
+                };
+            });
+
+            const squadWithSubs = applyAutoSubsKeepAll(teamPicks, chipName || "None");
+
+            for (const p of squadWithSubs) {
+                const stats = playerTotals.get(p.playerId);
+                if (!stats) continue;
+
+                if (gw === maxGw) stats.currentlyOwned = true;
+
+                const isStarter = p.position <= 11;
+                const played = (isStarter && !p.subOff) || p.subOn || (isBB && !isStarter);
+
+                if (played) {
+                    stats.games++;
+                    
+                    const pHist = playerHistoryMap.get(p.playerId);
+                    const gwStats = pHist ? pHist.find(h => h.round === gw) : null;
+                    const rawPoints = gwStats ? gwStats.total_points : 0;
+
+                    let multiplier = 1;
+                    if (p.isCaptain && !p.dnp) multiplier = isTC ? 3 : 2;
+                    else if (p.isViceCaptain && !p.dnp && squadWithSubs.find(s => s.isCaptain)?.dnp) multiplier = isTC ? 3 : 2;
+
+                    stats.points += (rawPoints * multiplier);
+                }
+            }
+        }
+
+        // 6. Build UI
+        const rows = Array.from(playerTotals.values());
+        
+        rows.sort((a, b) => b.points - a.points);
+
+        const totalPointsSum = rows.reduce((acc, r) => acc + r.points, 0);
+
+        let html = `
+            <h2 class="modal-title">${managerName}</h2>
+            <p class="text-muted" style="margin-bottom:1rem;">
+                Contribution History (GW1 - GW${maxGw}) <br>
+                <span class="text-success">Total Contributed: ${totalPointsSum} pts</span>
+            </p>
+            
+            <div class="table-container" style="max-height: 50vh; overflow-y:auto;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Pos</th>
+                            <th>Games</th>
+                            <th>Pts Earned</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        for (const r of rows) {
+            if (r.points === 0 && r.games === 0) continue; 
+
+            const rowStyle = r.currentlyOwned ? "font-weight:600;" : "";
+
+            html += `
+                <tr style="${rowStyle}">
+                    <td class="player-cell">
+                        ${r.name} 
+                        <span class="text-muted" style="font-size:10px;">${r.team}</span>
+                    </td>
+                    <td>${r.pos}</td>
+                    <td style="text-align:center;">${r.games}</td>
+                    <td style="text-align:center;" class="points-positive">${r.points}</td>
+                </tr>
+            `;
+        }
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+        
+        historyModalContent.innerHTML = html;
+
+    } catch (e) {
+        console.error(e);
+        historyModalContent.innerHTML = `<p class="status status--error">Error calculating history.</p>`;
+    }
   }
 
   async function fetchPlayerDefconStats(playerId: number): Promise<{ totalDefcon: number; gamesWithDefcon: number }> {
@@ -853,6 +1108,17 @@ import Nav from "../components/Nav.astro";
     });
   }
 
+  // --- UPGRADE: Attach Manager Link Buttons ---
+  function attachManagerLinkButtons() {
+    document.querySelectorAll('.manager-link-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const button = e.target as HTMLElement;
+        const managerId = parseInt(button.dataset.managerId || '0');
+        if (managerId) showManagerHistoryModal(managerId);
+      });
+    });
+  }
+
   function renderOutput() {
     const viewType = viewFilter.value;
     const managerFilterValue = managerFilter.value;
@@ -864,6 +1130,7 @@ import Nav from "../components/Nav.astro";
     }
     
     attachPlayerButtons();
+    attachManagerLinkButtons(); // Bind the new clicks
   }
 
   async function loadSquads(ids, gw) {
@@ -976,13 +1243,20 @@ import Nav from "../components/Nav.astro";
     await updateDisplay();
   });
 
-  // Player modal close handler
+  // Modal close handlers
   const playerModal = document.getElementById("player-modal");
   const closePlayerModal = document.getElementById("close-player-modal");
-  
   if (playerModal && closePlayerModal) {
     closePlayerModal.addEventListener("click", () => {
       playerModal.classList.remove("is-open");
+    });
+  }
+
+  const historyModal = document.getElementById("manager-history-modal");
+  const closeHistoryModal = document.getElementById("close-history-modal");
+  if (historyModal && closeHistoryModal) {
+    closeHistoryModal.addEventListener("click", () => {
+      historyModal.classList.remove("is-open");
     });
   }
 
