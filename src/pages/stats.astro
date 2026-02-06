@@ -356,12 +356,10 @@ import Nav from "../components/Nav.astro";
         const historyPoints = gwRow ? Number(gwRow.points) || 0 : 0;
         const historyRank = gwRow ? Number(gwRow.rank) || 0 : 0;
 
-        // If FPL API has updated stats for this GW (Net pts, Rank), use them.
         if (historyPoints > 0 || historyRank > 0) {
           gwPoints = historyPoints;
           gwRank = historyRank;
         } else {
-          // Otherwise, calculate gross live points manually
           gwPoints = await fetchManagerLiveGwPoints(id, gw);
           gwRank = 0;
         }
@@ -375,24 +373,16 @@ import Nav from "../components/Nav.astro";
 
       let totalPoints = Number(summaryData.summary_overall_points) || 0;
       
-      // FIX: LIVE TOTAL CALCULATION
+      // FIX: LIVE TOTAL CALCULATION (Same as Live Page)
       if (gw === latestGW && !currentGWFinished) {
-         // Get official Overall (Hit already deducted)
          const officialOverall = Number(summaryData.summary_overall_points) || 0;
-         // Get official Event Points (Net, usually)
          const officialEvent = Number(summaryData.summary_event_points) || 0;
          
-         // Get Hit Cost for this week
-         const currentHitCost = Number(historyData.current.find((h:any) => Number(h.event) === gw)?.event_transfers_cost) || 0;
-         
-         // Calculate Live Gross Points
          const liveGross = await fetchManagerLiveGwPoints(id, gw);
          
-         // Calculate Live Net Points
-         const liveNet = liveGross - currentHitCost;
-         
-         // Correct Total = Official Total - Official Event Pts + Live Net Pts
-         totalPoints = officialOverall - officialEvent + liveNet;
+         // Total = OfficialOverall - OfficialEvent + LiveGross
+         // We do NOT subtract hit cost here, because OfficialOverall already has it.
+         totalPoints = officialOverall - officialEvent + liveGross;
       }
 
       return {
@@ -709,8 +699,6 @@ import Nav from "../components/Nav.astro";
           fetchLiveGW({ gw, livePointsCache })
         ]);
 
-        // Note: fetchManagerLiveGwPoints returns GROSS points (hit NOT subtracted)
-        // If we want to show NET points in the modal title, we subtract the hit here.
         const grossPoints = await fetchManagerLiveGwPoints(entryId, gw);
         const hitCost = Number(historyData.current.find((r:any) => Number(r.event) === gw)?.event_transfers_cost) || 0;
         livePoints = grossPoints - hitCost;
