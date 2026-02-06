@@ -1,4 +1,4 @@
-const CACHE_IMPL_VERSION = "2026-02-06-kv-debug-readback";
+const CACHE_IMPL_VERSION = "2026-02-06-unconditional-debug";
 
 type AnyEnv = Record<string, any>;
 
@@ -14,10 +14,6 @@ function readVar(env: AnyEnv | undefined, name: string): string | undefined {
 
 function isCacheEnabled(env: AnyEnv | undefined): boolean {
   return readVar(env, "FPL_CACHE_ENABLED") === "true";
-}
-
-function debugHeadersEnabled(env: AnyEnv | undefined): boolean {
-  return readVar(env, "DEBUG_HEADERS") === "true";
 }
 
 function getKV(env: AnyEnv | undefined): KVNamespace | null {
@@ -43,18 +39,13 @@ export async function getOrSet(
   const flag = readVar(env, "FPL_CACHE_ENABLED") ?? "unset";
   const kvPresent = env?.FPL_CACHE ? "present" : "missing";
   const envDebug = `flag=${flag};kv=${kvPresent};ttl=${ttlSeconds}`;
-  const dbg = debugHeadersEnabled(env);
 
   const baseHeaders: Record<string, string> = {
     "X-Cache-Impl": CACHE_IMPL_VERSION,
     "X-Cache-Env": envDebug,
+    "X-Cache-Key": key,
   };
 
-  if (dbg) {
-    baseHeaders["X-Cache-Key"] = key;
-  }
-
-  // TTL=0 => never cache
   if (ttlSeconds === 0) {
     const res = await fetcher();
     return withHeaders(res, { ...baseHeaders, "X-Cache-Status": "SKIP" });
@@ -74,14 +65,15 @@ export async function getOrSet(
   try {
     const cached = await kv.get(key, { type: "text" });
     if (cached) {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        ...baseHeaders,
-        "X-Cache-Status": "HIT",
-      };
-
-      return new Response(cached, { status: 200, headers });
+      return new Response(cached, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          ...baseHeaders,
+          "X-Cache-Status": "HIT",
+        },
+      });
     }
 
     const upstream = await fetcher();
@@ -89,18 +81,16 @@ export async function getOrSet(
     if (upstream.ok) {
       const text = await upstream.clone().text();
 
-      // WRITE (await)
+      // WRITE
       if (ttlSeconds > 0) {
         await kv.put(key, text, { expirationTtl: ttlSeconds });
       } else {
         await kv.put(key, text);
       }
 
-      // READ-BACK verification (only when DEBUG_HEADERS=true)
-      if (dbg) {
-        const verify = await kv.get(key, { type: "text" });
-        baseHeaders["X-KV-Verify"] = verify ? "present" : "missing";
-      }
+      // READ-BACK verify (always)
+      const verify = await kv.get(key, { type: "text" });
+      baseHeaders["X-KV-Verify"] = verify ? "present" : "missing";
 
       return withHeaders(upstream, { ...baseHeaders, "X-Cache-Status": "MISS" });
     }
