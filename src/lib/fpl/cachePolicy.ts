@@ -136,7 +136,13 @@ export function getTTLForPath(path: string, queryString: string, currentGW: numb
 
 export function computeCacheKey(path: string, queryString: string): string {
   const normalizedPath = path.toLowerCase().trim();
-  const normalizedQuery = (queryString ?? '').trim();
+  let normalizedQuery = (queryString ?? '').trim();
+  
+  // NORMALIZE: Treat "?" (empty query) same as "" (empty string)
+  if (normalizedQuery === '?') {
+    normalizedQuery = '';
+  }
+
   return `fpl:${normalizedPath}${normalizedQuery}`;
 }
 
