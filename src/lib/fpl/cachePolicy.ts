@@ -1,192 +1,167 @@
 /**
  * Cache policy definitions for FPL API endpoints
- * 
- * Centralizes TTL configuration, cache key computation, and GW-aware caching logic
+ *
+ * CRITICAL GOAL:
+ * Never serve stale data for anything that can affect live/current GW views.
+ *
+ * Strategy:
+ * - Current GW live-sensitive endpoints => TTL 0 (never KV-cache)
+ * - Past GW immutable endpoints => TTL -1 (cache forever)
+ * - Truly static endpoints => short TTL (bootstrap-static)
+ * - Other endpoints => conservative TTL or 0
  */
 
-/**
- * TTL values (in seconds) for different endpoint types
- * 
- * Special values:
- * - 0 = Don't cache (current GW live data)
- * - -1 = Cache forever (past GW data never changes)
- */
 export const DEFAULT_TTLS = {
   // Static/rarely changing data
   BOOTSTRAP_STATIC: 300, // 5 minutes
-  
-  // Live data - depends on GW
-  EVENT_LIVE_CURRENT: 0, // Don't cache current GW
-  EVENT_LIVE_PAST: -1, // Cache past GWs forever
-  
-  // Fixtures
-  FIXTURES_CURRENT: 0, // Don't cache current GW fixtures
-  FIXTURES_PAST: -1, // Cache finished fixtures forever
-  
+
+  // Live data - GW aware
+  EVENT_LIVE_CURRENT: 0,
+  EVENT_LIVE_PAST: -1,
+
+  // Fixtures - GW aware via query ?event=
+  FIXTURES_CURRENT: 0,
+  FIXTURES_PAST: -1,
+
   // Manager data
-  ENTRY: 120, // 2 minutes - manager name
-  ENTRY_HISTORY_CURRENT: 0, // Don't cache (GW points change live)
-  ENTRY_HISTORY_PAST: 300, // 5 minutes for past data
-  ENTRY_EVENT_CURRENT: 0, // Don't cache current GW picks
-  ENTRY_EVENT_PAST: -1, // Cache past GW picks forever
+  ENTRY: 0, // CRITICAL: never cache entry/{id} (contains OR/Total/etc)
+  ENTRY_HISTORY_CURRENT: 0,
+  ENTRY_HISTORY_PAST: -1, // not used unless you later split history into past-only endpoint
+
+  // Picks
+  ENTRY_EVENT_CURRENT: 0,
+  ENTRY_EVENT_PAST: -1,
+
+  // Transfers
   ENTRY_TRANSFERS: 300, // 5 minutes
-  
-  // Element (player) summary
+
+  // Element summary
   ELEMENT_SUMMARY: 300, // 5 minutes
-  
+
   // Default fallback
-  DEFAULT: 60,
+  DEFAULT: 0, // CRITICAL: default to no-cache unless explicitly safe
 } as const;
 
-/**
- * Extract gameweek number from API path
- * 
- * @param path - The FPL API path (e.g., "entry/123/event/24/picks")
- * @returns Gameweek number or null if not found
- */
 export function extractGWFromPath(path: string): number | null {
-  // Match patterns like "event/24/live" or "entry/123/event/24/picks"
   const eventMatch = path.match(/event\/(\d+)/);
-  if (eventMatch) {
-    return parseInt(eventMatch[1], 10);
-  }
-  
+  if (eventMatch) return parseInt(eventMatch[1], 10);
   return null;
 }
 
-/**
- * Get current gameweek from bootstrap-static data
- * 
- * This should be called once at startup and cached.
- * For now, we'll hardcode GW 24 as current (you'll need to fetch this dynamically)
- * 
- * @returns Current gameweek number
- */
-export function getCurrentGW(): number {
-  // TODO: Fetch this from bootstrap-static and cache it
-  // For now, return 24 (you can update this manually each week)
-  return 24;
+export function extractEventFromQuery(queryString: string): number | null {
+  // queryString is like "?event=24" or ""
+  try {
+    const qs = queryString?.startsWith('?') ? queryString : `?${queryString ?? ''}`;
+    const url = new URL(`https://example.invalid/${qs}`);
+    const ev = url.searchParams.get('event');
+    if (!ev) return null;
+    const n = parseInt(ev, 10);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Determine TTL for a given FPL API path with GW awareness
- * 
- * @param path - The FPL API path (e.g., "bootstrap-static", "event/10/live")
- * @param currentGW - Current gameweek number (optional, defaults to getCurrentGW())
- * @returns TTL in seconds (0 = don't cache, -1 = cache forever, >0 = cache with TTL)
+ * Determine current GW from bootstrap-static payload.
+ * This is the only safe way to avoid hardcoding.
  */
-export function getTTLForPath(path: string, currentGW?: number): number {
+export function getCurrentGWFromBootstrap(bootstrap: any): number | null {
+  const events = bootstrap?.events;
+  if (!Array.isArray(events)) return null;
+  const current = events.find((e: any) => e?.is_current === true);
+  const id = current?.id;
+  return typeof id === 'number' ? id : null;
+}
+
+/**
+ * TTL decision, GW-aware.
+ *
+ * IMPORTANT: takes queryString so fixtures can be correct.
+ */
+export function getTTLForPath(path: string, queryString: string, currentGW: number): number {
   const normalizedPath = path.toLowerCase().trim();
-  const gw = extractGWFromPath(normalizedPath);
-  const current = currentGW ?? getCurrentGW();
-  
-  // Bootstrap-static: always cache
+  const gwFromPath = extractGWFromPath(normalizedPath);
+
+  // bootstrap-static: cache briefly
   if (normalizedPath === 'bootstrap-static') {
     return DEFAULT_TTLS.BOOTSTRAP_STATIC;
   }
-  
-  // Event live data: GW-aware
+
+  // event/{gw}/live
   if (normalizedPath.match(/^event\/\d+\/live$/)) {
-    if (gw === null) return DEFAULT_TTLS.DEFAULT;
-    return gw < current 
-      ? DEFAULT_TTLS.EVENT_LIVE_PAST    // Past GW: cache forever
-      : DEFAULT_TTLS.EVENT_LIVE_CURRENT; // Current GW: don't cache
+    if (gwFromPath === null) return DEFAULT_TTLS.DEFAULT;
+    return gwFromPath < currentGW ? DEFAULT_TTLS.EVENT_LIVE_PAST : DEFAULT_TTLS.EVENT_LIVE_CURRENT;
   }
-  
-  // Fixtures: GW-aware (if query includes event parameter)
+
+  // fixtures?event={gw}  (GW is in QUERY, not path)
   if (normalizedPath === 'fixtures') {
-    // Note: fixtures endpoint uses query param ?event=24
-    // This will be handled in computeCacheKey
-    return DEFAULT_TTLS.DEFAULT;
+    const event = extractEventFromQuery(queryString);
+    if (event === null) {
+      // If event isn't specified, play it safe: don't cache.
+      return DEFAULT_TTLS.DEFAULT;
+    }
+    return event < currentGW ? DEFAULT_TTLS.FIXTURES_PAST : DEFAULT_TTLS.FIXTURES_CURRENT;
   }
-  
-  // Entry summary: cache name/team (doesn't change during GW)
+
+  // entry/{id}  (contains live-sensitive totals/ranks)
   if (normalizedPath.match(/^entry\/\d+$/)) {
     return DEFAULT_TTLS.ENTRY;
   }
-  
-  // Entry history: GW-aware (current GW points change live)
+
+  // entry/{id}/history  (contains current GW info)
   if (normalizedPath.match(/^entry\/\d+\/history$/)) {
-    // History endpoint includes current GW data
-    // Conservative: don't cache during current GW
     return DEFAULT_TTLS.ENTRY_HISTORY_CURRENT;
   }
-  
-  // Entry event picks: GW-aware
+
+  // entry/{id}/event/{gw}/picks (or without /picks)
   if (normalizedPath.match(/^entry\/\d+\/event\/\d+(\/picks)?$/)) {
-    if (gw === null) return DEFAULT_TTLS.DEFAULT;
-    return gw < current
-      ? DEFAULT_TTLS.ENTRY_EVENT_PAST    // Past GW: cache forever
-      : DEFAULT_TTLS.ENTRY_EVENT_CURRENT; // Current GW: don't cache
+    if (gwFromPath === null) return DEFAULT_TTLS.DEFAULT;
+    return gwFromPath < currentGW ? DEFAULT_TTLS.ENTRY_EVENT_PAST : DEFAULT_TTLS.ENTRY_EVENT_CURRENT;
   }
-  
-  // Entry transfers: cache (transfers finalized after deadline)
+
+  // entry/{id}/transfers
   if (normalizedPath.match(/^entry\/\d+\/transfers$/)) {
     return DEFAULT_TTLS.ENTRY_TRANSFERS;
   }
-  
-  // Element summary
+
+  // element-summary/{id}
   if (normalizedPath.match(/^element-summary\/\d+$/)) {
     return DEFAULT_TTLS.ELEMENT_SUMMARY;
   }
-  
-  // Default TTL for unknown paths
+
+  // Unknown: do not cache (safe-by-default)
   return DEFAULT_TTLS.DEFAULT;
 }
 
-/**
- * Compute cache key from upstream path and query string
- */
 export function computeCacheKey(path: string, queryString: string): string {
   const normalizedPath = path.toLowerCase().trim();
-  const normalizedQuery = queryString.trim();
-  
+  const normalizedQuery = (queryString ?? '').trim();
   return `fpl:${normalizedPath}${normalizedQuery}`;
 }
 
 /**
- * Determine if a response should be cached
- */
-export function shouldCacheResponse(response: Response): boolean {
-  return response.ok && response.status >= 200 && response.status < 300;
-}
-
-/**
- * Cache allowlist - which endpoints have caching enabled
- * 
- * Enable all major endpoints now that we have KV
+ * Allowlist: only cache endpoints we have explicitly classified.
  */
 export const CACHE_ALLOWLIST = new Set<string>([
   'bootstrap-static',
   'event/*/live',
   'fixtures',
-  'entry/*',
+  'entry/*/event/*/picks',
+  'entry/*/transfers',
   'element-summary/*',
 ]);
 
-/**
- * Check if a path is allowed for caching
- */
 export function isPathAllowedForCache(path: string): boolean {
-  const normalizedPath = path.toLowerCase().trim();
-  
-  // Direct match
-  if (CACHE_ALLOWLIST.has(normalizedPath)) {
-    return true;
-  }
-  
-  // Pattern matching for dynamic paths
-  if (CACHE_ALLOWLIST.has('event/*/live') && normalizedPath.match(/^event\/\d+\/live$/)) {
-    return true;
-  }
-  
-  if (CACHE_ALLOWLIST.has('entry/*') && normalizedPath.match(/^entry\/\d+/)) {
-    return true;
-  }
-  
-  if (CACHE_ALLOWLIST.has('element-summary/*') && normalizedPath.match(/^element-summary\/\d+$/)) {
-    return true;
-  }
-  
+  const p = path.toLowerCase().trim();
+
+  if (CACHE_ALLOWLIST.has(p)) return true;
+
+  if (CACHE_ALLOWLIST.has('event/*/live') && p.match(/^event\/\d+\/live$/)) return true;
+  if (CACHE_ALLOWLIST.has('fixtures') && p === 'fixtures') return true;
+  if (CACHE_ALLOWLIST.has('entry/*/event/*/picks') && p.match(/^entry\/\d+\/event\/\d+\/picks$/)) return true;
+  if (CACHE_ALLOWLIST.has('entry/*/transfers') && p.match(/^entry\/\d+\/transfers$/)) return true;
+  if (CACHE_ALLOWLIST.has('element-summary/*') && p.match(/^element-summary\/\d+$/)) return true;
+
   return false;
 }
