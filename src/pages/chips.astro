@@ -121,14 +121,53 @@ import Nav from "../components/Nav.astro";
   let managerIds = [];
   let playerCache = new Map();
   let teamCache = new Map();
+  
+  // Load token for cancellation
+  let currentLoadToken = 0;
 
   closeChipModal.addEventListener("click", () => {
     chipModal.classList.remove("is-open");
   });
 
-  async function fetchBootstrapData() {
+  /**
+   * Concurrent mapping with limited concurrency
+   */
+  async function mapWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T, index: number) => Promise<R | null>,
+    onProgress?: (completed: number, total: number) => void
+  ): Promise<(R | null)[]> {
+    const results: (R | null)[] = [];
+    let currentIndex = 0;
+    let completed = 0;
+
+    async function worker() {
+      while (currentIndex < items.length) {
+        const index = currentIndex++;
+        const item = items[index];
+        try {
+          results[index] = await fn(item, index);
+        } catch (e) {
+          console.error(`Error processing item ${index}:`, e);
+          results[index] = null;
+        }
+        completed++;
+        if (onProgress) {
+          onProgress(completed, items.length);
+        }
+      }
+    }
+
+    const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+    await Promise.all(workers);
+    return results;
+  }
+
+  async function fetchBootstrapData(cacheBuster?: string) {
     try {
-      const res = await fetch('/api/fpl/bootstrap-static');
+      const v = cacheBuster || Date.now().toString();
+      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
@@ -153,9 +192,10 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerData(id) {
-    const historyUrl = `/api/fpl/entry/${id}/history`;
-    const summaryUrl = `/api/fpl/entry/${id}`;
+  async function fetchManagerData(id, cacheBuster?: string) {
+    const v = cacheBuster || Date.now().toString();
+    const historyUrl = `/api/fpl/entry/${id}/history?v=${v}`;
+    const summaryUrl = `/api/fpl/entry/${id}?v=${v}`;
 
     try {
       const [historyRes, summaryRes] = await Promise.all([
@@ -442,30 +482,49 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
-    const allData = [];
+    // Generate load token for cancellation
+    const loadToken = ++currentLoadToken;
+    
+    // Disable refresh button during loading
+    refreshBtn.disabled = true;
+
     out.innerHTML = "";
-    loadingStatus.textContent = `Loading 0 of ${ids.length}...`;
+    loadingStatus.textContent = `Fetching latest data...`;
 
-    let loaded = 0;
-    for (const id of ids) {
-      try {
-        const data = await fetchManagerData(id);
-        if (data) {
-          allData.push(data);
-          loaded++;
-
-          loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
-
-          out.innerHTML = makeChipsTable(allData);
-          attachChipButtons();
-        }
-      } catch (e) {
-        console.error(`Failed to load manager ${id}:`, e);
-        loaded++;
+    // Generate single cache-buster token for this load
+    const cacheBuster = Date.now().toString();
+    
+    // Fetch manager data concurrently with limit of 8
+    const managerDataResults = await mapWithConcurrency(
+      ids,
+      8,
+      async (id) => {
+        return await fetchManagerData(id, cacheBuster);
+      },
+      (completed, total) => {
+        loadingStatus.textContent = `Fetching ${completed}/${total}...`;
       }
+    );
+
+    // Check if this load has been superseded
+    if (loadToken !== currentLoadToken) {
+      console.log('Load superseded, aborting');
+      return;
     }
 
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
+    // Filter out nulls
+    const allData = managerDataResults.filter((data): data is NonNullable<typeof data> => data !== null);
+
+    // Render table once at the end
+    if (allData.length > 0) {
+      out.innerHTML = makeChipsTable(allData);
+      attachChipButtons();
+    }
+
+    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allData.length} managers</span>`;
+    
+    // Re-enable refresh button
+    refreshBtn.disabled = false;
   }
 
   async function updateDisplay() {

@@ -348,6 +348,9 @@ import Nav from "../components/Nav.astro";
   let managerIds = [];
   let allSquadsData = [];
   let latestGW = 1;
+  
+  // Load token for cancellation
+  let currentLoadToken = 0;
 
   let playerCache = new Map();
   let teamCache = new Map();
@@ -359,6 +362,41 @@ import Nav from "../components/Nav.astro";
   // NEW CACHES FOR OPTIMIZATION
   const playerHistoryCache = new Map(); // Global cache for element-summary (playerId -> historyArray)
   const managerPicksCache = new Map(); // Cache for manager picks (managerId:gw -> picksData)
+
+  /**
+   * Concurrent mapping with limited concurrency
+   */
+  async function mapWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T, index: number) => Promise<R | null>,
+    onProgress?: (completed: number, total: number) => void
+  ): Promise<(R | null)[]> {
+    const results: (R | null)[] = [];
+    let currentIndex = 0;
+    let completed = 0;
+
+    async function worker() {
+      while (currentIndex < items.length) {
+        const index = currentIndex++;
+        const item = items[index];
+        try {
+          results[index] = await fn(item, index);
+        } catch (e) {
+          console.error(`Error processing item ${index}:`, e);
+          results[index] = null;
+        }
+        completed++;
+        if (onProgress) {
+          onProgress(completed, items.length);
+        }
+      }
+    }
+
+    const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+    await Promise.all(workers);
+    return results;
+  }
 
   function populateGWSelector(currentGW) {
     gwFilterSelect.innerHTML = '';
@@ -463,9 +501,10 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  async function fetchBootstrapData() {
+  async function fetchBootstrapData(cacheBuster?: string) {
     try {
-      const res = await fetch('/api/fpl/bootstrap-static');
+      const v = cacheBuster || Date.now().toString();
+      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
@@ -509,14 +548,15 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchSquadForGW(entryId, gw) {
+  async function fetchSquadForGW(entryId, gw, cacheBuster?: string) {
     try {
       // OPTIMIZATION: Check cache for squad picks
       const cacheKey = `${entryId}:${gw}`;
       let data = managerPicksCache.get(cacheKey);
 
       if (!data) {
-        const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
+        const v = cacheBuster || Date.now().toString();
+        const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`);
         if (!res.ok) throw new Error("Failed to fetch picks");
         data = await res.json();
         managerPicksCache.set(cacheKey, data);
@@ -557,11 +597,12 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerData(entryId, gw) {
+  async function fetchManagerData(entryId, gw, cacheBuster?: string) {
     try {
+      const v = cacheBuster || Date.now().toString();
       const [summaryRes, historyRes] = await Promise.all([
-        fetch(`/api/fpl/entry/${entryId}`),
-        fetch(`/api/fpl/entry/${entryId}/history`)
+        fetch(`/api/fpl/entry/${entryId}?v=${v}`),
+        fetch(`/api/fpl/entry/${entryId}/history?v=${v}`)
       ]);
 
       if (!summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch manager data");
@@ -580,7 +621,7 @@ import Nav from "../components/Nav.astro";
         chipThisGW.name === "3xc" ? "TC" :
         chipThisGW.name === "freehit" ? "FH" : chipThisGW.name) : "";
 
-      const squadRaw = await fetchSquadForGW(entryId, gw);
+      const squadRaw = await fetchSquadForGW(entryId, gw, cacheBuster);
       const squadWithIndicators = applyAutoSubsKeepAll(squadRaw, chipPlayed || "None");
       const squad = applyCaptaincyToSquadDisplay(squadWithIndicators, chipPlayed || "None");
 
@@ -1203,43 +1244,73 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
+    // Generate load token for cancellation
+    const loadToken = ++currentLoadToken;
+    
+    // Disable refresh button during loading
+    refreshBtn.disabled = true;
+
     allSquadsData = [];
     out.innerHTML = "";
-    loadingStatus.textContent = `Loading GW${gw} data...`;
+    loadingStatus.textContent = `Fetching latest data...`;
 
+    // Generate single cache-buster token for this load
+    const cacheBuster = Date.now().toString();
+
+    // Fetch fixtures and live GW data first
     try {
       await Promise.all([
-        fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: false }),
-        fetchLiveGW({ gw, livePointsCache })
+        fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: false, cacheBuster }),
+        fetchLiveGW({ gw, livePointsCache, cacheBuster })
       ]);
     } catch (e) {
       console.error("Failed to load live caches:", e);
       out.innerHTML = "<p class='status status--error'>Failed to load live data. Try refresh.</p>";
       loadingStatus.textContent = "";
+      refreshBtn.disabled = false;
       return;
     }
 
-    let loaded = 0;
-    for (const id of ids) {
-      try {
-        const data = await fetchManagerData(id, gw);
-        if (data) {
-          allSquadsData.push(data);
-          loaded++;
-
-          loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
-
-          renderOutput();
-        }
-      } catch (e) {
-        console.error(`Failed to load manager ${id}:`, e);
-        loaded++;
-      }
+    // Check if this load has been superseded
+    if (loadToken !== currentLoadToken) {
+      console.log('Load superseded, aborting');
+      return;
     }
 
-    populateManagerFilter();
+    // Fetch manager data concurrently with limit of 8
+    const squadResults = await mapWithConcurrency(
+      ids,
+      8,
+      async (id) => {
+        try {
+          return await fetchManagerData(id, gw, cacheBuster);
+        } catch (e) {
+          console.error(`Failed to load manager ${id}:`, e);
+          return null;
+        }
+      },
+      (completed, total) => {
+        loadingStatus.textContent = `Fetching ${completed}/${total}...`;
+      }
+    );
 
-    loadingStatus.innerHTML = `<span class="text-success font-bold">✅ Loaded ${loaded} managers for GW${gw}</span>`;
+    // Check again if this load has been superseded
+    if (loadToken !== currentLoadToken) {
+      console.log('Load superseded after fetching managers, aborting');
+      return;
+    }
+
+    // Filter out nulls
+    allSquadsData = squadResults.filter((data): data is NonNullable<typeof data> => data !== null);
+
+    // Populate manager filter and render once at the end
+    populateManagerFilter();
+    renderOutput();
+
+    loadingStatus.innerHTML = `<span class="text-success font-bold">✅ Loaded ${allSquadsData.length} managers for GW${gw}</span>`;
+    
+    // Re-enable refresh button
+    refreshBtn.disabled = false;
   }
 
   async function init() {

@@ -273,10 +273,48 @@ import Nav from "../components/Nav.astro";
   let allHistories = [];
   let latestGW = null;
   let allPlayersMap = {};
+  
+  // Load token for cancellation
+  let currentLoadToken = 0;
 
   closeChipModal.addEventListener("click", () => {
     chipModal.classList.remove("is-open");
   });
+
+  /**
+   * Concurrent mapping with limited concurrency
+   */
+  async function mapWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T, index: number) => Promise<R | null>,
+    onProgress?: (completed: number, total: number) => void
+  ): Promise<(R | null)[]> {
+    const results: (R | null)[] = [];
+    let currentIndex = 0;
+    let completed = 0;
+
+    async function worker() {
+      while (currentIndex < items.length) {
+        const index = currentIndex++;
+        const item = items[index];
+        try {
+          results[index] = await fn(item, index);
+        } catch (e) {
+          console.error(`Error processing item ${index}:`, e);
+          results[index] = null;
+        }
+        completed++;
+        if (onProgress) {
+          onProgress(completed, items.length);
+        }
+      }
+    }
+
+    const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+    await Promise.all(workers);
+    return results;
+  }
 
   function populateGWSelector(currentGW) {
     gwFilterSelect.innerHTML = '<option value="">All GWs</option>';
@@ -289,9 +327,10 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchPlayers() {
+  async function fetchPlayers(cacheBuster?: string) {
     try {
-      const res = await fetch('/api/fpl/bootstrap-static');
+      const v = cacheBuster || Date.now().toString();
+      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) return;
       const data = await res.json();
       data.elements.forEach(p => {
@@ -529,9 +568,10 @@ import Nav from "../components/Nav.astro";
   }
 
   
-  async function fetchHistory(id) {
-    const historyUrl = `/api/fpl/entry/${id}/history`;
-    const summaryUrl = `/api/fpl/entry/${id}`;
+  async function fetchHistory(id, cacheBuster?: string) {
+    const v = cacheBuster || Date.now().toString();
+    const historyUrl = `/api/fpl/entry/${id}/history?v=${v}`;
+    const summaryUrl = `/api/fpl/entry/${id}?v=${v}`;
 
     const [historyRes, summaryRes] = await Promise.all([
       fetch(historyUrl),
@@ -652,38 +692,71 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
+    // Generate load token for cancellation
+    const loadToken = ++currentLoadToken;
+    
+    // Disable refresh button during loading
+    refreshBtn.disabled = true;
+
     allHistories = [];
+    latestGW = null;
     out.innerHTML = "";
-    loadingStatus.textContent = `Loading 0 of ${ids.length}...`;
+    loadingStatus.textContent = `Fetching latest data...`;
 
-    let loaded = 0;
-    for (const id of ids) {
-      try {
-        let history = await fetchHistory(id);
-        calculateFTs(history);
-        allHistories.push(history);
-
-        const managerMaxGW = Math.max(...history.map(h => h.gw));
-        if (latestGW === null || managerMaxGW > latestGW) {
-          latestGW = managerMaxGW;
+    // Generate single cache-buster token for this load
+    const cacheBuster = Date.now().toString();
+    
+    // Fetch manager data concurrently with limit of 8
+    const historyResults = await mapWithConcurrency(
+      ids,
+      8,
+      async (id) => {
+        try {
+          const history = await fetchHistory(id, cacheBuster);
+          calculateFTs(history);
+          return history;
+        } catch (e) {
+          console.error(`Failed to load manager ${id}:`, e);
+          return null;
         }
+      },
+      (completed, total) => {
+        loadingStatus.textContent = `Fetching ${completed}/${total}...`;
+      }
+    );
 
-        loaded++;
-        loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
-        out.innerHTML = makeTable(allHistories, "");
-        attachManagerLinks();
-      } catch (e) {
-        console.error(`Failed to load manager ${id}:`, e);
-        loaded++;
+    // Check if this load has been superseded
+    if (loadToken !== currentLoadToken) {
+      console.log('Load superseded, aborting');
+      return;
+    }
+
+    // Filter out nulls and update allHistories
+    allHistories = historyResults.filter((history): history is NonNullable<typeof history> => history !== null);
+
+    // Find latest GW
+    for (const history of allHistories) {
+      const managerMaxGW = Math.max(...history.map(h => h.gw));
+      if (latestGW === null || managerMaxGW > latestGW) {
+        latestGW = managerMaxGW;
       }
     }
 
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
+    // Render table once at the end
+    if (allHistories.length > 0) {
+      out.innerHTML = makeTable(allHistories, "");
+      attachManagerLinks();
+    }
+
+    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allHistories.length} managers</span>`;
 
     if (latestGW) {
       gwFilterSelect.value = latestGW;
       filterByGW();
     }
+    
+    // Re-enable refresh button
+    refreshBtn.disabled = false;
   }
 
   function attachManagerLinks() {
