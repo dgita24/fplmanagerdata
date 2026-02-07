@@ -132,23 +132,27 @@ import Nav from "../components/Nav.astro";
     background: var(--color-primary-hover);
   }
 
-  /* Clickable OR stat tile */
+  /* Clickable OR stat tile - entire badge highlighted */
   .stat-item--or {
     cursor: pointer;
     transition: all 0.2s ease;
+    background: rgb(59 130 246 / 0.3) !important;
+    border: 2px solid var(--color-primary) !important;
+    box-shadow: 0 0 0 2px rgb(59 130 246 / 0.2) !important;
   }
 
   .stat-item.stat-item--or:hover {
-    background: var(--color-primary-hover);
+    background: var(--color-primary-hover) !important;
     transform: translateY(-2px);
   }
 
-  .stat-value--clickable {
-    color: var(--color-primary);
+  /* Use :global() for classes used in JavaScript-generated HTML */
+  :global(.stat-value--clickable) {
+    color: var(--color-warning) !important;
   }
 
-  .stat-item--or:hover .stat-value--clickable {
-    color: white;
+  .stat-item--or:hover :global(.stat-value--clickable) {
+    color: white !important;
   }
 
   /* OR History Modal Styles */
@@ -156,44 +160,80 @@ import Nav from "../components/Nav.astro";
     max-width: 520px;
   }
 
-  .or-history-list {
+  /* Use :global() for JavaScript-generated content */
+  :global(.or-history-container) {
     display: flex;
     flex-direction: column;
+  }
+
+  :global(.or-history-header) {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     gap: var(--space-2);
+    padding: var(--space-2);
+    background: var(--color-surface-alt);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  :global(.or-history-header-label:first-child) {
+    text-align: left;
+  }
+
+  :global(.or-history-header-label:last-child) {
+    text-align: right;
+  }
+
+  :global(.or-history-divider) {
+    width: 1px;
+    background: var(--color-border);
+  }
+
+  :global(.or-history-list) {
+    display: flex;
+    flex-direction: column;
     max-height: 60vh;
     overflow-y: auto;
   }
 
-  .or-history-row {
+  :global(.or-history-row) {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr auto 1fr;
     gap: var(--space-2);
     padding: var(--space-2);
     background: var(--color-surface-alt);
-    border-radius: var(--radius-md);
+    border-top: 1px solid var(--color-border);
     font-size: 14px;
   }
 
-  .or-history-row:hover {
+  :global(.or-history-row:hover) {
     background: var(--color-surface);
   }
 
-  .or-history-label {
+  :global(.or-history-label) {
     font-weight: 600;
     color: var(--color-text-secondary);
+    text-align: left;
   }
 
-  .or-history-value {
+  :global(.or-history-value) {
     font-weight: 700;
     color: var(--color-text);
     text-align: right;
   }
 
-  .or-modal-title {
+  :global(.or-modal-title) {
     margin-bottom: var(--space-1);
   }
 
-  .or-modal-subtitle {
+  :global(.or-modal-subtitle) {
     margin-bottom: var(--space-3);
     font-size: 12px;
   }
@@ -924,10 +964,10 @@ import Nav from "../components/Nav.astro";
       return;
     }
     
-    // Filter and sort by gameweek (event), filter out invalid/0 values
+    // Filter and sort by gameweek (event) in DESCENDING order (latest at top), filter out invalid/0 values
     const validHistory = current
       .filter((row: HistoryRow) => typeof row.event === 'number' && row.overall_rank > 0)
-      .sort((a: HistoryRow, b: HistoryRow) => a.event - b.event);
+      .sort((a: HistoryRow, b: HistoryRow) => b.event - a.event);
 
     if (validHistory.length === 0) {
       orHistoryModalContent.innerHTML = '<p class="status status--error">No rank history available.</p>';
@@ -938,19 +978,26 @@ import Nav from "../components/Nav.astro";
     let html = `
       <h2 class="modal-title or-modal-title">Overall Rank History</h2>
       <p class="text-muted or-modal-subtitle">${manager.managerName} - ${manager.teamName}</p>
-      <div class="or-history-list">
+      <div class="or-history-container">
+        <div class="or-history-header">
+          <span class="or-history-header-label">GAMEWEEK</span>
+          <span class="or-history-divider"></span>
+          <span class="or-history-header-label">OVERALL RANK</span>
+        </div>
+        <div class="or-history-list">
     `;
 
     for (const row of validHistory) {
       html += `
         <div class="or-history-row">
           <span class="or-history-label">GW ${row.event}</span>
+          <span class="or-history-divider"></span>
           <span class="or-history-value">${formatRank(row.overall_rank)}</span>
         </div>
       `;
     }
 
-    html += '</div>';
+    html += '</div></div>';
 
     orHistoryModalContent.innerHTML = html;
     orHistoryModal.classList.add('is-open');
