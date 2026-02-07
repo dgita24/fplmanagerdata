@@ -526,7 +526,7 @@ import Nav from "../components/Nav.astro";
       { label: "Minutes", value: stats.minutes, points: stats.minutes >= 60 ? 2 : (stats.minutes > 0 ? 1 : 0), show: true },
       { label: "Goals", value: stats.goals_scored, points: getGoalPoints(player.position, stats.goals_scored), show: stats.goals_scored > 0 },
       { label: "Assists", value: stats.assists, points: stats.assists * 3, show: stats.assists > 0 },
-      { label: "Clean Sheet", value: stats.clean_sheets, points: getCleanSheetPoints(player.position, stats.clean_sheets), show: (isGK || isDef) && stats.clean_sheets > 0 },
+      { label: "Clean Sheet", value: stats.clean_sheets, points: getCleanSheetPoints(player.position, stats.clean_sheets), show: stats.clean_sheets > 0 && getCleanSheetPoints(player.position, stats.clean_sheets) > 0 },
       { label: "Goals Conceded", value: stats.goals_conceded, points: (isGK || isDef) ? -Math.floor(stats.goals_conceded / 2) : 0, show: (isGK || isDef) && stats.goals_conceded >= 2 },
       { label: "Saves", value: stats.saves, points: Math.floor(stats.saves / 3), show: isGK && stats.saves > 0 },
       { label: "Pen Saved", value: stats.penalties_saved, points: stats.penalties_saved * 5, show: stats.penalties_saved > 0 },
