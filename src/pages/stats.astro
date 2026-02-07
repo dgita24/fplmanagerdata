@@ -138,8 +138,8 @@ import Nav from "../components/Nav.astro";
     transition: all 0.2s ease;
   }
 
-  .stat-item--or:hover {
-    background: var(--color-primary-hover) !important;
+  .stat-item.stat-item--or:hover {
+    background: var(--color-primary-hover);
     transform: translateY(-2px);
   }
 
@@ -247,6 +247,19 @@ import Nav from "../components/Nav.astro";
   // Load token for cancellation
   let currentLoadToken = 0;
 
+  interface HistoryRow {
+    event: number;
+    overall_rank: number;
+    points?: number;
+    rank?: number;
+    event_transfers?: number;
+    event_transfers_cost?: number;
+  }
+
+  interface HistoryData {
+    current?: HistoryRow[];
+  }
+
   interface ManagerData {
     entryId: number;
     managerName: string;
@@ -257,7 +270,7 @@ import Nav from "../components/Nav.astro";
     gwRank: number;
     teamValue: number;
     bank: number;
-    historyData: any;
+    historyData: HistoryData;
     summaryData: any;
   }
 
@@ -906,8 +919,8 @@ import Nav from "../components/Nav.astro";
     
     // Filter and sort by gameweek (event), filter out invalid/0 values
     const validHistory = current
-      .filter((row: any) => row.event && row.overall_rank && row.overall_rank > 0)
-      .sort((a: any, b: any) => a.event - b.event);
+      .filter((row: HistoryRow) => row.event && row.overall_rank && row.overall_rank > 0)
+      .sort((a: HistoryRow, b: HistoryRow) => a.event - b.event);
 
     if (validHistory.length === 0) {
       orHistoryModalContent.innerHTML = '<p class="status status--error">No rank history available.</p>';
