@@ -260,7 +260,7 @@ import Nav from "../components/Nav.astro";
     worker: (item: T) => Promise<R>
   ): Promise<R[]> {
     const results: R[] = []
-    const executing: Promise<void>[] = []
+    const executing: Set<Promise<void>> = new Set()
 
     for (const item of items) {
       const promise = worker(item).then(result => {
@@ -268,17 +268,18 @@ import Nav from "../components/Nav.astro";
       }).catch(err => {
         console.error('Error processing item:', err)
         results.push(null as R)
+      }).finally(() => {
+        executing.delete(promise)
       })
 
-      executing.push(promise)
+      executing.add(promise)
 
-      if (executing.length >= limit) {
+      if (executing.size >= limit) {
         await Promise.race(executing)
-        executing.splice(executing.findIndex(p => p === promise), 1)
       }
     }
 
-    await Promise.all(executing)
+    await Promise.all(Array.from(executing))
     return results
   }
 
