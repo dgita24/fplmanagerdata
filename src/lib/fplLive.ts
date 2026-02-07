@@ -128,7 +128,9 @@ export async function fetchFixtures({
   includeFinishedProvisional = true
 }: FetchFixturesOptions) {
   try {
-    const res = await fetch(`/api/fpl/fixtures?event=${gw}`);
+    const res = await fetch(`/api/fpl/fixtures?event=${gw}`, {
+      cache: 'no-store'
+    });
     if (!res.ok) throw new Error("Failed to fetch fixtures");
     const fixtures: FixtureInfo[] = await res.json();
 
@@ -212,7 +214,9 @@ export async function fetchLiveGW({
   includeExtendedStats = false
 }: FetchLiveGWOptions) {
   try {
-    const res = await fetch(`/api/fpl/event/${gw}/live`);
+    const res = await fetch(`/api/fpl/event/${gw}/live`, {
+      cache: 'no-store'
+    });
     if (!res.ok) throw new Error("Failed to fetch live data");
     const data = await res.json();
 
