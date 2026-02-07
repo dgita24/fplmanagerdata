@@ -48,6 +48,14 @@ import Nav from "../components/Nav.astro";
       <div id="squad-modal-content"></div>
     </div>
   </div>
+
+  <!-- OR History Modal -->
+  <div id="or-history-modal" class="modal modal--nested">
+    <div class="modal-panel" style="max-width:520px;">
+      <button id="close-or-history-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="or-history-modal-content"></div>
+    </div>
+  </div>
 </Layout>
 
 <style>
@@ -122,6 +130,59 @@ import Nav from "../components/Nav.astro";
 
   .btn-row:hover {
     background: var(--color-primary-hover);
+  }
+
+  /* Clickable OR stat tile */
+  .stat-item--or {
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .stat-item--or:hover {
+    background: var(--color-primary-hover) !important;
+    transform: translateY(-2px);
+  }
+
+  .stat-value--clickable {
+    color: var(--color-primary);
+  }
+
+  .stat-item--or:hover .stat-value--clickable {
+    color: white;
+  }
+
+  /* OR History Modal Styles */
+  .or-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .or-history-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    background: var(--color-surface-alt);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+  }
+
+  .or-history-row:hover {
+    background: var(--color-surface);
+  }
+
+  .or-history-label {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+  }
+
+  .or-history-value {
+    font-weight: 700;
+    color: var(--color-text);
+    text-align: right;
   }
 </style>
 
@@ -198,6 +259,9 @@ import Nav from "../components/Nav.astro";
   const squadModal = document.getElementById("squad-modal")!;
   const squadModalContent = document.getElementById("squad-modal-content")!;
   const closeSquadModal = document.getElementById("close-squad-modal")!;
+  const orHistoryModal = document.getElementById("or-history-modal")!;
+  const orHistoryModalContent = document.getElementById("or-history-modal-content")!;
+  const closeOrHistoryModal = document.getElementById("close-or-history-modal")!;
 
   closeStatsModal.addEventListener("click", () => {
     statsModal.classList.remove("is-open");
@@ -205,6 +269,10 @@ import Nav from "../components/Nav.astro";
 
   closeSquadModal.addEventListener("click", () => {
     squadModal.classList.remove("is-open");
+  });
+
+  closeOrHistoryModal.addEventListener("click", () => {
+    orHistoryModal.classList.remove("is-open");
   });
 
   function populateGWSelector(currentGW: number) {
@@ -712,8 +780,8 @@ import Nav from "../components/Nav.astro";
             <span class="stat-value">${manager.totalPoints.toLocaleString()}</span>
             <span class="stat-label">Total Pts</span>
           </div>
-          <div class="stat-item stat-item--compact">
-            <span class="stat-value">${formatRank(manager.overallRank)}</span>
+          <div class="stat-item stat-item--compact stat-item--or" data-entry-id="${manager.entryId}">
+            <span class="stat-value stat-value--clickable">${formatRank(manager.overallRank)}</span>
             <span class="stat-label">OR</span>
           </div>
           <div class="stat-item stat-item--compact">
@@ -805,6 +873,54 @@ import Nav from "../components/Nav.astro";
     if(squadBtn) {
         squadBtn.addEventListener('click', () => showSquadModal(manager.entryId, manager.managerName, manager.teamName));
     }
+
+    // Attach OR history click
+    const orStatBtn = statsModalContent.querySelector('.stat-item--or');
+    if(orStatBtn) {
+        orStatBtn.addEventListener('click', () => populateORHistoryModal(manager.entryId, manager.managerName, manager.teamName));
+    }
+  }
+
+  function populateORHistoryModal(entryId: number, managerName: string, teamName: string) {
+    const manager = allManagerData.find(m => m.entryId === entryId);
+    if (!manager || !manager.historyData) {
+      orHistoryModalContent.innerHTML = '<p class="status status--error">No history data available.</p>';
+      orHistoryModal.classList.add('is-open');
+      return;
+    }
+
+    const current = Array.isArray(manager.historyData.current) ? manager.historyData.current : [];
+    
+    // Filter and sort by gameweek (event), filter out invalid/0 values
+    const validHistory = current
+      .filter((row: any) => row.event && row.overall_rank && row.overall_rank > 0)
+      .sort((a: any, b: any) => a.event - b.event);
+
+    if (validHistory.length === 0) {
+      orHistoryModalContent.innerHTML = '<p class="status status--error">No rank history available.</p>';
+      orHistoryModal.classList.add('is-open');
+      return;
+    }
+
+    let html = `
+      <h2 class="modal-title" style="margin-bottom: var(--space-1);">Overall Rank History</h2>
+      <p class="text-muted" style="margin-bottom: var(--space-3); font-size: 12px;">${managerName} - ${teamName}</p>
+      <div class="or-history-list">
+    `;
+
+    for (const row of validHistory) {
+      html += `
+        <div class="or-history-row">
+          <span class="or-history-label">GW ${row.event}</span>
+          <span class="or-history-value">${formatRank(row.overall_rank)}</span>
+        </div>
+      `;
+    }
+
+    html += '</div>';
+
+    orHistoryModalContent.innerHTML = html;
+    orHistoryModal.classList.add('is-open');
   }
 
   function attachManagerButtons() {
