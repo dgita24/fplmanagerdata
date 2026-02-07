@@ -150,6 +150,26 @@ import Nav from "../components/Nav.astro";
     background: var(--color-primary-hover);
   }
 
+  .btn-refresh:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
   :global(.squad-card) {
     margin-bottom: var(--space-4);
   }
@@ -346,6 +366,7 @@ import Nav from "../components/Nav.astro";
   const refreshBtn = document.getElementById("refresh-btn");
 
   let managerIds = [];
+  let currentLoadToken = 0;
   let allSquadsData = [];
   let latestGW = 1;
 
@@ -359,6 +380,35 @@ import Nav from "../components/Nav.astro";
   // NEW CACHES FOR OPTIMIZATION
   const playerHistoryCache = new Map(); // Global cache for element-summary (playerId -> historyArray)
   const managerPicksCache = new Map(); // Cache for manager picks (managerId:gw -> picksData)
+
+  // Helper function to run tasks with concurrency limit
+  async function runWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    worker: (item: T) => Promise<R>
+  ): Promise<R[]> {
+    const results: R[] = []
+    const executing: Promise<void>[] = []
+
+    for (const item of items) {
+      const promise = worker(item).then(result => {
+        results.push(result)
+      }).catch(err => {
+        console.error('Error processing item:', err)
+        results.push(null as R)
+      })
+
+      executing.push(promise)
+
+      if (executing.length >= limit) {
+        await Promise.race(executing)
+        executing.splice(executing.findIndex(p => p === promise), 1)
+      }
+    }
+
+    await Promise.all(executing)
+    return results
+  }
 
   function populateGWSelector(currentGW) {
     gwFilterSelect.innerHTML = '';
@@ -509,14 +559,14 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchSquadForGW(entryId, gw) {
+  async function fetchSquadForGW(entryId: number, gw: number, v: number) {
     try {
       // OPTIMIZATION: Check cache for squad picks
       const cacheKey = `${entryId}:${gw}`;
       let data = managerPicksCache.get(cacheKey);
 
       if (!data) {
-        const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`);
+        const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`);
         if (!res.ok) throw new Error("Failed to fetch picks");
         data = await res.json();
         managerPicksCache.set(cacheKey, data);
@@ -557,11 +607,11 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerData(entryId, gw) {
+  async function fetchManagerData(entryId: number, gw: number, v: number) {
     try {
       const [summaryRes, historyRes] = await Promise.all([
-        fetch(`/api/fpl/entry/${entryId}`),
-        fetch(`/api/fpl/entry/${entryId}/history`)
+        fetch(`/api/fpl/entry/${entryId}?v=${v}`),
+        fetch(`/api/fpl/entry/${entryId}/history?v=${v}`)
       ]);
 
       if (!summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch manager data");
@@ -580,7 +630,7 @@ import Nav from "../components/Nav.astro";
         chipThisGW.name === "3xc" ? "TC" :
         chipThisGW.name === "freehit" ? "FH" : chipThisGW.name) : "";
 
-      const squadRaw = await fetchSquadForGW(entryId, gw);
+      const squadRaw = await fetchSquadForGW(entryId, gw, v);
       const squadWithIndicators = applyAutoSubsKeepAll(squadRaw, chipPlayed || "None");
       const squad = applyCaptaincyToSquadDisplay(squadWithIndicators, chipPlayed || "None");
 
@@ -1219,27 +1269,71 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
+    // Generate load token and cache-busting parameter for this operation
+    currentLoadToken++;
+    const thisLoadToken = currentLoadToken;
+    const v = Date.now();
+
+    // Clear existing data and caches
+    allSquadsData = [];
+    managerPicksCache.clear();
+    playerHistoryCache.clear();
+    
+    // Disable refresh button
+    refreshBtn.disabled = true;
+    
+    // Show loading state
+    out.innerHTML = `<div style="text-align: center; padding: var(--space-4);"><div class="spinner"></div></div>`;
+    loadingStatus.innerHTML = `<span class="spinner"></span> Fetching latest data... Loading 0 of ${ids.length}...`;
+
     let loaded = 0;
-    for (const id of ids) {
-      try {
-        const data = await fetchManagerData(id, gw);
-        if (data) {
-          allSquadsData.push(data);
-          loaded++;
 
-          loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
-
-          renderOutput();
+    try {
+      // Fetch all managers concurrently with limit of 8
+      const results = await runWithConcurrency(
+        ids,
+        8,
+        async (id: number) => {
+          try {
+            const data = await fetchManagerData(id, gw, v);
+            
+            loaded++;
+            // Only update load status, not the full table
+            if (thisLoadToken === currentLoadToken) {
+              loadingStatus.innerHTML = `<span class="spinner"></span> Fetching latest data... Loading ${loaded} of ${ids.length}...`;
+            }
+            
+            return data;
+          } catch (e) {
+            console.error(`Failed to load manager ${id}:`, e);
+            loaded++;
+            if (thisLoadToken === currentLoadToken) {
+              loadingStatus.innerHTML = `<span class="spinner"></span> Fetching latest data... Loading ${loaded} of ${ids.length}...`;
+            }
+            return null;
+          }
         }
-      } catch (e) {
-        console.error(`Failed to load manager ${id}:`, e);
-        loaded++;
+      );
+
+      // Check if this load operation is still current
+      if (thisLoadToken !== currentLoadToken) {
+        console.log('Load operation superseded, ignoring results');
+        return;
+      }
+
+      // Filter out null results
+      allSquadsData = results.filter(d => d !== null);
+
+      // Populate manager filter and render once at the end
+      populateManagerFilter();
+      loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers for GW${gw}</span>`;
+      renderOutput();
+    } finally {
+      // Re-enable refresh button only if this is still the current operation
+      if (thisLoadToken === currentLoadToken) {
+        refreshBtn.disabled = false;
       }
     }
-
-    populateManagerFilter();
-
-    loadingStatus.innerHTML = `<span class="text-success font-bold">✅ Loaded ${loaded} managers for GW${gw}</span>`;
   }
 
   async function init() {

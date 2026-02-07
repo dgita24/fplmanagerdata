@@ -100,6 +100,21 @@ import Nav from "../components/Nav.astro";
     outline: none;
     border-color: var(--color-primary);
   }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 </style>
 
 <script>
@@ -142,6 +157,7 @@ import Nav from "../components/Nav.astro";
   const closeOwnershipModal = document.getElementById("close-ownership-modal");
 
   let managerIds = [];
+  let currentLoadToken = 0;
   let ownershipData = [];
   let latestGW = null;
   let playerCache = new Map();
@@ -150,6 +166,35 @@ import Nav from "../components/Nav.astro";
   // Names of managers who played Free Hit in the currently selected GW.
   // (Uses the same 🎯 FH indicator you already use on the Chips page.)
   let freeHitManagers = new Set();
+
+  // Helper function to run tasks with concurrency limit
+  async function runWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    worker: (item: T) => Promise<R>
+  ): Promise<R[]> {
+    const results: R[] = []
+    const executing: Promise<void>[] = []
+
+    for (const item of items) {
+      const promise = worker(item).then(result => {
+        results.push(result)
+      }).catch(err => {
+        console.error('Error processing item:', err)
+        results.push(null as R)
+      })
+
+      executing.push(promise)
+
+      if (executing.length >= limit) {
+        await Promise.race(executing)
+        executing.splice(executing.findIndex(p => p === promise), 1)
+      }
+    }
+
+    await Promise.all(executing)
+    return results
+  }
 
 
   closeOwnershipModal.addEventListener("click", () => {
@@ -196,12 +241,12 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerSquad(entryId, gw) {
+  async function fetchManagerSquad(entryId: number, gw: number, v: number) {
     try {
       const [picksRes, summaryRes, historyRes] = await Promise.all([
-        fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
-        fetch(`/api/fpl/entry/${entryId}`),
-        fetch(`/api/fpl/entry/${entryId}/history`)
+        fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`),
+        fetch(`/api/fpl/entry/${entryId}?v=${v}`),
+        fetch(`/api/fpl/entry/${entryId}/history?v=${v}`)
       ]);
 
       if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch data");
@@ -419,7 +464,7 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  async function loadOwnership(ids, gw) {
+  async function loadOwnership(ids: number[], gw: number) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
       return;
@@ -430,36 +475,79 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
-    const managerSquads = [];
+    // Generate load token and cache-busting parameter for this operation
+    currentLoadToken++;
+    const thisLoadToken = currentLoadToken;
+    const v = Date.now();
+
+    // Clear existing data and caches
     allManagerNames = [];
     freeHitManagers = new Set();
-    out.innerHTML = "";
-    loadingStatus.textContent = `Loading 0 of ${ids.length}...`;
+    playerCache = new Map();
+    teamCache = new Map();
+    
+    // Show loading state
+    out.innerHTML = `<div style="text-align: center; padding: var(--space-4);"><div class="spinner"></div></div>`;
+    loadingStatus.innerHTML = `<span class="spinner"></span> Fetching latest data... Loading 0 of ${ids.length}...`;
 
     let loaded = 0;
-    for (const id of ids) {
-      try {
-        const data = await fetchManagerSquad(id, gw);
-        if (data) {
-          managerSquads.push(data);
-          allManagerNames.push(data.managerName);
-          if (data.isFreeHit) freeHitManagers.add(data.managerName);
-          loaded++;
 
-          loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
-
-          ownershipData = calculateOwnership(managerSquads);
-          const posFilter = positionFilter.value;
-          out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
-          attachPlayerButtons();
+    try {
+      // Fetch all managers concurrently with limit of 8
+      const results = await runWithConcurrency(
+        ids,
+        8,
+        async (id: number) => {
+          try {
+            const data = await fetchManagerSquad(id, gw, v);
+            
+            loaded++;
+            // Only update load status, not the full table
+            if (thisLoadToken === currentLoadToken) {
+              loadingStatus.innerHTML = `<span class="spinner"></span> Fetching latest data... Loading ${loaded} of ${ids.length}...`;
+            }
+            
+            return data;
+          } catch (e) {
+            console.error(`Failed to load manager ${id}:`, e);
+            loaded++;
+            if (thisLoadToken === currentLoadToken) {
+              loadingStatus.innerHTML = `<span class="spinner"></span> Fetching latest data... Loading ${loaded} of ${ids.length}...`;
+            }
+            return null;
+          }
         }
-      } catch (e) {
-        console.error(`Failed to load manager ${id}:`, e);
-        loaded++;
+      );
+
+      // Check if this load operation is still current
+      if (thisLoadToken !== currentLoadToken) {
+        console.log('Load operation superseded, ignoring results');
+        return;
+      }
+
+      // Filter out null results
+      const managerSquads = results.filter(d => d !== null);
+      
+      // Build manager names and free hit set
+      managerSquads.forEach(data => {
+        allManagerNames.push(data.managerName);
+        if (data.isFreeHit) freeHitManagers.add(data.managerName);
+      });
+
+      // Calculate ownership and render once at the end
+      ownershipData = calculateOwnership(managerSquads);
+      loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers for GW${gw}</span>`;
+      
+      const posFilter = positionFilter.value;
+      out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
+      attachPlayerButtons();
+    } catch (error) {
+      console.error('Error loading ownership:', error);
+      if (thisLoadToken === currentLoadToken) {
+        out.innerHTML = "<p class='status status--error'>Error loading ownership data.</p>";
+        loadingStatus.innerHTML = "";
       }
     }
-
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers for GW${gw}</span>`;
   }
 
   async function init() {

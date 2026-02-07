@@ -78,6 +78,26 @@ import Nav from "../components/Nav.astro";
   .btn-refresh:hover {
     background: var(--color-primary-hover);
   }
+
+  .btn-refresh:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 </style>
 
 <script>
@@ -119,8 +139,38 @@ import Nav from "../components/Nav.astro";
   const closeChipModal = document.getElementById("close-chip-modal");
 
   let managerIds = [];
+  let currentLoadToken = 0;
   let playerCache = new Map();
   let teamCache = new Map();
+
+  // Helper function to run tasks with concurrency limit
+  async function runWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    worker: (item: T) => Promise<R>
+  ): Promise<R[]> {
+    const results: R[] = []
+    const executing: Promise<void>[] = []
+
+    for (const item of items) {
+      const promise = worker(item).then(result => {
+        results.push(result)
+      }).catch(err => {
+        console.error('Error processing item:', err)
+        results.push(null as R)
+      })
+
+      executing.push(promise)
+
+      if (executing.length >= limit) {
+        await Promise.race(executing)
+        executing.splice(executing.findIndex(p => p === promise), 1)
+      }
+    }
+
+    await Promise.all(executing)
+    return results
+  }
 
   closeChipModal.addEventListener("click", () => {
     chipModal.classList.remove("is-open");
@@ -153,9 +203,9 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerData(id) {
-    const historyUrl = `/api/fpl/entry/${id}/history`;
-    const summaryUrl = `/api/fpl/entry/${id}`;
+  async function fetchManagerData(id: number, v: number) {
+    const historyUrl = `/api/fpl/entry/${id}/history?v=${v}`;
+    const summaryUrl = `/api/fpl/entry/${id}?v=${v}`;
 
     try {
       const [historyRes, summaryRes] = await Promise.all([
@@ -436,36 +486,76 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  async function loadChips(ids) {
+  async function loadChips(ids: number[]) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
       return;
     }
 
-    const allData = [];
-    out.innerHTML = "";
-    loadingStatus.textContent = `Loading 0 of ${ids.length}...`;
+    // Generate load token and cache-busting parameter for this operation
+    currentLoadToken++;
+    const thisLoadToken = currentLoadToken;
+    const v = Date.now();
+
+    // Clear existing caches
+    playerCache = new Map();
+    teamCache = new Map();
+    
+    // Disable refresh button
+    refreshBtn.disabled = true;
+    
+    // Show loading state
+    out.innerHTML = `<div style="text-align: center; padding: var(--space-4);"><div class="spinner"></div></div>`;
+    loadingStatus.innerHTML = `<span class="spinner"></span> Fetching latest data... Loading 0 of ${ids.length}...`;
 
     let loaded = 0;
-    for (const id of ids) {
-      try {
-        const data = await fetchManagerData(id);
-        if (data) {
-          allData.push(data);
-          loaded++;
 
-          loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
-
-          out.innerHTML = makeChipsTable(allData);
-          attachChipButtons();
+    try {
+      // Fetch all managers concurrently with limit of 8
+      const results = await runWithConcurrency(
+        ids,
+        8,
+        async (id: number) => {
+          try {
+            const data = await fetchManagerData(id, v);
+            
+            loaded++;
+            // Only update load status, not the full table
+            if (thisLoadToken === currentLoadToken) {
+              loadingStatus.innerHTML = `<span class="spinner"></span> Fetching latest data... Loading ${loaded} of ${ids.length}...`;
+            }
+            
+            return data;
+          } catch (e) {
+            console.error(`Failed to load manager ${id}:`, e);
+            loaded++;
+            if (thisLoadToken === currentLoadToken) {
+              loadingStatus.innerHTML = `<span class="spinner"></span> Fetching latest data... Loading ${loaded} of ${ids.length}...`;
+            }
+            return null;
+          }
         }
-      } catch (e) {
-        console.error(`Failed to load manager ${id}:`, e);
-        loaded++;
+      );
+
+      // Check if this load operation is still current
+      if (thisLoadToken !== currentLoadToken) {
+        console.log('Load operation superseded, ignoring results');
+        return;
+      }
+
+      // Filter out null results
+      const allData = results.filter(d => d !== null);
+
+      // Render once at the end
+      loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
+      out.innerHTML = makeChipsTable(allData);
+      attachChipButtons();
+    } finally {
+      // Re-enable refresh button only if this is still the current operation
+      if (thisLoadToken === currentLoadToken) {
+        refreshBtn.disabled = false;
       }
     }
-
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
   }
 
   async function updateDisplay() {
