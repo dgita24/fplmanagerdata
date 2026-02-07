@@ -231,10 +231,10 @@ import Nav from "../components/Nav.astro";
   async function mapWithConcurrency<T, R>(
     items: T[],
     limit: number,
-    fn: (item: T, index: number) => Promise<R>,
+    fn: (item: T, index: number) => Promise<R | null>,
     onProgress?: (completed: number, total: number) => void
-  ): Promise<R[]> {
-    const results: R[] = [];
+  ): Promise<(R | null)[]> {
+    const results: (R | null)[] = [];
     let currentIndex = 0;
     let completed = 0;
 
@@ -246,7 +246,7 @@ import Nav from "../components/Nav.astro";
           results[index] = await fn(item, index);
         } catch (e) {
           console.error(`Error processing item ${index}:`, e);
-          results[index] = null as any;
+          results[index] = null;
         }
         completed++;
         if (onProgress) {
@@ -855,7 +855,7 @@ import Nav from "../components/Nav.astro";
     }
 
     // Filter out nulls and update allManagerData
-    allManagerData = managerDataResults.filter(data => data !== null);
+    allManagerData = managerDataResults.filter((data): data is ManagerData => data !== null);
 
     // Render table once at the end
     if (allManagerData.length > 0) {
