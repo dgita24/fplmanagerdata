@@ -241,6 +241,9 @@ import Nav from "../components/Nav.astro";
   let projectedBonusCache = new Map<string, number>();
   let teamStatusCache = new Map<string, TeamStatus>();
   let fixturesCache: FixtureInfo[] = [];
+  
+  // Load token for cancellation
+  let currentLoadToken = 0;
 
   closeSquadModal.addEventListener("click", () => {
     squadModal.classList.remove("is-open");
@@ -284,10 +287,45 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  async function fetchBootstrapData() {
+  /**
+   * Concurrent mapping with limited concurrency
+   */
+  async function mapWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T, index: number) => Promise<R | null>,
+    onProgress?: (completed: number, total: number) => void
+  ): Promise<(R | null)[]> {
+    const results: (R | null)[] = [];
+    let currentIndex = 0;
+    let completed = 0;
+
+    async function worker() {
+      while (currentIndex < items.length) {
+        const index = currentIndex++;
+        const item = items[index];
+        try {
+          results[index] = await fn(item, index);
+        } catch (e) {
+          console.error(`Error processing item ${index}:`, e);
+          results[index] = null;
+        }
+        completed++;
+        if (onProgress) {
+          onProgress(completed, items.length);
+        }
+      }
+    }
+
+    const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+    await Promise.all(workers);
+    return results;
+  }
+
+  async function fetchBootstrapData(cacheBuster?: string) {
     try {
-      // Add version param to force refresh of bootstrap data
-      const v = Date.now();
+      // Use provided cache-buster or generate new one
+      const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
@@ -319,13 +357,13 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerLive(entryId: number, gw: number) {
+  async function fetchManagerLive(entryId: number, gw: number, cacheBuster?: string) {
     try {
       const cacheKey = `${entryId}:${gw}`;
       let rawData = managerDataCache.get(cacheKey);
 
-      // Version timestamp to bust API cache
-      const v = Date.now();
+      // Version timestamp to bust API cache - use provided or generate new
+      const v = cacheBuster || Date.now().toString();
 
       if (!rawData) {
          const [picksRes, summaryRes, historyRes] = await Promise.all([
@@ -903,9 +941,15 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
+    // Generate load token for cancellation
+    const loadToken = ++currentLoadToken;
+    
+    // Disable refresh button during loading
+    refreshBtn.disabled = true;
+    
     liveData = [];
     out.innerHTML = "";
-    loadingStatus.textContent = `Loading GW${gw}...`;
+    loadingStatus.textContent = `Fetching latest data...`;
 
     // 1. CLEAR CACHES to ensure fresh data
     fixturesCache = [];
@@ -913,39 +957,74 @@ import Nav from "../components/Nav.astro";
     projectedBonusCache.clear();
     teamStatusCache.clear();
 
-    // 2. Fetch Fixtures & Live Data in parallel
-    // Added timestamp 'v' to bootstrap as well
-    const v = Date.now();
-    await Promise.all([
-      fetchFixtures({ gw, fixturesCache, projectedBonusCache, teamStatusCache, includeFinishedProvisional: true }),
-      fetchLiveGW({ gw, livePointsCache, includeExtendedStats: true })
-    ]);
-
-    // 3. Process managers AFTER caches are populated
-    let loaded = 0;
-    for (const id of ids) {
-      try {
-        const data = await fetchManagerLive(id, gw);
-        if (data) {
-          liveData.push(data);
-          loaded++;
-
-          loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
-
-          const compareId = compareManagerSelect.value;
-          out.innerHTML = makeLiveTable(liveData, compareId);
-          attachManagerButtons();
-        }
-      } catch (e) {
-        console.error(`Failed to load manager ${id}:`, e);
-        loaded++;
-      }
+    // 2. Generate single cache-buster token for this load
+    const cacheBuster = Date.now().toString();
+    
+    // 3. Fetch Fixtures & Live Data in parallel with cache-buster
+    try {
+      await Promise.all([
+        fetchFixtures({ 
+          gw, 
+          fixturesCache, 
+          projectedBonusCache, 
+          teamStatusCache, 
+          includeFinishedProvisional: true,
+          cacheBuster 
+        }),
+        fetchLiveGW({ 
+          gw, 
+          livePointsCache, 
+          includeExtendedStats: true,
+          cacheBuster 
+        })
+      ]);
+    } catch (e) {
+      console.error('Error fetching fixtures/live data:', e);
+      loadingStatus.innerHTML = `<span class='status status--error'>Error loading fixtures/live data</span>`;
+      refreshBtn.disabled = false;
+      return;
     }
 
-    populateCompareManager();
+    // Check if this load has been superseded
+    if (loadToken !== currentLoadToken) {
+      console.log('Load superseded, aborting');
+      return;
+    }
 
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
+    // 4. Fetch manager data concurrently with limit of 8
+    const managerDataResults = await mapWithConcurrency(
+      ids,
+      8,
+      async (id) => {
+        return await fetchManagerLive(id, gw, cacheBuster);
+      },
+      (completed, total) => {
+        loadingStatus.textContent = `Fetching ${completed}/${total}...`;
+      }
+    );
+
+    // Check again if this load has been superseded
+    if (loadToken !== currentLoadToken) {
+      console.log('Load superseded after fetching managers, aborting');
+      return;
+    }
+
+    // 5. Filter out nulls and update liveData
+    liveData = managerDataResults.filter((data): data is NonNullable<typeof data> => data !== null);
+
+    // 6. Render table once at the end
+    if (liveData.length > 0) {
+      const compareId = compareManagerSelect.value;
+      out.innerHTML = makeLiveTable(liveData, compareId);
+      attachManagerButtons();
+      populateCompareManager();
+    }
+
+    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers</span>`;
     lastUpdatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+    
+    // Re-enable refresh button
+    refreshBtn.disabled = false;
   }
 
   async function init() {

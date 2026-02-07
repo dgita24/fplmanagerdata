@@ -42,12 +42,14 @@ export interface FetchFixturesOptions {
   projectedBonusCache: Map<string, number>;
   teamStatusCache: Map<string, TeamStatus>;
   includeFinishedProvisional?: boolean;
+  cacheBuster?: string;
 }
 
 export interface FetchLiveGWOptions {
   gw: number;
   livePointsCache: Map<number, LiveStatLine>;
   includeExtendedStats?: boolean;
+  cacheBuster?: string;
 }
 
 export interface GetPlayerLiveComputedOptions {
@@ -125,10 +127,12 @@ export async function fetchFixtures({
   fixturesCache,
   projectedBonusCache,
   teamStatusCache,
-  includeFinishedProvisional = true
+  includeFinishedProvisional = true,
+  cacheBuster
 }: FetchFixturesOptions) {
   try {
-    const res = await fetch(`/api/fpl/fixtures?event=${gw}`, {
+    const v = cacheBuster || Date.now().toString();
+    const res = await fetch(`/api/fpl/fixtures?event=${gw}&v=${v}`, {
       cache: 'no-store'
     });
     if (!res.ok) throw new Error("Failed to fetch fixtures");
@@ -211,10 +215,12 @@ export async function fetchFixtures({
 export async function fetchLiveGW({
   gw,
   livePointsCache,
-  includeExtendedStats = false
+  includeExtendedStats = false,
+  cacheBuster
 }: FetchLiveGWOptions) {
   try {
-    const res = await fetch(`/api/fpl/event/${gw}/live`, {
+    const v = cacheBuster || Date.now().toString();
+    const res = await fetch(`/api/fpl/event/${gw}/live?v=${v}`, {
       cache: 'no-store'
     });
     if (!res.ok) throw new Error("Failed to fetch live data");

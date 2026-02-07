@@ -169,6 +169,9 @@ import Nav from "../components/Nav.astro";
   let projectedBonusCache = new Map<string, number>();
   let teamStatusCache = new Map<string, TeamStatus>();
   let fixturesCache: FixtureInfo[] = [];
+  
+  // Load token for cancellation
+  let currentLoadToken = 0;
 
   interface ManagerData {
     entryId: number;
@@ -222,9 +225,44 @@ import Nav from "../components/Nav.astro";
     return "FWD";
   }
 
-  async function fetchBootstrapData() {
+  /**
+   * Concurrent mapping with limited concurrency
+   */
+  async function mapWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T, index: number) => Promise<R | null>,
+    onProgress?: (completed: number, total: number) => void
+  ): Promise<(R | null)[]> {
+    const results: (R | null)[] = [];
+    let currentIndex = 0;
+    let completed = 0;
+
+    async function worker() {
+      while (currentIndex < items.length) {
+        const index = currentIndex++;
+        const item = items[index];
+        try {
+          results[index] = await fn(item, index);
+        } catch (e) {
+          console.error(`Error processing item ${index}:`, e);
+          results[index] = null;
+        }
+        completed++;
+        if (onProgress) {
+          onProgress(completed, items.length);
+        }
+      }
+    }
+
+    const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+    await Promise.all(workers);
+    return results;
+  }
+
+  async function fetchBootstrapData(cacheBuster?: string) {
     try {
-      const v = Date.now();
+      const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
@@ -255,13 +293,13 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerData(id: number, gw: number): Promise<ManagerData | null> {
+  async function fetchManagerData(id: number, gw: number, cacheBuster?: string): Promise<ManagerData | null> {
     try {
       // 1. Fetch Basic Summary and History
       let summaryData = managerStatsCache.get(`${id}:summary`);
       let historyData = managerStatsCache.get(`${id}:history`);
 
-      const v = Date.now();
+      const v = cacheBuster || Date.now().toString();
 
       if (!summaryData || !historyData) {
         const [summaryRes, historyRes] = await Promise.all([
@@ -785,26 +823,51 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
+    // Generate load token for cancellation
+    const loadToken = ++currentLoadToken;
+    
+    // Disable refresh button during loading
+    refreshBtn.disabled = true;
+
     allManagerData = [];
     out.innerHTML = "";
-    loadingStatus.textContent = `Loading 0 of ${ids.length}...`;
+    loadingStatus.textContent = `Fetching latest data...`;
 
-    let loaded = 0;
-    for (const id of ids) {
-      const data = await fetchManagerData(id, gw);
-      if (data) {
-        allManagerData.push(data);
-        loaded++;
-        loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
-        
-        // Sorting
-        allManagerData.sort((a, b) => b.totalPoints - a.totalPoints);
-        out.innerHTML = makeStatsTable(allManagerData, gw);
-        attachManagerButtons();
+    // Generate single cache-buster token for this load
+    const cacheBuster = Date.now().toString();
+
+    // Fetch manager data concurrently with limit of 8
+    const managerDataResults = await mapWithConcurrency(
+      ids,
+      8,
+      async (id) => {
+        return await fetchManagerData(id, gw, cacheBuster);
+      },
+      (completed, total) => {
+        loadingStatus.textContent = `Fetching ${completed}/${total}...`;
       }
+    );
+
+    // Check if this load has been superseded
+    if (loadToken !== currentLoadToken) {
+      console.log('Load superseded, aborting');
+      return;
     }
 
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
+    // Filter out nulls and update allManagerData
+    allManagerData = managerDataResults.filter((data): data is ManagerData => data !== null);
+
+    // Render table once at the end
+    if (allManagerData.length > 0) {
+      allManagerData.sort((a, b) => b.totalPoints - a.totalPoints);
+      out.innerHTML = makeStatsTable(allManagerData, gw);
+      attachManagerButtons();
+    }
+
+    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allManagerData.length} managers</span>`;
+    
+    // Re-enable refresh button
+    refreshBtn.disabled = false;
   }
 
   async function updateDisplay() {
