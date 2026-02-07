@@ -123,6 +123,26 @@ import Nav from "../components/Nav.astro";
   .btn-row:hover {
     background: var(--color-primary-hover);
   }
+
+  .btn-row:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 </style>
 
 <script>
@@ -162,6 +182,7 @@ import Nav from "../components/Nav.astro";
   let latestGW = 1;
   let currentGWFinished = false;
   let managerIds: number[] = [];
+  let currentLoadToken = 0;
   let allManagerData: ManagerData[] = [];
   let playerCache = new Map<number, { name: string; position: number; team: number }>();
   let teamCache = new Map<number, { name: string; shortName: string }>();
@@ -169,6 +190,39 @@ import Nav from "../components/Nav.astro";
   let projectedBonusCache = new Map<string, number>();
   let teamStatusCache = new Map<string, TeamStatus>();
   let fixturesCache: FixtureInfo[] = [];
+
+  // Helper function to run tasks with concurrency limit
+  async function runWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    worker: (item: T) => Promise<R>
+  ): Promise<R[]> {
+    const results: R[] = new Array(items.length)
+    const executing: Set<Promise<void>> = new Set()
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      const index = i
+      
+      const promise = worker(item).then(result => {
+        results[index] = result
+      }).catch(err => {
+        console.error('Error processing item:', err)
+        results[index] = null as R
+      }).finally(() => {
+        executing.delete(promise)
+      })
+
+      executing.add(promise)
+
+      if (executing.size >= limit) {
+        await Promise.race(executing)
+      }
+    }
+
+    await Promise.all(Array.from(executing))
+    return results
+  }
 
   interface ManagerData {
     entryId: number;
@@ -255,13 +309,11 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerData(id: number, gw: number): Promise<ManagerData | null> {
+  async function fetchManagerData(id: number, gw: number, v: number): Promise<ManagerData | null> {
     try {
       // 1. Fetch Basic Summary and History
       let summaryData = managerStatsCache.get(`${id}:summary`);
       let historyData = managerStatsCache.get(`${id}:history`);
-
-      const v = Date.now();
 
       if (!summaryData || !historyData) {
         const [summaryRes, historyRes] = await Promise.all([
@@ -785,26 +837,71 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
+    // Generate load token and cache-busting parameter for this operation
+    currentLoadToken++;
+    const thisLoadToken = currentLoadToken;
+    const v = Date.now();
+
+    // Clear existing data and caches
     allManagerData = [];
-    out.innerHTML = "";
-    loadingStatus.textContent = `Loading 0 of ${ids.length}...`;
+    managerStatsCache.clear();
+    
+    // Disable refresh button
+    refreshBtn.disabled = true;
+    
+    // Show loading state
+    out.innerHTML = `<div style="text-align: center; padding: var(--space-4);"><div class="spinner"></div></div>`;
+    loadingStatus.innerHTML = `<span class="spinner"></span> Fetching latest data... Loading 0 of ${ids.length}...`;
 
     let loaded = 0;
-    for (const id of ids) {
-      const data = await fetchManagerData(id, gw);
-      if (data) {
-        allManagerData.push(data);
-        loaded++;
-        loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
-        
-        // Sorting
-        allManagerData.sort((a, b) => b.totalPoints - a.totalPoints);
-        out.innerHTML = makeStatsTable(allManagerData, gw);
-        attachManagerButtons();
+
+    try {
+      // Fetch all managers concurrently with limit of 8
+      const results = await runWithConcurrency(
+        ids,
+        8,
+        async (id: number) => {
+          try {
+            const data = await fetchManagerData(id, gw, v);
+            
+            loaded++;
+            // Only update load status, not the full table
+            if (thisLoadToken === currentLoadToken) {
+              loadingStatus.innerHTML = `<span class="spinner"></span> Fetching latest data... Loading ${loaded} of ${ids.length}...`;
+            }
+            
+            return data;
+          } catch (e) {
+            console.error(`Failed to load manager ${id}:`, e);
+            loaded++;
+            if (thisLoadToken === currentLoadToken) {
+              loadingStatus.innerHTML = `<span class="spinner"></span> Fetching latest data... Loading ${loaded} of ${ids.length}...`;
+            }
+            return null;
+          }
+        }
+      );
+
+      // Check if this load operation is still current
+      if (thisLoadToken !== currentLoadToken) {
+        console.log('Load operation superseded, ignoring results');
+        return;
+      }
+
+      // Filter out null results and store
+      allManagerData = results.filter(d => d !== null);
+
+      // Sort and render once at the end
+      allManagerData.sort((a, b) => b.totalPoints - a.totalPoints);
+      loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
+      out.innerHTML = makeStatsTable(allManagerData, gw);
+      attachManagerButtons();
+    } finally {
+      // Re-enable refresh button only if this is still the current operation
+      if (thisLoadToken === currentLoadToken) {
+        refreshBtn.disabled = false;
       }
     }
-
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers</span>`;
   }
 
   async function updateDisplay() {
