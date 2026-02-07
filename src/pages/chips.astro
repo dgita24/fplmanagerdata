@@ -501,10 +501,6 @@ import Nav from "../components/Nav.astro";
     const thisLoadToken = currentLoadToken;
     const v = Date.now();
 
-    // Clear existing caches
-    playerCache = new Map();
-    teamCache = new Map();
-    
     // Disable refresh button
     refreshBtn.disabled = true;
     
