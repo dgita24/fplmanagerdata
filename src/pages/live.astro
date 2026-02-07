@@ -273,6 +273,7 @@ import Nav from "../components/Nav.astro";
 <script>
   import { supabase } from '../lib/supabase.ts'
   import { applyAutoSubsAndMultipliers, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
 
   let managerIds: number[] = []
   const managerDataCache = new Map<string, any>();
@@ -367,8 +368,7 @@ import Nav from "../components/Nav.astro";
     playerModal.classList.remove("is-open");
   });
 
-  // Import and initialize GW Points Modal
-  import { initGWPointsModal } from '../lib/gwPointsModal.js';
+  // Initialize GW Points Modal
   const gwPointsModal = initGWPointsModal('gw-points-modal');
 
   function populateGWSelector(currentGW: number) {
@@ -738,7 +738,6 @@ import Nav from "../components/Nav.astro";
     // Make player name clickable to show GW points
     const playerNameEl = playerModalContent.querySelector('.player-modal-name');
     if (playerNameEl && gwPointsModal) {
-      import { makePlayerNameClickable } from '../lib/gwPointsModal.js';
       makePlayerNameClickable(playerNameEl, playerId, player.name, gwPointsModal, teamCache);
     }
     playerModal.classList.add("is-open");

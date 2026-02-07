@@ -423,6 +423,7 @@ import Nav from "../components/Nav.astro";
 <script>
   import { supabase } from '../lib/supabase.ts'
   import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive'
+  import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -1314,7 +1315,6 @@ import Nav from "../components/Nav.astro";
     // Make player name clickable to show GW points
     const playerNameEl = playerModalContent.querySelector('.player-modal-name');
     if (playerNameEl && gwPointsModal) {
-      import { makePlayerNameClickable } from '../lib/gwPointsModal.js';
       makePlayerNameClickable(playerNameEl, playerId, player.name, gwPointsModal, teamCache);
     }
   }
@@ -1503,8 +1503,7 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  // Import and initialize GW Points Modal
-  import { initGWPointsModal } from '../lib/gwPointsModal.js';
+  // Initialize GW Points Modal
   const gwPointsModal = initGWPointsModal('gw-points-modal');
 
   const historyModal = document.getElementById("manager-history-modal");
