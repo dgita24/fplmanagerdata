@@ -51,7 +51,7 @@ import Nav from "../components/Nav.astro";
 
   <!-- OR History Modal -->
   <div id="or-history-modal" class="modal modal--nested">
-    <div class="modal-panel" style="max-width:520px;">
+    <div class="modal-panel modal-panel--or-history">
       <button id="close-or-history-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
       <div id="or-history-modal-content"></div>
     </div>
@@ -152,6 +152,10 @@ import Nav from "../components/Nav.astro";
   }
 
   /* OR History Modal Styles */
+  .modal-panel--or-history {
+    max-width: 520px;
+  }
+
   .or-history-list {
     display: flex;
     flex-direction: column;
@@ -183,6 +187,15 @@ import Nav from "../components/Nav.astro";
     font-weight: 700;
     color: var(--color-text);
     text-align: right;
+  }
+
+  .or-modal-title {
+    margin-bottom: var(--space-1);
+  }
+
+  .or-modal-subtitle {
+    margin-bottom: var(--space-3);
+    font-size: 12px;
   }
 </style>
 
@@ -889,7 +902,7 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
-    const current = Array.isArray(manager.historyData.current) ? manager.historyData.current : [];
+    const current = manager.historyData.current ?? [];
     
     // Filter and sort by gameweek (event), filter out invalid/0 values
     const validHistory = current
@@ -903,8 +916,8 @@ import Nav from "../components/Nav.astro";
     }
 
     let html = `
-      <h2 class="modal-title" style="margin-bottom: var(--space-1);">Overall Rank History</h2>
-      <p class="text-muted" style="margin-bottom: var(--space-3); font-size: 12px;">${managerName} - ${teamName}</p>
+      <h2 class="modal-title or-modal-title">Overall Rank History</h2>
+      <p class="text-muted or-modal-subtitle">${managerName} - ${teamName}</p>
       <div class="or-history-list">
     `;
 
