@@ -223,7 +223,7 @@ export function makePlayerNameClickable(playerNameElement, playerId, playerName,
   if (!playerNameElement) return;
 
   playerNameElement.style.cursor = 'pointer';
-  playerNameElement.style.color = '#ffd700'; // Yellow
+  playerNameElement.style.color = 'var(--color-warning)'; // Use warning color (yellow/gold)
   playerNameElement.dataset.playerId = playerId;
   playerNameElement.dataset.playerName = playerName;
 
