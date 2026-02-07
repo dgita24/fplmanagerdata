@@ -55,6 +55,14 @@ import Nav from "../components/Nav.astro";
     </div>
   </div>
 
+  <!-- GW Points Modal (nested on top of player modal) -->
+  <div id="gw-points-modal" class="modal modal--nested modal--gw-points">
+    <div class="modal-panel modal-panel--gw-points">
+      <button class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div class="gw-points-modal-content"></div>
+    </div>
+  </div>
+
   <!-- Manager History Modal -->
   <div id="manager-history-modal" class="modal modal--nested">
     <div class="modal-panel">
@@ -303,6 +311,112 @@ import Nav from "../components/Nav.astro";
       word-wrap: break-word !important;
       overflow-wrap: break-word !important;
     }
+  }
+
+  /* GW Points Modal Styles */
+  .modal--gw-points {
+    z-index: 10002; /* Higher than nested player modal */
+  }
+
+  .modal-panel--gw-points {
+    max-width: 900px;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  :global(.gw-points-title) {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: var(--space-4);
+    text-align: center;
+  }
+
+  :global(.gw-points-tables) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+  }
+
+  @media (max-width: 768px) {
+    :global(.gw-points-tables) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  :global(.gw-points-table) {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  :global(.gw-points-table thead) {
+    background: var(--color-surface-alt);
+  }
+
+  :global(.gw-points-table th) {
+    padding: var(--space-2);
+    text-align: left;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    border-bottom: 2px solid var(--color-border);
+  }
+
+  :global(.gw-points-table td) {
+    padding: var(--space-2);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  :global(.gw-points-table tbody tr:hover) {
+    background: var(--color-surface-alt);
+  }
+
+  :global(.gw-col) {
+    font-weight: 600;
+    width: 50px;
+  }
+
+  :global(.opp-col) {
+    width: auto;
+  }
+
+  :global(.mins-col) {
+    width: 60px;
+    text-align: center;
+  }
+
+  :global(.pts-col) {
+    width: 60px;
+    text-align: right;
+    font-weight: 600;
+  }
+
+  :global(.gw-points-loading),
+  :global(.gw-points-error),
+  :global(.gw-points-empty) {
+    text-align: center;
+    padding: var(--space-6);
+  }
+
+  :global(.gw-points-loading-text) {
+    color: var(--color-text-secondary);
+    margin-top: var(--space-2);
+  }
+
+  :global(.gw-points-error-text) {
+    color: var(--color-danger);
+    margin-top: var(--space-2);
+  }
+
+  :global(.gw-points-error-details) {
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    margin-top: var(--space-1);
+  }
+
+  :global(.gw-points-empty-text) {
+    color: var(--color-text-secondary);
+    margin-top: var(--space-2);
   }
 </style>
 
@@ -1196,6 +1310,13 @@ import Nav from "../components/Nav.astro";
     const playerModal = document.getElementById("player-modal");
     playerModalContent.innerHTML = html;
     playerModal.classList.add("is-open");
+    
+    // Make player name clickable to show GW points
+    const playerNameEl = playerModalContent.querySelector('.player-modal-name');
+    if (playerNameEl && gwPointsModal) {
+      import { makePlayerNameClickable } from '../lib/gwPointsModal.js';
+      makePlayerNameClickable(playerNameEl, playerId, player.name, gwPointsModal, teamCache);
+    }
   }
 
   function attachPlayerButtons() {
@@ -1381,6 +1502,10 @@ import Nav from "../components/Nav.astro";
       playerModal.classList.remove("is-open");
     });
   }
+
+  // Import and initialize GW Points Modal
+  import { initGWPointsModal } from '../lib/gwPointsModal.js';
+  const gwPointsModal = initGWPointsModal('gw-points-modal');
 
   const historyModal = document.getElementById("manager-history-modal");
   const closeHistoryModal = document.getElementById("close-history-modal");
