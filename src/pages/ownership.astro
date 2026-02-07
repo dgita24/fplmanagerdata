@@ -173,15 +173,18 @@ import Nav from "../components/Nav.astro";
     limit: number,
     worker: (item: T) => Promise<R>
   ): Promise<R[]> {
-    const results: R[] = []
+    const results: R[] = new Array(items.length)
     const executing: Set<Promise<void>> = new Set()
 
-    for (const item of items) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      const index = i
+      
       const promise = worker(item).then(result => {
-        results.push(result)
+        results[index] = result
       }).catch(err => {
         console.error('Error processing item:', err)
-        results.push(null as R)
+        results[index] = null as R
       }).finally(() => {
         executing.delete(promise)
       })
