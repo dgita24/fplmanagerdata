@@ -903,11 +903,11 @@ import Nav from "../components/Nav.astro";
     // Attach OR history click
     const orStatBtn = statsModalContent.querySelector('.stat-item--or');
     if(orStatBtn) {
-        orStatBtn.addEventListener('click', () => populateORHistoryModal(manager.entryId, manager.managerName, manager.teamName));
+        orStatBtn.addEventListener('click', () => populateORHistoryModal(manager.entryId));
     }
   }
 
-  function populateORHistoryModal(entryId: number, managerName: string, teamName: string) {
+  function populateORHistoryModal(entryId: number) {
     const manager = allManagerData.find(m => m.entryId === entryId);
     if (!manager || !manager.historyData) {
       orHistoryModalContent.innerHTML = '<p class="status status--error">No history data available.</p>';
@@ -919,7 +919,7 @@ import Nav from "../components/Nav.astro";
     
     // Filter and sort by gameweek (event), filter out invalid/0 values
     const validHistory = current
-      .filter((row: HistoryRow) => row.event && row.overall_rank && row.overall_rank > 0)
+      .filter((row: HistoryRow) => row.event && row.overall_rank > 0)
       .sort((a: HistoryRow, b: HistoryRow) => a.event - b.event);
 
     if (validHistory.length === 0) {
@@ -930,7 +930,7 @@ import Nav from "../components/Nav.astro";
 
     let html = `
       <h2 class="modal-title or-modal-title">Overall Rank History</h2>
-      <p class="text-muted or-modal-subtitle">${managerName} - ${teamName}</p>
+      <p class="text-muted or-modal-subtitle">${manager.managerName} - ${manager.teamName}</p>
       <div class="or-history-list">
     `;
 
