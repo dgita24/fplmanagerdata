@@ -132,12 +132,13 @@ import Nav from "../components/Nav.astro";
     background: var(--color-primary-hover);
   }
 
-  /* Clickable OR stat tile */
+  /* Clickable OR stat tile - entire badge highlighted */
   .stat-item--or {
     cursor: pointer;
     transition: all 0.2s ease;
-    background: rgb(59 130 246 / 0.15) !important;
+    background: rgb(59 130 246 / 0.3) !important;
     border: 2px solid var(--color-primary) !important;
+    box-shadow: 0 0 0 2px rgb(59 130 246 / 0.2) !important;
   }
 
   .stat-item.stat-item--or:hover {
@@ -963,10 +964,10 @@ import Nav from "../components/Nav.astro";
       return;
     }
     
-    // Filter and sort by gameweek (event), filter out invalid/0 values
+    // Filter and sort by gameweek (event) in DESCENDING order (latest at top), filter out invalid/0 values
     const validHistory = current
       .filter((row: HistoryRow) => typeof row.event === 'number' && row.overall_rank > 0)
-      .sort((a: HistoryRow, b: HistoryRow) => a.event - b.event);
+      .sort((a: HistoryRow, b: HistoryRow) => b.event - a.event);
 
     if (validHistory.length === 0) {
       orHistoryModalContent.innerHTML = '<p class="status status--error">No rank history available.</p>';
