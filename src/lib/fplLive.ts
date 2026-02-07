@@ -319,13 +319,30 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   const starterCapId = starters.find(p => p.is_captain)?.playerId ?? null;
   const starterVcId = starters.find(p => p.is_vice_captain)?.playerId ?? null;
 
-  // Treat "played" as >0 minutes. If captain and vice both didn't play, no doubling.
-  const starterCapPlayed =
-    starterCapId !== null && starters.some(p => p.playerId === starterCapId && p.minutes > 0);
-  const starterVcPlayed =
-    starterVcId !== null && starters.some(p => p.playerId === starterVcId && p.minutes > 0);
+  // Find the actual starter objects (contain minutes + status)
+  const starterCap = starterCapId !== null ? starters.find(p => p.playerId === starterCapId) : null;
+  const starterVc = starterVcId !== null ? starters.find(p => p.playerId === starterVcId) : null;
 
-  const eligibleCaptainId = starterCapPlayed ? starterCapId : starterVcPlayed ? starterVcId : null;
+  // Treat "played" as >0 minutes.
+  const starterCapPlayed = !!starterCap && starterCap.minutes > 0;
+  const starterVcPlayed = !!starterVc && starterVc.minutes > 0;
+
+  // CRITICAL RULE FIX:
+  // Vice-captain takes over ONLY when the captain is confirmed "did not play" for the gameweek.
+  // In this app, that means:
+  // - captain's team is finished (or provisionally finished, depending on includeFinishedProvisional used upstream)
+  // - AND captain has 0 minutes
+  //
+  // IMPORTANT: If captain is "NS" (not started) we must NOT switch to VC yet.
+  // This prevents the bug where VC is doubled while captain hasn't played *yet*.
+  const captainResolvedDidNotPlay = !!starterCap && starterCap.status === "Fin" && starterCap.minutes === 0;
+
+  const eligibleCaptainId =
+    starterCapPlayed
+      ? starterCapId
+      : (captainResolvedDidNotPlay && starterVcPlayed)
+        ? starterVcId
+        : null;
 
   if (isBB) {
     // Bench Boost: all 15 score; no autosubs. Captaincy still restricted to XI.
