@@ -145,11 +145,12 @@ import Nav from "../components/Nav.astro";
     transform: translateY(-2px);
   }
 
-  .stat-value--clickable {
+  /* Use :global() for classes used in JavaScript-generated HTML */
+  :global(.stat-value--clickable) {
     color: var(--color-warning) !important;
   }
 
-  .stat-item--or:hover .stat-value--clickable {
+  .stat-item--or:hover :global(.stat-value--clickable) {
     color: white !important;
   }
 
@@ -158,12 +159,13 @@ import Nav from "../components/Nav.astro";
     max-width: 520px;
   }
 
-  .or-history-container {
+  /* Use :global() for JavaScript-generated content */
+  :global(.or-history-container) {
     display: flex;
     flex-direction: column;
   }
 
-  .or-history-header {
+  :global(.or-history-header) {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     gap: var(--space-2);
@@ -180,27 +182,27 @@ import Nav from "../components/Nav.astro";
     z-index: 1;
   }
 
-  .or-history-header-label:first-child {
+  :global(.or-history-header-label:first-child) {
     text-align: left;
   }
 
-  .or-history-header-label:last-child {
+  :global(.or-history-header-label:last-child) {
     text-align: right;
   }
 
-  .or-history-divider {
+  :global(.or-history-divider) {
     width: 1px;
     background: var(--color-border);
   }
 
-  .or-history-list {
+  :global(.or-history-list) {
     display: flex;
     flex-direction: column;
     max-height: 60vh;
     overflow-y: auto;
   }
 
-  .or-history-row {
+  :global(.or-history-row) {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     gap: var(--space-2);
@@ -210,27 +212,27 @@ import Nav from "../components/Nav.astro";
     font-size: 14px;
   }
 
-  .or-history-row:hover {
+  :global(.or-history-row:hover) {
     background: var(--color-surface);
   }
 
-  .or-history-label {
+  :global(.or-history-label) {
     font-weight: 600;
     color: var(--color-text-secondary);
     text-align: left;
   }
 
-  .or-history-value {
+  :global(.or-history-value) {
     font-weight: 700;
     color: var(--color-text);
     text-align: right;
   }
 
-  .or-modal-title {
+  :global(.or-modal-title) {
     margin-bottom: var(--space-1);
   }
 
-  .or-modal-subtitle {
+  :global(.or-modal-subtitle) {
     margin-bottom: var(--space-3);
     font-size: 12px;
   }
