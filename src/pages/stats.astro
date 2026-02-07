@@ -917,9 +917,16 @@ import Nav from "../components/Nav.astro";
 
     const current = manager.historyData.current ?? [];
     
+    // Early return if no history data
+    if (current.length === 0) {
+      orHistoryModalContent.innerHTML = '<p class="status status--error">No rank history available.</p>';
+      orHistoryModal.classList.add('is-open');
+      return;
+    }
+    
     // Filter and sort by gameweek (event), filter out invalid/0 values
     const validHistory = current
-      .filter((row: HistoryRow) => row.event && row.overall_rank > 0)
+      .filter((row: HistoryRow) => typeof row.event === 'number' && row.overall_rank > 0)
       .sort((a: HistoryRow, b: HistoryRow) => a.event - b.event);
 
     if (validHistory.length === 0) {
