@@ -499,7 +499,12 @@ import Nav from "../components/Nav.astro";
       ids,
       8,
       async (id) => {
-        return await fetchManagerData(id, cacheBuster);
+        try {
+          return await fetchManagerData(id, cacheBuster);
+        } catch (e) {
+          console.error(`Failed to load manager ${id}:`, e);
+          return null;
+        }
       },
       (completed, total) => {
         loadingStatus.textContent = `Fetching ${completed}/${total}...`;
