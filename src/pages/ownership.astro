@@ -150,11 +150,49 @@ import Nav from "../components/Nav.astro";
   // Names of managers who played Free Hit in the currently selected GW.
   // (Uses the same 🎯 FH indicator you already use on the Chips page.)
   let freeHitManagers = new Set();
+  
+  // Load token for cancellation
+  let currentLoadToken = 0;
 
 
   closeOwnershipModal.addEventListener("click", () => {
     ownershipModal.classList.remove("is-open");
   });
+
+  /**
+   * Concurrent mapping with limited concurrency
+   */
+  async function mapWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T, index: number) => Promise<R | null>,
+    onProgress?: (completed: number, total: number) => void
+  ): Promise<(R | null)[]> {
+    const results: (R | null)[] = [];
+    let currentIndex = 0;
+    let completed = 0;
+
+    async function worker() {
+      while (currentIndex < items.length) {
+        const index = currentIndex++;
+        const item = items[index];
+        try {
+          results[index] = await fn(item, index);
+        } catch (e) {
+          console.error(`Error processing item ${index}:`, e);
+          results[index] = null;
+        }
+        completed++;
+        if (onProgress) {
+          onProgress(completed, items.length);
+        }
+      }
+    }
+
+    const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+    await Promise.all(workers);
+    return results;
+  }
 
   function populateGWSelector(currentGW) {
     gwFilterSelect.innerHTML = '';
@@ -167,9 +205,10 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchBootstrapData() {
+  async function fetchBootstrapData(cacheBuster?: string) {
     try {
-      const res = await fetch('/api/fpl/bootstrap-static');
+      const v = cacheBuster || Date.now().toString();
+      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
@@ -196,12 +235,13 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerSquad(entryId, gw) {
+  async function fetchManagerSquad(entryId, gw, cacheBuster?: string) {
     try {
+      const v = cacheBuster || Date.now().toString();
       const [picksRes, summaryRes, historyRes] = await Promise.all([
-        fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks`),
-        fetch(`/api/fpl/entry/${entryId}`),
-        fetch(`/api/fpl/entry/${entryId}/history`)
+        fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`),
+        fetch(`/api/fpl/entry/${entryId}?v=${v}`),
+        fetch(`/api/fpl/entry/${entryId}/history?v=${v}`)
       ]);
 
       if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch data");
@@ -430,36 +470,54 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
-    const managerSquads = [];
+    // Generate load token for cancellation
+    const loadToken = ++currentLoadToken;
+
     allManagerNames = [];
     freeHitManagers = new Set();
     out.innerHTML = "";
-    loadingStatus.textContent = `Loading 0 of ${ids.length}...`;
+    loadingStatus.textContent = `Fetching latest data...`;
 
-    let loaded = 0;
-    for (const id of ids) {
-      try {
-        const data = await fetchManagerSquad(id, gw);
-        if (data) {
-          managerSquads.push(data);
-          allManagerNames.push(data.managerName);
-          if (data.isFreeHit) freeHitManagers.add(data.managerName);
-          loaded++;
-
-          loadingStatus.textContent = `Loading ${loaded} of ${ids.length}...`;
-
-          ownershipData = calculateOwnership(managerSquads);
-          const posFilter = positionFilter.value;
-          out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
-          attachPlayerButtons();
+    // Generate single cache-buster token for this load
+    const cacheBuster = Date.now().toString();
+    
+    // Fetch manager squads concurrently with limit of 8
+    const squadResults = await mapWithConcurrency(
+      ids,
+      8,
+      async (id) => {
+        try {
+          return await fetchManagerSquad(id, gw, cacheBuster);
+        } catch (e) {
+          console.error(`Failed to load manager ${id}:`, e);
+          return null;
         }
-      } catch (e) {
-        console.error(`Failed to load manager ${id}:`, e);
-        loaded++;
+      },
+      (completed, total) => {
+        loadingStatus.textContent = `Fetching ${completed}/${total}...`;
       }
+    );
+
+    // Check if this load has been superseded
+    if (loadToken !== currentLoadToken) {
+      console.log('Load superseded, aborting');
+      return;
     }
 
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${loaded} managers for GW${gw}</span>`;
+    // Filter out nulls and update data
+    const managerSquads = squadResults.filter((data): data is NonNullable<typeof data> => data !== null);
+    allManagerNames = managerSquads.map(data => data.managerName);
+    freeHitManagers = new Set(managerSquads.filter(data => data.isFreeHit).map(data => data.managerName));
+
+    // Calculate ownership and render table once at the end
+    ownershipData = calculateOwnership(managerSquads);
+    if (ownershipData.length > 0) {
+      const posFilter = positionFilter.value;
+      out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
+      attachPlayerButtons();
+    }
+
+    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${managerSquads.length} managers for GW${gw}</span>`;
   }
 
   async function init() {
