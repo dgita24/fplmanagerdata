@@ -136,15 +136,19 @@ import Nav from "../components/Nav.astro";
   .stat-item--or {
     cursor: pointer;
     transition: all 0.2s ease;
+    background: rgb(37 99 235 / 0.08);
+    border: 2px solid rgb(37 99 235 / 0.3);
   }
 
   .stat-item.stat-item--or:hover {
     background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
     transform: translateY(-2px);
   }
 
   .stat-value--clickable {
     color: var(--color-primary);
+    font-weight: 700;
   }
 
   .stat-item--or:hover .stat-value--clickable {
@@ -164,14 +168,45 @@ import Nav from "../components/Nav.astro";
     overflow-y: auto;
   }
 
+  .or-history-header {
+    display: grid;
+    grid-template-columns: 1fr 1px 1fr;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    border: 1px solid var(--color-border);
+  }
+
+  .or-history-divider {
+    background: var(--color-border);
+    width: 1px;
+  }
+
+  .or-history-header-label {
+    text-align: left;
+  }
+
+  .or-history-header-value {
+    text-align: right;
+  }
+
   .or-history-row {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1px 1fr;
     gap: var(--space-2);
     padding: var(--space-2);
     background: var(--color-surface-alt);
     border-radius: var(--radius-md);
     font-size: 14px;
+    align-items: center;
   }
 
   .or-history-row:hover {
@@ -925,9 +960,10 @@ import Nav from "../components/Nav.astro";
     }
     
     // Filter and sort by gameweek (event), filter out invalid/0 values
+    // Sort descending (latest GW first)
     const validHistory = current
       .filter((row: HistoryRow) => typeof row.event === 'number' && row.overall_rank > 0)
-      .sort((a: HistoryRow, b: HistoryRow) => a.event - b.event);
+      .sort((a: HistoryRow, b: HistoryRow) => b.event - a.event);
 
     if (validHistory.length === 0) {
       orHistoryModalContent.innerHTML = '<p class="status status--error">No rank history available.</p>';
@@ -939,12 +975,18 @@ import Nav from "../components/Nav.astro";
       <h2 class="modal-title or-modal-title">Overall Rank History</h2>
       <p class="text-muted or-modal-subtitle">${manager.managerName} - ${manager.teamName}</p>
       <div class="or-history-list">
+        <div class="or-history-header">
+          <span class="or-history-header-label">Gameweek</span>
+          <div class="or-history-divider"></div>
+          <span class="or-history-header-value">Overall Rank</span>
+        </div>
     `;
 
     for (const row of validHistory) {
       html += `
         <div class="or-history-row">
           <span class="or-history-label">GW ${row.event}</span>
+          <div class="or-history-divider"></div>
           <span class="or-history-value">${formatRank(row.overall_rank)}</span>
         </div>
       `;
