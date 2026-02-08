@@ -580,7 +580,7 @@ import Nav from "../components/Nav.astro";
     let maxGwPoints = -Infinity;
     sortedData.forEach(m => {
       if (m.gwPoints > maxGwPoints) maxGwPoints = m.gwPoints;
-    });;
+    });
 
     let html = `
       <div class="table-container">
@@ -599,7 +599,7 @@ import Nav from "../components/Nav.astro";
     `;
 
     let rank = 1;
-    for (const m of sortedData) { {
+    for (const m of sortedData) {
       const isTopScorer = m.gwPoints === maxGwPoints && maxGwPoints > 0;
       const rowClass = isTopScorer ? 'top-scorer-row' : '';
 
@@ -1106,7 +1106,6 @@ import Nav from "../components/Nav.astro";
 
     // Render table once at the end
     if (allManagerData.length > 0) {
-      allManagerData.sort((a, b) => b.totalPoints - a.totalPoints);
       out.innerHTML = makeStatsTable(allManagerData, gw);
       attachManagerButtons();
       attachStatsSortHandlers();
