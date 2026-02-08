@@ -6,6 +6,16 @@ export type FeaturedManager = {
 
 export const featuredManagers: FeaturedManager[] = [
   // Update this each season:
-  { name: "Example Manager 1", entryId: 12345, note: "Content creator" },
-  { name: "Example Manager 2", entryId: 67890, note: "Former player" },
+  { name: "Andy LTFPL", entryId: 44, note: "YouTube" },
+  { name: "FPL Harry", entryId: 1320, note: "YouTube" },
+  { name: "FPL Raptor", entryId: 1587, note: "YouTube" },
+  { name: "FPL Focal", entryId: 200, note: "YouTube" },
+  { name: "Ben Crellin", entryId: 6586, note: "Expert" },
+  { name: "Tom Dollimore", entryId: 497000, note: "Expert" },
+  { name: "Fabio Borges", entryId: 4783108, note: "Expert" },
+  { name: "Richard Clarke", entryId: 4290, note: "Green Arrow Pod" },
+  { name: "Tom Stephenson", entryId: 37434, note: "Expert" },
+  { name: "Matt Corbridge", entryId: 265852, note: "Expert" },
+  { name: "Pras", entryId: 3570, note: "YouTube" },
+  { name: "BigMan Bakar", entryId: 963, note: "FF Hub" },
 ];
