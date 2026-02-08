@@ -141,7 +141,7 @@ function injectGWPointsStyles() {
       margin-top: var(--space-1);
     }
   `;
-  
+
   document.head.appendChild(styleEl);
 }
 
