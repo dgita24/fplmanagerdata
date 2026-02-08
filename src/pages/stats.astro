@@ -578,9 +578,9 @@ import Nav from "../components/Nav.astro";
 
     // Find max for highlighting
     let maxGwPoints = -Infinity;
-    managersData.forEach(m => {
+    sortedData.forEach(m => {
       if (m.gwPoints > maxGwPoints) maxGwPoints = m.gwPoints;
-    });
+    });;
 
     let html = `
       <div class="table-container">
@@ -599,7 +599,7 @@ import Nav from "../components/Nav.astro";
     `;
 
     let rank = 1;
-    for (const m of managersData) {
+    for (const m of sortedData) { {
       const isTopScorer = m.gwPoints === maxGwPoints && maxGwPoints > 0;
       const rowClass = isTopScorer ? 'top-scorer-row' : '';
 
