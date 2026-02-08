@@ -2,7 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 ---
-<Layout title="Live League Standings - FPL Manager Data Test">
+<Layout title="Live League Standings - FPL Manager Data">
   <Nav />
 
   <main class="page">
@@ -439,9 +439,6 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  /**
-   * Concurrent mapping with limited concurrency
-   */
   async function mapWithConcurrency<T, R>(
     items: T[],
     limit: number,
@@ -476,7 +473,6 @@ import Nav from "../components/Nav.astro";
 
   async function fetchBootstrapData(cacheBuster?: string) {
     try {
-      // Use provided cache-buster or generate new one
       const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
@@ -514,7 +510,6 @@ import Nav from "../components/Nav.astro";
       const cacheKey = `${entryId}:${gw}`;
       let rawData = managerDataCache.get(cacheKey);
 
-      // Version timestamp to bust API cache - use provided or generate new
       const v = cacheBuster || Date.now().toString();
 
       if (!rawData) {
@@ -574,29 +569,32 @@ import Nav from "../components/Nav.astro";
 
       const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
 
-      // GROSS live points (sum of players, hit NOT subtracted)
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
 
       const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
       const transferCost =
         Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
 
-      // Nett = GW Points (Gross) - Hit
       const liveNet = livePointsBeforeHits - transferCost;
 
-      // === TOTAL POINTS CALCULATION (CRITICAL FIX) ===
-      // summary_overall_points: Official Total from API (Includes hit deduction already)
-      // summary_event_points: Official Event Points from API (Includes hit deduction already)
-      
-      const officialOverall = Number(summaryData.summary_overall_points) || 0;
-      const officialEvent = Number(summaryData.summary_event_points) || 0;
-      
-      // We calculate Live Total Points by starting with Official Total, subtracting Official Event (Net),
-      // and adding our calculated Live Gross points. This removes the "double deduction" of hits.
-      // Math: (Start Total) + Live Gross.
-      // Since Start Total = Official Overall - Official Event (Net, which includes hits),
-      // And Live Gross doesn't have hits, we end up with a Total that effectively ignores the hit visually until next GW.
-      const liveOverall = officialOverall - officialEvent + livePointsBeforeHits;
+      // =========================
+      // TOTAL POINTS (projected)
+      // =========================
+      let totalPoints = 0;
+
+      if (Number(gw) === Number(latestGW)) {
+        const prevGw = Number(gw) - 1;
+        const prevRow =
+          prevGw >= 1
+            ? historyRows.find((h: any) => Number(h.event) === prevGw)
+            : null;
+
+        const startOverall = Number(prevRow?.total_points) || 0;
+        totalPoints = startOverall + liveNet;
+      } else {
+        const gwRow = historyRows.find((h: any) => Number(h.event) === Number(gw));
+        totalPoints = Number(gwRow?.total_points) || 0;
+      }
 
       return {
         entryId,
@@ -604,9 +602,9 @@ import Nav from "../components/Nav.astro";
         teamName: summaryData.name || "",
         chipPlayed: chipCode === "None" ? "" : chipCode,
         transferCost,
-        livePointsBeforeHits, // Gross points for GW column
-        livePoints: liveNet,  // Net points for Nett column
-        totalPoints: liveOverall // Corrected Total Points
+        livePointsBeforeHits,
+        livePoints: liveNet,
+        totalPoints
       };
     } catch (e) {
       console.error(`Error fetching live data for manager ${entryId}:`, e);
@@ -769,7 +767,6 @@ import Nav from "../components/Nav.astro";
 
     playerModalContent.innerHTML = html;
     
-    // Make player name clickable to show GW points
     const playerNameEl = playerModalContent.querySelector('.player-modal-name');
     if (playerNameEl && gwPointsModal) {
       makePlayerNameClickable(playerNameEl, playerId, player.name, gwPointsModal, teamCache);
@@ -791,7 +788,6 @@ import Nav from "../components/Nav.astro";
     return 0;
   }
 
-  
   async function showSquadModal(entryId: number, managerName: string, teamName: string, chipPlayed: string, livePoints: number) {
     const gw = parseInt(gwFilterSelect.value) || latestGW;
 
@@ -831,7 +827,6 @@ import Nav from "../components/Nav.astro";
 
       const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
     
-      // Keep original positions for display
       const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
       const originalStarters = sorted.slice(0, 11);
       const originalBench = sorted.slice(11);
@@ -867,7 +862,6 @@ import Nav from "../components/Nav.astro";
         const capLabel = p.is_captain ? '<span class="cap-badge cap-c">C</span>' : 
                          p.is_vice_captain ? '<span class="cap-badge cap-v">V</span>' : '';
       
-        const mult = p.multiplier || 0;
         const isSubbedOut = p.autoSubStatus === 'OUT';
         const isNotStarted = p.status === "NS";
         const isLive = p.status === "Live";
@@ -904,7 +898,6 @@ import Nav from "../components/Nav.astro";
         `;
       }
 
-      // Show auto-subs who came on (from bench)
       const subbedInPlayers = originalBench.filter(p => p.autoSubStatus === 'IN');
       for (const p of subbedInPlayers) {
         const mult = p.multiplier || 1;
@@ -1099,26 +1092,20 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
-    // Generate load token for cancellation
     const loadToken = ++currentLoadToken;
-    
-    // Disable refresh button during loading
     refreshBtn.disabled = true;
     
     liveData = [];
     out.innerHTML = "";
     loadingStatus.textContent = `Fetching latest data...`;
 
-    // 1. CLEAR CACHES to ensure fresh data
     fixturesCache = [];
     livePointsCache.clear();
     projectedBonusCache.clear();
     teamStatusCache.clear();
 
-    // 2. Generate single cache-buster token for this load
     const cacheBuster = Date.now().toString();
     
-    // 3. Fetch Fixtures & Live Data in parallel with cache-buster
     try {
       await Promise.all([
         fetchFixtures({ 
@@ -1143,34 +1130,21 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
-    // Check if this load has been superseded
-    if (loadToken !== currentLoadToken) {
-      console.log('Load superseded, aborting');
-      return;
-    }
+    if (loadToken !== currentLoadToken) return;
 
-    // 4. Fetch manager data concurrently with limit of 8
     const managerDataResults = await mapWithConcurrency(
       ids,
       8,
-      async (id) => {
-        return await fetchManagerLive(id, gw, cacheBuster);
-      },
+      async (id) => await fetchManagerLive(id, gw, cacheBuster),
       (completed, total) => {
         loadingStatus.textContent = `Fetching ${completed}/${total}...`;
       }
     );
 
-    // Check again if this load has been superseded
-    if (loadToken !== currentLoadToken) {
-      console.log('Load superseded after fetching managers, aborting');
-      return;
-    }
+    if (loadToken !== currentLoadToken) return;
 
-    // 5. Filter out nulls and update liveData
     liveData = managerDataResults.filter((data): data is NonNullable<typeof data> => data !== null);
 
-    // 6. Render table once at the end
     if (liveData.length > 0) {
       const compareId = compareManagerSelect.value;
       out.innerHTML = makeLiveTable(liveData, compareId);
@@ -1180,8 +1154,6 @@ import Nav from "../components/Nav.astro";
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers</span>`;
     lastUpdatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
-    
-    // Re-enable refresh button
     refreshBtn.disabled = false;
   }
 
@@ -1216,7 +1188,6 @@ import Nav from "../components/Nav.astro";
   });
 
   refreshBtn.addEventListener('click', async () => {
-    // Clear manager data cache on manual refresh
     managerDataCache.clear();
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
