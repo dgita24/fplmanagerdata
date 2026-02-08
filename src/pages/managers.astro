@@ -216,9 +216,9 @@ import Nav from "../components/Nav.astro";
     left: 0;
     right: 0;
 
-    /* Covers Quick Start area on mobile */
-    height: 65vh;
-    max-height: 65vh;
+    /* Reduced height so Save stays visible on large phones */
+    height: 52vh;
+    max-height: 52vh;
 
     background: var(--color-surface, #111827);
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
@@ -275,20 +275,52 @@ import Nav from "../components/Nav.astro";
     gap: var(--space-2);
   }
 
+  /* Two-row layout:
+     Row 1: Name + note (same line)
+     Row 2: Checkbox + EntryID (same row) */
   .featured-item {
     display: grid;
-    grid-template-columns: 28px 1fr auto;
-    gap: var(--space-2);
-    align-items: center;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    gap: 6px;
     padding: var(--space-2);
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.03);
   }
 
-  .featured-item__meta {
+  .featured-item__topline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: baseline;
+  }
+
+  .featured-item__name {
+    font-weight: 700;
+  }
+
+  .featured-item__note {
     color: var(--color-text-muted);
     font-size: var(--text-sm);
+  }
+
+  .featured-item__bottomline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  .featured-item__left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .featured-item__id code {
+    font-family: var(--font-mono);
   }
 
   .top-sheet__footer {
@@ -346,10 +378,10 @@ import Nav from "../components/Nav.astro";
       width: 160px;
     }
 
-    /* On desktop, keep the sheet centered and a bit shorter */
+    /* Reduced desktop sheet height as well */
     .top-sheet {
-      height: 55vh;
-      max-height: 55vh;
+      height: 45vh;
+      max-height: 45vh;
       left: 50%;
       right: auto;
       width: min(720px, 96vw);
@@ -390,6 +422,12 @@ import Nav from "../components/Nav.astro";
       flex-basis: 100%;
       text-align: left;
       margin-top: var(--space-2);
+    }
+
+    /* Slightly shorter sheet on very small screens */
+    .top-sheet {
+      height: 48vh;
+      max-height: 48vh;
     }
   }
 </style>
@@ -599,17 +637,25 @@ import Nav from "../components/Nav.astro";
   function renderFeaturedList() {
     featuredListEl.innerHTML = featuredManagers.map((m) => {
       const safeName = escapeHtml(String(m.name ?? ''))
-      const safeNote = m.note ? `<div class="featured-item__meta">${escapeHtml(String(m.note))}</div>` : ''
+      const safeNote = m.note ? escapeHtml(String(m.note)) : ''
       const entryId = Number(m.entryId)
 
+      // Two-line layout in a single label:
+      // Line 1: name + note
+      // Line 2: checkbox + id
       return `
         <label class="featured-item">
-          <input type="checkbox" class="featured-check" data-id="${entryId}" />
-          <div>
-            <div><strong>${safeName}</strong></div>
-            ${safeNote}
+          <div class="featured-item__topline">
+            <span class="featured-item__name">${safeName}</span>
+            ${safeNote ? `<span class="featured-item__note">— ${safeNote}</span>` : ``}
           </div>
-          <div><code>${entryId}</code></div>
+
+          <div class="featured-item__bottomline">
+            <div class="featured-item__left">
+              <input type="checkbox" class="featured-check" data-id="${entryId}" />
+              <span class="featured-item__id"><code>${entryId}</code></span>
+            </div>
+          </div>
         </label>
       `
     }).join('')
