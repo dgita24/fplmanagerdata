@@ -22,9 +22,10 @@ describe('gwPointsModal - team name handling', () => {
       { round: 3, opponent_team: 3, was_home: true, minutes: 85, total_points: 12 },
     ];
 
-    // Simulate the mapping logic from gwPointsModal.js
+    // Simulate the mapping logic from gwPointsModal.js (with Number() coercion)
     const enrichedData = gwData.map(gw => {
-      const team = teamCache.get(gw.opponent_team);
+      const opponentTeamId = Number(gw.opponent_team);
+      const team = teamCache.get(opponentTeamId);
       const shortName = typeof team === 'string' ? team : team?.shortName;
       return {
         ...gw,
@@ -53,9 +54,42 @@ describe('gwPointsModal - team name handling', () => {
       { round: 3, opponent_team: 3, was_home: true, minutes: 85, total_points: 12 },
     ];
 
-    // Simulate the mapping logic from gwPointsModal.js
+    // Simulate the mapping logic from gwPointsModal.js (with Number() coercion)
     const enrichedData = gwData.map(gw => {
-      const team = teamCache.get(gw.opponent_team);
+      const opponentTeamId = Number(gw.opponent_team);
+      const team = teamCache.get(opponentTeamId);
+      const shortName = typeof team === 'string' ? team : team?.shortName;
+      return {
+        ...gw,
+        opponent_team_short: shortName || gw.opponent_team
+      };
+    });
+
+    expect(enrichedData[0].opponent_team_short).toBe('ARS');
+    expect(enrichedData[1].opponent_team_short).toBe('CHE');
+    expect(enrichedData[2].opponent_team_short).toBe('LIV');
+  });
+
+  /**
+   * Test: teamCache with object values and string opponent_team (type mismatch case)
+   * Should handle case where opponent_team comes as string from API but cache uses number keys
+   */
+  it('should handle type mismatch between string opponent_team and number cache keys', () => {
+    const teamCache = new Map();
+    teamCache.set(1, { name: 'Arsenal', shortName: 'ARS' });
+    teamCache.set(2, { name: 'Chelsea', shortName: 'CHE' });
+    teamCache.set(3, { name: 'Liverpool', shortName: 'LIV' });
+
+    const gwData = [
+      { round: 1, opponent_team: '1', was_home: true, minutes: 90, total_points: 8 }, // String '1'
+      { round: 2, opponent_team: '2', was_home: false, minutes: 90, total_points: 6 }, // String '2'
+      { round: 3, opponent_team: '3', was_home: true, minutes: 85, total_points: 12 }, // String '3'
+    ];
+
+    // Simulate the mapping logic from gwPointsModal.js (with Number() coercion)
+    const enrichedData = gwData.map(gw => {
+      const opponentTeamId = Number(gw.opponent_team);
+      const team = teamCache.get(opponentTeamId);
       const shortName = typeof team === 'string' ? team : team?.shortName;
       return {
         ...gw,
@@ -81,9 +115,10 @@ describe('gwPointsModal - team name handling', () => {
       { round: 2, opponent_team: 99, was_home: false, minutes: 90, total_points: 6 }, // Team 99 not in cache
     ];
 
-    // Simulate the mapping logic from gwPointsModal.js
+    // Simulate the mapping logic from gwPointsModal.js (with Number() coercion)
     const enrichedData = gwData.map(gw => {
-      const team = teamCache.get(gw.opponent_team);
+      const opponentTeamId = Number(gw.opponent_team);
+      const team = teamCache.get(opponentTeamId);
       const shortName = typeof team === 'string' ? team : team?.shortName;
       return {
         ...gw,
