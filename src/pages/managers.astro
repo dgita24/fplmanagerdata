@@ -65,11 +65,43 @@ import Nav from "../components/Nav.astro";
                 <span class="ids-count">Managers: <strong id="count">0</strong></span>
                 <button type="button" id="edit-btn" class="btn btn--neutral btn--full-width">✏️ Edit</button>
                 <button type="submit" id="save-btn" class="btn btn--success btn--full-width" disabled>💾 Save</button>
+
+                <button type="button" id="featured-open" class="linklike">
+                  Browse featured managers
+                </button>
               </div>
             </div>
           </form>
 
           <div id="status" style="margin-top: var(--space-3);"></div>
+        </div>
+      </section>
+
+      <!-- Featured managers top sheet (non-blocking; keeps textarea editable) -->
+      <section id="featured-sheet" class="top-sheet" aria-hidden="true">
+        <div class="top-sheet__header">
+          <div>
+            <div class="top-sheet__title">Featured managers</div>
+            <div class="top-sheet__subtitle">Select one or more, then add them to your list.</div>
+          </div>
+
+          <button type="button" id="featured-close" class="top-sheet__close" aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        <div class="top-sheet__body">
+          <div id="featured-list" class="featured-list"></div>
+        </div>
+
+        <div class="top-sheet__footer">
+          <div id="featured-status" class="top-sheet__status" aria-live="polite"></div>
+          <div class="top-sheet__actions">
+            <button type="button" id="featured-clear" class="btn btn--neutral">Clear</button>
+            <button type="button" id="featured-add" class="btn btn--success" disabled>
+              Add selected (0)
+            </button>
+          </div>
         </div>
       </section>
     </div>
@@ -163,6 +195,121 @@ import Nav from "../components/Nav.astro";
     cursor: not-allowed;
   }
 
+  /* Link-like button under Save */
+  .linklike {
+    margin-top: var(--space-1);
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: var(--color-primary);
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: var(--text-xs);
+    text-align: center;
+  }
+
+  /* --- Featured managers TOP SHEET --- */
+  .top-sheet {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+
+    /* Covers Quick Start area on mobile */
+    height: 65vh;
+    max-height: 65vh;
+
+    background: var(--color-surface, #111827);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    z-index: 1000;
+
+    transform: translateY(-105%);
+    transition: transform 220ms ease;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+  }
+
+  .top-sheet.is-open {
+    transform: translateY(0);
+  }
+
+  .top-sheet__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3);
+  }
+
+  .top-sheet__title {
+    font-weight: 700;
+  }
+
+  .top-sheet__subtitle {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    margin-top: 2px;
+  }
+
+  .top-sheet__close {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: inherit;
+    border-radius: 10px;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+  }
+
+  .top-sheet__body {
+    overflow: auto;
+    padding: 0 var(--space-3) var(--space-3);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .featured-list {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .featured-item {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    gap: var(--space-2);
+    align-items: center;
+    padding: var(--space-2);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .featured-item__meta {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  .top-sheet__footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.10);
+    padding: var(--space-2) var(--space-3);
+    background: rgba(0, 0, 0, 0.15);
+  }
+
+  .top-sheet__status {
+    min-height: 1.2em;
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-2);
+  }
+
+  .top-sheet__actions {
+    display: flex;
+    gap: var(--space-2);
+    justify-content: flex-end;
+  }
+
   /* Desktop ONLY: Shrink cards to content and center */
   @media (min-width: 640px) {
     .page {
@@ -198,6 +345,24 @@ import Nav from "../components/Nav.astro";
     .ids-actions {
       width: 160px;
     }
+
+    /* On desktop, keep the sheet centered and a bit shorter */
+    .top-sheet {
+      height: 55vh;
+      max-height: 55vh;
+      left: 50%;
+      right: auto;
+      width: min(720px, 96vw);
+      transform: translate(-50%, -105%);
+      border-left: 1px solid rgba(255, 255, 255, 0.12);
+      border-right: 1px solid rgba(255, 255, 255, 0.12);
+      border-bottom-left-radius: var(--radius-lg);
+      border-bottom-right-radius: var(--radius-lg);
+    }
+
+    .top-sheet.is-open {
+      transform: translate(-50%, 0);
+    }
   }
 
   @media (max-width: 360px) {
@@ -219,11 +384,19 @@ import Nav from "../components/Nav.astro";
       flex: 1;
       min-width: 80px;
     }
+
+    /* Ensure the linklike stays full width on tiny screens */
+    .linklike {
+      flex-basis: 100%;
+      text-align: left;
+      margin-top: var(--space-2);
+    }
   }
 </style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
+  import { featuredManagers } from '../data/featuredManagers'
 
   const authCheckDiv = document.getElementById('auth-check') as HTMLElement
   const loadingDiv = document.getElementById('loading') as HTMLElement
@@ -374,6 +547,136 @@ import Nav from "../components/Nav.astro";
       status.innerHTML = "<p class='status status--error'>❌ Error saving. Please try again.</p>"
     }
   }
+
+  // --- Featured managers top sheet ---
+  const featuredOpenBtn = document.getElementById('featured-open') as HTMLButtonElement
+  const featuredSheet = document.getElementById('featured-sheet') as HTMLElement
+  const featuredCloseBtn = document.getElementById('featured-close') as HTMLButtonElement
+  const featuredListEl = document.getElementById('featured-list') as HTMLElement
+  const featuredAddBtn = document.getElementById('featured-add') as HTMLButtonElement
+  const featuredClearBtn = document.getElementById('featured-clear') as HTMLButtonElement
+  const featuredStatusEl = document.getElementById('featured-status') as HTMLElement
+
+  const selectedFeaturedIds = new Set<number>()
+
+  function openFeaturedSheet() {
+    featuredSheet.classList.add('is-open')
+    featuredSheet.setAttribute('aria-hidden', 'false')
+  }
+
+  function closeFeaturedSheet() {
+    featuredSheet.classList.remove('is-open')
+    featuredSheet.setAttribute('aria-hidden', 'true')
+  }
+
+  function parseTextareaIds(): number[] {
+    const trimmed = textarea.value.trim()
+    if (!trimmed) return []
+    return trimmed
+      .split(/[\s,]+/)
+      .filter(x => x.match(/^\d+$/))
+      .map(x => parseInt(x, 10))
+  }
+
+  function updateFeaturedActions() {
+    featuredAddBtn.disabled = selectedFeaturedIds.size === 0
+    featuredAddBtn.textContent = `Add selected (${selectedFeaturedIds.size})`
+  }
+
+  function escapeHtml(s: string) {
+    return s.replace(/[&<>"']/g, (ch) => {
+      switch (ch) {
+        case '&': return '&amp;'
+        case '<': return '&lt;'
+        case '>': return '&gt;'
+        case '"': return '&quot;'
+        case "'": return '&#39;'
+        default: return ch
+      }
+    })
+  }
+
+  function renderFeaturedList() {
+    featuredListEl.innerHTML = featuredManagers.map((m) => {
+      const safeName = escapeHtml(String(m.name ?? ''))
+      const safeNote = m.note ? `<div class="featured-item__meta">${escapeHtml(String(m.note))}</div>` : ''
+      const entryId = Number(m.entryId)
+
+      return `
+        <label class="featured-item">
+          <input type="checkbox" class="featured-check" data-id="${entryId}" />
+          <div>
+            <div><strong>${safeName}</strong></div>
+            ${safeNote}
+          </div>
+          <div><code>${entryId}</code></div>
+        </label>
+      `
+    }).join('')
+
+    featuredListEl.querySelectorAll<HTMLInputElement>('input.featured-check').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const id = parseInt(cb.dataset.id || '', 10)
+        if (!Number.isFinite(id)) return
+
+        if (cb.checked) selectedFeaturedIds.add(id)
+        else selectedFeaturedIds.delete(id)
+
+        updateFeaturedActions()
+      })
+    })
+  }
+
+  function clearFeaturedSelection() {
+    selectedFeaturedIds.clear()
+    featuredListEl.querySelectorAll<HTMLInputElement>('input.featured-check').forEach(cb => { cb.checked = false })
+    updateFeaturedActions()
+  }
+
+  featuredOpenBtn?.addEventListener('click', () => {
+    if (!featuredListEl.dataset.rendered) {
+      renderFeaturedList()
+      featuredListEl.dataset.rendered = 'true'
+    }
+    featuredStatusEl.textContent = ''
+    openFeaturedSheet()
+  })
+
+  featuredCloseBtn?.addEventListener('click', () => closeFeaturedSheet())
+
+  featuredClearBtn?.addEventListener('click', () => {
+    featuredStatusEl.textContent = ''
+    clearFeaturedSelection()
+  })
+
+  featuredAddBtn?.addEventListener('click', () => {
+    if (selectedFeaturedIds.size === 0) return
+
+    // Auto-enable edit mode so textarea is editable
+    if (!isEditing) setEditMode(true)
+
+    const existing = new Set(parseTextareaIds())
+    const toAdd = [...selectedFeaturedIds].filter(id => !existing.has(id))
+
+    if (toAdd.length === 0) {
+      featuredStatusEl.textContent = 'All selected managers are already in your list.'
+      return
+    }
+
+    // Append to end (one per line)
+    const current = textarea.value.trim()
+    const appended = (current ? current + '\n' : '') + toAdd.join('\n')
+    textarea.value = appended + '\n'
+
+    updateCount()
+    featuredStatusEl.textContent = `Added ${toAdd.length} manager${toAdd.length === 1 ? '' : 's'}.`
+
+    // Stay open after add, allow adding more
+    clearFeaturedSelection()
+  })
+
+  // Initialize button text
+  updateFeaturedActions()
 
   checkAuth()
 </script>
