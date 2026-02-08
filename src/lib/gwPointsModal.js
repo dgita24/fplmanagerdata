@@ -106,30 +106,27 @@ export function initGWPointsModal(modalId = 'gw-points-modal') {
     // Sort by gameweek (round field)
     const sortedHistory = [...gwHistory].sort((a, b) => a.round - b.round);
 
-    // Split into two columns for better layout
-    const halfLength = Math.ceil(sortedHistory.length / 2);
-    const firstHalf = sortedHistory.slice(0, halfLength);
-    const secondHalf = sortedHistory.slice(halfLength);
-
+    // Single scrollable table
     let tableHTML = `
       <h2 class="gw-points-title">${playerName} - GW Points</h2>
-      <div class="gw-points-tables">
+      <div class="gw-points-table-wrapper">
         <table class="gw-points-table">
           <thead>
             <tr>
-              <th>GW</th>
-              <th>Opponent</th>
-              <th>Mins</th>
-              <th>Points</th>
+              <th class="gw-col">GW</th>
+              <th class="opp-col">Opponent</th>
+              <th class="mins-col">Mins</th>
+              <th class="pts-col">Points</th>
             </tr>
           </thead>
           <tbody>
     `;
 
-    firstHalf.forEach(gw => {
+    sortedHistory.forEach(gw => {
       const opponent = gw.opponent_team_short || gw.opponent_team || '—';
       const wasHome = gw.was_home;
-      const opponentStr = wasHome ? `vs ${opponent}` : `@ ${opponent}`;
+      // Format: 3-letter code (H) or (A)
+      const opponentStr = `${opponent} ${wasHome ? '(H)' : '(A)'}`;
       const minutes = gw.minutes || 0;
       const points = gw.total_points || 0;
       const pointsClass = points > 0 ? 'points-positive' : (points < 0 ? 'points-negative' : '');
@@ -147,48 +144,9 @@ export function initGWPointsModal(modalId = 'gw-points-modal') {
     tableHTML += `
           </tbody>
         </table>
+      </div>
     `;
-
-    // Add second table if we have data
-    if (secondHalf.length > 0) {
-      tableHTML += `
-        <table class="gw-points-table">
-          <thead>
-            <tr>
-              <th>GW</th>
-              <th>Opponent</th>
-              <th>Mins</th>
-              <th>Points</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-
-      secondHalf.forEach(gw => {
-        const opponent = gw.opponent_team_short || gw.opponent_team || '—';
-        const wasHome = gw.was_home;
-        const opponentStr = wasHome ? `vs ${opponent}` : `@ ${opponent}`;
-        const minutes = gw.minutes || 0;
-        const points = gw.total_points || 0;
-        const pointsClass = points > 0 ? 'points-positive' : (points < 0 ? 'points-negative' : '');
-        
-        tableHTML += `
-          <tr>
-            <td class="gw-col">${gw.round}</td>
-            <td class="opp-col">${opponentStr}</td>
-            <td class="mins-col">${minutes}</td>
-            <td class="pts-col ${pointsClass}">${points}</td>
-          </tr>
-        `;
-      });
-
-      tableHTML += `
-          </tbody>
-        </table>
-      `;
-    }
-
-    tableHTML += `</div>`;
+    
     modalContent.innerHTML = tableHTML;
   }
 
