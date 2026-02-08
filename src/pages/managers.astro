@@ -524,7 +524,7 @@ import Nav from "../components/Nav.astro";
   function updateCount() {
     const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
     countEl.textContent = String(ids.length)
-    if (ids.length > 50) {
+    if (ids.length > 35) {
       countEl.style.color = "var(--color-danger)"
       countEl.textContent = `${ids.length} (max 50!)`
     } else {
@@ -562,7 +562,7 @@ import Nav from "../components/Nav.astro";
       return
     }
 
-    if (ids.length > 50) {
+    if (ids.length > 35) {
       status.innerHTML = "<p class='status status--error'>⚠️ Maximum 50 managers allowed.</p>"
       return
     }
