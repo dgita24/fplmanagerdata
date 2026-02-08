@@ -50,9 +50,10 @@ export function initGWPointsModal(modalId = 'gw-points-modal') {
       if (teamCache) {
         return history.map(gw => {
           const team = teamCache.get(gw.opponent_team);
+          const shortName = typeof team === 'string' ? team : team?.shortName;
           return {
             ...gw,
-            opponent_team_short: team?.shortName || gw.opponent_team
+            opponent_team_short: shortName || gw.opponent_team
           };
         });
       }
@@ -103,8 +104,8 @@ export function initGWPointsModal(modalId = 'gw-points-modal') {
       return;
     }
 
-    // Sort by gameweek (round field)
-    const sortedHistory = [...gwHistory].sort((a, b) => a.round - b.round);
+    // Sort by gameweek (round field) - newest first
+    const sortedHistory = [...gwHistory].sort((a, b) => b.round - a.round);
 
     // Single scrollable table
     let tableHTML = `
