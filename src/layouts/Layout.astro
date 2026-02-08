@@ -1625,13 +1625,13 @@ const { title = "FPL Manager Data" } = Astro.props;
   .stats-table th.sortable-col {
     cursor: pointer;
     user-select: none;
-    color: var(--color-primary) !important; /* makes it look clickable */
+    color: var(--color-primary) !important; /* clickable hint */
   }
 
   .transfers-table th.sortable-col.is-sorted,
   .live-table th.sortable-col.is-sorted,
   .stats-table th.sortable-col.is-sorted {
-    color: var(--color-text) !important; /* stronger contrast for active column */
+    color: #f59e0b !important; /* active sorted column: amber/gold */
     text-decoration: underline;
     text-underline-offset: 3px;
   }
@@ -1639,11 +1639,10 @@ const { title = "FPL Manager Data" } = Astro.props;
   .transfers-table th.sortable-col:focus-visible,
   .live-table th.sortable-col:focus-visible,
   .stats-table th.sortable-col:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: 2px solid #f59e0b; /* match highlight colour */
     outline-offset: 2px;
     border-radius: 4px;
   }
-
   /* ========================================
      OWNERSHIP TABLE - Balanced compact columns
    ======================================== */
