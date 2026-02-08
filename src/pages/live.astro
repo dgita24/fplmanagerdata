@@ -1000,7 +1000,7 @@ import Nav from "../components/Nav.astro";
             <td class="col-team">${p.teamShort}</td>
             <td class="col-pts">${
               (p.multiplier || 0) === 0
-                ? `<span class="text-muted">0</span>`
+                ? `<span class="text-muted">${Math.round(p.liveTotal)}</span>`
                 : ((p.multiplier || 1) > 1
                     ? `${p.liveTotal}×${p.multiplier}`
                     : `${Math.round(p.liveTotal * (p.multiplier || 1))}`)
