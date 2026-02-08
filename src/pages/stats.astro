@@ -521,9 +521,60 @@ import Nav from "../components/Nav.astro";
     return `£${(value / 10).toFixed(1)}m`;
   }
 
+  // ==============================
+  // Stats table sorting (client-side)
+  // Default: Total desc
+  // ==============================
+  let statsSortKey: "gwPoints" | "totalPoints" | "overallRank" = "totalPoints";
+  let statsSortDir: "asc" | "desc" = "desc";
+
+  function normalizeNumber(v: any) {
+    if (v === null || v === undefined || v === "") return Number.NEGATIVE_INFINITY;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
+  }
+
+  function sortStatsRows(rows: any[]) {
+    const copy = [...rows];
+    copy.sort((a, b) => {
+      const av = normalizeNumber(a?.[statsSortKey]);
+      const bv = normalizeNumber(b?.[statsSortKey]);
+      const delta = av - bv;
+      return statsSortDir === "asc" ? delta : -delta;
+    });
+    return copy;
+  }
+
+  function setStatsSort(nextKey: typeof statsSortKey) {
+    if (nextKey === statsSortKey) {
+      statsSortDir = statsSortDir === "asc" ? "desc" : "asc";
+      return;
+    }
+    statsSortKey = nextKey;
+
+    // default direction by column
+    statsSortDir = nextKey === "overallRank" ? "asc" : "desc";
+  }
+
+  function attachStatsSortHandlers() {
+    document.querySelectorAll(".stats-table th[data-sort]").forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.getAttribute("data-sort") as typeof statsSortKey | null;
+        if (!key) return;
+
+        setStatsSort(key);
+
+        // re-render instantly with current GW selection (no refetch)
+        const gw = parseInt(gwFilterSelect.value) || latestGW;
+        out.innerHTML = makeStatsTable(allManagerData, gw);
+        attachManagerButtons();
+        attachStatsSortHandlers();
+      });
+    });
+  }
+
   function makeStatsTable(managersData: ManagerData[], gw: number): string {
-    // Sort by Total Points (descending) as default for Stats page
-    managersData.sort((a, b) => b.totalPoints - a.totalPoints);
+    const sortedData = sortStatsRows(managersData);
 
     // Find max for highlighting
     let maxGwPoints = -Infinity;
@@ -539,9 +590,9 @@ import Nav from "../components/Nav.astro";
               <tr>
                 <th class="rank-col">#</th>
                 <th>Manager</th>
-                <th class="pts-col">GW</th>
-                <th class="total-col">Total</th>
-                <th class="or-col">OR</th>
+                <th class="pts-col sortable-col ${statsSortKey === "gwPoints" ? "is-sorted" : ""}" data-sort="gwPoints">GW</th>
+                <th class="total-col sortable-col ${statsSortKey === "totalPoints" ? "is-sorted" : ""}" data-sort="totalPoints">Total</th>
+                <th class="or-col sortable-col ${statsSortKey === "overallRank" ? "is-sorted" : ""}" data-sort="overallRank">OR</th>
               </tr>
             </thead>
             <tbody>
@@ -1058,6 +1109,7 @@ import Nav from "../components/Nav.astro";
       allManagerData.sort((a, b) => b.totalPoints - a.totalPoints);
       out.innerHTML = makeStatsTable(allManagerData, gw);
       attachManagerButtons();
+      attachStatsSortHandlers();
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allManagerData.length} managers</span>`;
