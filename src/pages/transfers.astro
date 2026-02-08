@@ -361,10 +361,16 @@ import Nav from "../components/Nav.astro";
   let sortKey = "totalPoints"; // "transferCost" | "gwPoints" | "totalPoints" | "FTsForNextGW"
   let sortDir = "desc";        // "asc" | "desc"
 
+  let lastRenderedRows: any[] = [];
+
   function normalizeNumber(v) {
     if (v === null || v === undefined || v === "") return Number.NEGATIVE_INFINITY;
     const n = Number(v);
     return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
+  }
+
+  function hasAnyHits(rows: any[]) {
+    return rows.some(r => Number(r?.transferCost || 0) > 0);
   }
 
   function sortRows(rows) {
@@ -378,14 +384,36 @@ import Nav from "../components/Nav.astro";
     return copy;
   }
 
-  function setSort(nextKey) {
+  function setSort(nextKey: string) {
+    // Special case: Hit column ("transferCost")
+    if (nextKey === "transferCost") {
+      // If all hits are 0 in the CURRENT view, fall back to Total desc
+      if (!hasAnyHits(lastRenderedRows)) {
+        sortKey = "totalPoints";
+        sortDir = "desc";
+        return;
+      }
+
+      // First time clicking Hit: default to DESC (highest hits first)
+      if (sortKey !== "transferCost") {
+        sortKey = "transferCost";
+        sortDir = "desc";
+        return;
+      }
+
+      // Clicking Hit again toggles direction
+      sortDir = sortDir === "asc" ? "desc" : "asc";
+      return;
+    }
+
+    // Default behavior for other columns
     if (nextKey === sortKey) {
       sortDir = sortDir === "asc" ? "desc" : "asc";
       return;
     }
+
     sortKey = nextKey;
-    // default direction by column
-    sortDir = nextKey === "transferCost" ? "asc" : "desc";
+    sortDir = "desc";
   }
 
   function attachSortHandlers() {
@@ -680,7 +708,9 @@ import Nav from "../components/Nav.astro";
         }
       });
     }
-   
+    
+    lastRenderedRows = rows;
+
     rows = sortRows(rows);
 
     let html = `
