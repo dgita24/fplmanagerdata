@@ -391,6 +391,57 @@ import Nav from "../components/Nav.astro";
   let teamStatusCache = new Map<string, TeamStatus>();
   let fixturesCache: FixtureInfo[] = [];
   
+  // ==============================
+  // Live table sorting (client-side)
+  // Default: Total desc
+  // ==============================
+  let liveSortKey: "livePointsBeforeHits" | "transferCost" | "livePoints" | "totalPoints" | "diff" = "totalPoints";
+  let liveSortDir: "asc" | "desc" = "desc";
+
+  function normalizeNumber(v: any) {
+    if (v === null || v === undefined || v === "") return Number.NEGATIVE_INFINITY;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
+  }
+
+  function sortLiveRows(rows: any[]) {
+    const copy = [...rows];
+    copy.sort((a, b) => {
+      const av = normalizeNumber(a?.[liveSortKey]);
+      const bv = normalizeNumber(b?.[liveSortKey]);
+      const delta = av - bv; // asc
+      return liveSortDir === "asc" ? delta : -delta;
+    });
+    return copy;
+  }
+
+  function setLiveSort(nextKey: typeof liveSortKey) {
+    if (nextKey === liveSortKey) {
+      liveSortDir = liveSortDir === "asc" ? "desc" : "asc";
+      return;
+    }
+    liveSortKey = nextKey;
+    // default direction by column
+    liveSortDir = nextKey === "transferCost" ? "asc" : "desc";
+  }
+
+  function attachLiveSortHandlers() {
+    document.querySelectorAll(".live-table th[data-sort]").forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.getAttribute("data-sort") as typeof liveSortKey | null;
+        if (!key) return;
+
+        setLiveSort(key);
+
+        // Re-render without refetch
+        const compareId = compareManagerSelect.value;
+        out.innerHTML = makeLiveTable(liveData, compareId);
+        attachManagerButtons();
+        attachLiveSortHandlers();
+      });
+    });
+  }
+
   // Load token for cancellation
   let currentLoadToken = 0;
 
@@ -996,11 +1047,26 @@ import Nav from "../components/Nav.astro";
   }
 
   function makeLiveTable(managers: any[], compareToId = "") {
-    const sorted = [...managers].sort((a, b) => b.totalPoints - a.totalPoints);
+    const base = [...managers];
 
-    const leader = sorted[0];
-    const compareManager = compareToId ? sorted.find(m => m.entryId.toString() === compareToId) : leader;
+    // Determine compare target (leader or selected manager)
+    const leader = [...base].sort((a, b) => b.totalPoints - a.totalPoints)[0];
+    const compareManager = compareToId ? base.find(m => m.entryId.toString() === compareToId) : leader;
 
+    // Compute numeric diff (used for display + sorting)
+    base.forEach(m => {
+      m.diff = m.totalPoints - (compareManager?.totalPoints || 0);
+    });
+
+    // Sort AFTER diff exists
+    const sorted = sortLiveRows(base);
+
+    let maxGwPoints = -Infinity;
+    sorted.forEach(m => {
+      if (m.livePoints > maxGwPoints) {
+        maxGwPoints = m.livePoints;
+      }
+    });
     let maxGwPoints = -Infinity;
     sorted.forEach(m => {
       if (m.livePoints > maxGwPoints) {
@@ -1016,11 +1082,11 @@ import Nav from "../components/Nav.astro";
               <tr>
                 <th class="rank-col">#</th>
                 <th>Manager</th>
-                <th class="gw-col">GW</th>
-                <th class="hit-col">Hit</th>
-                <th class="nett-col">Nett</th>
-                <th class="total-col">Total</th>
-                <th class="diff-col">Diff</th>
+                <th class="gw-col sortable-col ${liveSortKey === "livePointsBeforeHits" ? "is-sorted" : ""}" data-sort="livePointsBeforeHits">GW</th>
+                <th class="hit-col sortable-col ${liveSortKey === "transferCost" ? "is-sorted" : ""}" data-sort="transferCost">Hit</th>
+                <th class="nett-col sortable-col ${liveSortKey === "livePoints" ? "is-sorted" : ""}" data-sort="livePoints">Nett</th>
+                <th class="total-col sortable-col ${liveSortKey === "totalPoints" ? "is-sorted" : ""}" data-sort="totalPoints">Total</th>
+                <th class="diff-col sortable-col ${liveSortKey === "diff" ? "is-sorted" : ""}" data-sort="diff">Diff</th>
               </tr>
             </thead>
             <tbody>
@@ -1028,7 +1094,7 @@ import Nav from "../components/Nav.astro";
 
     let rank = 1;
     for (const m of sorted) {
-      const diffOverall = m.totalPoints - (compareManager?.totalPoints || 0);
+      const diffOverall = m.diff;
       const diffText = diffOverall > 0 ? `+${diffOverall}` : diffOverall === 0 ? "—" : `${diffOverall}`;
 
       const isTopScorer = m.livePoints === maxGwPoints;
@@ -1149,6 +1215,7 @@ import Nav from "../components/Nav.astro";
       const compareId = compareManagerSelect.value;
       out.innerHTML = makeLiveTable(liveData, compareId);
       attachManagerButtons();
+      attachLiveSortHandlers();
       populateCompareManager();
     }
 
@@ -1185,6 +1252,7 @@ import Nav from "../components/Nav.astro";
     const compareId = compareManagerSelect.value;
     out.innerHTML = makeLiveTable(liveData, compareId);
     attachManagerButtons();
+    attachLiveSortHandlers();
   });
 
   refreshBtn.addEventListener('click', async () => {
