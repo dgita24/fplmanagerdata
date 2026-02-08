@@ -354,6 +354,54 @@ import Nav from "../components/Nav.astro";
       .replaceAll("'", "&#039;");
   }
 
+  // ==============================
+  // Table sorting (client-side)
+  // Default: Total desc
+  // ==============================
+  let sortKey = "totalPoints"; // "transferCost" | "gwPoints" | "totalPoints" | "FTsForNextGW"
+  let sortDir = "desc";        // "asc" | "desc"
+
+  function normalizeNumber(v) {
+    if (v === null || v === undefined || v === "") return Number.NEGATIVE_INFINITY;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
+  }
+
+  function sortRows(rows) {
+    const copy = [...rows];
+    copy.sort((a, b) => {
+      const av = normalizeNumber(a?.[sortKey]);
+      const bv = normalizeNumber(b?.[sortKey]);
+      const delta = av - bv; // ascending
+      return sortDir === "asc" ? delta : -delta;
+    });
+    return copy;
+  }
+
+  function setSort(nextKey) {
+    if (nextKey === sortKey) {
+      sortDir = sortDir === "asc" ? "desc" : "asc";
+      return;
+    }
+    sortKey = nextKey;
+    // default direction by column
+    sortDir = nextKey === "transferCost" ? "asc" : "desc";
+  }
+
+  function attachSortHandlers() {
+    document.querySelectorAll(".transfers-table th[data-sort]").forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.getAttribute("data-sort");
+        if (!key) return;
+
+        setSort(key);
+
+        // Re-render the table using the currently selected GW filter
+        filterByGW();
+      });
+    });
+  }
+
   function transferLineHtml(playerOut, playerIn) {
     return `
       <div style="display:flex; align-items:center; gap:var(--space-2); padding:var(--space-2); margin:var(--space-1) 0; border:1px solid var(--color-border); border-radius:var(--radius-md); font-size:var(--text-sm); flex-wrap:wrap;">
@@ -619,7 +667,6 @@ import Nav from "../components/Nav.astro";
     if (filterGW !== null && filterGW !== "") {
       const gwNum = Number(filterGW);
       rows = rows.filter(r => r.gw === gwNum);
-      rows.sort((a, b) => b.totalPoints - a.totalPoints);
     } else {
       rows.sort((a,b) => a.managerName.localeCompare(b.managerName) || a.gw - b.gw);
     }
@@ -633,6 +680,8 @@ import Nav from "../components/Nav.astro";
         }
       });
     }
+   
+    rows = sortRows(rows);
 
     let html = `
       <div class="table-container">
@@ -641,10 +690,10 @@ import Nav from "../components/Nav.astro";
             <thead>
               <tr>
                 <th>Manager</th>
-                <th class="hit-col">Hit</th>
-                <th class="gwpts-col">GW Pts</th>
-                <th class="total-col">Total</th>
-                <th class="fts-col">FTs</th>
+                <th class="hit-col sortable-col ${sortKey === "transferCost" ? "is-sorted" : ""}" data-sort="transferCost">Hit</th>
+                <th class="gwpts-col sortable-col ${sortKey === "gwPoints" ? "is-sorted" : ""}" data-sort="gwPoints">GW Pts</th>
+                <th class="total-col sortable-col ${sortKey === "totalPoints" ? "is-sorted" : ""}" data-sort="totalPoints">Total</th>
+                <th class="fts-col sortable-col ${sortKey === "FTsForNextGW" ? "is-sorted" : ""}" data-sort="FTsForNextGW">FTs</th>
               </tr>
             </thead>
             <tbody>
@@ -746,6 +795,7 @@ import Nav from "../components/Nav.astro";
     if (allHistories.length > 0) {
       out.innerHTML = makeTable(allHistories, "");
       attachManagerLinks();
+      attachSortHandlers();
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allHistories.length} managers</span>`;
@@ -774,6 +824,7 @@ import Nav from "../components/Nav.astro";
     const filterGW = gwFilterSelect.value;
     out.innerHTML = makeTable(allHistories, filterGW);
     attachManagerLinks();
+    attachSortHandlers();
   }
 
   (async function init() {
