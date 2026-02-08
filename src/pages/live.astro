@@ -1067,13 +1067,7 @@ import Nav from "../components/Nav.astro";
         maxGwPoints = m.livePoints;
       }
     });
-    let maxGwPoints = -Infinity;
-    sorted.forEach(m => {
-      if (m.livePoints > maxGwPoints) {
-        maxGwPoints = m.livePoints;
-      }
-    });
-
+    
     let html = `
       <div class="table-container">
         <div class="table-scroll">
