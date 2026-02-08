@@ -1618,21 +1618,27 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ========================================
-     TRANSFERS TABLE - Sorting header affordance
+     TABLES - Sorting header affordance
    ======================================== */
-  .transfers-table th.sortable-col {
+  .transfers-table th.sortable-col,
+  .live-table th.sortable-col,
+  .stats-table th.sortable-col {
     cursor: pointer;
     user-select: none;
     color: var(--color-primary) !important; /* makes it look clickable */
   }
 
-  .transfers-table th.sortable-col.is-sorted {
+  .transfers-table th.sortable-col.is-sorted,
+  .live-table th.sortable-col.is-sorted,
+  .stats-table th.sortable-col.is-sorted {
     color: var(--color-text) !important; /* stronger contrast for active column */
     text-decoration: underline;
     text-underline-offset: 3px;
   }
 
-  .transfers-table th.sortable-col:focus-visible {
+  .transfers-table th.sortable-col:focus-visible,
+  .live-table th.sortable-col:focus-visible,
+  .stats-table th.sortable-col:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
     border-radius: 4px;
