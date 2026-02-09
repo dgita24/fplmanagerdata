@@ -343,94 +343,97 @@ const navLinks = [
 <script>
   import { supabase } from '../lib/supabase.ts'
 
-  const menuToggle = document.getElementById('menu-toggle');
-  const menuClose = document.getElementById('menu-close');
-  const navMenu = document.getElementById('nav-menu');
+  document.addEventListener('astro:page-load', () => {
+    const menuToggle = document.getElementById('menu-toggle');
+    const menuClose = document.getElementById('menu-close');
+    const navMenu = document.getElementById('nav-menu');
 
-  function openMenu() {
-    navMenu?.classList.add('is-open');
-    menuToggle?.setAttribute('aria-expanded', 'true');
-    document.body.style.overflow = 'hidden';
-  }
+    function openMenu() {
+      navMenu?.classList.add('is-open');
+      menuToggle?.setAttribute('aria-expanded', 'true');
+      document.body.style.overflow = 'hidden';
+    }
 
-  function closeMenu() {
-    navMenu?.classList.remove('is-open');
-    menuToggle?.setAttribute('aria-expanded', 'false');
-    document.body.style.overflow = '';
-  }
+    function closeMenu() {
+      navMenu?.classList.remove('is-open');
+      menuToggle?.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+    }
 
-  menuToggle?.addEventListener('click', openMenu);
-  menuClose?.addEventListener('click', closeMenu);
+    menuToggle?.addEventListener('click', openMenu);
+    menuClose?.addEventListener('click', closeMenu);
 
-  navMenu?.querySelectorAll('.nav-link').forEach(link => {
-    if (link.classList.contains('nav-link--no-hover')) return;
-    link.addEventListener('click', closeMenu);
-  });
+    navMenu?.querySelectorAll('.nav-link').forEach(link => {
+      if (link.classList.contains('nav-link--no-hover')) return;
+      link.addEventListener('click', closeMenu);
+    });
 
-  const themeToggle = document.getElementById('theme-toggle');
-  
-  function getStoredTheme() {
-    const stored = localStorage.getItem('theme');
-    if (stored) return stored;
-    return 'dark';
-  }
+    const themeToggle = document.getElementById('theme-toggle');
+    
+    function getStoredTheme() {
+      const stored = localStorage.getItem('theme');
+      if (stored) return stored;
+      return 'dark';
+    }
 
-  function setTheme(theme: string) {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-  }
+    function setTheme(theme: string) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('theme', theme);
+    }
 
-  setTheme(getStoredTheme());
+    // Ensure theme is set correctly on page load
+    setTheme(getStoredTheme());
 
-  themeToggle?.addEventListener('click', () => {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-  });
+    themeToggle?.addEventListener('click', () => {
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+      setTheme(newTheme);
+    });
 
-  const navAuthMobile = document.getElementById('nav-auth-mobile');
-  const navAuthDesktop = document.getElementById('nav-auth-desktop');
+    const navAuthMobile = document.getElementById('nav-auth-mobile');
+    const navAuthDesktop = document.getElementById('nav-auth-desktop');
 
-  async function updateAuthUI() {
-    const { data: { user } } = await supabase.auth.getUser();
+    async function updateAuthUI() {
+      const { data: { user } } = await supabase.auth.getUser();
 
-    if (user) {
-      // Mobile: logout button in header (next to X)
-      if (navAuthMobile) {
-        navAuthMobile.innerHTML = `
-          <button id="logout-btn-mobile" class="btn btn--danger btn--small" type="button">Logout</button>
-        `;
-        document.getElementById('logout-btn-mobile')?.addEventListener('click', async () => {
-          await supabase.auth.signOut();
-          window.location.href = '/login';
-        });
-      }
+      if (user) {
+        // Mobile: logout button in header (next to X)
+        if (navAuthMobile) {
+          navAuthMobile.innerHTML = `
+            <button id="logout-btn-mobile" class="btn btn--danger btn--small" type="button">Logout</button>
+          `;
+          document.getElementById('logout-btn-mobile')?.addEventListener('click', async () => {
+            await supabase.auth.signOut();
+            window.location.href = '/login';
+          });
+        }
 
-      // Desktop: user + logout
-      if (navAuthDesktop) {
-        navAuthDesktop.innerHTML = `
-          <span class="nav-user">${user.email?.split('@')[0] || 'User'}</span>
-          <button id="logout-btn-desktop" class="btn btn--neutral btn--small" type="button">Logout</button>
-        `;
-        document.getElementById('logout-btn-desktop')?.addEventListener('click', async () => {
-          await supabase.auth.signOut();
-          window.location.href = '/login';
-        });
-      }
-    } else {
-      // Not logged in
-      if (navAuthMobile) {
-        navAuthMobile.innerHTML = '';
-      }
-      if (navAuthDesktop) {
-        navAuthDesktop.innerHTML = `<a href="/login" class="btn btn--neutral btn--small">Login</a>`;
+        // Desktop: user + logout
+        if (navAuthDesktop) {
+          navAuthDesktop.innerHTML = `
+            <span class="nav-user">${user.email?.split('@')[0] || 'User'}</span>
+            <button id="logout-btn-desktop" class="btn btn--neutral btn--small" type="button">Logout</button>
+          `;
+          document.getElementById('logout-btn-desktop')?.addEventListener('click', async () => {
+            await supabase.auth.signOut();
+            window.location.href = '/login';
+          });
+        }
+      } else {
+        // Not logged in
+        if (navAuthMobile) {
+          navAuthMobile.innerHTML = '';
+        }
+        if (navAuthDesktop) {
+          navAuthDesktop.innerHTML = `<a href="/login" class="btn btn--neutral btn--small">Login</a>`;
+        }
       }
     }
-  }
 
-  updateAuthUI();
-
-  supabase.auth.onAuthStateChange(() => {
     updateAuthUI();
+
+    supabase.auth.onAuthStateChange(() => {
+      updateAuthUI();
+    });
   });
 </script>

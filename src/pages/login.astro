@@ -107,34 +107,38 @@ import Layout from "../layouts/Layout.astro";
 <script>
   import { supabase } from '../lib/supabase.ts'
 
-  const form = document.getElementById('login-form') as HTMLFormElement
-  const errorMessage = document.getElementById('error-message') as HTMLElement
-  const successMessage = document.getElementById('success-message') as HTMLElement
+  document.addEventListener('astro:page-load', () => {
+    const form = document.getElementById('login-form') as HTMLFormElement
+    const errorMessage = document.getElementById('error-message') as HTMLElement
+    const successMessage = document.getElementById('success-message') as HTMLElement
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault()
+    if (!form) return;
 
-    errorMessage.style.display = 'none'
-    successMessage.style.display = 'none'
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault()
 
-    const email = (document.getElementById('email') as HTMLInputElement).value
-    const password = (document.getElementById('password') as HTMLInputElement).value
+      errorMessage.style.display = 'none'
+      successMessage.style.display = 'none'
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+      const email = (document.getElementById('email') as HTMLInputElement).value
+      const password = (document.getElementById('password') as HTMLInputElement).value
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) {
+        errorMessage.textContent = error.message
+        errorMessage.style.display = 'block'
+      } else {
+        successMessage.textContent = 'Login successful! Redirecting...'
+        successMessage.style.display = 'block'
+
+        setTimeout(() => {
+          window.location.href = '/managers'
+        }, 1000)
+      }
     })
-
-    if (error) {
-      errorMessage.textContent = error.message
-      errorMessage.style.display = 'block'
-    } else {
-      successMessage.textContent = 'Login successful! Redirecting...'
-      successMessage.style.display = 'block'
-
-      setTimeout(() => {
-        window.location.href = '/managers'
-      }, 1000)
-    }
-  })
+  });
 </script>
