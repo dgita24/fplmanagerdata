@@ -243,8 +243,9 @@ import Nav from "../components/Nav.astro";
   import { supabase } from '../lib/supabase.ts'
   // We only need fetchLiveGW/fetchFixtures for the Modal details now, not the main table
   import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { globalCache, clearCache } from '../lib/globalStore.ts';
 
-  const managerStatsCache = new Map<string, any>();
+  const managerStatsCache = globalCache.stats.summary;
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -277,12 +278,12 @@ import Nav from "../components/Nav.astro";
   let currentGWFinished = false;
   let managerIds: number[] = [];
   let allManagerData: ManagerData[] = [];
-  let playerCache = new Map<number, { name: string; position: number; team: number }>();
-  let teamCache = new Map<number, { name: string; shortName: string }>();
-  let livePointsCache = new Map<number, LiveStatLine>();
-  let projectedBonusCache = new Map<string, number>();
-  let teamStatusCache = new Map<string, TeamStatus>();
-  let fixturesCache: FixtureInfo[] = [];
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
+  let livePointsCache = globalCache.live.points;
+  let projectedBonusCache = globalCache.live.projectedBonus;
+  let teamStatusCache = globalCache.live.teamStatus;
+  let fixturesCache = globalCache.live.fixtures;
   
   // Load token for cancellation
   let currentLoadToken = 0;
@@ -314,14 +315,28 @@ import Nav from "../components/Nav.astro";
     summaryData: any;
   }
 
-  const out = document.getElementById("stats-output")!;
-  const loadingStatus = document.getElementById("loading-status")!;
-  const managerCountEl = document.getElementById("manager-count")!;
-  const refreshBtn = document.getElementById("refresh-btn")!;
-  const gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
-  const statsModal = document.getElementById("stats-modal")!;
-  const statsModalContent = document.getElementById("stats-modal-content")!;
-  const closeStatsModal = document.getElementById("close-stats-modal")!;
+  let out: HTMLElement;
+  let loadingStatus: HTMLElement;
+  let managerCountEl: HTMLElement;
+  let refreshBtn: HTMLButtonElement;
+  let gwFilterSelect: HTMLSelectElement;
+  let statsModal: HTMLElement;
+  let statsModalContent: HTMLElement;
+  let closeStatsModal: HTMLElement;
+  let orModal: HTMLElement;
+  let orModalContent: HTMLElement;
+  let closeOrModal: HTMLElement;
+
+  document.addEventListener('astro:page-load', () => {
+    // Initialize DOM elements
+    out = document.getElementById("stats-output")!;
+    loadingStatus = document.getElementById("loading-status")!;
+    managerCountEl = document.getElementById("manager-count")!;
+    refreshBtn = document.getElementById("refresh-btn")!;
+    gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
+    statsModal = document.getElementById("stats-modal")!;
+    statsModalContent = document.getElementById("stats-modal-content")!;
+    closeStatsModal = document.getElementById("close-stats-modal")!;
   const squadModal = document.getElementById("squad-modal")!;
   const squadModalContent = document.getElementById("squad-modal-content")!;
   const closeSquadModal = document.getElementById("close-squad-modal")!;
@@ -1140,9 +1155,10 @@ import Nav from "../components/Nav.astro";
   });
 
   refreshBtn.addEventListener('click', async () => {
-    managerStatsCache.clear();
+    clearCache('stats');
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();
+  });
   });
 </script>

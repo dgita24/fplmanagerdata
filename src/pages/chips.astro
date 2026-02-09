@@ -82,6 +82,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
+  import { globalCache, clearCache } from '../lib/globalStore.ts';
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -110,20 +111,30 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  const out = document.getElementById("chips-output");
-  const loadingStatus = document.getElementById("loading-status");
-  const managerCountEl = document.getElementById("manager-count");
-  const refreshBtn = document.getElementById("refresh-btn");
-  const chipModal = document.getElementById("chip-modal");
-  const chipModalContent = document.getElementById("chip-modal-content");
-  const closeChipModal = document.getElementById("close-chip-modal");
+  let out: HTMLElement;
+  let loadingStatus: HTMLElement;
+  let managerCountEl: HTMLElement;
+  let refreshBtn: HTMLButtonElement;
+  let chipModal: HTMLElement;
+  let chipModalContent: HTMLElement;
+  let closeChipModal: HTMLElement;
 
   let managerIds = [];
-  let playerCache = new Map();
-  let teamCache = new Map();
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
   
   // Load token for cancellation
   let currentLoadToken = 0;
+
+  document.addEventListener('astro:page-load', () => {
+    // Initialize DOM elements
+    out = document.getElementById("chips-output")!;
+    loadingStatus = document.getElementById("loading-status")!;
+    managerCountEl = document.getElementById("manager-count")!;
+    refreshBtn = document.getElementById("refresh-btn") as HTMLButtonElement;
+    chipModal = document.getElementById("chip-modal")!;
+    chipModalContent = document.getElementById("chip-modal-content")!;
+    closeChipModal = document.getElementById("close-chip-modal")!;
 
   closeChipModal.addEventListener("click", () => {
     chipModal.classList.remove("is-open");
@@ -553,8 +564,10 @@ import Nav from "../components/Nav.astro";
   })();
 
   refreshBtn.addEventListener('click', async () => {
+    clearCache('chips');
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();
+  });
   });
 </script>

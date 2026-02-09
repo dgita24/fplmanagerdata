@@ -35,7 +35,11 @@ import Nav from "../components/Nav.astro";
       </div>
     </div>
 
-    <div id="loading-status" class="meta-row"></div>
+    <div class="status-row">
+      <div id="loading-status" class="status-text"></div>
+      <button id="refresh-btn" class="btn-refresh" type="button">🔄 Refresh</button>
+    </div>
+
     <section id="ownership-output" aria-live="polite"></section>
   </main>
 
@@ -100,10 +104,44 @@ import Nav from "../components/Nav.astro";
     outline: none;
     border-color: var(--color-primary);
   }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  .status-text {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .btn-refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: var(--space-2) var(--space-3);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+    background: var(--color-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-refresh:hover {
+    background: var(--color-primary-hover);
+  }
 </style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
+  import { globalCache, clearCache } from '../lib/globalStore.ts';
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -132,20 +170,21 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  const out = document.getElementById("ownership-output");
-  const gwFilterSelect = document.getElementById("gw-filter");
-  const positionFilter = document.getElementById("position-filter");
-  const loadingStatus = document.getElementById("loading-status");
-  const managerCountEl = document.getElementById("manager-count");
-  const ownershipModal = document.getElementById("ownership-modal");
-  const ownershipModalContent = document.getElementById("ownership-modal-content");
-  const closeOwnershipModal = document.getElementById("close-ownership-modal");
+  let out: HTMLElement;
+  let gwFilterSelect: HTMLSelectElement;
+  let positionFilter: HTMLSelectElement;
+  let loadingStatus: HTMLElement;
+  let managerCountEl: HTMLElement;
+  let refreshBtn: HTMLButtonElement;
+  let ownershipModal: HTMLElement;
+  let ownershipModalContent: HTMLElement;
+  let closeOwnershipModal: HTMLElement;
 
   let managerIds = [];
   let ownershipData = [];
   let latestGW = null;
-  let playerCache = new Map();
-  let teamCache = new Map();
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
   let allManagerNames = [];
   // Names of managers who played Free Hit in the currently selected GW.
   // (Uses the same 🎯 FH indicator you already use on the Chips page.)
@@ -153,6 +192,18 @@ import Nav from "../components/Nav.astro";
   
   // Load token for cancellation
   let currentLoadToken = 0;
+
+  document.addEventListener('astro:page-load', () => {
+    // Initialize DOM elements
+    out = document.getElementById("ownership-output")!;
+    gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
+    positionFilter = document.getElementById("position-filter") as HTMLSelectElement;
+    loadingStatus = document.getElementById("loading-status")!;
+    managerCountEl = document.getElementById("manager-count")!;
+    refreshBtn = document.getElementById("refresh-btn") as HTMLButtonElement;
+    ownershipModal = document.getElementById("ownership-modal")!;
+    ownershipModalContent = document.getElementById("ownership-modal-content")!;
+    closeOwnershipModal = document.getElementById("close-ownership-modal")!;
 
 
   closeOwnershipModal.addEventListener("click", () => {
@@ -551,5 +602,17 @@ import Nav from "../components/Nav.astro";
     attachPlayerButtons();
   });
 
+  refreshBtn.addEventListener('click', async () => {
+    clearCache('ownership');
+    const { managerIds: ids } = await loadManagerIdsFromSupabase();
+    managerIds = ids;
+    managerCountEl.textContent = `${managerIds.length} managers`;
+    if (managerIds.length > 0) {
+      const gw = parseInt(gwFilterSelect.value) || latestGW;
+      await loadOwnership(managerIds, gw);
+    }
+  });
+
   init();
+  });
 </script>
