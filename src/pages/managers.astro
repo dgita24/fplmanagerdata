@@ -436,18 +436,21 @@ import Nav from "../components/Nav.astro";
   import { supabase } from '../lib/supabase.ts'
   import { featuredManagers } from '../data/featuredManagers'
 
-  const authCheckDiv = document.getElementById('auth-check') as HTMLElement
-  const loadingDiv = document.getElementById('loading') as HTMLElement
-  const requireLoginDiv = document.getElementById('require-login') as HTMLElement
-  const form = document.getElementById('manager-form') as HTMLFormElement
-  const textarea = document.getElementById('ids') as HTMLTextAreaElement
-  const status = document.getElementById('status') as HTMLElement
-  const countEl = document.getElementById('count') as HTMLElement
-  const editBtn = document.getElementById('edit-btn') as HTMLButtonElement
-  const saveBtn = document.getElementById('save-btn') as HTMLButtonElement
+  document.addEventListener('astro:page-load', () => {
+    const authCheckDiv = document.getElementById('auth-check') as HTMLElement
+    const loadingDiv = document.getElementById('loading') as HTMLElement
+    const requireLoginDiv = document.getElementById('require-login') as HTMLElement
+    const form = document.getElementById('manager-form') as HTMLFormElement
+    const textarea = document.getElementById('ids') as HTMLTextAreaElement
+    const status = document.getElementById('status') as HTMLElement
+    const countEl = document.getElementById('count') as HTMLElement
+    const editBtn = document.getElementById('edit-btn') as HTMLButtonElement
+    const saveBtn = document.getElementById('save-btn') as HTMLButtonElement
 
-  let currentUser: any = null
-  let isEditing = false
+    if (!form || !textarea) return;
+
+    let currentUser: any = null
+    let isEditing = false
 
   async function checkAuth() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -725,4 +728,6 @@ import Nav from "../components/Nav.astro";
   updateFeaturedActions()
 
   checkAuth()
+  });
+</script>
 </script>

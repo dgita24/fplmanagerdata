@@ -94,24 +94,26 @@ import Nav from "../components/Nav.astro";
 <script>
   import { supabase } from '../lib/supabase.ts'
 
-  const guestContent = document.getElementById('guest-content')
-  const userContent = document.getElementById('user-content')
+  document.addEventListener('astro:page-load', () => {
+    const guestContent = document.getElementById('guest-content')
+    const userContent = document.getElementById('user-content')
 
-  async function checkAuth() {
-    const { data: { user } } = await supabase.auth.getUser()
+    async function checkAuth() {
+      const { data: { user } } = await supabase.auth.getUser()
 
-    if (user) {
-      if (userContent) userContent.style.display = 'block'
-      if (guestContent) guestContent.style.display = 'none'
-    } else {
-      if (guestContent) guestContent.style.display = 'block'
-      if (userContent) userContent.style.display = 'none'
+      if (user) {
+        if (userContent) userContent.style.display = 'block'
+        if (guestContent) guestContent.style.display = 'none'
+      } else {
+        if (guestContent) guestContent.style.display = 'block'
+        if (userContent) userContent.style.display = 'none'
+      }
     }
-  }
 
-  checkAuth()
-
-  supabase.auth.onAuthStateChange(() => {
     checkAuth()
-  })
+
+    supabase.auth.onAuthStateChange(() => {
+      checkAuth()
+    })
+  });
 </script>
