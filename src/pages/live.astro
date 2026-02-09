@@ -31,11 +31,11 @@ import Nav from "../components/Nav.astro";
       </div>
     </div>
 
-    <div class="buttons-row">
-      <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
+    <div class="status-row">
+      <div id="loading-status" class="status-text"></div>
+      <button id="refresh-btn" class="btn-refresh" type="button">🔄 Refresh</button>
     </div>
 
-    <div id="loading-status" class="meta-row"></div>
     <div id="last-updated" class="meta-row"></div>
     <section id="live-output" aria-live="polite"></section>
   </main>
@@ -301,6 +301,44 @@ import Nav from "../components/Nav.astro";
   .gw-points-empty-text {
     color: var(--color-text-secondary);
     margin-top: var(--space-2);
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  .status-text {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .btn-refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: var(--space-2) var(--space-3);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+    background: var(--color-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-refresh:hover {
+    background: var(--color-primary-hover);
+  }
+
+  .btn-refresh:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>
 
