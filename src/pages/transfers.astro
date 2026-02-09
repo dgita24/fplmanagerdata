@@ -901,8 +901,6 @@ import Nav from "../components/Nav.astro";
     loadManagers(managerIds);
   });
 
-  // Wrap initialization in astro:page-load for View Transitions
-  document.addEventListener('astro:page-load', () => {
-    init();
-  });
+  // Initialize immediately - Astro View Transitions will handle re-running scripts on navigation
+  init();
 </script>

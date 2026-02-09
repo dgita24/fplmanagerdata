@@ -568,8 +568,6 @@ import Nav from "../components/Nav.astro";
     await updateDisplay();
   });
 
-  // Wrap initialization in astro:page-load for View Transitions
-  document.addEventListener('astro:page-load', () => {
-    init();
-  });
+  // Initialize immediately - Astro View Transitions will handle re-running scripts on navigation
+  init();
 </script>

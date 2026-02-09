@@ -35,6 +35,10 @@ import Nav from "../components/Nav.astro";
       </div>
     </div>
 
+    <div class="buttons-row">
+      <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
+    </div>
+
     <div id="loading-status" class="meta-row"></div>
     <section id="ownership-output" aria-live="polite"></section>
   </main>
@@ -138,6 +142,7 @@ import Nav from "../components/Nav.astro";
   const positionFilter = document.getElementById("position-filter");
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
+  const refreshBtn = document.getElementById("refresh-btn");
   const ownershipModal = document.getElementById("ownership-modal");
   const ownershipModalContent = document.getElementById("ownership-modal-content");
   const closeOwnershipModal = document.getElementById("close-ownership-modal");
@@ -563,8 +568,14 @@ import Nav from "../components/Nav.astro";
     attachPlayerButtons();
   });
 
-  // Wrap initialization in astro:page-load for View Transitions
-  document.addEventListener('astro:page-load', () => {
-    init();
+  refreshBtn.addEventListener('click', async () => {
+    clearCache('ownership');
+    const { managerIds: ids } = await loadManagerIdsFromSupabase();
+    managerIds = ids;
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
+    await loadOwnership(managerIds, gw);
   });
+
+  // Initialize immediately - Astro View Transitions will handle re-running scripts on navigation
+  init();
 </script>
