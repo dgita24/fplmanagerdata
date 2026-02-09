@@ -308,9 +308,10 @@ import Nav from "../components/Nav.astro";
   import { supabase } from '../lib/supabase.ts'
   import { applyAutoSubsAndMultipliers, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
   import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
+  import { globalCache, clearCache } from '../lib/globalStore.ts';
 
   let managerIds: number[] = []
-  const managerDataCache = new Map<string, any>();
+  const managerDataCache = globalCache.live.managerData;
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -339,19 +340,19 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  const out = document.getElementById("live-output")!;
-  const gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
-  const compareManagerSelect = document.getElementById("compare-manager") as HTMLSelectElement;
-  const loadingStatus = document.getElementById("loading-status")!;
-  const lastUpdatedEl = document.getElementById("last-updated")!;
-  const managerCountEl = document.getElementById("manager-count")!;
-  const refreshBtn = document.getElementById("refresh-btn")!;
-  const squadModal = document.getElementById("squad-modal")!;
-  const squadModalContent = document.getElementById("squad-modal-content")!;
-  const closeSquadModal = document.getElementById("close-squad-modal")!;
-  const playerModal = document.getElementById("player-modal")!;
-  const playerModalContent = document.getElementById("player-modal-content")!;
-  const closePlayerModal = document.getElementById("close-player-modal")!;
+  let out: HTMLElement;
+  let gwFilterSelect: HTMLSelectElement;
+  let compareManagerSelect: HTMLSelectElement;
+  let loadingStatus: HTMLElement;
+  let lastUpdatedEl: HTMLElement;
+  let managerCountEl: HTMLElement;
+  let refreshBtn: HTMLButtonElement;
+  let squadModal: HTMLElement;
+  let squadModalContent: HTMLElement;
+  let closeSquadModal: HTMLElement;
+  let playerModal: HTMLElement;
+  let playerModalContent: HTMLElement;
+  let closePlayerModal: HTMLElement;;
 
   interface PlayerInfo {
     name: string;
@@ -384,12 +385,12 @@ import Nav from "../components/Nav.astro";
 
   let liveData: any[] = [];
   let latestGW: number = 1;
-  let playerCache = new Map<number, PlayerInfo>();
-  let teamCache = new Map<number, TeamInfo>();
-  let livePointsCache = new Map<number, LiveStats>();
-  let projectedBonusCache = new Map<string, number>();
-  let teamStatusCache = new Map<string, TeamStatus>();
-  let fixturesCache: FixtureInfo[] = [];
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
+  let livePointsCache = globalCache.live.points;
+  let projectedBonusCache = globalCache.live.projectedBonus;
+  let teamStatusCache = globalCache.live.teamStatus;
+  let fixturesCache = globalCache.live.fixtures;
   
   // ==============================
   // Live table sorting (client-side)
@@ -1235,6 +1236,22 @@ import Nav from "../components/Nav.astro";
     }
   }
 
+  document.addEventListener('astro:page-load', () => {
+    // Initialize DOM elements
+    out = document.getElementById("live-output")!;
+    gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
+    compareManagerSelect = document.getElementById("compare-manager") as HTMLSelectElement;
+    loadingStatus = document.getElementById("loading-status")!;
+    lastUpdatedEl = document.getElementById("last-updated")!;
+    managerCountEl = document.getElementById("manager-count")!;
+    refreshBtn = document.getElementById("refresh-btn")!;
+    squadModal = document.getElementById("squad-modal")!;
+    squadModalContent = document.getElementById("squad-modal-content")!;
+    closeSquadModal = document.getElementById("close-squad-modal")!;
+    playerModal = document.getElementById("player-modal")!;
+    playerModalContent = document.getElementById("player-modal-content")!;
+    closePlayerModal = document.getElementById("close-player-modal")!;
+
   gwFilterSelect.addEventListener('change', async () => {
     const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
@@ -1250,7 +1267,7 @@ import Nav from "../components/Nav.astro";
   });
 
   refreshBtn.addEventListener('click', async () => {
-    managerDataCache.clear();
+    clearCache('live');
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     const gw = parseInt(gwFilterSelect.value) || latestGW;
@@ -1258,4 +1275,5 @@ import Nav from "../components/Nav.astro";
   });
 
   init();
+  });
 </script>
