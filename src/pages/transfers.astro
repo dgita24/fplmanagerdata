@@ -289,11 +289,14 @@ import Nav from "../components/Nav.astro";
     modalContent = document.getElementById("modal-content")!;
     chipModal = document.getElementById("chip-modal")!;
     chipModalContent = document.getElementById("chip-modal-content")!;
-    closeChipModal = document.getElementById("close-chip-modal")!;
+    closeChipModal = document.getElementById("close-chip-modal");
 
-  closeChipModal.addEventListener("click", () => {
-    chipModal.classList.remove("is-open");
-  });
+  // Add null check before attaching event listener
+  if (closeChipModal) {
+    closeChipModal.addEventListener("click", () => {
+      chipModal.classList.remove("is-open");
+    });
+  }
 
   /**
    * Concurrent mapping with limited concurrency
@@ -898,13 +901,18 @@ import Nav from "../components/Nav.astro";
     }
   })();
 
-  gwFilterSelect.addEventListener('change', filterByGW);
+  // Add null checks before attaching event listeners
+  if (gwFilterSelect) {
+    gwFilterSelect.addEventListener('change', filterByGW);
+  }
 
-  refreshBtn.addEventListener('click', async () => {
-    clearCache('transfers');
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
-    loadManagers(managerIds);
-  });
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async () => {
+      clearCache('transfers');
+      const { managerIds: ids } = await loadManagerIdsFromSupabase();
+      managerIds = ids;
+      loadManagers(managerIds);
+    });
+  }
   });
 </script>

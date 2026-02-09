@@ -329,29 +329,36 @@ import Nav from "../components/Nav.astro";
     out = document.getElementById("stats-output")!;
     loadingStatus = document.getElementById("loading-status")!;
     managerCountEl = document.getElementById("manager-count")!;
-    refreshBtn = document.getElementById("refresh-btn")!;
+    refreshBtn = document.getElementById("refresh-btn") as HTMLButtonElement;
     gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
     statsModal = document.getElementById("stats-modal")!;
     statsModalContent = document.getElementById("stats-modal-content")!;
-    closeStatsModal = document.getElementById("close-stats-modal")!;
+    closeStatsModal = document.getElementById("close-stats-modal");
   const squadModal = document.getElementById("squad-modal")!;
   const squadModalContent = document.getElementById("squad-modal-content")!;
-  const closeSquadModal = document.getElementById("close-squad-modal")!;
+  const closeSquadModal = document.getElementById("close-squad-modal");
   const orHistoryModal = document.getElementById("or-history-modal")!;
   const orHistoryModalContent = document.getElementById("or-history-modal-content")!;
-  const closeOrHistoryModal = document.getElementById("close-or-history-modal")!;
+  const closeOrHistoryModal = document.getElementById("close-or-history-modal");
 
-  closeStatsModal.addEventListener("click", () => {
-    statsModal.classList.remove("is-open");
-  });
+  // Add null checks before attaching event listeners
+  if (closeStatsModal) {
+    closeStatsModal.addEventListener("click", () => {
+      statsModal.classList.remove("is-open");
+    });
+  }
 
-  closeSquadModal.addEventListener("click", () => {
-    squadModal.classList.remove("is-open");
-  });
+  if (closeSquadModal) {
+    closeSquadModal.addEventListener("click", () => {
+      squadModal.classList.remove("is-open");
+    });
+  }
 
-  closeOrHistoryModal.addEventListener("click", () => {
-    orHistoryModal.classList.remove("is-open");
-  });
+  if (closeOrHistoryModal) {
+    closeOrHistoryModal.addEventListener("click", () => {
+      orHistoryModal.classList.remove("is-open");
+    });
+  }
 
   function populateGWSelector(currentGW: number) {
     gwFilterSelect.innerHTML = '';
@@ -1146,16 +1153,21 @@ import Nav from "../components/Nav.astro";
     await updateDisplay();
   })();
 
-  gwFilterSelect.addEventListener('change', async () => {
-    const gw = parseInt(gwFilterSelect.value);
-    if (gw) await loadStats(managerIds, gw);
-  });
+  // Add null checks before attaching event listeners
+  if (gwFilterSelect) {
+    gwFilterSelect.addEventListener('change', async () => {
+      const gw = parseInt(gwFilterSelect.value);
+      if (gw) await loadStats(managerIds, gw);
+    });
+  }
 
-  refreshBtn.addEventListener('click', async () => {
-    clearCache('stats');
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
-    await updateDisplay();
-  });
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async () => {
+      clearCache('stats');
+      const { managerIds: ids } = await loadManagerIdsFromSupabase();
+      managerIds = ids;
+      await updateDisplay();
+    });
+  }
   });
 </script>

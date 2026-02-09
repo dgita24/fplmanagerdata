@@ -446,17 +446,6 @@ import Nav from "../components/Nav.astro";
   // Load token for cancellation
   let currentLoadToken = 0;
 
-  closeSquadModal.addEventListener("click", () => {
-    squadModal.classList.remove("is-open");
-  });
-
-  closePlayerModal.addEventListener("click", () => {
-    playerModal.classList.remove("is-open");
-  });
-
-  // Initialize GW Points Modal
-  const gwPointsModal = initGWPointsModal('gw-points-modal');
-
   function populateGWSelector(currentGW: number) {
     gwFilterSelect.innerHTML = '';
     for (let i = 1; i <= 38; i++) {
@@ -1256,7 +1245,7 @@ import Nav from "../components/Nav.astro";
     loadingStatus = document.getElementById("loading-status")!;
     lastUpdatedEl = document.getElementById("last-updated")!;
     managerCountEl = document.getElementById("manager-count")!;
-    refreshBtn = document.getElementById("refresh-btn")!;
+    refreshBtn = document.getElementById("refresh-btn") as HTMLButtonElement;
     squadModal = document.getElementById("squad-modal")!;
     squadModalContent = document.getElementById("squad-modal-content")!;
     closeSquadModal = document.getElementById("close-squad-modal")!;
@@ -1264,27 +1253,49 @@ import Nav from "../components/Nav.astro";
     playerModalContent = document.getElementById("player-modal-content")!;
     closePlayerModal = document.getElementById("close-player-modal")!;
 
-  gwFilterSelect.addEventListener('change', async () => {
-    const gw = parseInt(gwFilterSelect.value);
-    if (gw && gw >= 1 && gw <= 38) {
+  // Add null checks before attaching event listeners
+  if (gwFilterSelect) {
+    gwFilterSelect.addEventListener('change', async () => {
+      const gw = parseInt(gwFilterSelect.value);
+      if (gw && gw >= 1 && gw <= 38) {
+        loadLive(managerIds, gw);
+      }
+    });
+  }
+
+  if (compareManagerSelect) {
+    compareManagerSelect.addEventListener('change', () => {
+      const compareId = compareManagerSelect.value;
+      out.innerHTML = makeLiveTable(liveData, compareId);
+      attachManagerButtons();
+      attachLiveSortHandlers();
+    });
+  }
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async () => {
+      clearCache('live');
+      const { managerIds: ids } = await loadManagerIdsFromSupabase();
+      managerIds = ids;
+      const gw = parseInt(gwFilterSelect?.value || '') || latestGW;
       loadLive(managerIds, gw);
-    }
-  });
+    });
+  }
 
-  compareManagerSelect.addEventListener('change', () => {
-    const compareId = compareManagerSelect.value;
-    out.innerHTML = makeLiveTable(liveData, compareId);
-    attachManagerButtons();
-    attachLiveSortHandlers();
-  });
+  if (closeSquadModal) {
+    closeSquadModal.addEventListener("click", () => {
+      squadModal.classList.remove("is-open");
+    });
+  }
 
-  refreshBtn.addEventListener('click', async () => {
-    clearCache('live');
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
-    const gw = parseInt(gwFilterSelect.value) || latestGW;
-    loadLive(managerIds, gw);
-  });
+  if (closePlayerModal) {
+    closePlayerModal.addEventListener("click", () => {
+      playerModal.classList.remove("is-open");
+    });
+  }
+
+  // Initialize GW Points Modal
+  const gwPointsModal = initGWPointsModal('gw-points-modal');
 
   init();
   });

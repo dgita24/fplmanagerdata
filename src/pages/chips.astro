@@ -134,11 +134,14 @@ import Nav from "../components/Nav.astro";
     refreshBtn = document.getElementById("refresh-btn") as HTMLButtonElement;
     chipModal = document.getElementById("chip-modal")!;
     chipModalContent = document.getElementById("chip-modal-content")!;
-    closeChipModal = document.getElementById("close-chip-modal")!;
+    closeChipModal = document.getElementById("close-chip-modal");
 
-  closeChipModal.addEventListener("click", () => {
-    chipModal.classList.remove("is-open");
-  });
+  // Add null check before attaching event listener
+  if (closeChipModal) {
+    closeChipModal.addEventListener("click", () => {
+      chipModal.classList.remove("is-open");
+    });
+  }
 
   /**
    * Concurrent mapping with limited concurrency
@@ -575,11 +578,14 @@ import Nav from "../components/Nav.astro";
     await updateDisplay();
   })();
 
-  refreshBtn.addEventListener('click', async () => {
-    clearCache('chips');
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
-    await updateDisplay();
-  });
+  // Add null check before attaching event listener
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async () => {
+      clearCache('chips');
+      const { managerIds: ids } = await loadManagerIdsFromSupabase();
+      managerIds = ids;
+      await updateDisplay();
+    });
+  }
   });
 </script>

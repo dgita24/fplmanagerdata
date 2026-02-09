@@ -203,12 +203,15 @@ import Nav from "../components/Nav.astro";
     refreshBtn = document.getElementById("refresh-btn") as HTMLButtonElement;
     ownershipModal = document.getElementById("ownership-modal")!;
     ownershipModalContent = document.getElementById("ownership-modal-content")!;
-    closeOwnershipModal = document.getElementById("close-ownership-modal")!;
+    closeOwnershipModal = document.getElementById("close-ownership-modal");
 
 
-  closeOwnershipModal.addEventListener("click", () => {
-    ownershipModal.classList.remove("is-open");
-  });
+  // Add null check before attaching event listener
+  if (closeOwnershipModal) {
+    closeOwnershipModal.addEventListener("click", () => {
+      ownershipModal.classList.remove("is-open");
+    });
+  }
 
   /**
    * Concurrent mapping with limited concurrency
@@ -601,29 +604,36 @@ import Nav from "../components/Nav.astro";
     await loadOwnership(managerIds, latestGW);
   }
 
-  gwFilterSelect.addEventListener('change', async () => {
-    const gw = parseInt(gwFilterSelect.value);
-    if (gw && gw >= 1 && gw <= 38) {
-      await loadOwnership(managerIds, gw);
-    }
-  });
+  // Add null checks before attaching event listeners
+  if (gwFilterSelect) {
+    gwFilterSelect.addEventListener('change', async () => {
+      const gw = parseInt(gwFilterSelect.value);
+      if (gw && gw >= 1 && gw <= 38) {
+        await loadOwnership(managerIds, gw);
+      }
+    });
+  }
 
-  positionFilter.addEventListener('change', () => {
-    const posFilter = positionFilter.value;
-    out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
-    attachPlayerButtons();
-  });
+  if (positionFilter) {
+    positionFilter.addEventListener('change', () => {
+      const posFilter = positionFilter.value;
+      out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
+      attachPlayerButtons();
+    });
+  }
 
-  refreshBtn.addEventListener('click', async () => {
-    clearCache('ownership');
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
-    if (managerIds.length > 0) {
-      const gw = parseInt(gwFilterSelect.value) || latestGW;
-      await loadOwnership(managerIds, gw);
-    }
-  });
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', async () => {
+      clearCache('ownership');
+      const { managerIds: ids } = await loadManagerIdsFromSupabase();
+      managerIds = ids;
+      managerCountEl.textContent = `${managerIds.length} managers`;
+      if (managerIds.length > 0) {
+        const gw = parseInt(gwFilterSelect?.value || '') || latestGW;
+        await loadOwnership(managerIds, gw);
+      }
+    });
+  }
 
   init();
   });
