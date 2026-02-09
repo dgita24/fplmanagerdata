@@ -3,6 +3,7 @@
  * Global app shell + design system CSS.
  * Mobile-first responsive design for 2026.
  */
+import { ViewTransitions } from 'astro:transitions';
 const { title = "FPL Manager Data" } = Astro.props;
 ---
 <!doctype html>
@@ -19,6 +20,7 @@ const { title = "FPL Manager Data" } = Astro.props;
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
+    <ViewTransitions />
   </head>
 
   <body>
