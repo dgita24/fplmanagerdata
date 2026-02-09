@@ -229,6 +229,7 @@ import Nav from "../components/Nav.astro";
   }
 
   import { supabase } from '../lib/supabase.ts'
+  import { globalCache, clearCache } from '../lib/globalStore';
 
   let managerIds = []
 
@@ -272,7 +273,7 @@ import Nav from "../components/Nav.astro";
 
   let allHistories = [];
   let latestGW = null;
-  let allPlayersMap = {};
+  let allPlayersMap = globalCache.playerCache; // Use global player cache
   
   // Load token for cancellation
   let currentLoadToken = 0;
@@ -329,17 +330,30 @@ import Nav from "../components/Nav.astro";
 
   async function fetchPlayers(cacheBuster?: string) {
     try {
+      // Check if we already have bootstrap data in cache
+      if (!cacheBuster && globalCache.bootstrapData && allPlayersMap.size > 0) {
+        const currentEvent = (globalCache.bootstrapData.events || []).find(e => e.is_current);
+        latestGW = currentEvent ? currentEvent.id : 1;
+        populateGWSelector(latestGW);
+        return;
+      }
+
       const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) return;
       const data = await res.json();
+      
+      allPlayersMap.clear();
       data.elements.forEach(p => {
-        allPlayersMap[p.id] = p.web_name;
+        allPlayersMap.set(p.id, { name: p.web_name, position: p.element_type, team: p.team });
       });
 
       const currentEvent = (data.events || []).find(e => e.is_current);
       latestGW = currentEvent ? currentEvent.id : 1;
       populateGWSelector(latestGW);
+
+      // Store in global cache
+      globalCache.bootstrapData = data;
     } catch (e) {
       console.error("Error fetching players:", e);
     }
@@ -522,8 +536,8 @@ import Nav from "../components/Nav.astro";
         if (shouldShowTransfers) {
           if (gwTransfers.length > 0) {
             for (const t of gwTransfers) {
-              const playerIn = allPlayersMap[t.element_in] || `Player ${t.element_in}`;
-              const playerOut = allPlayersMap[t.element_out] || `Player ${t.element_out}`;
+              const playerIn = allPlayersMap.get(t.element_in)?.name || `Player ${t.element_in}`;
+              const playerOut = allPlayersMap.get(t.element_out)?.name || `Player ${t.element_out}`;
               html += `
                 <div class="transfer-row">
                   <span class="transfer-out">▼ ${escapeHtml(playerOut)}</span>
@@ -611,7 +625,7 @@ import Nav from "../components/Nav.astro";
         html += `<div class="chip-transfer-list">`;
         if (playersOut.length > 0) {
           playersOut.forEach(pid => {
-            html += `<div class="chip-transfer-item">▼ ${escapeHtml(allPlayersMap[pid] || `Player ${pid}`)}</div>`;
+            html += `<div class="chip-transfer-item">▼ ${escapeHtml(allPlayersMap.get(pid)?.name || `Player ${pid}`)}</div>`;
           });
         } else {
           html += `<div class="chip-transfer-item text-muted">None</div>`;
@@ -623,7 +637,7 @@ import Nav from "../components/Nav.astro";
         html += `<div class="chip-transfer-list">`;
         if (playersIn.length > 0) {
           playersIn.forEach(pid => {
-            html += `<div class="chip-transfer-item">▲ ${escapeHtml(allPlayersMap[pid] || `Player ${pid}`)}</div>`;
+            html += `<div class="chip-transfer-item">▲ ${escapeHtml(allPlayersMap.get(pid)?.name || `Player ${pid}`)}</div>`;
           });
         } else {
           html += `<div class="chip-transfer-item text-muted">None</div>`;
@@ -857,7 +871,7 @@ import Nav from "../components/Nav.astro";
     attachSortHandlers();
   }
 
-  (async function init() {
+  async function init() {
     await fetchPlayers();
 
     const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
@@ -871,13 +885,19 @@ import Nav from "../components/Nav.astro";
     } else {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
     }
-  })();
+  }
 
   gwFilterSelect.addEventListener('change', filterByGW);
 
   refreshBtn.addEventListener('click', async () => {
+    clearCache('transfers');
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     loadManagers(managerIds);
+  });
+
+  // Wrap initialization in astro:page-load for View Transitions
+  document.addEventListener('astro:page-load', () => {
+    init();
   });
 </script>
