@@ -749,6 +749,13 @@ import Nav from "../components/Nav.astro";
 
   async function fetchManagerData(entryId, gw, cacheBuster?: string) {
     try {
+      // Check cache first
+      const cacheKey = `${entryId}:${gw}:manager`;
+      if (!cacheBuster && managerPicksCache.has(cacheKey)) {
+        console.log("Loading manager data from cache...");
+        return managerPicksCache.get(cacheKey);
+      }
+
       const v = cacheBuster || Date.now().toString();
       const [summaryRes, historyRes] = await Promise.all([
         fetch(`/api/fpl/entry/${entryId}?v=${v}`),
@@ -775,13 +782,18 @@ import Nav from "../components/Nav.astro";
       const squadWithIndicators = applyAutoSubsKeepAll(squadRaw, chipPlayed || "None");
       const squad = applyCaptaincyToSquadDisplay(squadWithIndicators, chipPlayed || "None");
 
-      return {
+      const result = {
         entryId,
         managerName,
         teamName,
         chipPlayed,
         squad
       };
+
+      // Cache the result
+      managerPicksCache.set(cacheKey, result);
+
+      return result;
     } catch (e) {
       console.error(`Error fetching manager ${entryId}:`, e);
       return null;

@@ -1018,6 +1018,9 @@ import Nav from "../components/Nav.astro";
 
       squadModalContent.innerHTML = html;
 
+      // Make player names clickable
+      makePlayerNameClickable(squadModalContent);
+
       squadModalContent.querySelectorAll('.player-name-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           const button = e.target as HTMLElement;
@@ -1158,37 +1161,46 @@ import Nav from "../components/Nav.astro";
     
     liveData = [];
     out.innerHTML = "";
-    loadingStatus.textContent = `Fetching latest data...`;
-
-    fixturesCache = [];
-    livePointsCache.clear();
-    projectedBonusCache.clear();
-    teamStatusCache.clear();
-
-    const cacheBuster = Date.now().toString();
     
-    try {
-      await Promise.all([
-        fetchFixtures({ 
-          gw, 
-          fixturesCache, 
-          projectedBonusCache, 
-          teamStatusCache, 
-          includeFinishedProvisional: true,
-          cacheBuster 
-        }),
-        fetchLiveGW({ 
-          gw, 
-          livePointsCache, 
-          includeExtendedStats: true,
-          cacheBuster 
-        })
-      ]);
-    } catch (e) {
-      console.error('Error fetching fixtures/live data:', e);
-      loadingStatus.innerHTML = `<span class='status status--error'>Error loading fixtures/live data</span>`;
-      refreshBtn.disabled = false;
-      return;
+    // Check if we have cached data
+    const hasCachedData = globalCache.live.points.size > 0 && globalCache.live.fixtures.length > 0;
+    
+    if (hasCachedData) {
+      loadingStatus.textContent = `Loading from cache...`;
+      // Use cached data, skip the fetch
+    } else {
+      loadingStatus.textContent = `Fetching latest data...`;
+      
+      fixturesCache = [];
+      livePointsCache.clear();
+      projectedBonusCache.clear();
+      teamStatusCache.clear();
+
+      const cacheBuster = Date.now().toString();
+      
+      try {
+        await Promise.all([
+          fetchFixtures({ 
+            gw, 
+            fixturesCache, 
+            projectedBonusCache, 
+            teamStatusCache, 
+            includeFinishedProvisional: true,
+            cacheBuster 
+          }),
+          fetchLiveGW({ 
+            gw, 
+            livePointsCache, 
+            includeExtendedStats: true,
+            cacheBuster 
+          })
+        ]);
+      } catch (e) {
+        console.error('Error fetching fixtures/live data:', e);
+        loadingStatus.innerHTML = `<span class='status status--error'>Error loading fixtures/live data</span>`;
+        refreshBtn.disabled = false;
+        return;
+      }
     }
 
     if (loadToken !== currentLoadToken) return;

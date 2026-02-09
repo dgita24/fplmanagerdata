@@ -204,6 +204,13 @@ import Nav from "../components/Nav.astro";
   }
 
   async function fetchManagerData(id, cacheBuster?: string) {
+    // Check cache first
+    const cacheKey = `${id}`;
+    if (!cacheBuster && globalCache.chips.data.has(cacheKey)) {
+      console.log("Loading chips data from cache...");
+      return globalCache.chips.data.get(cacheKey);
+    }
+
     const v = cacheBuster || Date.now().toString();
     const historyUrl = `/api/fpl/entry/${id}/history?v=${v}`;
     const summaryUrl = `/api/fpl/entry/${id}?v=${v}`;
@@ -237,11 +244,16 @@ import Nav from "../components/Nav.astro";
         };
       });
 
-      return {
+      const result = {
         entryId: Number(id),
         managerName,
         chips: chipsFormatted
       };
+
+      // Cache the result
+      globalCache.chips.data.set(cacheKey, result);
+
+      return result;
     } catch (e) {
       console.error(`Error fetching manager ${id}:`, e);
       return null;

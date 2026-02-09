@@ -659,6 +659,13 @@ import Nav from "../components/Nav.astro";
 
   
   async function fetchHistory(id, cacheBuster?: string) {
+    // Check cache first
+    const cacheKey = `${id}`;
+    if (!cacheBuster && globalCache.transfers.history.has(cacheKey)) {
+      console.log("Loading transfer history from cache...");
+      return globalCache.transfers.history.get(cacheKey);
+    }
+
     const v = cacheBuster || Date.now().toString();
     const historyUrl = `/api/fpl/entry/${id}/history?v=${v}`;
     const summaryUrl = `/api/fpl/entry/${id}?v=${v}`;
@@ -700,6 +707,10 @@ import Nav from "../components/Nav.astro";
         }
       });
     }
+
+    // Cache the result
+    globalCache.transfers.history.set(cacheKey, history);
+
     return history;
   }
 

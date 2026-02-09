@@ -288,6 +288,13 @@ import Nav from "../components/Nav.astro";
 
   async function fetchManagerSquad(entryId, gw, cacheBuster?: string) {
     try {
+      // Check cache first
+      const cacheKey = `${entryId}:${gw}`;
+      if (!cacheBuster && globalCache.ownership.squads.has(cacheKey)) {
+        console.log("Loading ownership squad from cache...");
+        return globalCache.ownership.squads.get(cacheKey);
+      }
+
       const v = cacheBuster || Date.now().toString();
       const [picksRes, summaryRes, historyRes] = await Promise.all([
         fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`),
@@ -306,12 +313,17 @@ import Nav from "../components/Nav.astro";
       const chips = historyData?.chips || [];
       const isFreeHit = chips.some(c => c.name === 'freehit' && Number(c.event) === Number(gw));
 
-      return {
+      const result = {
         entryId,
         managerName,
         isFreeHit,
         picks: picksData.picks.map(p => p.element)
       };
+
+      // Cache the result
+      globalCache.ownership.squads.set(cacheKey, result);
+
+      return result;
     } catch (e) {
       console.error(`Error fetching squad for ${entryId}:`, e);
       return null;
