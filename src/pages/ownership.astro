@@ -194,8 +194,12 @@ import Nav from "../components/Nav.astro";
   let currentLoadToken = 0;
 
   document.addEventListener('astro:page-load', () => {
+    // GUARD: Stop if not on Ownership page
+    const pageContainer = document.getElementById("ownership-output");
+    if (!pageContainer) return;
+
     // Initialize DOM elements
-    out = document.getElementById("ownership-output")!;
+    out = pageContainer;
     gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
     positionFilter = document.getElementById("position-filter") as HTMLSelectElement;
     loadingStatus = document.getElementById("loading-status")!;

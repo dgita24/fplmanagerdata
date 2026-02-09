@@ -279,8 +279,12 @@ import Nav from "../components/Nav.astro";
   let currentLoadToken = 0;
 
   document.addEventListener('astro:page-load', () => {
+    // GUARD: Stop if not on Transfers page
+    const pageContainer = document.getElementById("transfers-table");
+    if (!pageContainer) return;
+
     // Initialize DOM elements
-    out = document.getElementById("transfers-table")!;
+    out = pageContainer;
     gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
     loadingStatus = document.getElementById("loading-status")!;
     managerCountEl = document.getElementById("manager-count")!;

@@ -1238,8 +1238,12 @@ import Nav from "../components/Nav.astro";
   }
 
   document.addEventListener('astro:page-load', () => {
+    // GUARD: Stop if not on Live page
+    const pageContainer = document.getElementById("live-output");
+    if (!pageContainer) return;
+
     // Initialize DOM elements
-    out = document.getElementById("live-output")!;
+    out = pageContainer;
     gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
     compareManagerSelect = document.getElementById("compare-manager") as HTMLSelectElement;
     loadingStatus = document.getElementById("loading-status")!;

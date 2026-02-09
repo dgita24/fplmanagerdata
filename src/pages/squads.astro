@@ -1521,8 +1521,12 @@ import Nav from "../components/Nav.astro";
   }
 
   document.addEventListener('astro:page-load', () => {
+    // GUARD: Stop if not on Squads page
+    const pageContainer = document.getElementById("squads-output");
+    if (!pageContainer) return;
+
     // Initialize DOM elements
-    out = document.getElementById("squads-output")!;
+    out = pageContainer;
     gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
     managerFilter = document.getElementById("manager-filter") as HTMLSelectElement;
     viewFilter = document.getElementById("view-filter") as HTMLSelectElement;
