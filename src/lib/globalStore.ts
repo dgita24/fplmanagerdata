@@ -54,7 +54,10 @@ export function clearCache(page: 'live' | 'squads' | 'transfers' | 'ownership' |
     globalCache.live.teamStatus.clear();
     globalCache.live.fixtures = [];
   }
-  if (page === 'squads') globalCache.squads.data.clear();
+  if (page === 'squads') {
+    globalCache.squads.data.clear();
+    globalCache.squads.history.clear();
+  }
   if (page === 'transfers') globalCache.transfers.history.clear();
   if (page === 'ownership') globalCache.ownership.squads.clear();
   if (page === 'chips') globalCache.chips.data.clear();
