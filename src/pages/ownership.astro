@@ -104,6 +104,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
+  import { globalCache, clearCache } from '../lib/globalStore';
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -144,8 +145,8 @@ import Nav from "../components/Nav.astro";
   let managerIds = [];
   let ownershipData = [];
   let latestGW = null;
-  let playerCache = new Map();
-  let teamCache = new Map();
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
   let allManagerNames = [];
   // Names of managers who played Free Hit in the currently selected GW.
   // (Uses the same 🎯 FH indicator you already use on the Chips page.)
@@ -207,6 +208,14 @@ import Nav from "../components/Nav.astro";
 
   async function fetchBootstrapData(cacheBuster?: string) {
     try {
+      // Check if we already have bootstrap data in cache
+      if (!cacheBuster && globalCache.bootstrapData && playerCache.size > 0) {
+        const currentEvent = globalCache.bootstrapData.events.find(e => e.is_current);
+        latestGW = currentEvent ? currentEvent.id : 1;
+        populateGWSelector(latestGW);
+        return globalCache.bootstrapData;
+      }
+
       const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
@@ -230,6 +239,9 @@ import Nav from "../components/Nav.astro";
       latestGW = currentEvent ? currentEvent.id : 1;
       
       populateGWSelector(latestGW);
+
+      // Store in global cache
+      globalCache.bootstrapData = data;
     } catch (e) {
       console.error("Error fetching bootstrap data:", e);
     }
@@ -551,5 +563,8 @@ import Nav from "../components/Nav.astro";
     attachPlayerButtons();
   });
 
-  init();
+  // Wrap initialization in astro:page-load for View Transitions
+  document.addEventListener('astro:page-load', () => {
+    init();
+  });
 </script>

@@ -82,6 +82,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
+  import { globalCache, clearCache } from '../lib/globalStore';
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -119,8 +120,8 @@ import Nav from "../components/Nav.astro";
   const closeChipModal = document.getElementById("close-chip-modal");
 
   let managerIds = [];
-  let playerCache = new Map();
-  let teamCache = new Map();
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
   
   // Load token for cancellation
   let currentLoadToken = 0;
@@ -166,6 +167,11 @@ import Nav from "../components/Nav.astro";
 
   async function fetchBootstrapData(cacheBuster?: string) {
     try {
+      // Check if we already have bootstrap data in cache
+      if (!cacheBuster && globalCache.bootstrapData && playerCache.size > 0) {
+        return globalCache.bootstrapData;
+      }
+
       const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
@@ -184,6 +190,9 @@ import Nav from "../components/Nav.astro";
       data.teams.forEach(team => {
         teamCache.set(team.id, team.short_name);
       });
+
+      // Store in global cache
+      globalCache.bootstrapData = data;
 
       return data;
     } catch (e) {
@@ -542,7 +551,7 @@ import Nav from "../components/Nav.astro";
     await loadChips(managerIds);
   }
 
-  (async function init() {
+  async function init() {
     loadingStatus.textContent = "Loading player data...";
     await fetchBootstrapData();
     
@@ -550,11 +559,17 @@ import Nav from "../components/Nav.astro";
     managerIds = ids;
 
     await updateDisplay();
-  })();
+  }
 
   refreshBtn.addEventListener('click', async () => {
+    clearCache('chips');
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();
+  });
+
+  // Wrap initialization in astro:page-load for View Transitions
+  document.addEventListener('astro:page-load', () => {
+    init();
   });
 </script>

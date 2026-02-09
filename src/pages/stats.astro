@@ -243,8 +243,9 @@ import Nav from "../components/Nav.astro";
   import { supabase } from '../lib/supabase.ts'
   // We only need fetchLiveGW/fetchFixtures for the Modal details now, not the main table
   import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { globalCache, clearCache } from '../lib/globalStore';
 
-  const managerStatsCache = new Map<string, any>();
+  const managerStatsCache = globalCache.stats.summary;
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -277,12 +278,12 @@ import Nav from "../components/Nav.astro";
   let currentGWFinished = false;
   let managerIds: number[] = [];
   let allManagerData: ManagerData[] = [];
-  let playerCache = new Map<number, { name: string; position: number; team: number }>();
-  let teamCache = new Map<number, { name: string; shortName: string }>();
-  let livePointsCache = new Map<number, LiveStatLine>();
-  let projectedBonusCache = new Map<string, number>();
-  let teamStatusCache = new Map<string, TeamStatus>();
-  let fixturesCache: FixtureInfo[] = [];
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
+  let livePointsCache = globalCache.live.points;
+  let projectedBonusCache = globalCache.live.projectedBonus;
+  let teamStatusCache = globalCache.live.teamStatus;
+  let fixturesCache: FixtureInfo[] = globalCache.live.fixtures;
   
   // Load token for cancellation
   let currentLoadToken = 0;
@@ -396,6 +397,15 @@ import Nav from "../components/Nav.astro";
 
   async function fetchBootstrapData(cacheBuster?: string) {
     try {
+      // Check if we already have bootstrap data in cache
+      if (!cacheBuster && globalCache.bootstrapData && playerCache.size > 0) {
+        const currentEvent = (globalCache.bootstrapData.events || []).find((e: any) => e.is_current);
+        latestGW = currentEvent ? currentEvent.id : 1;
+        currentGWFinished = currentEvent ? currentEvent.finished : false;
+        populateGWSelector(latestGW);
+        return;
+      }
+
       const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
@@ -421,6 +431,9 @@ import Nav from "../components/Nav.astro";
       currentGWFinished = currentEvent ? currentEvent.finished : false;
 
       populateGWSelector(latestGW);
+
+      // Store in global cache
+      globalCache.bootstrapData = data;
     } catch (e) {
       console.error("Error fetching bootstrap data:", e);
       latestGW = 1;
@@ -1127,12 +1140,12 @@ import Nav from "../components/Nav.astro";
     await loadStats(managerIds, gw);
   }
 
-  (async function init() {
+  async function init() {
     await fetchBootstrapData();
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();
-  })();
+  }
 
   gwFilterSelect.addEventListener('change', async () => {
     const gw = parseInt(gwFilterSelect.value);
@@ -1140,9 +1153,14 @@ import Nav from "../components/Nav.astro";
   });
 
   refreshBtn.addEventListener('click', async () => {
-    managerStatsCache.clear();
+    clearCache('stats');
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();
+  });
+
+  // Wrap initialization in astro:page-load for View Transitions
+  document.addEventListener('astro:page-load', () => {
+    init();
   });
 </script>
