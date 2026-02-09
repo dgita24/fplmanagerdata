@@ -1277,8 +1277,5 @@ import Nav from "../components/Nav.astro";
     loadLive(managerIds, gw, true);
   });
 
-  // Wrap initialization in astro:page-load for View Transitions
-  document.addEventListener('astro:page-load', () => {
-    init();
-  });
+  init();
 </script>
