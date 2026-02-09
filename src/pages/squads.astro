@@ -458,6 +458,7 @@ import Nav from "../components/Nav.astro";
   import { supabase } from '../lib/supabase.ts'
   import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive'
   import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
+  import { globalCache, clearCache } from '../lib/globalStore.ts';
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -486,13 +487,13 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  const out = document.getElementById("squads-output");
-  const gwFilterSelect = document.getElementById("gw-filter");
-  const managerFilter = document.getElementById("manager-filter");
-  const viewFilter = document.getElementById("view-filter");
-  const loadingStatus = document.getElementById("loading-status");
-  const managerCountEl = document.getElementById("manager-count");
-  const refreshBtn = document.getElementById("refresh-btn");
+  let out: HTMLElement;
+  let gwFilterSelect: HTMLSelectElement;
+  let managerFilter: HTMLSelectElement;
+  let viewFilter: HTMLSelectElement;
+  let loadingStatus: HTMLElement;
+  let managerCountEl: HTMLElement;
+  let refreshBtn: HTMLButtonElement;
 
   let managerIds = [];
   let allSquadsData = [];
@@ -501,16 +502,16 @@ import Nav from "../components/Nav.astro";
   // Load token for cancellation
   let currentLoadToken = 0;
 
-  let playerCache = new Map();
-  let teamCache = new Map();
-  let livePointsCache = new Map<number, LiveStatLine>();
-  let teamStatusCache = new Map<string, TeamStatus>();
-  let projectedBonusCache = new Map<string, number>();
-  let fixturesCache: FixtureInfo[] = [];
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
+  let livePointsCache = globalCache.live.points;
+  let teamStatusCache = globalCache.live.teamStatus;
+  let projectedBonusCache = globalCache.live.projectedBonus;
+  let fixturesCache = globalCache.live.fixtures;
 
   // NEW CACHES FOR OPTIMIZATION
-  const playerHistoryCache = new Map(); // Global cache for element-summary (playerId -> historyArray)
-  const managerPicksCache = new Map(); // Cache for manager picks (managerId:gw -> picksData)
+  const playerHistoryCache = globalCache.squads.history; // Global cache for element-summary (playerId -> historyArray)
+  const managerPicksCache = globalCache.squads.data; // Cache for manager picks (managerId:gw -> picksData)
 
   /**
    * Concurrent mapping with limited concurrency
@@ -1507,6 +1508,16 @@ import Nav from "../components/Nav.astro";
     }
   }
 
+  document.addEventListener('astro:page-load', () => {
+    // Initialize DOM elements
+    out = document.getElementById("squads-output")!;
+    gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
+    managerFilter = document.getElementById("manager-filter") as HTMLSelectElement;
+    viewFilter = document.getElementById("view-filter") as HTMLSelectElement;
+    loadingStatus = document.getElementById("loading-status")!;
+    managerCountEl = document.getElementById("manager-count")!;
+    refreshBtn = document.getElementById("refresh-btn") as HTMLButtonElement;
+
   gwFilterSelect.addEventListener('change', async () => {
     const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
@@ -1523,6 +1534,7 @@ import Nav from "../components/Nav.astro";
   });
 
   refreshBtn.addEventListener('click', async () => {
+    clearCache('squads');
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();
@@ -1549,4 +1561,5 @@ import Nav from "../components/Nav.astro";
   }
 
   init();
+  });
 </script>

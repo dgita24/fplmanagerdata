@@ -229,6 +229,7 @@ import Nav from "../components/Nav.astro";
   }
 
   import { supabase } from '../lib/supabase.ts'
+  import { globalCache, clearCache } from '../lib/globalStore.ts';
 
   let managerIds = []
 
@@ -259,16 +260,16 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  const out = document.getElementById("transfers-table");
-  const gwFilterSelect = document.getElementById("gw-filter");
-  const loadingStatus = document.getElementById("loading-status");
-  const managerCountEl = document.getElementById("manager-count");
-  const refreshBtn = document.getElementById("refresh-btn");
-  const transferModal = document.getElementById("transfer-modal");
-  const modalContent = document.getElementById("modal-content");
-  const chipModal = document.getElementById("chip-modal");
-  const chipModalContent = document.getElementById("chip-modal-content");
-  const closeChipModal = document.getElementById("close-chip-modal");
+  let out: HTMLElement;
+  let gwFilterSelect: HTMLSelectElement;
+  let loadingStatus: HTMLElement;
+  let managerCountEl: HTMLElement;
+  let refreshBtn: HTMLButtonElement;
+  let transferModal: HTMLElement;
+  let modalContent: HTMLElement;
+  let chipModal: HTMLElement;
+  let chipModalContent: HTMLElement;
+  let closeChipModal: HTMLElement;
 
   let allHistories = [];
   let latestGW = null;
@@ -276,6 +277,19 @@ import Nav from "../components/Nav.astro";
   
   // Load token for cancellation
   let currentLoadToken = 0;
+
+  document.addEventListener('astro:page-load', () => {
+    // Initialize DOM elements
+    out = document.getElementById("transfers-table")!;
+    gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
+    loadingStatus = document.getElementById("loading-status")!;
+    managerCountEl = document.getElementById("manager-count")!;
+    refreshBtn = document.getElementById("refresh-btn") as HTMLButtonElement;
+    transferModal = document.getElementById("transfer-modal")!;
+    modalContent = document.getElementById("modal-content")!;
+    chipModal = document.getElementById("chip-modal")!;
+    chipModalContent = document.getElementById("chip-modal-content")!;
+    closeChipModal = document.getElementById("close-chip-modal")!;
 
   closeChipModal.addEventListener("click", () => {
     chipModal.classList.remove("is-open");
@@ -876,8 +890,10 @@ import Nav from "../components/Nav.astro";
   gwFilterSelect.addEventListener('change', filterByGW);
 
   refreshBtn.addEventListener('click', async () => {
+    clearCache('transfers');
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     loadManagers(managerIds);
+  });
   });
 </script>
