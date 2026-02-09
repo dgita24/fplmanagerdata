@@ -308,9 +308,10 @@ import Nav from "../components/Nav.astro";
   import { supabase } from '../lib/supabase.ts'
   import { applyAutoSubsAndMultipliers, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
   import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
+  import { globalCache, clearCache } from '../lib/globalStore';
 
   let managerIds: number[] = []
-  const managerDataCache = new Map<string, any>();
+  const managerDataCache = globalCache.live.managerData;
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -384,12 +385,12 @@ import Nav from "../components/Nav.astro";
 
   let liveData: any[] = [];
   let latestGW: number = 1;
-  let playerCache = new Map<number, PlayerInfo>();
-  let teamCache = new Map<number, TeamInfo>();
-  let livePointsCache = new Map<number, LiveStats>();
-  let projectedBonusCache = new Map<string, number>();
-  let teamStatusCache = new Map<string, TeamStatus>();
-  let fixturesCache: FixtureInfo[] = [];
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
+  let livePointsCache = globalCache.live.points;
+  let projectedBonusCache = globalCache.live.projectedBonus;
+  let teamStatusCache = globalCache.live.teamStatus;
+  let fixturesCache: FixtureInfo[] = globalCache.live.fixtures;
   
   // ==============================
   // Live table sorting (client-side)
@@ -524,6 +525,14 @@ import Nav from "../components/Nav.astro";
 
   async function fetchBootstrapData(cacheBuster?: string) {
     try {
+      // Check if we already have bootstrap data in cache
+      if (!cacheBuster && globalCache.bootstrapData && playerCache.size > 0) {
+        const activeEvent = globalCache.bootstrapData.events.filter((e: any) => new Date(e.deadline_time) < new Date()).pop();
+        latestGW = activeEvent ? activeEvent.id : 1;
+        populateGWSelector(latestGW);
+        return globalCache.bootstrapData;
+      }
+
       const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
@@ -549,6 +558,9 @@ import Nav from "../components/Nav.astro";
 
       populateGWSelector(latestGW);
 
+      // Store in global cache
+      globalCache.bootstrapData = data;
+
       return data;
     } catch (e) {
       console.error("Error fetching bootstrap data:", e);
@@ -563,7 +575,8 @@ import Nav from "../components/Nav.astro";
 
       const v = cacheBuster || Date.now().toString();
 
-      if (!rawData) {
+      // If cacheBuster is provided, skip cache and fetch fresh data
+      if (!rawData || cacheBuster) {
          const [picksRes, summaryRes, historyRes] = await Promise.all([
           fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`),
           fetch(`/api/fpl/entry/${entryId}?v=${v}`),
@@ -1141,7 +1154,7 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  async function loadLive(ids: number[], gw: number) {
+  async function loadLive(ids: number[], gw: number, forceRefresh: boolean = false) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
       return;
@@ -1159,35 +1172,39 @@ import Nav from "../components/Nav.astro";
     out.innerHTML = "";
     loadingStatus.textContent = `Fetching latest data...`;
 
-    fixturesCache = [];
-    livePointsCache.clear();
-    projectedBonusCache.clear();
-    teamStatusCache.clear();
+    // Check if we have cached data and are not forcing a refresh
+    const hasCachedData = livePointsCache.size > 0 && fixturesCache.length > 0;
+    const cacheBuster = forceRefresh ? Date.now().toString() : undefined;
 
-    const cacheBuster = Date.now().toString();
-    
-    try {
-      await Promise.all([
-        fetchFixtures({ 
-          gw, 
-          fixturesCache, 
-          projectedBonusCache, 
-          teamStatusCache, 
-          includeFinishedProvisional: true,
-          cacheBuster 
-        }),
-        fetchLiveGW({ 
-          gw, 
-          livePointsCache, 
-          includeExtendedStats: true,
-          cacheBuster 
-        })
-      ]);
-    } catch (e) {
-      console.error('Error fetching fixtures/live data:', e);
-      loadingStatus.innerHTML = `<span class='status status--error'>Error loading fixtures/live data</span>`;
-      refreshBtn.disabled = false;
-      return;
+    if (!hasCachedData || forceRefresh) {
+      globalCache.live.fixtures = [];
+      livePointsCache.clear();
+      projectedBonusCache.clear();
+      teamStatusCache.clear();
+      
+      try {
+        await Promise.all([
+          fetchFixtures({ 
+            gw, 
+            fixturesCache: globalCache.live.fixtures, 
+            projectedBonusCache, 
+            teamStatusCache, 
+            includeFinishedProvisional: true,
+            cacheBuster 
+          }),
+          fetchLiveGW({ 
+            gw, 
+            livePointsCache, 
+            includeExtendedStats: true,
+            cacheBuster 
+          })
+        ]);
+      } catch (e) {
+        console.error('Error fetching fixtures/live data:', e);
+        loadingStatus.innerHTML = `<span class='status status--error'>Error loading fixtures/live data</span>`;
+        refreshBtn.disabled = false;
+        return;
+      }
     }
 
     if (loadToken !== currentLoadToken) return;
@@ -1238,7 +1255,7 @@ import Nav from "../components/Nav.astro";
   gwFilterSelect.addEventListener('change', async () => {
     const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
-      loadLive(managerIds, gw);
+      loadLive(managerIds, gw, false);
     }
   });
 
@@ -1250,12 +1267,16 @@ import Nav from "../components/Nav.astro";
   });
 
   refreshBtn.addEventListener('click', async () => {
-    managerDataCache.clear();
+    clearCache('live');
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     const gw = parseInt(gwFilterSelect.value) || latestGW;
-    loadLive(managerIds, gw);
+    loadLive(managerIds, gw, true);
   });
 
-  init();
+  // Wrap initialization in astro:page-load for View Transitions
+  document.addEventListener('astro:page-load', () => {
+    init();
+  });
+</script>
 </script>
