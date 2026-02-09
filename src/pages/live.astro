@@ -390,6 +390,7 @@ import Nav from "../components/Nav.astro";
   let livePointsCache = globalCache.live.points;
   let projectedBonusCache = globalCache.live.projectedBonus;
   let teamStatusCache = globalCache.live.teamStatus;
+  // fixturesCache is a reference to the global array - both point to the same object
   let fixturesCache: FixtureInfo[] = globalCache.live.fixtures;
   
   // ==============================
@@ -1177,16 +1178,18 @@ import Nav from "../components/Nav.astro";
     const cacheBuster = forceRefresh ? Date.now().toString() : undefined;
 
     if (!hasCachedData || forceRefresh) {
-      globalCache.live.fixtures = [];
+      // Clear caches before fetching fresh data
       livePointsCache.clear();
       projectedBonusCache.clear();
       teamStatusCache.clear();
+      // Clear fixturesCache (which is a reference to globalCache.live.fixtures)
+      fixturesCache.length = 0;
       
       try {
         await Promise.all([
           fetchFixtures({ 
             gw, 
-            fixturesCache: globalCache.live.fixtures, 
+            fixturesCache, 
             projectedBonusCache, 
             teamStatusCache, 
             includeFinishedProvisional: true,
@@ -1278,5 +1281,4 @@ import Nav from "../components/Nav.astro";
   document.addEventListener('astro:page-load', () => {
     init();
   });
-</script>
 </script>

@@ -330,12 +330,16 @@ import Nav from "../components/Nav.astro";
 
   async function fetchPlayers(cacheBuster?: string) {
     try {
-      // Check if we already have bootstrap data in cache
+      // Check if we already have bootstrap data in cache with valid structure
       if (!cacheBuster && globalCache.bootstrapData && allPlayersMap.size > 0) {
-        const currentEvent = (globalCache.bootstrapData.events || []).find(e => e.is_current);
-        latestGW = currentEvent ? currentEvent.id : 1;
-        populateGWSelector(latestGW);
-        return;
+        // Validate cache structure - ensure it has the format we expect
+        const firstPlayer = allPlayersMap.values().next().value;
+        if (firstPlayer && typeof firstPlayer === 'object' && 'name' in firstPlayer) {
+          const currentEvent = (globalCache.bootstrapData.events || []).find(e => e.is_current);
+          latestGW = currentEvent ? currentEvent.id : 1;
+          populateGWSelector(latestGW);
+          return;
+        }
       }
 
       const v = cacheBuster || Date.now().toString();
@@ -343,6 +347,7 @@ import Nav from "../components/Nav.astro";
       if (!res.ok) return;
       const data = await res.json();
       
+      // Clear and repopulate with the structure this page needs
       allPlayersMap.clear();
       data.elements.forEach(p => {
         allPlayersMap.set(p.id, { name: p.web_name, position: p.element_type, team: p.team });

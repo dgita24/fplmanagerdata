@@ -53,16 +53,33 @@ export function clearCache(page: 'live' | 'squads' | 'transfers' | 'ownership' |
     globalCache.live.projectedBonus.clear();
     globalCache.live.teamStatus.clear();
     globalCache.live.fixtures = [];
+    return;
   }
+  
   if (page === 'squads') {
     globalCache.squads.data.clear();
     globalCache.squads.history.clear();
+    return;
   }
-  if (page === 'transfers') globalCache.transfers.history.clear();
-  if (page === 'ownership') globalCache.ownership.squads.clear();
-  if (page === 'chips') globalCache.chips.data.clear();
+  
+  if (page === 'transfers') {
+    globalCache.transfers.history.clear();
+    return;
+  }
+  
+  if (page === 'ownership') {
+    globalCache.ownership.squads.clear();
+    return;
+  }
+  
+  if (page === 'chips') {
+    globalCache.chips.data.clear();
+    return;
+  }
+  
   if (page === 'stats') {
     globalCache.stats.summary.clear();
     globalCache.stats.history.clear();
+    return;
   }
 }
