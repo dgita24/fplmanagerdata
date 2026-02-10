@@ -498,6 +498,73 @@ import Nav from "../components/Nav.astro";
   let allSquadsData = [];
   let latestGW = 1;
   
+  // ==============================
+  // Persistent page cache (Squads) - cached until Refresh
+  // ==============================
+  const SQUADS_SNAPSHOT_KEY = "fpl_squads_snapshot_v1";
+
+  type SquadsSnapshot = {
+    savedAt: number;
+    managerIds: number[];
+    gw: number;
+    latestGW: number;
+    allSquadsData: any[];
+    ui: {
+      gwFilter: string;
+      managerFilter: string;
+      viewFilter: string;
+    };
+  };
+ 
+  function safeJsonParse(value: string | null) {
+    if (!value) return null;
+    try { return JSON.parse(value); } catch { return null; }
+  }
+
+  function normalizeIds(ids: any): number[] {
+    return (Array.isArray(ids) ? ids : []).map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  }
+
+  // Order-insensitive compare (cache survives reordering of IDs)
+  function sameManagerIds(a: any, b: any) {
+    const aa = normalizeIds(a).sort((x, y) => x - y);
+    const bb = normalizeIds(b).sort((x, y) => x - y);
+    if (aa.length !== bb.length) return false;
+    for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
+    return true;
+  }
+
+  function loadSquadsSnapshot(): SquadsSnapshot | null {
+    return safeJsonParse(localStorage.getItem(SQUADS_SNAPSHOT_KEY));
+  }
+
+  function saveSquadsSnapshot(gw: number) {
+    const snap: SquadsSnapshot = {
+      savedAt: Date.now(),
+      managerIds: [...managerIds],
+      gw,
+      latestGW,
+      allSquadsData,
+      ui: {
+        gwFilter: (gwFilterSelect as HTMLSelectElement).value || "",
+        managerFilter: (managerFilter as HTMLSelectElement).value || "",
+        viewFilter: (viewFilter as HTMLSelectElement).value || "all",
+      },
+    };
+
+    try {
+      localStorage.setItem(SQUADS_SNAPSHOT_KEY, JSON.stringify(snap));
+    } catch (e) {
+      console.warn("Could not save squads snapshot", e);
+    }
+  }
+
+  function renderSquadsFromState() {
+    populateManagerFilter();
+    renderOutput();
+  }
+
+
   // Load token for cancellation
   let currentLoadToken = 0;
 
@@ -652,8 +719,11 @@ import Nav from "../components/Nav.astro";
 
   async function fetchBootstrapData(cacheBuster?: string) {
     try {
-      const v = cacheBuster || Date.now().toString();
-      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
+      const url = cacheBuster
+        ? `/api/fpl/bootstrap-static?v=${cacheBuster}`
+        : `/api/fpl/bootstrap-static`;
+
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
@@ -697,6 +767,7 @@ import Nav from "../components/Nav.astro";
     }
   }
 
+
   async function fetchSquadForGW(entryId, gw, cacheBuster?: string) {
     try {
       // OPTIMIZATION: Check cache for squad picks
@@ -704,8 +775,11 @@ import Nav from "../components/Nav.astro";
       let data = managerPicksCache.get(cacheKey);
 
       if (!data) {
-        const v = cacheBuster || Date.now().toString();
-        const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`);
+        const url = cacheBuster
+          ? `/api/fpl/entry/${entryId}/event/${gw}/picks?v=${cacheBuster}`
+          : `/api/fpl/entry/${entryId}/event/${gw}/picks`;
+
+        const res = await fetch(url);
         if (!res.ok) throw new Error("Failed to fetch picks");
         data = await res.json();
         managerPicksCache.set(cacheKey, data);
@@ -746,12 +820,20 @@ import Nav from "../components/Nav.astro";
     }
   }
 
+
   async function fetchManagerData(entryId, gw, cacheBuster?: string) {
     try {
-      const v = cacheBuster || Date.now().toString();
+      const summaryUrl = cacheBuster
+        ? `/api/fpl/entry/${entryId}?v=${cacheBuster}`
+        : `/api/fpl/entry/${entryId}`;
+
+      const historyUrl = cacheBuster
+        ? `/api/fpl/entry/${entryId}/history?v=${cacheBuster}`
+        : `/api/fpl/entry/${entryId}/history`;
+
       const [summaryRes, historyRes] = await Promise.all([
-        fetch(`/api/fpl/entry/${entryId}?v=${v}`),
-        fetch(`/api/fpl/entry/${entryId}/history?v=${v}`)
+        fetch(summaryUrl),
+        fetch(historyUrl)
       ]);
 
       if (!summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch manager data");
@@ -1388,7 +1470,7 @@ import Nav from "../components/Nav.astro";
     attachManagerLinkButtons(); // Bind the new clicks
   }
 
-  async function loadSquads(ids, gw) {
+  async function loadSquads(ids, gw, opts?: { force?: boolean }) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
       return;
@@ -1399,18 +1481,20 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
+    const force = !!opts?.force;
+
     // Generate load token for cancellation
     const loadToken = ++currentLoadToken;
-    
+
     // Disable refresh button during loading
     refreshBtn.disabled = true;
 
     allSquadsData = [];
     out.innerHTML = "";
-    loadingStatus.textContent = `Fetching latest data...`;
+   loadingStatus.textContent = `Fetching latest data...`;
 
-    // Generate single cache-buster token for this load
-    const cacheBuster = Date.now().toString();
+    // Only bust caches when force=true (Refresh button)
+    const cacheBuster = force ? Date.now().toString() : undefined;
 
     // Fetch fixtures and live GW data first
     try {
@@ -1426,13 +1510,11 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
-    // Check if this load has been superseded
     if (loadToken !== currentLoadToken) {
-      console.log('Load superseded, aborting');
+      console.log("Load superseded, aborting");
       return;
     }
 
-    // Fetch manager data concurrently with limit of 8
     const squadResults = await mapWithConcurrency(
       ids,
       8,
@@ -1449,34 +1531,78 @@ import Nav from "../components/Nav.astro";
       }
     );
 
-    // Check again if this load has been superseded
     if (loadToken !== currentLoadToken) {
-      console.log('Load superseded after fetching managers, aborting');
+      console.log("Load superseded after fetching managers, aborting");
       return;
     }
 
-    // Filter out nulls
-    allSquadsData = squadResults.filter((data): data is NonNullable<typeof data> => data !== null);
+    allSquadsData = squadResults.filter((data) => data !== null);
 
-    // Populate manager filter and render once at the end
-    populateManagerFilter();
-    renderOutput();
+    // Render
+    renderSquadsFromState();
 
     loadingStatus.innerHTML = `<span class="text-success font-bold">✅ Loaded ${allSquadsData.length} managers for GW${gw}</span>`;
-    
-    // Re-enable refresh button
+
+    // Persist snapshot
+    saveSquadsSnapshot(gw);
+
     refreshBtn.disabled = false;
   }
 
+
   async function init() {
+    loadingStatus.textContent = "Loading...";
+
+    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    if (authenticated === false) return;
+
+    managerIds = ids;
+    managerCountEl.textContent = `${managerIds.length} managers`;
+
+    if (managerIds.length === 0) {
+      out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
+      return;
+    }
+
+    // Try cached render first (no network)
+    const snap = loadSquadsSnapshot();
+
+    if (
+      snap &&
+      sameManagerIds(snap.managerIds, managerIds) &&
+      Array.isArray(snap.allSquadsData) &&
+      snap.allSquadsData.length > 0
+    ) {
+      allSquadsData = snap.allSquadsData;
+      latestGW = snap.latestGW || latestGW;
+
+      populateGWSelector(latestGW);
+
+      if (typeof snap.ui?.gwFilter === "string" && snap.ui.gwFilter) {
+        gwFilterSelect.value = snap.ui.gwFilter;
+      } else {
+        gwFilterSelect.value = String(snap.gw || latestGW);
+      }
+
+      if (typeof snap.ui?.managerFilter === "string") {
+        managerFilter.value = snap.ui.managerFilter;
+      }
+      if (typeof snap.ui?.viewFilter === "string") {
+        viewFilter.value = snap.ui.viewFilter;
+      }
+
+      renderSquadsFromState();
+      loadingStatus.textContent = "Loaded from cache.";
+      return;
+    }
+
+    // No cache -> one normal load (not forced)
     loadingStatus.textContent = "Loading player data...";
     await fetchBootstrapData();
 
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
-
     await updateDisplay();
   }
+
 
   async function updateDisplay() {
     managerCountEl.textContent = `${managerIds.length} managers`;
@@ -1492,7 +1618,8 @@ import Nav from "../components/Nav.astro";
 
     if (managerParam) {
       const managerId = parseInt(managerParam);
-      await loadSquads([managerId], gw);
+      await loadSquads([managerId], gw, { force: false });
+
 
       const checkAndSetFilter = () => {
         if (managerFilter.options.length > 1) {
@@ -1503,30 +1630,66 @@ import Nav from "../components/Nav.astro";
       };
       setTimeout(checkAndSetFilter, 50);
     } else {
-      await loadSquads(managerIds, gw);
+      await loadSquads(managerIds, gw, { force: false });
     }
   }
 
-  gwFilterSelect.addEventListener('change', async () => {
-    const gw = parseInt(gwFilterSelect.value);
-    if (gw && gw >= 1 && gw <= 38) {
-      await loadSquads(managerIds, gw);
+  gwFilterSelect.addEventListener("change", async () => {
+    const gw = parseInt(gwFilterSelect.value as any);
+    if (!(gw && gw >= 1 && gw <= 38)) return;
+
+    const snap = loadSquadsSnapshot();
+    if (
+      snap &&
+      sameManagerIds(snap.managerIds, managerIds) &&
+      Number(snap.gw) === Number(gw) &&
+      Array.isArray(snap.allSquadsData) &&
+      snap.allSquadsData.length > 0
+    ) {
+      allSquadsData = snap.allSquadsData;
+      renderSquadsFromState();
+      loadingStatus.textContent = "Loaded from cache.";
+      return;
     }
+
+    await loadSquads(managerIds, gw, { force: false });
   });
 
-  managerFilter.addEventListener('change', () => {
+  managerFilter.addEventListener("change", () => {
     renderOutput();
+    const gw = parseInt(gwFilterSelect.value as any) || latestGW;
+    saveSquadsSnapshot(gw);
   });
 
-  viewFilter.addEventListener('change', () => {
+
+  viewFilter.addEventListener("change", () => {
     renderOutput();
+    const gw = parseInt(gwFilterSelect.value as any) || latestGW;
+    saveSquadsSnapshot(gw);
   });
 
-  refreshBtn.addEventListener('click', async () => {
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
+  refreshBtn.addEventListener("click", async () => {
+    localStorage.removeItem(SQUADS_SNAPSHOT_KEY);
+
+    // Also clear these two so refresh truly refetches picks/element-summary where needed
+    managerPicksCache.clear();
+    playerHistoryCache.clear();
+
+    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    if (authenticated === false) return;
+
     managerIds = ids;
-    await updateDisplay();
+    managerCountEl.textContent = `${managerIds.length} managers`;
+
+    const bust = Date.now().toString();
+    await fetchBootstrapData(bust);
+
+    await updateDisplay(); // updateDisplay now calls loadSquads(..., { force:false }) by default
+    // Force an actual refetch for the current GW dataset:
+    const gw = parseInt(gwFilterSelect.value as any) || latestGW;
+    await loadSquads(managerIds, gw, { force: true });
   });
+
 
   // Modal close handlers
   const playerModal = document.getElementById("player-modal");
