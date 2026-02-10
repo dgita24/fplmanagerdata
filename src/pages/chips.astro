@@ -1,6 +1,8 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
+import { supabase } from '../lib/supabase.ts'
+import { globalCache, clearCache } from '../lib/globalStore.ts';
 ---
 <Layout title="Chip Usage Tracker - FPL Manager Data">
   <Nav />
@@ -119,8 +121,9 @@ import Nav from "../components/Nav.astro";
   const closeChipModal = document.getElementById("close-chip-modal");
 
   let managerIds = [];
-  let playerCache = new Map();
-  let teamCache = new Map();
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
+  let chipsCache = globalCache.chips.data;
   
   // Load token for cancellation
   let currentLoadToken = 0;
@@ -165,13 +168,14 @@ import Nav from "../components/Nav.astro";
   }
 
   async function fetchBootstrapData(cacheBuster?: string) {
+    if (globalCache.bootstrapData && !cacheBuster) return globalCache.bootstrapData;
     try {
       const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
-      data.elements.forEach(player => {
+      data.elements.forEach((player: any) => {
         playerCache.set(player.id, {
           name: player.web_name,
           position: player.element_type === 1 ? "GK" :
@@ -181,10 +185,11 @@ import Nav from "../components/Nav.astro";
         });
       });
 
-      data.teams.forEach(team => {
+      data.teams.forEach((team: any) => {
         teamCache.set(team.id, team.short_name);
       });
-
+      
+      globalCache.bootstrapData = data;
       return data;
     } catch (e) {
       console.error("Error fetching bootstrap data:", e);
@@ -192,7 +197,9 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerData(id, cacheBuster?: string) {
+  async function fetchManagerData(id: number | string, cacheBuster?: string) {
+    if (!cacheBuster && chipsCache.has(id)) return chipsCache.get(id);
+
     const v = cacheBuster || Date.now().toString();
     const historyUrl = `/api/fpl/entry/${id}/history?v=${v}`;
     const summaryUrl = `/api/fpl/entry/${id}?v=${v}`;
@@ -212,8 +219,8 @@ import Nav from "../components/Nav.astro";
       const current = historyData.current || [];
       const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
 
-      const chipsFormatted = chips.map(c => {
-        const gwData = current.find(gw => gw.event === c.event);
+      const chipsFormatted = chips.map((c: any) => {
+        const gwData = current.find((gw: any) => gw.event === c.event);
         const points = gwData ? gwData.points : 0;
 
         return {
@@ -226,17 +233,19 @@ import Nav from "../components/Nav.astro";
         };
       });
 
-      return {
+      const result = {
         entryId: Number(id),
         managerName,
         chips: chipsFormatted
       };
+      
+      chipsCache.set(id, result);
+      return result;
     } catch (e) {
       console.error(`Error fetching manager ${id}:`, e);
       return null;
     }
   }
-
   async function showChipSquad(managerId, managerName, chipName, gw, points) {
     const chipEmoji = chipName === "WC" ? "🃏" : 
                       chipName === "BB" ? "🪑" : 
@@ -538,23 +547,32 @@ import Nav from "../components/Nav.astro";
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
       return;
     }
-
     await loadChips(managerIds);
   }
 
-  (async function init() {
+  async function init() {
     loadingStatus.textContent = "Loading player data...";
     await fetchBootstrapData();
-    
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
-
-    await updateDisplay();
-  })();
-
-  refreshBtn.addEventListener('click', async () => {
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();
-  });
+  }
+
+  function setupPage() {
+      if (!document.getElementById("chips-output")) return;
+
+      const refBtn = document.getElementById("refresh-btn");
+      if (refBtn) {
+          refBtn.onclick = async () => {
+            clearCache('chips');
+            const { managerIds: ids } = await loadManagerIdsFromSupabase();
+            managerIds = ids;
+            await updateDisplay();
+          };
+      }
+      
+      init();
+  }
+
+  document.addEventListener('astro:page-load', setupPage);
 </script>

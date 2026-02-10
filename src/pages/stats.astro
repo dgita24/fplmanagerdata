@@ -1,6 +1,9 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
+import { supabase } from '../lib/supabase.ts'
+import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+import { globalCache, clearCache } from '../lib/globalStore.ts';
 ---
 <Layout title="League Statistics - FPL Manager Data">
   <Nav />
@@ -277,13 +280,14 @@ import Nav from "../components/Nav.astro";
   let currentGWFinished = false;
   let managerIds: number[] = [];
   let allManagerData: ManagerData[] = [];
-  let playerCache = new Map<number, { name: string; position: number; team: number }>();
-  let teamCache = new Map<number, { name: string; shortName: string }>();
-  let livePointsCache = new Map<number, LiveStatLine>();
-  let projectedBonusCache = new Map<string, number>();
-  let teamStatusCache = new Map<string, TeamStatus>();
   let fixturesCache: FixtureInfo[] = [];
-  
+  let managerStatsCache = globalCache.stats; // Note: Use .summary and .history inside
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
+  let livePointsCache = globalCache.live.points;
+  let projectedBonusCache = globalCache.live.projectedBonus;
+  let teamStatusCache = globalCache.live.teamStatus;
+  // fixturesCache is referenced from globalCache.live.fixtures in code
   // Load token for cancellation
   let currentLoadToken = 0;
 
@@ -395,6 +399,13 @@ import Nav from "../components/Nav.astro";
   }
 
   async function fetchBootstrapData(cacheBuster?: string) {
+    if (globalCache.bootstrapData && !cacheBuster) {
+        const data = globalCache.bootstrapData;
+        const currentEvent = (data.events || []).find((e: any) => e.is_current);
+        latestGW = currentEvent ? currentEvent.id : 1;
+        populateGWSelector(latestGW);
+        return;
+    }
     try {
       const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
@@ -415,6 +426,8 @@ import Nav from "../components/Nav.astro";
           shortName: t.short_name
         });
       });
+      
+      globalCache.bootstrapData = data;
 
       const currentEvent = (data.events || []).find((e: any) => e.is_current);
       latestGW = currentEvent ? currentEvent.id : 1;
@@ -429,9 +442,8 @@ import Nav from "../components/Nav.astro";
 
   async function fetchManagerData(id: number, gw: number, cacheBuster?: string): Promise<ManagerData | null> {
     try {
-      // 1. Fetch Basic Summary and History
-      let summaryData = managerStatsCache.get(`${id}:summary`);
-      let historyData = managerStatsCache.get(`${id}:history`);
+      let summaryData = !cacheBuster ? managerStatsCache.summary.get(`${id}`) : null;
+      let historyData = !cacheBuster ? managerStatsCache.history.get(`${id}`) : null;
 
       const v = cacheBuster || Date.now().toString();
 
@@ -445,18 +457,15 @@ import Nav from "../components/Nav.astro";
 
         if (summaryRes) {
           summaryData = await summaryRes.json();
-          managerStatsCache.set(`${id}:summary`, summaryData);
+          managerStatsCache.summary.set(`${id}`, summaryData);
         }
         if (historyRes) {
           historyData = await historyRes.json();
-          managerStatsCache.set(`${id}:history`, historyData);
+          managerStatsCache.history.set(`${id}`, historyData);
         }
       }
 
-      // 2. Determine Points Logic based on Official FPL Site methodology
-      // If we are looking at the CURRENT gameweek, we trust summary_overall_points
-      // If we are looking at a PAST gameweek, we look at the history array.
-      
+      // ... (Keep existing points logic exactly as it is) ...
       const current = Array.isArray(historyData?.current) ? historyData.current : [];
       
       let gwPoints = 0;
@@ -467,24 +476,16 @@ import Nav from "../components/Nav.astro";
       let bank = 0;
 
       if (gw === latestGW) {
-        // === CURRENT GAMEWEEK ===
-        // Always use the summary object. This reflects what is on the FPL site "right now".
-        // It accounts for hits naturally as FPL updates.
-        
         gwPoints = Number(summaryData.summary_event_points) || 0;
         gwRank = Number(summaryData.summary_event_rank) || 0;
         totalPoints = Number(summaryData.summary_overall_points) || 0;
         overallRank = Number(summaryData.summary_overall_rank) || 0;
         teamValue = Number(summaryData.last_deadline_value) || 0;
         bank = Number(summaryData.last_deadline_bank) || 0;
-
       } else {
-        // === PAST GAMEWEEK ===
-        // Find the specific row in history
         const gwRow = current.find((r: any) => Number(r.event) === Number(gw));
-        
         if (gwRow) {
-            gwPoints = Number(gwRow.points) || 0; // Note: In history, this is usually points *after* hits
+            gwPoints = Number(gwRow.points) || 0; 
             gwRank = Number(gwRow.rank) || 0;
             totalPoints = Number(gwRow.total_points) || 0;
             overallRank = Number(gwRow.overall_rank) || 0;
@@ -511,7 +512,6 @@ import Nav from "../components/Nav.astro";
       return null;
     }
   }
-
   function formatRank(rank: number): string {
     if (!rank || rank === 0) return "—";
     return rank.toLocaleString();
@@ -521,13 +521,64 @@ import Nav from "../components/Nav.astro";
     return `£${(value / 10).toFixed(1)}m`;
   }
 
+  // ==============================
+  // Stats table sorting (client-side)
+  // Default: Total desc
+  // ==============================
+  let statsSortKey: "gwPoints" | "totalPoints" | "overallRank" = "totalPoints";
+  let statsSortDir: "asc" | "desc" = "desc";
+
+  function normalizeNumber(v: any) {
+    if (v === null || v === undefined || v === "") return Number.NEGATIVE_INFINITY;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
+  }
+
+  function sortStatsRows(rows: any[]) {
+    const copy = [...rows];
+    copy.sort((a, b) => {
+      const av = normalizeNumber(a?.[statsSortKey]);
+      const bv = normalizeNumber(b?.[statsSortKey]);
+      const delta = av - bv;
+      return statsSortDir === "asc" ? delta : -delta;
+    });
+    return copy;
+  }
+
+  function setStatsSort(nextKey: typeof statsSortKey) {
+    if (nextKey === statsSortKey) {
+      statsSortDir = statsSortDir === "asc" ? "desc" : "asc";
+      return;
+    }
+    statsSortKey = nextKey;
+
+    // default direction by column
+    statsSortDir = nextKey === "overallRank" ? "asc" : "desc";
+  }
+
+  function attachStatsSortHandlers() {
+    document.querySelectorAll(".stats-table th[data-sort]").forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.getAttribute("data-sort") as typeof statsSortKey | null;
+        if (!key) return;
+
+        setStatsSort(key);
+
+        // re-render instantly with current GW selection (no refetch)
+        const gw = parseInt(gwFilterSelect.value) || latestGW;
+        out.innerHTML = makeStatsTable(allManagerData, gw);
+        attachManagerButtons();
+        attachStatsSortHandlers();
+      });
+    });
+  }
+
   function makeStatsTable(managersData: ManagerData[], gw: number): string {
-    // Sort by Total Points (descending) as default for Stats page
-    managersData.sort((a, b) => b.totalPoints - a.totalPoints);
+    const sortedData = sortStatsRows(managersData);
 
     // Find max for highlighting
     let maxGwPoints = -Infinity;
-    managersData.forEach(m => {
+    sortedData.forEach(m => {
       if (m.gwPoints > maxGwPoints) maxGwPoints = m.gwPoints;
     });
 
@@ -539,16 +590,16 @@ import Nav from "../components/Nav.astro";
               <tr>
                 <th class="rank-col">#</th>
                 <th>Manager</th>
-                <th class="pts-col">GW</th>
-                <th class="total-col">Total</th>
-                <th class="or-col">OR</th>
+                <th class="pts-col sortable-col ${statsSortKey === "gwPoints" ? "is-sorted" : ""}" data-sort="gwPoints">GW</th>
+                <th class="total-col sortable-col ${statsSortKey === "totalPoints" ? "is-sorted" : ""}" data-sort="totalPoints">Total</th>
+                <th class="or-col sortable-col ${statsSortKey === "overallRank" ? "is-sorted" : ""}" data-sort="overallRank">OR</th>
               </tr>
             </thead>
             <tbody>
     `;
 
     let rank = 1;
-    for (const m of managersData) {
+    for (const m of sortedData) {
       const isTopScorer = m.gwPoints === maxGwPoints && maxGwPoints > 0;
       const rowClass = isTopScorer ? 'top-scorer-row' : '';
 
@@ -1055,9 +1106,9 @@ import Nav from "../components/Nav.astro";
 
     // Render table once at the end
     if (allManagerData.length > 0) {
-      allManagerData.sort((a, b) => b.totalPoints - a.totalPoints);
       out.innerHTML = makeStatsTable(allManagerData, gw);
       attachManagerButtons();
+      attachStatsSortHandlers();
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allManagerData.length} managers</span>`;
@@ -1076,22 +1127,38 @@ import Nav from "../components/Nav.astro";
     await loadStats(managerIds, gw);
   }
 
-  (async function init() {
+  async function init() {
     await fetchBootstrapData();
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
     await updateDisplay();
-  })();
+  }
 
-  gwFilterSelect.addEventListener('change', async () => {
-    const gw = parseInt(gwFilterSelect.value);
-    if (gw) await loadStats(managerIds, gw);
-  });
+  function setupPage() {
+      if (!document.getElementById("stats-output")) return;
 
-  refreshBtn.addEventListener('click', async () => {
-    managerStatsCache.clear();
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
-    await updateDisplay();
-  });
+      const gwSelect = document.getElementById("gw-filter") as HTMLSelectElement;
+      const refBtn = document.getElementById("refresh-btn");
+
+      if (gwSelect) {
+          if (gwSelect.options.length <= 1) populateGWSelector(latestGW);
+          gwSelect.onchange = async () => {
+             const gw = parseInt(gwSelect.value);
+             if (gw) await loadStats(managerIds, gw);
+          };
+      }
+
+      if (refBtn) {
+          refBtn.onclick = async () => {
+            clearCache('stats');
+            const { managerIds: ids } = await loadManagerIdsFromSupabase();
+            managerIds = ids;
+            await updateDisplay();
+          };
+      }
+
+      init();
+  }
+
+  document.addEventListener('astro:page-load', setupPage);
 </script>

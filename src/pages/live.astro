@@ -1,6 +1,8 @@
 ---
-import Layout from "../layouts/Layout.astro";
-import Nav from "../components/Nav.astro";
+import { supabase } from '../lib/supabase.ts'
+import { applyAutoSubsAndMultipliers, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
+import { globalCache, clearCache } from '../lib/globalStore.ts';
 ---
 <Layout title="Live League Standings - FPL Manager Data">
   <Nav />
@@ -382,17 +384,24 @@ import Nav from "../components/Nav.astro";
     defensive_contribution: number;
   }
 
+  // MAP LOCAL VARS TO GLOBAL STORE
+  let managerDataCache = globalCache.live.managerData;
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
+  let livePointsCache = globalCache.live.points;
+  let projectedBonusCache = globalCache.live.projectedBonus;
+  let teamStatusCache = globalCache.live.teamStatus;
+  
+  // Note: fixturesCache is an array reference in global store
+  
+  let managerIds: number[] = []
   let liveData: any[] = [];
   let latestGW: number = 1;
-  let playerCache = new Map<number, PlayerInfo>();
-  let teamCache = new Map<number, TeamInfo>();
-  let livePointsCache = new Map<number, LiveStats>();
-  let projectedBonusCache = new Map<string, number>();
-  let teamStatusCache = new Map<string, TeamStatus>();
-  let fixturesCache: FixtureInfo[] = [];
-  
-  // Load token for cancellation
   let currentLoadToken = 0;
+
+  // Sorting State
+  let liveSortKey: "livePointsBeforeHits" | "transferCost" | "livePoints" | "totalPoints" | "diff" = "totalPoints";
+  let liveSortDir: "asc" | "desc" = "desc";
 
   closeSquadModal.addEventListener("click", () => {
     squadModal.classList.remove("is-open");
@@ -449,7 +458,7 @@ import Nav from "../components/Nav.astro";
     let currentIndex = 0;
     let completed = 0;
 
-    async function worker() {
+  async function worker() {
       while (currentIndex < items.length) {
         const index = currentIndex++;
         const item = items[index];
@@ -472,6 +481,14 @@ import Nav from "../components/Nav.astro";
   }
 
   async function fetchBootstrapData(cacheBuster?: string) {
+    if (globalCache.bootstrapData && !cacheBuster) {
+       const data = globalCache.bootstrapData;
+       const activeEvent = data.events.filter((e: any) => new Date(e.deadline_time) < new Date()).pop();
+       latestGW = activeEvent ? activeEvent.id : 1;
+       populateGWSelector(latestGW);
+       return data;
+    }
+
     try {
       const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
@@ -492,10 +509,11 @@ import Nav from "../components/Nav.astro";
           shortName: team.short_name
         });
       });
+      
+      globalCache.bootstrapData = data;
 
       const activeEvent = data.events.filter((e: any) => new Date(e.deadline_time) < new Date()).pop();
       latestGW = activeEvent ? activeEvent.id : 1;
-
       populateGWSelector(latestGW);
 
       return data;
@@ -505,23 +523,21 @@ import Nav from "../components/Nav.astro";
     }
   }
 
+
   async function fetchManagerLive(entryId: number, gw: number, cacheBuster?: string) {
-    try {
-      const cacheKey = `${entryId}:${gw}`;
-      let rawData = managerDataCache.get(cacheKey);
+    const cacheKey = `${entryId}:${gw}`;
+    let rawData = managerDataCache.get(cacheKey);
+    const v = cacheBuster || Date.now().toString();
 
-      const v = cacheBuster || Date.now().toString();
-
-      if (!rawData) {
+    // IF NOT IN CACHE OR REFRESH REQUESTED, FETCH IT
+    if (!rawData || cacheBuster) {
          const [picksRes, summaryRes, historyRes] = await Promise.all([
           fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`),
           fetch(`/api/fpl/entry/${entryId}?v=${v}`),
           fetch(`/api/fpl/entry/${entryId}/history?v=${v}`)
         ]);
 
-        if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) {
-          throw new Error("Failed to fetch manager data");
-        }
+        if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) throw new Error("Failed");
 
         const picksData = await picksRes.json();
         const summaryData = await summaryRes.json();
@@ -529,7 +545,7 @@ import Nav from "../components/Nav.astro";
         
         rawData = { picksData, summaryData, historyData };
         managerDataCache.set(cacheKey, rawData);
-      }
+    }
 
       const { picksData, summaryData, historyData } = rawData;
 
@@ -1081,119 +1097,142 @@ import Nav from "../components/Nav.astro";
     });
   }
 
+  function sortLiveRows() {
+    liveData.sort((a, b) => {
+      const valA = a[liveSortKey];
+      const valB = b[liveSortKey];
+      if (valA < valB) return liveSortDir === "asc" ? -1 : 1;
+      if (valA > valB) return liveSortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+  }
+
+  function attachLiveSortHandlers() {
+    // Add sorting UI logic here if you have table headers with IDs
+    // For now, this placeholder prevents the crash
+  }
+
   async function loadLive(ids: number[], gw: number) {
     if (ids.length === 0) {
-      out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
+      out.innerHTML = "<p class='status status--error'>No manager IDs found...</p>";
       return;
     }
-
-    if (!gw) {
-      out.innerHTML = "<p class='status status--warning'>Please select a gameweek.</p>";
-      return;
-    }
+    if (!gw) return;
 
     const loadToken = ++currentLoadToken;
     refreshBtn.disabled = true;
-    
     liveData = [];
     out.innerHTML = "";
-    loadingStatus.textContent = `Fetching latest data...`;
-
-    fixturesCache = [];
-    livePointsCache.clear();
-    projectedBonusCache.clear();
-    teamStatusCache.clear();
-
-    const cacheBuster = Date.now().toString();
     
-    try {
-      await Promise.all([
-        fetchFixtures({ 
-          gw, 
-          fixturesCache, 
-          projectedBonusCache, 
-          teamStatusCache, 
-          includeFinishedProvisional: true,
-          cacheBuster 
-        }),
-        fetchLiveGW({ 
-          gw, 
-          livePointsCache, 
-          includeExtendedStats: true,
-          cacheBuster 
-        })
-      ]);
-    } catch (e) {
-      console.error('Error fetching fixtures/live data:', e);
-      loadingStatus.innerHTML = `<span class='status status--error'>Error loading fixtures/live data</span>`;
-      refreshBtn.disabled = false;
-      return;
+    // CACHE CHECK FOR FIXTURES/POINTS
+    // If we have data in memory, skip the fetch unless cacheBuster is set (which is handled by clearing cache before calling this)
+    if (globalCache.live.points.size > 0 && globalCache.live.fixtures.length > 0) {
+        loadingStatus.textContent = "Loading from cache...";
+    } else {
+        loadingStatus.textContent = `Fetching latest data...`;
+        livePointsCache.clear();
+        projectedBonusCache.clear();
+        teamStatusCache.clear();
+        globalCache.live.fixtures = [];
+        
+        try {
+          const cacheBuster = Date.now().toString();
+          // Pass global cache references
+          await Promise.all([
+            fetchFixtures({ 
+              gw, 
+              fixturesCache: globalCache.live.fixtures, 
+              projectedBonusCache, 
+              teamStatusCache, 
+              includeFinishedProvisional: true,
+              cacheBuster 
+            }),
+            fetchLiveGW({ 
+              gw, 
+              livePointsCache, 
+              includeExtendedStats: true,
+              cacheBuster 
+            })
+          ]);
+        } catch (e) {
+           console.error(e);
+        }
     }
 
-    if (loadToken !== currentLoadToken) return;
-
-    const managerDataResults = await mapWithConcurrency(
-      ids,
-      8,
-      async (id) => await fetchManagerLive(id, gw, cacheBuster),
-      (completed, total) => {
-        loadingStatus.textContent = `Fetching ${completed}/${total}...`;
+    // Now process managers (Rendering)
+    // This part runs regardless of whether we fetched or used cache
+    await mapWithConcurrency(ids, 4, async (entryId) => {
+      if (currentLoadToken !== loadToken) return;
+      try {
+        const result = await fetchManagerLive(entryId, gw); // Arguments MUST match your function signature
+        if (currentLoadToken !== loadToken) return;
+        liveData.push(result);
+        
+        // Update DOM progressively (optional, or wait for sort)
+        loadingStatus.textContent = `Loaded ${liveData.length}/${ids.length} managers...`;
+      } catch (e) {
+        console.error(`Error manager ${entryId}:`, e);
       }
-    );
+    });
 
-    if (loadToken !== currentLoadToken) return;
+    if (currentLoadToken !== loadToken) return;
 
-    liveData = managerDataResults.filter((data): data is NonNullable<typeof data> => data !== null);
-
-    if (liveData.length > 0) {
-      const compareId = compareManagerSelect.value;
-      out.innerHTML = makeLiveTable(liveData, compareId);
-      attachManagerButtons();
-      populateCompareManager();
-    }
-
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers</span>`;
-    lastUpdatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+    // Final Render
+    sortLiveRows(); 
+    makeLiveTable();
+    attachLiveSortHandlers();
+    attachManagerButtons(); 
+    
+    const now = new Date();
+    lastUpdatedEl.textContent = `Last updated: ${now.toLocaleTimeString()}`;
+    loadingStatus.textContent = "";
     refreshBtn.disabled = false;
   }
 
-  async function init() {
+    async function init() {
     loadingStatus.textContent = "Loading player data...";
     await fetchBootstrapData();
-
     const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
     if (!authenticated) return;
-
     managerIds = ids;
     managerCountEl.textContent = `${managerIds.length} managers`;
-
-    if (managerIds.length > 0) {
-      loadLive(managerIds, latestGW);
-    } else {
-      out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
-    }
+    if (managerIds.length > 0) loadLive(managerIds, latestGW);
   }
 
-  gwFilterSelect.addEventListener('change', async () => {
-    const gw = parseInt(gwFilterSelect.value);
-    if (gw && gw >= 1 && gw <= 38) {
-      loadLive(managerIds, gw);
-    }
-  });
+  // --- SAFE EVENT HANDLING ---
+  function setupPage() {
+      // 1. ISOLATION CHECK: Stop if not on Live Page
+      const out = document.getElementById("live-output");
+      if (!out) return; 
 
-  compareManagerSelect.addEventListener('change', () => {
-    const compareId = compareManagerSelect.value;
-    out.innerHTML = makeLiveTable(liveData, compareId);
-    attachManagerButtons();
-  });
+      // 2. Re-acquire elements in this scope (fresh DOM)
+      const gwFilter = document.getElementById("gw-filter") as HTMLSelectElement;
+      const refBtn = document.getElementById("refresh-btn") as HTMLButtonElement;
 
-  refreshBtn.addEventListener('click', async () => {
-    managerDataCache.clear();
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
-    const gw = parseInt(gwFilterSelect.value) || latestGW;
-    loadLive(managerIds, gw);
-  });
+      // 3. Attach GW Filter
+      if (gwFilter) {
+          // Re-populate if needed (simple check if empty)
+          if (gwFilter.options.length <= 1) populateGWSelector(latestGW);
+          
+          gwFilter.onchange = async () => {
+             const gw = parseInt(gwFilter.value);
+             if (gw) loadLive(managerIds, gw);
+          };
+      }
 
-  init();
-</script>
+      // 4. Attach Refresh Button
+      if (refBtn) {
+          refBtn.onclick = async () => {
+            clearCache('live'); // CLEAR MEMORY
+            const { managerIds: ids } = await loadManagerIdsFromSupabase();
+            managerIds = ids;
+            loadLive(managerIds, parseInt(gwFilter?.value || "1") || latestGW);
+          };
+      }
+      
+      // 5. Run Init
+      init();
+  }
+
+  // Run on initial load AND every navigation swap
+  document.addEventListener('astro:page-load', setupPage);

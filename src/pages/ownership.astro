@@ -1,6 +1,8 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
+import { supabase } from '../lib/supabase.ts'
+import { globalCache, clearCache } from '../lib/globalStore.ts';
 ---
 <Layout title="Player Ownership - FPL Manager Data">
   <Nav />
@@ -33,13 +35,17 @@ import Nav from "../components/Nav.astro";
           <option value="FWD">FWD</option>
         </select>
       </div>
+      <div class="control-inline">
+        <label class="label-small">&nbsp;</label>
+        <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
+      </div>
     </div>
 
     <div id="loading-status" class="meta-row"></div>
     <section id="ownership-output" aria-live="polite"></section>
   </main>
 
-  <!-- Ownership Modal edit here this text to force cloudflare deploy -->
+  <!-- Ownership Modal -->
   <div id="ownership-modal" class="modal">
     <div class="modal-panel">
       <button id="close-ownership-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
@@ -68,6 +74,7 @@ import Nav from "../components/Nav.astro";
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
     padding: var(--space-2);
+    align-items: flex-end; /* Align button with inputs */
   }
 
   .control-inline {
@@ -75,6 +82,7 @@ import Nav from "../components/Nav.astro";
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-width: 100px;
   }
 
   .label-small {
@@ -86,7 +94,7 @@ import Nav from "../components/Nav.astro";
 
   .select-small {
     width: 100%;
-    min-height: 32px;
+    min-height: 36px;
     padding: 6px 8px;
     font-family: inherit;
     font-size: 13px;
@@ -99,6 +107,28 @@ import Nav from "../components/Nav.astro";
   .select-small:focus {
     outline: none;
     border-color: var(--color-primary);
+  }
+
+  .btn-row {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: var(--space-2) var(--space-3);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+    background: var(--color-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-row:hover {
+    background: var(--color-primary-hover);
   }
 </style>
 
@@ -137,6 +167,7 @@ import Nav from "../components/Nav.astro";
   const positionFilter = document.getElementById("position-filter");
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
+  const refreshBtn = document.getElementById("refresh-btn");
   const ownershipModal = document.getElementById("ownership-modal");
   const ownershipModalContent = document.getElementById("ownership-modal-content");
   const closeOwnershipModal = document.getElementById("close-ownership-modal");
@@ -144,24 +175,18 @@ import Nav from "../components/Nav.astro";
   let managerIds = [];
   let ownershipData = [];
   let latestGW = null;
-  let playerCache = new Map();
-  let teamCache = new Map();
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
   let allManagerNames = [];
-  // Names of managers who played Free Hit in the currently selected GW.
-  // (Uses the same 🎯 FH indicator you already use on the Chips page.)
   let freeHitManagers = new Set();
   
-  // Load token for cancellation
   let currentLoadToken = 0;
-
+  let ownershipCache = globalCache.ownership.squads;
 
   closeOwnershipModal.addEventListener("click", () => {
     ownershipModal.classList.remove("is-open");
   });
 
-  /**
-   * Concurrent mapping with limited concurrency
-   */
   async function mapWithConcurrency<T, R>(
     items: T[],
     limit: number,
@@ -206,13 +231,21 @@ import Nav from "../components/Nav.astro";
   }
 
   async function fetchBootstrapData(cacheBuster?: string) {
+    if (globalCache.bootstrapData && !cacheBuster) {
+       const data = globalCache.bootstrapData;
+       const currentEvent = data.events.find((e: any) => e.is_current);
+       latestGW = currentEvent ? currentEvent.id : 1;
+       populateGWSelector(latestGW);
+       return;
+    }
+
     try {
       const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
-      data.elements.forEach(player => {
+      data.elements.forEach((player: any) => {
         playerCache.set(player.id, {
           name: player.web_name,
           position: player.element_type === 1 ? "GK" :
@@ -222,11 +255,13 @@ import Nav from "../components/Nav.astro";
         });
       });
 
-      data.teams.forEach(team => {
+      data.teams.forEach((team: any) => {
         teamCache.set(team.id, team.short_name);
       });
+      
+      globalCache.bootstrapData = data;
 
-      const currentEvent = data.events.find(e => e.is_current);
+      const currentEvent = data.events.find((e: any) => e.is_current);
       latestGW = currentEvent ? currentEvent.id : 1;
       
       populateGWSelector(latestGW);
@@ -235,7 +270,13 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerSquad(entryId, gw, cacheBuster?: string) {
+  async function fetchManagerSquad(entryId: number, gw: number, cacheBuster?: string) {
+    const cacheKey = `${entryId}:${gw}`;
+    // Respect cache unless bust requested
+    if (!cacheBuster && ownershipCache.has(cacheKey)) {
+        return ownershipCache.get(cacheKey);
+    }
+
     try {
       const v = cacheBuster || Date.now().toString();
       const [picksRes, summaryRes, historyRes] = await Promise.all([
@@ -253,20 +294,23 @@ import Nav from "../components/Nav.astro";
       const managerName = `${summaryData.player_first_name} ${summaryData.player_last_name}`;
 
       const chips = historyData?.chips || [];
-      const isFreeHit = chips.some(c => c.name === 'freehit' && Number(c.event) === Number(gw));
+      const isFreeHit = chips.some((c: any) => c.name === 'freehit' && Number(c.event) === Number(gw));
 
-      return {
+      const result = {
         entryId,
         managerName,
         isFreeHit,
-        picks: picksData.picks.map(p => p.element)
+        picks: picksData.picks.map((p: any) => p.element)
       };
+      
+      ownershipCache.set(cacheKey, result);
+      return result;
+
     } catch (e) {
       console.error(`Error fetching squad for ${entryId}:`, e);
       return null;
     }
   }
-
 
   function calculateOwnership(managerSquads) {
     const ownership = new Map();
@@ -459,7 +503,8 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  async function loadOwnership(ids, gw) {
+  // Updated to handle forceRefresh logic
+  async function loadOwnership(ids, gw, forceRefresh = false) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
       return;
@@ -470,16 +515,16 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
-    // Generate load token for cancellation
     const loadToken = ++currentLoadToken;
+    refreshBtn.disabled = true;
 
     allManagerNames = [];
     freeHitManagers = new Set();
     out.innerHTML = "";
     loadingStatus.textContent = `Fetching latest data...`;
 
-    // Generate single cache-buster token for this load
-    const cacheBuster = Date.now().toString();
+    // Pass null if not forcing refresh (allows cache to be used)
+    const cacheBuster = forceRefresh ? Date.now().toString() : null;
     
     // Fetch manager squads concurrently with limit of 8
     const squadResults = await mapWithConcurrency(
@@ -498,18 +543,12 @@ import Nav from "../components/Nav.astro";
       }
     );
 
-    // Check if this load has been superseded
-    if (loadToken !== currentLoadToken) {
-      console.log('Load superseded, aborting');
-      return;
-    }
+    if (loadToken !== currentLoadToken) return;
 
-    // Filter out nulls and update data
     const managerSquads = squadResults.filter((data): data is NonNullable<typeof data> => data !== null);
     allManagerNames = managerSquads.map(data => data.managerName);
     freeHitManagers = new Set(managerSquads.filter(data => data.isFreeHit).map(data => data.managerName));
 
-    // Calculate ownership and render table once at the end
     ownershipData = calculateOwnership(managerSquads);
     if (ownershipData.length > 0) {
       const posFilter = positionFilter.value;
@@ -518,6 +557,7 @@ import Nav from "../components/Nav.astro";
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${managerSquads.length} managers for GW${gw}</span>`;
+    refreshBtn.disabled = false;
   }
 
   async function init() {
@@ -535,21 +575,45 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
+    // Default load: Use cache if available (forceRefresh = false)
     await loadOwnership(managerIds, latestGW);
   }
 
-  gwFilterSelect.addEventListener('change', async () => {
-    const gw = parseInt(gwFilterSelect.value);
-    if (gw && gw >= 1 && gw <= 38) {
-      await loadOwnership(managerIds, gw);
-    }
-  });
+  function setupPage() {
+      const outElement = document.getElementById("ownership-output");
+      if (!outElement) return;
 
-  positionFilter.addEventListener('change', () => {
-    const posFilter = positionFilter.value;
-    out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
-    attachPlayerButtons();
-  });
+      const gwSelect = document.getElementById("gw-filter") as HTMLSelectElement;
+      const posSelect = document.getElementById("position-filter") as HTMLSelectElement;
+      const refBtn = document.getElementById("refresh-btn");
 
-  init();
+      if (gwSelect) {
+          gwSelect.onchange = async () => {
+            const gw = parseInt(gwSelect.value);
+            if (gw && gw >= 1 && gw <= 38) {
+              await loadOwnership(managerIds, gw);
+            }
+          };
+      }
+
+      if (posSelect) {
+          posSelect.onchange = () => {
+            const posFilter = posSelect.value;
+            out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
+            attachPlayerButtons();
+          };
+      }
+
+      if (refBtn) {
+          refBtn.onclick = () => {
+              clearCache('ownership');
+              // Force refresh: Pass true
+              loadOwnership(managerIds, parseInt(gwSelect?.value) || latestGW, true);
+          };
+      }
+
+      init();
+  }
+
+  document.addEventListener('astro:page-load', setupPage);
 </script>

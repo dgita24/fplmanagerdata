@@ -1,4 +1,6 @@
 ---
+import { ViewTransitions } from 'astro:transitions';
+
 /**
  * Global app shell + design system CSS.
  * Mobile-first responsive design for 2026.
@@ -19,6 +21,7 @@ const { title = "FPL Manager Data" } = Astro.props;
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
+    <ViewTransitions />
   </head>
 
   <body>
@@ -1617,6 +1620,32 @@ const { title = "FPL Manager Data" } = Astro.props;
     }
   }
 
+  /* ========================================
+     TABLES - Sorting header affordance
+   ======================================== */
+  .transfers-table th.sortable-col,
+  .live-table th.sortable-col,
+  .stats-table th.sortable-col {
+    cursor: pointer;
+    user-select: none;
+    color: var(--color-primary) !important; /* clickable hint */
+  }
+
+  .transfers-table th.sortable-col.is-sorted,
+  .live-table th.sortable-col.is-sorted,
+  .stats-table th.sortable-col.is-sorted {
+    color: #f59e0b !important; /* active sorted column: amber/gold */
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .transfers-table th.sortable-col:focus-visible,
+  .live-table th.sortable-col:focus-visible,
+  .stats-table th.sortable-col:focus-visible {
+    outline: 2px solid #f59e0b; /* match highlight colour */
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
   /* ========================================
      OWNERSHIP TABLE - Balanced compact columns
    ======================================== */

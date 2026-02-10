@@ -1,6 +1,8 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
+import { globalCache, clearCache } from '../lib/globalStore.ts';
+import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js'; // Ensure this is present
 ---
 <Layout title="Manager Squads - FPL Manager Data">
   <Nav />
@@ -501,12 +503,13 @@ import Nav from "../components/Nav.astro";
   // Load token for cancellation
   let currentLoadToken = 0;
 
-  let playerCache = new Map();
-  let teamCache = new Map();
-  let livePointsCache = new Map<number, LiveStatLine>();
+  let playerCache = globalCache.playerCache;
+  let teamCache = globalCache.teamCache;
+  let livePointsCache = globalCache.live.points; 
   let teamStatusCache = new Map<string, TeamStatus>();
   let projectedBonusCache = new Map<string, number>();
   let fixturesCache: FixtureInfo[] = [];
+  let managerSquadsCache = globalCache.squads.data;
 
   // NEW CACHES FOR OPTIMIZATION
   const playerHistoryCache = new Map(); // Global cache for element-summary (playerId -> historyArray)
@@ -697,23 +700,21 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchSquadForGW(entryId, gw, cacheBuster?: string) {
+  // Helper to fetch just the picks for a specific GW
+  async function fetchSquadForGW(entryId: number, gw: number, cacheBuster?: string) {
     try {
-      // OPTIMIZATION: Check cache for squad picks
-      const cacheKey = `${entryId}:${gw}`;
-      let data = managerPicksCache.get(cacheKey);
-
-      if (!data) {
-        const v = cacheBuster || Date.now().toString();
-        const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`);
-        if (!res.ok) throw new Error("Failed to fetch picks");
-        data = await res.json();
-        managerPicksCache.set(cacheKey, data);
-      }
+      const v = cacheBuster || Date.now().toString();
+      // We don't cache individual picks persistently in global store for this view 
+      // because we cache the higher-level 'managerData' object instead.
+      // But we can check if we have it in memory to save bandwidth on re-renders.
+      
+      const res = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`);
+      if (!res.ok) throw new Error("Failed to fetch picks");
+      const data = await res.json();
 
       const picks = data.picks || [];
 
-      return picks.map(pick => {
+      return picks.map((pick: any) => {
         const info = playerCache.get(pick.element) || { name: "Unknown", position: "?", teamId: 0 };
         const teamName = teamCache.get(info.teamId) || "???";
 
@@ -746,7 +747,13 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerData(entryId, gw, cacheBuster?: string) {
+  async function fetchManagerData(entryId: number, gw: number, cacheBuster?: string) {
+    // 1. Check Global Cache
+    const cacheKey = `${entryId}:${gw}`;
+    if (!cacheBuster && globalCache.squads.data.has(cacheKey)) {
+        return globalCache.squads.data.get(cacheKey);
+    }
+
     try {
       const v = cacheBuster || Date.now().toString();
       const [summaryRes, historyRes] = await Promise.all([
@@ -763,7 +770,8 @@ import Nav from "../components/Nav.astro";
       const teamName = summaryData.name;
 
       const chips = historyData.chips || [];
-      const chipThisGW = chips.find(c => c.event === gw);
+      const chipThisGW = chips.find((c: any) => Number(c.event) === Number(gw));
+      
       const chipPlayed = chipThisGW ?
         (chipThisGW.name === "wildcard" ? "WC" :
         chipThisGW.name === "bboost" ? "BB" :
@@ -774,19 +782,23 @@ import Nav from "../components/Nav.astro";
       const squadWithIndicators = applyAutoSubsKeepAll(squadRaw, chipPlayed || "None");
       const squad = applyCaptaincyToSquadDisplay(squadWithIndicators, chipPlayed || "None");
 
-      return {
+      const result = {
         entryId,
         managerName,
         teamName,
         chipPlayed,
         squad
       };
+
+      // 2. Save to Global Cache
+      globalCache.squads.data.set(cacheKey, result);
+      return result;
+
     } catch (e) {
       console.error(`Error fetching manager ${entryId}:`, e);
       return null;
     }
   }
-
   function populateManagerFilter() {
     managerFilter.innerHTML = '<option value="">All</option>';
 
@@ -973,12 +985,14 @@ import Nav from "../components/Nav.astro";
     return html;
   }
   // --- UPGRADE 2: Manager History Modal (Optimized) ---
-  async function showManagerHistoryModal(managerId) {
+  
+  async function showManagerHistoryModal(managerId: number) {
     const managerNameBtn = document.querySelector(`.manager-link-btn[data-manager-id="${managerId}"]`);
     const managerName = managerNameBtn ? managerNameBtn.textContent : "Manager";
     
     const historyModalContent = document.getElementById("history-modal-content");
     const historyModal = document.getElementById("manager-history-modal");
+    if (!historyModal || !historyModalContent) return;
     
     historyModalContent.innerHTML = `
       <h2 class="modal-title">${managerName}</h2>
@@ -993,25 +1007,14 @@ import Nav from "../components/Nav.astro";
         const maxGw = latestGW; 
         if (maxGw < 1) throw new Error("Season not started");
 
-        // 1. Fetch ALL picks for this manager (Parallel & Cached)
+        // 1. Fetch ALL picks for this manager (Parallel)
+        // We use a local cache for this heavy operation to avoid slamming the API if opened twice
         const pickPromises = [];
         for(let i=1; i<=maxGw; i++) {
-            const cacheKey = `${managerId}:${i}`;
-            if (managerPicksCache.has(cacheKey)) {
-                pickPromises.push(Promise.resolve(managerPicksCache.get(cacheKey)));
-            } else {
-                pickPromises.push(
-                    fetch(`/api/fpl/entry/${managerId}/event/${i}/picks`)
-                    .then(r => {
-                        if (r.ok) return r.json();
-                        return null;
-                    })
-                    .then(data => {
-                        if (data) managerPicksCache.set(cacheKey, data);
-                        return data;
-                    })
-                );
-            }
+             pickPromises.push(
+                fetch(`/api/fpl/entry/${managerId}/event/${i}/picks`)
+                .then(r => r.ok ? r.json() : null)
+             );
         }
         
         // 2. Fetch Manager History
@@ -1020,36 +1023,31 @@ import Nav from "../components/Nav.astro";
         const [picksResults, historyData] = await Promise.all([Promise.all(pickPromises), historyPromise]);
         
         // 3. Identify ALL unique players owned
-        const uniquePlayerIds = new Set();
-        picksResults.forEach(p => {
-            if(p && p.picks) p.picks.forEach(pick => uniquePlayerIds.add(pick.element));
+        const uniquePlayerIds = new Set<number>();
+        picksResults.forEach((p: any) => {
+            if(p && p.picks) p.picks.forEach((pick: any) => uniquePlayerIds.add(pick.element));
         });
 
-        // 4. Fetch per-gameweek stats for ONLY these players (Parallel & Cached)
-        const playerHistoryMap = new Map(); // key: playerId, val: array of GW stats
+        // 4. Fetch per-gameweek stats for ONLY these players
+        const playerHistoryMap = new Map(); 
         const playerPromises = [];
         
         for (const pid of uniquePlayerIds) {
-            if (playerHistoryCache.has(pid)) {
-                playerHistoryMap.set(pid, playerHistoryCache.get(pid));
-            } else {
-                playerPromises.push(
-                    fetch(`/api/fpl/element-summary/${pid}`)
-                    .then(r => r.ok ? r.json() : null)
-                    .then(data => {
-                        if (data && data.history) {
-                            playerHistoryCache.set(pid, data.history); // Cache it globally
-                            playerHistoryMap.set(pid, data.history);
-                        }
-                    })
-                );
-            }
+             playerPromises.push(
+                fetch(`/api/fpl/element-summary/${pid}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    if (data && data.history) {
+                        playerHistoryMap.set(pid, data.history);
+                    }
+                })
+            );
         }
         
         await Promise.all(playerPromises);
 
         // 5. THE CALCULATION LOOP
-        const playerTotals = new Map(); // key: pid, val: { games, points, name, team, pos }
+        const playerTotals = new Map(); 
 
         for (const pid of uniquePlayerIds) {
             const pInfo = playerCache.get(pid);
@@ -1067,16 +1065,16 @@ import Nav from "../components/Nav.astro";
 
         for(let i=0; i<picksResults.length; i++) {
             const gw = i + 1;
-            const pickData = picksResults[i];
+            const pickData: any = picksResults[i];
             if (!pickData) continue;
 
-            const chipName = (historyData.chips || []).find(c => c.event === gw)?.name;
+            const chipName = (historyData.chips || []).find((c: any) => Number(c.event) === gw)?.name;
             const isBB = chipName === "bboost";
             const isTC = chipName === "3xc";
 
-            const teamPicks = pickData.picks.map(p => {
+            const teamPicks = pickData.picks.map((p: any) => {
                 const pHist = playerHistoryMap.get(p.element);
-                const gwStats = pHist ? pHist.find(h => h.round === gw) : null;
+                const gwStats = pHist ? pHist.find((h: any) => h.round === gw) : null;
                 const minutes = gwStats ? gwStats.minutes : 0;
                 
                 return {
@@ -1104,12 +1102,12 @@ import Nav from "../components/Nav.astro";
                     stats.games++;
                     
                     const pHist = playerHistoryMap.get(p.playerId);
-                    const gwStats = pHist ? pHist.find(h => h.round === gw) : null;
+                    const gwStats = pHist ? pHist.find((h: any) => h.round === gw) : null;
                     const rawPoints = gwStats ? gwStats.total_points : 0;
 
                     let multiplier = 1;
                     if (p.isCaptain && !p.dnp) multiplier = isTC ? 3 : 2;
-                    else if (p.isViceCaptain && !p.dnp && squadWithSubs.find(s => s.isCaptain)?.dnp) multiplier = isTC ? 3 : 2;
+                    else if (p.isViceCaptain && !p.dnp && squadWithSubs.find((s: any) => s.isCaptain)?.dnp) multiplier = isTC ? 3 : 2;
 
                     stats.points += (rawPoints * multiplier);
                 }
@@ -1119,9 +1117,9 @@ import Nav from "../components/Nav.astro";
         // 6. Build UI
         const rows = Array.from(playerTotals.values());
         
-        rows.sort((a, b) => b.points - a.points);
+        rows.sort((a: any, b: any) => b.points - a.points);
 
-        const totalPointsSum = rows.reduce((acc, r) => acc + r.points, 0);
+        const totalPointsSum = rows.reduce((acc: number, r: any) => acc + r.points, 0);
 
         let html = `
             <h2 class="modal-title">${managerName}</h2>
@@ -1144,19 +1142,19 @@ import Nav from "../components/Nav.astro";
         `;
 
         for (const r of rows) {
-            if (r.points === 0 && r.games === 0) continue; 
+            if ((r as any).points === 0 && (r as any).games === 0) continue; 
 
-            const rowStyle = r.currentlyOwned ? "font-weight:600;" : "";
+            const rowStyle = (r as any).currentlyOwned ? "font-weight:600;" : "";
 
             html += `
                 <tr style="${rowStyle}">
                     <td class="player-cell">
-                        ${r.name} 
-                        <span class="text-muted" style="font-size:10px;">${r.team}</span>
+                        ${(r as any).name} 
+                        <span class="text-muted" style="font-size:10px;">${(r as any).team}</span>
                     </td>
-                    <td style="text-align:center;">${r.pos}</td>
-                    <td style="text-align:center;">${r.games}</td>
-                    <td style="text-align:center;" class="points-positive">${r.points}</td>
+                    <td style="text-align:center;">${(r as any).pos}</td>
+                    <td style="text-align:center;">${(r as any).games}</td>
+                    <td style="text-align:center;" class="points-positive">${(r as any).points}</td>
                 </tr>
             `;
         }
@@ -1490,6 +1488,7 @@ import Nav from "../components/Nav.astro";
 
     const gw = parseInt(gwFilterSelect.value) || latestGW;
 
+    // Support for linking directly to a specific manager's squad
     if (managerParam) {
       const managerId = parseInt(managerParam);
       await loadSquads([managerId], gw);
@@ -1507,46 +1506,67 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  gwFilterSelect.addEventListener('change', async () => {
-    const gw = parseInt(gwFilterSelect.value);
-    if (gw && gw >= 1 && gw <= 38) {
-      await loadSquads(managerIds, gw);
-    }
-  });
+  function setupPage() {
+      // Guard clause to ensure we are on the Squads page
+      if (!document.getElementById("squads-output")) return;
 
-  managerFilter.addEventListener('change', () => {
-    renderOutput();
-  });
+      // Re-attach elements in this scope
+      const gwFilter = document.getElementById("gw-filter") as HTMLSelectElement;
+      const mgrFilter = document.getElementById("manager-filter") as HTMLSelectElement;
+      const vFilter = document.getElementById("view-filter") as HTMLSelectElement;
+      const refBtn = document.getElementById("refresh-btn");
 
-  viewFilter.addEventListener('change', () => {
-    renderOutput();
-  });
+      // Modal Elements
+      const pModal = document.getElementById("player-modal");
+      const closePModal = document.getElementById("close-player-modal");
+      const hModal = document.getElementById("manager-history-modal");
+      const closeHModal = document.getElementById("close-history-modal");
 
-  refreshBtn.addEventListener('click', async () => {
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
-    await updateDisplay();
-  });
+      if (gwFilter) {
+          // Re-populate if needed (check if empty or just default)
+          if (gwFilter.options.length <= 1) populateGWSelector(latestGW);
 
-  // Modal close handlers
-  const playerModal = document.getElementById("player-modal");
-  const closePlayerModal = document.getElementById("close-player-modal");
-  if (playerModal && closePlayerModal) {
-    closePlayerModal.addEventListener("click", () => {
-      playerModal.classList.remove("is-open");
-    });
+          gwFilter.onchange = async () => {
+             const gw = parseInt(gwFilter.value);
+             if (gw && gw >= 1 && gw <= 38) {
+               await loadSquads(managerIds, gw);
+             }
+          };
+      }
+
+      if (mgrFilter) {
+          mgrFilter.onchange = () => {
+             renderOutput();
+          };
+      }
+
+      if (vFilter) {
+          vFilter.onchange = () => {
+             renderOutput();
+          };
+      }
+
+      if (refBtn) {
+          refBtn.onclick = async () => {
+            clearCache('squads'); // Clear global cache
+            const { managerIds: ids } = await loadManagerIdsFromSupabase();
+            managerIds = ids;
+            await updateDisplay();
+          };
+      }
+
+      // Modal Close Handlers
+      if (pModal && closePModal) {
+          closePModal.onclick = () => pModal.classList.remove("is-open");
+      }
+      
+      if (hModal && closeHModal) {
+          closeHModal.onclick = () => hModal.classList.remove("is-open");
+      }
+
+      init();
   }
 
-  // Initialize GW Points Modal
-  const gwPointsModal = initGWPointsModal('gw-points-modal');
-
-  const historyModal = document.getElementById("manager-history-modal");
-  const closeHistoryModal = document.getElementById("close-history-modal");
-  if (historyModal && closeHistoryModal) {
-    closeHistoryModal.addEventListener("click", () => {
-      historyModal.classList.remove("is-open");
-    });
-  }
-
-  init();
+  // Hook into Astro's View Transitions
+  document.addEventListener('astro:page-load', setupPage);
 </script>
