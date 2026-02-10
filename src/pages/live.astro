@@ -315,7 +315,7 @@ import Nav from "../components/Nav.astro";
   // SWR + localStorage snapshot (Live Standings)
   // ==============================
   const LIVE_SNAPSHOT_KEY = 'fpl_live_snapshot_v1';
-  const LIVE_TTL_MS = 60 * 1000; // 60s
+  const LIVE_TTL_MS = Number.POSITIVE_INFINITY; // cache until manual refresh
   const LIVE_REFRESH_THROTTLE_MS = 8 * 1000; // avoid hammering refreshes
 
   type LiveSnapshot = {
@@ -586,7 +586,7 @@ import Nav from "../components/Nav.astro";
   async function fetchBootstrapData(cacheBuster?: string) {
     try {
       const v = cacheBuster || Date.now().toString();
-      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
+      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`, { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
 
@@ -627,9 +627,9 @@ import Nav from "../components/Nav.astro";
 
       if (!rawData) {
          const [picksRes, summaryRes, historyRes] = await Promise.all([
-          fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`),
-          fetch(`/api/fpl/entry/${entryId}?v=${v}`),
-          fetch(`/api/fpl/entry/${entryId}/history?v=${v}`)
+          fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`, { cache: "no-store" }),
+          fetch(`/api/fpl/entry/${entryId}?v=${v}`, { cache: "no-store" }),
+          fetch(`/api/fpl/entry/${entryId}/history?v=${v}`, { cache: "no-store" })
         ]);
 
         if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) {
@@ -909,7 +909,8 @@ import Nav from "../components/Nav.astro";
 
     try {
       const v = Date.now();
-      const picksRes = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`);
+      const picksRes = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`, { cache: "no-store" });
+
       if (!picksRes.ok) throw new Error("Failed to fetch picks");
 
       const picksData = await picksRes.json();
@@ -1346,18 +1347,14 @@ import Nav from "../components/Nav.astro";
 
       lastUpdatedEl.textContent = `Updated: ${new Date(snap!.ts).toLocaleTimeString()}`;
 
-      // 2) SWR: refresh in background if stale
-      const age = Date.now() - snap!.ts;
-      if (age > LIVE_TTL_MS) {
-        loadLive(managerIds, gw, { force: true, background: true });
-      } else {
-        loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers (cached)</span>`;
-      }
+      // Cached-until-refresh: never auto-refresh
+      loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers (cached)</span>`;
       return;
+
     }
 
     // No snapshot (or unusable) -> normal foreground load
-    loadLive(managerIds, gw, { force: true, background: false });
+    loadLive(managerIds, gw, { force: false, background: false });
   }
 
   // ==============================
@@ -1381,16 +1378,13 @@ import Nav from "../components/Nav.astro";
         renderLiveFromState();
         lastUpdatedEl.textContent = `Updated: ${new Date(snap!.ts).toLocaleTimeString()}`;
 
-        const age = Date.now() - snap!.ts;
-        if (age > LIVE_TTL_MS) {
-          loadLive(managerIds, gw, { force: true, background: true });
-        } else {
-          loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers (cached)</span>`;
-        }
+        // Cached-until-refresh: never auto-refresh
+        loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers (cached)</span>`;
         return;
+
       }
 
-      loadLive(managerIds, gw, { force: true, background: false });
+      loadLive(managerIds, gw, { force: false, background: false });
     }
   });
 
