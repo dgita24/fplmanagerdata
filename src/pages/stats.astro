@@ -247,8 +247,6 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
   // We only need fetchLiveGW/fetchFixtures for the Modal details now, not the main table
   import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 
-  const managerStatsCache = new Map<string, any>();
-
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
 
