@@ -246,6 +246,76 @@ import Nav from "../components/Nav.astro";
 
   const managerStatsCache = new Map<string, any>();
 
+  // ==============================
+  // Persistent page cache (Stats) - cached until Refresh
+  // ==============================
+  const STATS_SNAPSHOT_KEY = "fpl_stats_snapshot_v1";
+
+  type StatsSnapshot = {
+    savedAt: number;
+    managerIds: number[];
+    gw: number;
+    allManagerData: ManagerData[];
+    latestGW: number;
+    currentGWFinished: boolean;
+    ui: {
+      statsSortKey: "gwPoints" | "totalPoints" | "overallRank";
+      statsSortDir: "asc" | "desc";
+      gwFilter: string;
+    };
+  };
+
+  function safeJsonParse<T>(value: string | null): T | null {
+    if (!value) return null;
+    try { return JSON.parse(value) as T; } catch { return null; }
+  }
+
+  function normalizeIds(ids: any): number[] {
+    return (Array.isArray(ids) ? ids : []).map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  }
+
+  // Order-insensitive compare (so cache still works if you reorder IDs)
+  function sameManagerIds(a: any, b: any) {
+    const aa = normalizeIds(a).sort((x, y) => x - y);
+    const bb = normalizeIds(b).sort((x, y) => x - y);
+    if (aa.length !== bb.length) return false;
+    for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
+    return true;
+  }
+
+  function loadStatsSnapshot(): StatsSnapshot | null {
+    return safeJsonParse<StatsSnapshot>(localStorage.getItem(STATS_SNAPSHOT_KEY));
+  }
+
+  function saveStatsSnapshot(gw: number) {
+    const snap: StatsSnapshot = {
+      savedAt: Date.now(),
+      managerIds: [...managerIds],
+      gw,
+      allManagerData,
+      latestGW,
+      currentGWFinished,
+      ui: {
+        statsSortKey,
+        statsSortDir,
+        gwFilter: gwFilterSelect.value || "",
+      },
+    };
+
+    try {
+      localStorage.setItem(STATS_SNAPSHOT_KEY, JSON.stringify(snap));
+    } catch (e) {
+      console.warn("Could not save stats snapshot", e);
+    }
+  }
+
+  function renderStatsFromState(gw: number) {
+    out.innerHTML = makeStatsTable(allManagerData, gw);
+    attachManagerButtons();
+    attachStatsSortHandlers();
+  }
+
+
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -396,10 +466,17 @@ import Nav from "../components/Nav.astro";
 
   async function fetchBootstrapData(cacheBuster?: string) {
     try {
-      const v = cacheBuster || Date.now().toString();
-      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
+      const url = cacheBuster
+        ? `/api/fpl/bootstrap-static?v=${cacheBuster}`
+        : `/api/fpl/bootstrap-static`;
+
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
+
+      // Rebuild caches
+      playerCache = new Map<number, { name: string; position: number; team: number }>();
+      teamCache = new Map<number, { name: string; shortName: string }>();
 
       data.elements.forEach((p: any) => {
         playerCache.set(p.id, {
@@ -433,12 +510,18 @@ import Nav from "../components/Nav.astro";
       let summaryData = managerStatsCache.get(`${id}:summary`);
       let historyData = managerStatsCache.get(`${id}:history`);
 
-      const v = cacheBuster || Date.now().toString();
+      const summaryUrl = cacheBuster
+        ? `/api/fpl/entry/${id}?v=${cacheBuster}`
+        : `/api/fpl/entry/${id}`;
+
+      const historyUrl = cacheBuster
+        ? `/api/fpl/entry/${id}/history?v=${cacheBuster}`
+        : `/api/fpl/entry/${id}/history`;
 
       if (!summaryData || !historyData) {
         const [summaryRes, historyRes] = await Promise.all([
-          !summaryData ? fetch(`/api/fpl/entry/${id}?v=${v}`) : Promise.resolve(null),
-          !historyData ? fetch(`/api/fpl/entry/${id}/history?v=${v}`) : Promise.resolve(null)
+          !summaryData ? fetch(summaryUrl) : Promise.resolve(null),
+          !historyData ? fetch(historyUrl) : Promise.resolve(null)
         ]);
 
         if ((summaryRes && !summaryRes.ok) || (historyRes && !historyRes.ok)) throw new Error("Load error");
@@ -454,11 +537,8 @@ import Nav from "../components/Nav.astro";
       }
 
       // 2. Determine Points Logic based on Official FPL Site methodology
-      // If we are looking at the CURRENT gameweek, we trust summary_overall_points
-      // If we are looking at a PAST gameweek, we look at the history array.
-      
       const current = Array.isArray(historyData?.current) ? historyData.current : [];
-      
+
       let gwPoints = 0;
       let gwRank = 0;
       let totalPoints = 0;
@@ -467,29 +547,23 @@ import Nav from "../components/Nav.astro";
       let bank = 0;
 
       if (gw === latestGW) {
-        // === CURRENT GAMEWEEK ===
-        // Always use the summary object. This reflects what is on the FPL site "right now".
-        // It accounts for hits naturally as FPL updates.
-        
+        // CURRENT GAMEWEEK: use summary
         gwPoints = Number(summaryData.summary_event_points) || 0;
         gwRank = Number(summaryData.summary_event_rank) || 0;
         totalPoints = Number(summaryData.summary_overall_points) || 0;
         overallRank = Number(summaryData.summary_overall_rank) || 0;
         teamValue = Number(summaryData.last_deadline_value) || 0;
         bank = Number(summaryData.last_deadline_bank) || 0;
-
       } else {
-        // === PAST GAMEWEEK ===
-        // Find the specific row in history
+        // PAST GAMEWEEK: use history row
         const gwRow = current.find((r: any) => Number(r.event) === Number(gw));
-        
         if (gwRow) {
-            gwPoints = Number(gwRow.points) || 0; // Note: In history, this is usually points *after* hits
-            gwRank = Number(gwRow.rank) || 0;
-            totalPoints = Number(gwRow.total_points) || 0;
-            overallRank = Number(gwRow.overall_rank) || 0;
-            teamValue = Number(gwRow.value) || 0;
-            bank = Number(gwRow.bank) || 0;
+          gwPoints = Number(gwRow.points) || 0;
+          gwRank = Number(gwRow.rank) || 0;
+          totalPoints = Number(gwRow.total_points) || 0;
+          overallRank = Number(gwRow.overall_rank) || 0;
+          teamValue = Number(gwRow.value) || 0;
+          bank = Number(gwRow.bank) || 0;
         }
       }
 
@@ -1064,15 +1138,17 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  async function loadStats(ids: number[], gw: number) {
+  async function loadStats(ids: number[], gw: number, opts?: { force?: boolean }) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found.</p>";
       return;
     }
 
+    const force = !!opts?.force;
+
     // Generate load token for cancellation
     const loadToken = ++currentLoadToken;
-    
+
     // Disable refresh button during loading
     refreshBtn.disabled = true;
 
@@ -1080,8 +1156,8 @@ import Nav from "../components/Nav.astro";
     out.innerHTML = "";
     loadingStatus.textContent = `Fetching latest data...`;
 
-    // Generate single cache-buster token for this load
-    const cacheBuster = Date.now().toString();
+    // Only bust caches when force=true (Refresh button)
+    const cacheBuster = force ? Date.now().toString() : undefined;
 
     // Fetch manager data concurrently with limit of 8
     const managerDataResults = await mapWithConcurrency(
@@ -1097,7 +1173,7 @@ import Nav from "../components/Nav.astro";
 
     // Check if this load has been superseded
     if (loadToken !== currentLoadToken) {
-      console.log('Load superseded, aborting');
+      console.log("Load superseded, aborting");
       return;
     }
 
@@ -1106,13 +1182,14 @@ import Nav from "../components/Nav.astro";
 
     // Render table once at the end
     if (allManagerData.length > 0) {
-      out.innerHTML = makeStatsTable(allManagerData, gw);
-      attachManagerButtons();
-      attachStatsSortHandlers();
+      renderStatsFromState(gw);
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allManagerData.length} managers</span>`;
-    
+
+    // Persist snapshot (so back-navigation/browser restart is instant)
+    saveStatsSnapshot(gw);
+
     // Re-enable refresh button
     refreshBtn.disabled = false;
   }
@@ -1129,20 +1206,95 @@ import Nav from "../components/Nav.astro";
 
   (async function init() {
     await fetchBootstrapData();
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
+
+    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    if (authenticated === false) return;
+
     managerIds = ids;
+    managerCountEl.textContent = `${managerIds.length} managers`;
+
+    if (managerIds.length === 0) {
+      out.innerHTML = "<p class='status status--error'>No manager IDs configured.</p>";
+      return;
+    }
+
+    // Restore cached view instantly (if it matches this user’s manager IDs)
+    const snap = loadStatsSnapshot();
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
+
+    if (
+      snap &&
+      sameManagerIds(snap.managerIds, managerIds) &&
+      Array.isArray(snap.allManagerData) &&
+     snap.allManagerData.length > 0
+    ) {
+      // Restore data
+      allManagerData = snap.allManagerData;
+      latestGW = snap.latestGW || latestGW;
+      currentGWFinished = !!snap.currentGWFinished;
+
+      // Restore UI state
+      statsSortKey = snap.ui?.statsSortKey || statsSortKey;
+      statsSortDir = snap.ui?.statsSortDir || statsSortDir;
+
+      populateGWSelector(latestGW);
+
+      if (typeof snap.ui?.gwFilter === "string" && snap.ui.gwFilter) {
+        gwFilterSelect.value = snap.ui.gwFilter;
+      }
+
+      const gwToRender = parseInt(gwFilterSelect.value) || gw || latestGW;
+      renderStatsFromState(gwToRender);
+
+      loadingStatus.textContent = `Loaded from cache.`;
+      return;
+    }
+
+    // No cache -> do one normal load (NOT forced)
     await updateDisplay();
   })();
 
-  gwFilterSelect.addEventListener('change', async () => {
+
+  gwFilterSelect.addEventListener("change", async () => {
     const gw = parseInt(gwFilterSelect.value);
-    if (gw) await loadStats(managerIds, gw);
+    if (!gw) return;
+
+    // If cached snapshot is for this manager set + GW, render instantly (no fetch)
+    const snap = loadStatsSnapshot();
+    if (
+      snap &&
+      sameManagerIds(snap.managerIds, managerIds) &&
+      Number(snap.gw) === Number(gw) &&
+      Array.isArray(snap.allManagerData) &&
+      snap.allManagerData.length > 0
+    ) {
+      allManagerData = snap.allManagerData;
+      statsSortKey = snap.ui?.statsSortKey || statsSortKey;
+      statsSortDir = snap.ui?.statsSortDir || statsSortDir;
+      renderStatsFromState(gw);
+      loadingStatus.textContent = `Loaded from cache.`;
+      return;
+    }
+
+    // Otherwise load once (not forced) and it will save a new snapshot
+    await loadStats(managerIds, gw, { force: false });
   });
 
-  refreshBtn.addEventListener('click', async () => {
+  refreshBtn.addEventListener("click", async () => {
     managerStatsCache.clear();
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
+    localStorage.removeItem(STATS_SNAPSHOT_KEY);
+
+    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    if (authenticated === false) return;
+
     managerIds = ids;
-    await updateDisplay();
+    managerCountEl.textContent = `${managerIds.length} managers`;
+
+    const bust = Date.now().toString();
+    await fetchBootstrapData(bust);
+
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
+    await loadStats(managerIds, gw, { force: true });
   });
+
 </script>
