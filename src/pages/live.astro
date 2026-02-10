@@ -1122,7 +1122,6 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
     out.innerHTML = "";
     
     // CACHE CHECK FOR FIXTURES/POINTS
-    // If we have data in memory, skip the fetch unless cacheBuster is set (which is handled by clearing cache before calling this)
     if (globalCache.live.points.size > 0 && globalCache.live.fixtures.length > 0) {
         loadingStatus.textContent = "Loading from cache...";
     } else {
@@ -1131,10 +1130,9 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
         projectedBonusCache.clear();
         teamStatusCache.clear();
         globalCache.live.fixtures = [];
-        
+    
         try {
           const cacheBuster = Date.now().toString();
-          // Pass global cache references
           await Promise.all([
             fetchFixtures({ 
               gw, 
@@ -1152,7 +1150,7 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
             })
           ]);
         } catch (e) {
-           console.error(e);
+          console.error("Failed to load live caches:", e);
         }
     }
 
