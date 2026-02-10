@@ -1,4 +1,6 @@
 ---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
 import { supabase } from '../lib/supabase.ts'
 import { applyAutoSubsAndMultipliers, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
 import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
@@ -167,13 +169,13 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
 
   /* GW Points Modal Styles */
   .modal--gw-points {
-    z-index: 10002; /* Higher than nested player modal */
+    z-index: 10002;
   }
 
   .modal-panel--gw-points {
-    max-width: 500px; /* Narrower for single column */
+    max-width: 500px;
     max-height: 85vh;
-    overflow: hidden; /* Let wrapper handle scroll */
+    overflow: hidden;
   }
 
   .gw-points-title {
@@ -194,7 +196,7 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
-    min-width: 280px; /* Ensure minimum width for mobile */
+    min-width: 280px;
   }
 
   .gw-points-table thead {
@@ -232,7 +234,6 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
     background: var(--color-surface-alt);
   }
 
-  /* Column-specific styles */
   .gw-points-table .gw-col {
     font-weight: 600;
     width: 15%;
@@ -255,7 +256,6 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
     font-weight: 600;
   }
 
-  /* Mobile optimization */
   @media (max-width: 480px) {
     .modal-panel--gw-points {
       max-width: 95vw;
@@ -310,6 +310,7 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
   import { supabase } from '../lib/supabase.ts'
   import { applyAutoSubsAndMultipliers, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
   import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
+  import { globalCache, clearCache } from '../lib/globalStore.ts';
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -388,15 +389,13 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
   let livePointsCache = globalCache.live.points;
   let projectedBonusCache = globalCache.live.projectedBonus;
   let teamStatusCache = globalCache.live.teamStatus;
-  
-  // Note: fixturesCache is an array reference in global store
+  let fixturesCache = globalCache.live.fixtures;
   
   let managerIds: number[] = []
   let liveData: any[] = [];
   let latestGW: number = 1;
   let currentLoadToken = 0;
 
-  // Sorting State
   let liveSortKey: "livePointsBeforeHits" | "transferCost" | "livePoints" | "totalPoints" | "diff" = "totalPoints";
   let liveSortDir: "asc" | "desc" = "desc";
 
@@ -408,7 +407,6 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
     playerModal.classList.remove("is-open");
   });
 
-  // Initialize GW Points Modal
   const gwPointsModal = initGWPointsModal('gw-points-modal');
 
   function populateGWSelector(currentGW: number) {
@@ -455,7 +453,7 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
     let currentIndex = 0;
     let completed = 0;
 
-  async function worker() {
+    async function worker() {
       while (currentIndex < items.length) {
         const index = currentIndex++;
         const item = items[index];
@@ -520,15 +518,14 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
     }
   }
 
-
   async function fetchManagerLive(entryId: number, gw: number, cacheBuster?: string) {
     const cacheKey = `${entryId}:${gw}`;
     let rawData = managerDataCache.get(cacheKey);
     const v = cacheBuster || Date.now().toString();
 
-    // IF NOT IN CACHE OR REFRESH REQUESTED, FETCH IT
     if (!rawData || cacheBuster) {
-         const [picksRes, summaryRes, historyRes] = await Promise.all([
+      try {
+        const [picksRes, summaryRes, historyRes] = await Promise.all([
           fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`),
           fetch(`/api/fpl/entry/${entryId}?v=${v}`),
           fetch(`/api/fpl/entry/${entryId}/history?v=${v}`)
@@ -542,87 +539,84 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
         
         rawData = { picksData, summaryData, historyData };
         managerDataCache.set(cacheKey, rawData);
+      } catch (e) {
+        console.error(`Error fetching manager ${entryId}:`, e);
+        return null;
+      }
     }
 
-      const { picksData, summaryData, historyData } = rawData;
+    const { picksData, summaryData, historyData } = rawData;
 
-      const chipName = (historyData.chips || []).find((c: any) => c.event === gw)?.name || "";
-      const chipCode =
-        chipName === "bboost" ? "BB" :
-        chipName === "3xc" ? "TC" :
-        chipName === "wildcard" ? "WC" :
-        chipName === "freehit" ? "FH" :
-        "None";
+    const chipName = (historyData.chips || []).find((c: any) => c.event === gw)?.name || "";
+    const chipCode =
+      chipName === "bboost" ? "BB" :
+      chipName === "3xc" ? "TC" :
+      chipName === "wildcard" ? "WC" :
+      chipName === "freehit" ? "FH" :
+      "None";
 
-      const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
+    const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
 
-      const picks = rawPicks.map((p: any) => {
-        const player = playerCache.get(p.element) || { name: "", position: 4, team: 0 };
-        const teamId = Number(player.team) || 0;
+    const picks = rawPicks.map((p: any) => {
+      const player = playerCache.get(p.element) || { name: "", position: 4, team: 0 };
+      const teamId = Number(player.team) || 0;
 
-        const computed = getPlayerLiveComputedLocal(p.element, teamId, gw);
-
-        return {
-          playerId: Number(p.element),
-          position: Number(p.position),
-          is_captain: !!p.is_captain,
-          is_vice_captain: !!p.is_vice_captain,
-
-          web_name: player.name || "",
-          teamId,
-          playingPosition: positionLabel(player.position),
-
-          minutes: computed.minutes,
-          status: computed.status,
-          lockedPoints: computed.locked,
-          projBonus: computed.projBonus,
-          liveTotal: computed.liveTotal
-        };
-      });
-
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
-
-      const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
-
-      const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
-      const transferCost =
-        Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
-
-      const liveNet = livePointsBeforeHits - transferCost;
-
-      // =========================
-      // TOTAL POINTS (projected)
-      // =========================
-      let totalPoints = 0;
-
-      if (Number(gw) === Number(latestGW)) {
-        const prevGw = Number(gw) - 1;
-        const prevRow =
-          prevGw >= 1
-            ? historyRows.find((h: any) => Number(h.event) === prevGw)
-            : null;
-
-        const startOverall = Number(prevRow?.total_points) || 0;
-        totalPoints = startOverall + liveNet;
-      } else {
-        const gwRow = historyRows.find((h: any) => Number(h.event) === Number(gw));
-        totalPoints = Number(gwRow?.total_points) || 0;
-      }
+      const computed = getPlayerLiveComputedLocal(p.element, teamId, gw);
 
       return {
-        entryId,
-        managerName: `${summaryData.player_first_name || ""} ${summaryData.player_last_name || ""}`.trim(),
-        teamName: summaryData.name || "",
-        chipPlayed: chipCode === "None" ? "" : chipCode,
-        transferCost,
-        livePointsBeforeHits,
-        livePoints: liveNet,
-        totalPoints
+        playerId: Number(p.element),
+        position: Number(p.position),
+        is_captain: !!p.is_captain,
+        is_vice_captain: !!p.is_vice_captain,
+
+        web_name: player.name || "",
+        teamId,
+        playingPosition: positionLabel(player.position),
+
+        minutes: computed.minutes,
+        status: computed.status,
+        lockedPoints: computed.locked,
+        projBonus: computed.projBonus,
+        liveTotal: computed.liveTotal
       };
-    } catch (e) {
-      console.error(`Error fetching live data for manager ${entryId}:`, e);
-      return null;
+    });
+
+    const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+
+    const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
+
+    const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
+    const transferCost =
+      Number(historyRows.find((h: any) => Number(h.event) === Number(gw))?.event_transfers_cost) || 0;
+
+    const liveNet = livePointsBeforeHits - transferCost;
+
+    let totalPoints = 0;
+
+    if (Number(gw) === Number(latestGW)) {
+      const prevGw = Number(gw) - 1;
+      const prevRow =
+        prevGw >= 1
+          ? historyRows.find((h: any) => Number(h.event) === prevGw)
+          : null;
+
+      const startOverall = Number(prevRow?.total_points) || 0;
+      totalPoints = startOverall + liveNet;
+    } else {
+      const gwRow = historyRows.find((h: any) => Number(h.event) === Number(gw));
+      totalPoints = Number(gwRow?.total_points) || 0;
     }
+
+    return {
+      entryId,
+      managerName: `${summaryData.player_first_name || ""} ${summaryData.player_last_name || ""}`.trim(),
+      teamName: summaryData.name || "",
+      chipPlayed: chipCode === "None" ? "" : chipCode,
+      transferCost,
+      livePointsBeforeHits,
+      livePoints: liveNet,
+      totalPoints
+    };
   }
 
   function getPlayerFixture(teamId: number): FixtureInfo | null {
@@ -634,6 +628,20 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
     const threshold = position === 2 ? 10 : 12;
     const points = defensiveContribution >= threshold ? 2 : 0;
     return { points, threshold };
+  }
+
+  function getGoalPoints(position: number, goals: number): number {
+    if (goals === 0) return 0;
+    if (position === 1 || position === 2) return goals * 6;
+    if (position === 3) return goals * 5;
+    return goals * 4;
+  }
+
+  function getCleanSheetPoints(position: number, cleanSheets: number): number {
+    if (cleanSheets === 0) return 0;
+    if (position === 1 || position === 2) return cleanSheets * 4;
+    if (position === 3) return cleanSheets * 1;
+    return 0;
   }
 
   function showPlayerModal(playerId: number) {
@@ -787,20 +795,6 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
     playerModal.classList.add("is-open");
   }
 
-  function getGoalPoints(position: number, goals: number): number {
-    if (goals === 0) return 0;
-    if (position === 1 || position === 2) return goals * 6;
-    if (position === 3) return goals * 5;
-    return goals * 4;
-  }
-
-  function getCleanSheetPoints(position: number, cleanSheets: number): number {
-    if (cleanSheets === 0) return 0;
-    if (position === 1 || position === 2) return cleanSheets * 4;
-    if (position === 3) return cleanSheets * 1;
-    return 0;
-  }
-
   async function showSquadModal(entryId: number, managerName: string, teamName: string, chipPlayed: string, livePoints: number) {
     const gw = parseInt(gwFilterSelect.value) || latestGW;
 
@@ -939,7 +933,7 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
           <h3 class="squad-modal-heading">Bench</h3>
           <table class="squad-modal-table bench-table">
             <tbody>
-    `  ;
+      `;
 
       for (const p of originalBench) {
         const isSubbedIn = p.autoSubStatus === 'IN';
@@ -1105,8 +1099,7 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
   }
 
   function attachLiveSortHandlers() {
-    // Add sorting UI logic here if you have table headers with IDs
-    // For now, this placeholder prevents the crash
+    // Placeholder for sorting UI
   }
 
   async function loadLive(ids: number[], gw: number) {
@@ -1121,49 +1114,45 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
     liveData = [];
     out.innerHTML = "";
     
-    // CACHE CHECK FOR FIXTURES/POINTS
-    if (globalCache.live.points.size > 0 && globalCache.live.fixtures.length > 0) {
-        loadingStatus.textContent = "Loading from cache...";
+    if (livePointsCache.size > 0 && fixturesCache.length > 0) {
+      loadingStatus.textContent = "Loading from cache...";
     } else {
-        loadingStatus.textContent = `Fetching latest data...`;
-        livePointsCache.clear();
-        projectedBonusCache.clear();
-        teamStatusCache.clear();
-        globalCache.live.fixtures = [];
-    
-        try {
-          const cacheBuster = Date.now().toString();
-          await Promise.all([
-            fetchFixtures({ 
-              gw, 
-              fixturesCache: globalCache.live.fixtures, 
-              projectedBonusCache, 
-              teamStatusCache, 
-              includeFinishedProvisional: true,
-              cacheBuster 
-            }),
-            fetchLiveGW({ 
-              gw, 
-              livePointsCache, 
-              includeExtendedStats: true,
-              cacheBuster 
-            })
-          ]);
-        } catch (e) {
-          console.error("Failed to load live caches:", e);
-        }
+      loadingStatus.textContent = `Fetching latest data...`;
+      livePointsCache.clear();
+      projectedBonusCache.clear();
+      teamStatusCache.clear();
+      globalCache.live.fixtures.length = 0;
+        
+      try {
+        const cacheBuster = Date.now().toString();
+        await Promise.all([
+          fetchFixtures({ 
+            gw, 
+            fixturesCache: globalCache.live.fixtures, 
+            projectedBonusCache, 
+            teamStatusCache, 
+            includeFinishedProvisional: true,
+            cacheBuster 
+          }),
+          fetchLiveGW({ 
+            gw, 
+            livePointsCache, 
+            includeExtendedStats: true,
+            cacheBuster 
+          })
+        ]);
+      } catch (e) {
+        console.error(e);
+      }
     }
 
-    // Now process managers (Rendering)
-    // This part runs regardless of whether we fetched or used cache
     await mapWithConcurrency(ids, 4, async (entryId) => {
       if (currentLoadToken !== loadToken) return;
       try {
-        const result = await fetchManagerLive(entryId, gw); // Arguments MUST match your function signature
+        const result = await fetchManagerLive(entryId, gw);
         if (currentLoadToken !== loadToken) return;
         liveData.push(result);
         
-        // Update DOM progressively (optional, or wait for sort)
         loadingStatus.textContent = `Loaded ${liveData.length}/${ids.length} managers...`;
       } catch (e) {
         console.error(`Error manager ${entryId}:`, e);
@@ -1172,9 +1161,9 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
 
     if (currentLoadToken !== loadToken) return;
 
-    // Final Render
     sortLiveRows(); 
-    makeLiveTable();
+    out.innerHTML = makeLiveTable(liveData);
+    populateCompareManager();
     attachLiveSortHandlers();
     attachManagerButtons(); 
     
@@ -1184,7 +1173,7 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
     refreshBtn.disabled = false;
   }
 
-    async function init() {
+  async function init() {
     loadingStatus.textContent = "Loading player data...";
     await fetchBootstrapData();
     const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
@@ -1194,40 +1183,42 @@ import { globalCache, clearCache } from '../lib/globalStore.ts';
     if (managerIds.length > 0) loadLive(managerIds, latestGW);
   }
 
-  // --- SAFE EVENT HANDLING ---
   function setupPage() {
-      // 1. ISOLATION CHECK: Stop if not on Live Page
-      const out = document.getElementById("live-output");
-      if (!out) return; 
+    const out = document.getElementById("live-output");
+    if (!out) return; 
 
-      // 2. Re-acquire elements in this scope (fresh DOM)
-      const gwFilter = document.getElementById("gw-filter") as HTMLSelectElement;
-      const refBtn = document.getElementById("refresh-btn") as HTMLButtonElement;
+    const gwFilter = document.getElementById("gw-filter") as HTMLSelectElement;
+    const refBtn = document.getElementById("refresh-btn") as HTMLButtonElement;
+    const compareSelect = document.getElementById("compare-manager") as HTMLSelectElement;
 
-      // 3. Attach GW Filter
-      if (gwFilter) {
-          // Re-populate if needed (simple check if empty)
-          if (gwFilter.options.length <= 1) populateGWSelector(latestGW);
-          
-          gwFilter.onchange = async () => {
-             const gw = parseInt(gwFilter.value);
-             if (gw) loadLive(managerIds, gw);
-          };
-      }
-
-      // 4. Attach Refresh Button
-      if (refBtn) {
-          refBtn.onclick = async () => {
-            clearCache('live'); // CLEAR MEMORY
-            const { managerIds: ids } = await loadManagerIdsFromSupabase();
-            managerIds = ids;
-            loadLive(managerIds, parseInt(gwFilter?.value || "1") || latestGW);
-          };
-      }
+    if (gwFilter) {
+      if (gwFilter.options.length <= 1) populateGWSelector(latestGW);
       
-      // 5. Run Init
-      init();
+      gwFilter.onchange = async () => {
+        const gw = parseInt(gwFilter.value);
+        if (gw) loadLive(managerIds, gw);
+      };
+    }
+
+    if (compareSelect) {
+      compareSelect.onchange = () => {
+        const compareToId = compareSelect.value;
+        out.innerHTML = makeLiveTable(liveData, compareToId);
+        attachManagerButtons();
+      };
+    }
+
+    if (refBtn) {
+      refBtn.onclick = async () => {
+        clearCache('live');
+        const { managerIds: ids } = await loadManagerIdsFromSupabase();
+        managerIds = ids;
+        loadLive(managerIds, parseInt(gwFilter?.value || "1") || latestGW);
+      };
+    }
+    
+    init();
   }
 
-  // Run on initial load AND every navigation swap
   document.addEventListener('astro:page-load', setupPage);
+</script>
