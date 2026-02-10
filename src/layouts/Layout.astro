@@ -31,6 +31,37 @@ const { title = "FPL Manager Data" } = Astro.props;
   </body>
 
 <script is:inline>
+  // Initialize global cache
+  window.globalCache = {
+    playerCache: new Map(),
+    teamCache: new Map(),
+    bootstrapData: null,
+    live: {
+      managerData: new Map(),
+      points: new Map(),
+      projectedBonus: new Map(),
+      teamStatus: new Map(),
+      fixtures: []
+    },
+    squads: {
+      data: new Map(),
+      history: new Map()
+    },
+    transfers: {
+      history: new Map()
+    },
+    ownership: {
+      squads: new Map()
+    },
+    chips: {
+      data: new Map()
+    },
+    stats: {
+      summary: new Map(),
+      history: new Map()
+    }
+  };
+
   // Initialize theme immediately to prevent flash
   (function() {
     const stored = localStorage.getItem('theme');
@@ -46,24 +77,24 @@ const { title = "FPL Manager Data" } = Astro.props;
      DESIGN SYSTEM - CSS Custom Properties
      ======================================== */
   :root {
-     /* Light theme (default) */
-    --color-bg: #f8fafc;
-    --color-surface: #ffffff;
-    --color-surface-alt: #f1f5f9;
-    --color-border: #e2e8f0;
-    --color-border-strong: #cbd5e1;
+     /* Dark theme (default) */
+    --color-bg: #0f172a;
+    --color-surface: #1e293b;
+    --color-surface-alt: #334155;
+    --color-border: #475569;
+    --color-border-strong: #64748b;
 
-    --color-text: #0f172a;
-    --color-text-secondary: #475569;
+    --color-text: #f1f5f9;
+    --color-text-secondary: #cbd5e1;
     --color-text-muted: #94a3b8;
 
-    --color-primary: #2563eb;
-    --color-primary-hover: #1d4ed8;
-    --color-success: #16a34a;
-    --color-success-hover: #15803d;
-    --color-danger: #dc2626;
-    --color-danger-hover: #b91c1c;
-    --color-warning: #f59e0b;
+    --color-primary: #3b82f6;
+    --color-primary-hover: #60a5fa;
+    --color-success: #22c55e;
+    --color-success-hover: #4ade80;
+    --color-danger: #ef4444;
+    --color-danger-hover: #f87171;
+    --color-warning: #fbbf24;
 
     /* Spacing scale */
     --space-1: 4px;
@@ -94,9 +125,9 @@ const { title = "FPL Manager Data" } = Astro.props;
     --radius-full: 9999px;
 
     /* Shadows */
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
 
     /* Transitions */
     --transition-fast: 150ms ease;
@@ -107,29 +138,29 @@ const { title = "FPL Manager Data" } = Astro.props;
     --touch-target: 44px;
   }
 
-  /* Dark theme */
-  [data-theme="dark"] {
-    --color-bg: #0f172a;
-    --color-surface: #1e293b;
-    --color-surface-alt: #334155;
-    --color-border: #475569;
-    --color-border-strong: #64748b;
+  /* Light theme */
+  [data-theme="light"] {
+    --color-bg: #f8fafc;
+    --color-surface: #ffffff;
+    --color-surface-alt: #f1f5f9;
+    --color-border: #e2e8f0;
+    --color-border-strong: #cbd5e1;
 
-    --color-text: #f1f5f9;
-    --color-text-secondary: #cbd5e1;
+    --color-text: #0f172a;
+    --color-text-secondary: #475569;
     --color-text-muted: #94a3b8;
 
-    --color-primary: #3b82f6;
-    --color-primary-hover: #60a5fa;
-    --color-success: #22c55e;
-    --color-success-hover: #4ade80;
-    --color-danger: #ef4444;
-    --color-danger-hover: #f87171;
-    --color-warning: #fbbf24;
+    --color-primary: #2563eb;
+    --color-primary-hover: #1d4ed8;
+    --color-success: #16a34a;
+    --color-success-hover: #15803d;
+    --color-danger: #dc2626;
+    --color-danger-hover: #b91c1c;
+    --color-warning: #f59e0b;
 
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   }
 
   /* ========================================
