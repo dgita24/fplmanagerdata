@@ -121,7 +121,7 @@ import Nav from "../components/Nav.astro";
   let managerIds = [];
   let playerCache = new Map();
   let teamCache = new Map();
-  
+
   // Load token for cancellation
   let currentLoadToken = 0;
 
@@ -129,16 +129,53 @@ import Nav from "../components/Nav.astro";
     chipModal.classList.remove("is-open");
   });
 
+  // ==== Persistent cache (localStorage) ====
+  const CHIPS_CACHE_KEY = "fpl_cache_v1_chips";
+  const CHIPS_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12h
+
+  function safeJsonParse(v) {
+    try { return JSON.parse(v); } catch { return null; }
+  }
+
+  function isFresh(savedAt, ttlMs) {
+    if (!savedAt) return false;
+    return (Date.now() - Number(savedAt)) < ttlMs;
+  }
+
+  function saveChipsSnapshot({ managerIds, allData, playerCache, teamCache }) {
+    const snapshot = {
+      savedAt: Date.now(),
+      managerIds: managerIds || [],
+      allData: allData || [],
+      playerEntries: Array.from(playerCache.entries()),
+      teamEntries: Array.from(teamCache.entries()),
+    };
+    localStorage.setItem(CHIPS_CACHE_KEY, JSON.stringify(snapshot));
+  }
+
+  function loadChipsSnapshot() {
+    const raw = localStorage.getItem(CHIPS_CACHE_KEY);
+    const snap = safeJsonParse(raw);
+    if (!snap || !Array.isArray(snap.allData)) return null;
+
+    return {
+      savedAt: snap.savedAt,
+      managerIds: snap.managerIds || [],
+      allData: snap.allData || [],
+      playerCache: new Map(snap.playerEntries || []),
+      teamCache: new Map(snap.teamEntries || []),
+    };
+  }
+
+  function sameManagerIds(a, b) {
+    return JSON.stringify(a || []) === JSON.stringify(b || []);
+  }
+
   /**
    * Concurrent mapping with limited concurrency
    */
-  async function mapWithConcurrency<T, R>(
-    items: T[],
-    limit: number,
-    fn: (item: T, index: number) => Promise<R | null>,
-    onProgress?: (completed: number, total: number) => void
-  ): Promise<(R | null)[]> {
-    const results: (R | null)[] = [];
+  async function mapWithConcurrency(items, limit, fn, onProgress) {
+    const results = [];
     let currentIndex = 0;
     let completed = 0;
 
@@ -153,9 +190,7 @@ import Nav from "../components/Nav.astro";
           results[index] = null;
         }
         completed++;
-        if (onProgress) {
-          onProgress(completed, items.length);
-        }
+        if (onProgress) onProgress(completed, items.length);
       }
     }
 
@@ -164,12 +199,18 @@ import Nav from "../components/Nav.astro";
     return results;
   }
 
-  async function fetchBootstrapData(cacheBuster?: string) {
+  async function fetchBootstrapData(cacheBuster) {
     try {
-      const v = cacheBuster || Date.now().toString();
-      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
+      const url = cacheBuster
+        ? `/api/fpl/bootstrap-static?v=${cacheBuster}`
+        : `/api/fpl/bootstrap-static`;
+
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
+
+      playerCache = new Map();
+      teamCache = new Map();
 
       data.elements.forEach(player => {
         playerCache.set(player.id, {
@@ -192,10 +233,14 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchManagerData(id, cacheBuster?: string) {
-    const v = cacheBuster || Date.now().toString();
-    const historyUrl = `/api/fpl/entry/${id}/history?v=${v}`;
-    const summaryUrl = `/api/fpl/entry/${id}?v=${v}`;
+  async function fetchManagerData(id, cacheBuster) {
+    const historyUrl = cacheBuster
+      ? `/api/fpl/entry/${id}/history?v=${cacheBuster}`
+      : `/api/fpl/entry/${id}/history`;
+
+    const summaryUrl = cacheBuster
+      ? `/api/fpl/entry/${id}?v=${cacheBuster}`
+      : `/api/fpl/entry/${id}`;
 
     try {
       const [historyRes, summaryRes] = await Promise.all([
@@ -238,14 +283,14 @@ import Nav from "../components/Nav.astro";
   }
 
   async function showChipSquad(managerId, managerName, chipName, gw, points) {
-    const chipEmoji = chipName === "WC" ? "🃏" : 
-                      chipName === "BB" ? "🪑" : 
-                      chipName === "TC" ? "👑" : 
+    const chipEmoji = chipName === "WC" ? "🃏" :
+                      chipName === "BB" ? "🪑" :
+                      chipName === "TC" ? "👑" :
                       chipName === "FH" ? "🎯" : "";
-    
-    const chipFull = chipName === "WC" ? "Wildcard" : 
-                     chipName === "BB" ? "Bench Boost" : 
-                     chipName === "TC" ? "Triple Captain" : 
+
+    const chipFull = chipName === "WC" ? "Wildcard" :
+                     chipName === "BB" ? "Bench Boost" :
+                     chipName === "TC" ? "Triple Captain" :
                      chipName === "FH" ? "Free Hit" : chipName;
 
     chipModalContent.innerHTML = `<p class="text-muted">Loading squad...</p>`;
@@ -313,7 +358,7 @@ import Nav from "../components/Nav.astro";
       `;
 
       for (const p of starters) {
-        const capLabel = p.isCaptain ? '<span class="cap-badge cap-c">C</span>' : 
+        const capLabel = p.isCaptain ? '<span class="cap-badge cap-c">C</span>' :
                          p.isViceCaptain ? '<span class="cap-badge cap-v">V</span>' : '';
         const ptsDisplay = p.multiplier > 1 ? `${p.rawPoints}×${p.multiplier}=${p.points}` : p.points;
 
@@ -342,7 +387,7 @@ import Nav from "../components/Nav.astro";
       `;
 
       for (const p of bench) {
-        const ptsDisplay = chipName === "BB" && p.multiplier > 0 ? p.points : 
+        const ptsDisplay = chipName === "BB" && p.multiplier > 0 ? p.points :
                            `<span class="text-muted">${p.rawPoints}</span>`;
         const rowClass = chipName === "BB" ? "" : "bench-inactive";
 
@@ -376,17 +421,17 @@ import Nav from "../components/Nav.astro";
     if (chips.length === 0) {
       return '<span class="text-muted">None</span>';
     }
-    
+
     const sorted = [...chips].sort((a, b) => a.gw - b.gw);
     return sorted.map(c => {
-      const emoji = c.name === "WC" ? "🃏" : 
-                    c.name === "BB" ? "🪑" : 
-                    c.name === "TC" ? "👑" : 
+      const emoji = c.name === "WC" ? "🃏" :
+                    c.name === "BB" ? "🪑" :
+                    c.name === "TC" ? "👑" :
                     c.name === "FH" ? "🎯" : "";
-      return `<button type="button" class="chip-used-btn" 
-                data-manager-id="${managerId}" 
+      return `<button type="button" class="chip-used-btn"
+                data-manager-id="${managerId}"
                 data-manager-name="${managerName}"
-                data-chip="${c.name}" 
+                data-chip="${c.name}"
                 data-gw="${c.gw}"
                 data-points="${c.points}">
                 ${emoji} ${c.name} <span class="chip-gw">GW${c.gw}</span> <span class="chip-pts">(${c.points})</span>
@@ -402,7 +447,7 @@ import Nav from "../components/Nav.astro";
     const fhCount = usedChips.filter(c => c === "FH").length;
 
     const remaining = [];
-    
+
     const wcRemain = 2 - wcCount;
     const bbRemain = 2 - bbCount;
     const tcRemain = 2 - tcCount;
@@ -476,25 +521,18 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  async function loadChips(ids) {
+  async function loadChips(ids, cacheBuster) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
-      return;
+      return [];
     }
 
-    // Generate load token for cancellation
     const loadToken = ++currentLoadToken;
-    
-    // Disable refresh button during loading
     refreshBtn.disabled = true;
 
     out.innerHTML = "";
     loadingStatus.textContent = `Fetching latest data...`;
 
-    // Generate single cache-buster token for this load
-    const cacheBuster = Date.now().toString();
-    
-    // Fetch manager data concurrently with limit of 8
     const managerDataResults = await mapWithConcurrency(
       ids,
       8,
@@ -511,50 +549,83 @@ import Nav from "../components/Nav.astro";
       }
     );
 
-    // Check if this load has been superseded
     if (loadToken !== currentLoadToken) {
       console.log('Load superseded, aborting');
-      return;
+      return [];
     }
 
-    // Filter out nulls
-    const allData = managerDataResults.filter((data): data is NonNullable<typeof data> => data !== null);
+    const allData = managerDataResults.filter((data) => data !== null);
 
-    // Render table once at the end
     if (allData.length > 0) {
       out.innerHTML = makeChipsTable(allData);
       attachChipButtons();
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allData.length} managers</span>`;
-    
-    // Re-enable refresh button
     refreshBtn.disabled = false;
-  }
 
-  async function updateDisplay() {
-    managerCountEl.textContent = `${managerIds.length} managers`;
-    if (managerIds.length === 0) {
-      out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
-      return;
-    }
+    // Persist snapshot for restarts
+    saveChipsSnapshot({ managerIds: ids, allData, playerCache, teamCache });
 
-    await loadChips(managerIds);
+    return allData;
   }
 
   (async function init() {
-    loadingStatus.textContent = "Loading player data...";
-    await fetchBootstrapData();
-    
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
-    managerIds = ids;
+    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    if (!authenticated) return;
 
-    await updateDisplay();
+    managerIds = ids;
+    managerCountEl.textContent = `${managerIds.length} managers`;
+
+    const snap = loadChipsSnapshot();
+    const canUseSnap =
+      snap &&
+      Array.isArray(snap.allData) &&
+      snap.allData.length > 0 &&
+      sameManagerIds(snap.managerIds, managerIds);
+
+    if (canUseSnap) {
+      playerCache = snap.playerCache;
+      teamCache = snap.teamCache;
+
+      out.innerHTML = makeChipsTable(snap.allData);
+      attachChipButtons();
+
+      const ageMins = Math.round((Date.now() - Number(snap.savedAt)) / 60000);
+      loadingStatus.textContent = `Loaded from cache (${ageMins}m old).`;
+
+      if (!isFresh(snap.savedAt, CHIPS_CACHE_TTL_MS)) {
+        (async () => {
+          try {
+            loadingStatus.textContent = `Refreshing in background...`;
+            const bust = Date.now().toString();
+            await fetchBootstrapData(bust);
+            await loadChips(managerIds, bust);
+          } catch (e) {
+            console.warn("Background refresh failed:", e);
+            loadingStatus.textContent = `Loaded from cache. (Background refresh failed)`;
+          }
+        })();
+      }
+      return;
+    }
+
+    loadingStatus.textContent = "Loading player data...";
+    await fetchBootstrapData(); // no cache-buster
+    await loadChips(managerIds); // no cache-buster
   })();
 
   refreshBtn.addEventListener('click', async () => {
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
+    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    if (!authenticated) return;
+
     managerIds = ids;
-    await updateDisplay();
+    managerCountEl.textContent = `${managerIds.length} managers`;
+
+    loadingStatus.textContent = "Refreshing...";
+    const bust = Date.now().toString();
+
+    await fetchBootstrapData(bust);
+    await loadChips(managerIds, bust);
   });
 </script>

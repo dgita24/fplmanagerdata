@@ -273,7 +273,7 @@ import Nav from "../components/Nav.astro";
   let allHistories = [];
   let latestGW = null;
   let allPlayersMap = {};
-  
+
   // Load token for cancellation
   let currentLoadToken = 0;
 
@@ -281,16 +281,51 @@ import Nav from "../components/Nav.astro";
     chipModal.classList.remove("is-open");
   });
 
+  // ==== Persistent cache (localStorage) ====
+  const TRANSFERS_CACHE_KEY = "fpl_cache_v1_transfers";
+  const TRANSFERS_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12h
+
+  function safeJsonParse(v) {
+    try { return JSON.parse(v); } catch { return null; }
+  }
+
+  function isFresh(savedAt, ttlMs) {
+    if (!savedAt) return false;
+    return (Date.now() - Number(savedAt)) < ttlMs;
+  }
+
+  function sameManagerIds(a, b) {
+    return JSON.stringify(a || []) === JSON.stringify(b || []);
+  }
+
+  function saveTransfersSnapshot() {
+    const snapshot = {
+      savedAt: Date.now(),
+      managerIds: managerIds || [],
+      allHistories,
+      latestGW,
+      allPlayersMap,
+      ui: {
+        sortKey,
+        sortDir,
+        gwFilter: gwFilterSelect.value || "",
+      },
+    };
+    localStorage.setItem(TRANSFERS_CACHE_KEY, JSON.stringify(snapshot));
+  }
+
+  function loadTransfersSnapshot() {
+    const raw = localStorage.getItem(TRANSFERS_CACHE_KEY);
+    const snap = safeJsonParse(raw);
+    if (!snap || !Array.isArray(snap.allHistories)) return null;
+    return snap;
+  }
+
   /**
    * Concurrent mapping with limited concurrency
    */
-  async function mapWithConcurrency<T, R>(
-    items: T[],
-    limit: number,
-    fn: (item: T, index: number) => Promise<R | null>,
-    onProgress?: (completed: number, total: number) => void
-  ): Promise<(R | null)[]> {
-    const results: (R | null)[] = [];
+  async function mapWithConcurrency(items, limit, fn, onProgress) {
+    const results = [];
     let currentIndex = 0;
     let completed = 0;
 
@@ -305,9 +340,7 @@ import Nav from "../components/Nav.astro";
           results[index] = null;
         }
         completed++;
-        if (onProgress) {
-          onProgress(completed, items.length);
-        }
+        if (onProgress) onProgress(completed, items.length);
       }
     }
 
@@ -327,12 +360,17 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  async function fetchPlayers(cacheBuster?: string) {
+  async function fetchPlayers(cacheBuster) {
     try {
-      const v = cacheBuster || Date.now().toString();
-      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
+      const url = cacheBuster
+        ? `/api/fpl/bootstrap-static?v=${cacheBuster}`
+        : `/api/fpl/bootstrap-static`;
+
+      const res = await fetch(url);
       if (!res.ok) return;
       const data = await res.json();
+
+      allPlayersMap = {};
       data.elements.forEach(p => {
         allPlayersMap[p.id] = p.web_name;
       });
@@ -360,8 +398,7 @@ import Nav from "../components/Nav.astro";
   // ==============================
   let sortKey = "totalPoints"; // "transferCost" | "gwPoints" | "totalPoints" | "FTsForNextGW"
   let sortDir = "desc";        // "asc" | "desc"
-
-  let lastRenderedRows: any[] = [];
+  let lastRenderedRows = [];
 
   function normalizeNumber(v) {
     if (v === null || v === undefined || v === "") return Number.NEGATIVE_INFINITY;
@@ -369,7 +406,7 @@ import Nav from "../components/Nav.astro";
     return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
   }
 
-  function hasAnyHits(rows: any[]) {
+  function hasAnyHits(rows) {
     return rows.some(r => Number(r?.transferCost || 0) > 0);
   }
 
@@ -384,29 +421,22 @@ import Nav from "../components/Nav.astro";
     return copy;
   }
 
-  function setSort(nextKey: string) {
-    // Special case: Hit column ("transferCost")
+  function setSort(nextKey) {
     if (nextKey === "transferCost") {
-      // If all hits are 0 in the CURRENT view, fall back to Total desc
       if (!hasAnyHits(lastRenderedRows)) {
         sortKey = "totalPoints";
         sortDir = "desc";
         return;
       }
-
-      // First time clicking Hit: default to DESC (highest hits first)
       if (sortKey !== "transferCost") {
         sortKey = "transferCost";
         sortDir = "desc";
         return;
       }
-
-      // Clicking Hit again toggles direction
       sortDir = sortDir === "asc" ? "desc" : "asc";
       return;
     }
 
-    // Default behavior for other columns
     if (nextKey === sortKey) {
       sortDir = sortDir === "asc" ? "desc" : "asc";
       return;
@@ -423,9 +453,8 @@ import Nav from "../components/Nav.astro";
         if (!key) return;
 
         setSort(key);
-
-        // Re-render the table using the currently selected GW filter
         filterByGW();
+        saveTransfersSnapshot();
       });
     });
   }
@@ -488,7 +517,7 @@ import Nav from "../components/Nav.astro";
         html += `<div class="transfer-gw-row">`;
         html += `<div class="transfer-gw-header">`;
         html += `<span class="transfer-gw-label">GW ${gw}</span>`;
-        
+
         if (cost > 0) {
           html += `<span class="transfer-hit-badge">-${cost}</span>`;
         }
@@ -497,8 +526,8 @@ import Nav from "../components/Nav.astro";
         html += `<div class="transfer-gw-content">`;
 
         if (chip) {
-          const chipDisplay = chip === 'wildcard' ? 'Wildcard' : 
-                              chip === 'freehit' ? 'Free Hit' : 
+          const chipDisplay = chip === 'wildcard' ? 'Wildcard' :
+                              chip === 'freehit' ? 'Free Hit' :
                               chip === 'bboost' ? 'Bench Boost' :
                               chip === '3xc' ? 'Triple Captain' : chip;
 
@@ -518,7 +547,6 @@ import Nav from "../components/Nav.astro";
         }
 
         const shouldShowTransfers = !chip || (chip !== 'wildcard' && chip !== 'freehit');
-
         if (shouldShowTransfers) {
           if (gwTransfers.length > 0) {
             for (const t of gwTransfers) {
@@ -556,7 +584,6 @@ import Nav from "../components/Nav.astro";
         btn.addEventListener('click', async (e) => {
           const button = e.target.closest('.chip-btn');
           const gw = button.dataset.gw;
-          const oderId = button.dataset.manager;
           const chip = button.dataset.chip;
           await showChipTransfers(managerId, gw, chip);
         });
@@ -593,7 +620,7 @@ import Nav from "../components/Nav.astro";
       const playersIn = currentSquad.filter(p => !prevSquad.includes(p));
       const playersOut = prevSquad.filter(p => !currentSquad.includes(p));
 
-      const chipDisplay = chipName === 'wildcard' ? '🃏 Wildcard' : 
+      const chipDisplay = chipName === 'wildcard' ? '🃏 Wildcard' :
                           chipName === 'freehit' ? '🎯 Free Hit' :
                           chipName === 'bboost' ? '🪑 Bench Boost' :
                           chipName === '3xc' ? '👑 Triple Captain' : chipName;
@@ -643,11 +670,14 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  
-  async function fetchHistory(id, cacheBuster?: string) {
-    const v = cacheBuster || Date.now().toString();
-    const historyUrl = `/api/fpl/entry/${id}/history?v=${v}`;
-    const summaryUrl = `/api/fpl/entry/${id}?v=${v}`;
+  async function fetchHistory(id, cacheBuster) {
+    const historyUrl = cacheBuster
+      ? `/api/fpl/entry/${id}/history?v=${cacheBuster}`
+      : `/api/fpl/entry/${id}/history`;
+
+    const summaryUrl = cacheBuster
+      ? `/api/fpl/entry/${id}?v=${cacheBuster}`
+      : `/api/fpl/entry/${id}`;
 
     const [historyRes, summaryRes] = await Promise.all([
       fetch(historyUrl),
@@ -699,7 +729,6 @@ import Nav from "../components/Nav.astro";
       rows.sort((a,b) => a.managerName.localeCompare(b.managerName) || a.gw - b.gw);
     }
 
-    // Find highest GW score for highlighting
     let maxGwPoints = -Infinity;
     if (filterGW !== null && filterGW !== "") {
       rows.forEach(r => {
@@ -708,9 +737,8 @@ import Nav from "../components/Nav.astro";
         }
       });
     }
-    
-    lastRenderedRows = rows;
 
+    lastRenderedRows = rows;
     rows = sortRows(rows);
 
     let html = `
@@ -732,15 +760,14 @@ import Nav from "../components/Nav.astro";
     for (const r of rows) {
       const hitClass = r.transferCost > 0 ? 'hit-highlight' : '';
 
-      // Determine FT-based row class
       let rowClass = '';
       const fts = Number(r.FTsForNextGW);
       if (fts >= 3 && fts <= 5) {
-        rowClass = 'ft-high-row';      // Yellow
+        rowClass = 'ft-high-row';
       } else if (fts === 2) {
-        rowClass = 'ft-medium-row';    // Blue
+        rowClass = 'ft-medium-row';
       } else if (fts === 1) {
-        rowClass = 'ft-low-row';       // Red
+        rowClass = 'ft-low-row';
       }
 
       html += `
@@ -765,16 +792,13 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
-  async function loadManagers(ids) {
+  async function loadManagers(ids, cacheBuster) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
       return;
     }
 
-    // Generate load token for cancellation
     const loadToken = ++currentLoadToken;
-    
-    // Disable refresh button during loading
     refreshBtn.disabled = true;
 
     allHistories = [];
@@ -782,10 +806,6 @@ import Nav from "../components/Nav.astro";
     out.innerHTML = "";
     loadingStatus.textContent = `Fetching latest data...`;
 
-    // Generate single cache-buster token for this load
-    const cacheBuster = Date.now().toString();
-    
-    // Fetch manager data concurrently with limit of 8
     const historyResults = await mapWithConcurrency(
       ids,
       8,
@@ -804,16 +824,13 @@ import Nav from "../components/Nav.astro";
       }
     );
 
-    // Check if this load has been superseded
     if (loadToken !== currentLoadToken) {
       console.log('Load superseded, aborting');
       return;
     }
 
-    // Filter out nulls and update allHistories
-    allHistories = historyResults.filter((history): history is NonNullable<typeof history> => history !== null);
+    allHistories = historyResults.filter((history) => history !== null);
 
-    // Find latest GW
     for (const history of allHistories) {
       const managerMaxGW = Math.max(...history.map(h => h.gw));
       if (latestGW === null || managerMaxGW > latestGW) {
@@ -821,7 +838,6 @@ import Nav from "../components/Nav.astro";
       }
     }
 
-    // Render table once at the end
     if (allHistories.length > 0) {
       out.innerHTML = makeTable(allHistories, "");
       attachManagerLinks();
@@ -831,12 +847,16 @@ import Nav from "../components/Nav.astro";
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allHistories.length} managers</span>`;
 
     if (latestGW) {
-      gwFilterSelect.value = latestGW;
+      if (!gwFilterSelect.value) {
+        gwFilterSelect.value = latestGW;
+      }
       filterByGW();
     }
-    
-    // Re-enable refresh button
+
     refreshBtn.disabled = false;
+
+    // Persist snapshot
+    saveTransfersSnapshot();
   }
 
   function attachManagerLinks() {
@@ -858,26 +878,73 @@ import Nav from "../components/Nav.astro";
   }
 
   (async function init() {
-    await fetchPlayers();
-
     const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
     if (!authenticated) return;
 
     managerIds = ids;
     managerCountEl.textContent = `${managerIds.length} managers`;
 
+    const snap = loadTransfersSnapshot();
+    const canUseSnap =
+      snap &&
+      Array.isArray(snap.allHistories) &&
+      snap.allHistories.length > 0 &&
+      sameManagerIds(snap.managerIds, managerIds);
+
+    if (canUseSnap) {
+      allHistories = snap.allHistories;
+      latestGW = snap.latestGW ?? null;
+      allPlayersMap = snap.allPlayersMap || {};
+
+      sortKey = snap.ui?.sortKey || sortKey;
+      sortDir = snap.ui?.sortDir || sortDir;
+
+      populateGWSelector(latestGW || 1);
+      gwFilterSelect.value = (snap.ui?.gwFilter ?? (latestGW || "")) + "";
+
+      filterByGW();
+      loadingStatus.textContent = `Loaded from cache.`;
+
+      if (!isFresh(snap.savedAt, TRANSFERS_CACHE_TTL_MS)) {
+        (async () => {
+          try {
+            loadingStatus.textContent = `Refreshing in background...`;
+            const bust = Date.now().toString();
+            await fetchPlayers(bust);
+            await loadManagers(managerIds, bust);
+            loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Updated</span>`;
+          } catch (e) {
+            console.warn("Background refresh failed:", e);
+            loadingStatus.textContent = `Loaded from cache. (Background refresh failed)`;
+          }
+        })();
+      }
+      return;
+    }
+
+    await fetchPlayers(); // no cache-buster
+
     if (managerIds.length > 0) {
-      loadManagers(managerIds);
+      loadManagers(managerIds); // no cache-buster
     } else {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
     }
   })();
 
-  gwFilterSelect.addEventListener('change', filterByGW);
+  gwFilterSelect.addEventListener('change', () => {
+    filterByGW();
+    saveTransfersSnapshot();
+  });
 
   refreshBtn.addEventListener('click', async () => {
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
+    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    if (!authenticated) return;
+
     managerIds = ids;
-    loadManagers(managerIds);
+    managerCountEl.textContent = `${managerIds.length} managers`;
+
+    const bust = Date.now().toString();
+    await fetchPlayers(bust);
+    await loadManagers(managerIds, bust);
   });
 </script>
