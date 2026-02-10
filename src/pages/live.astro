@@ -310,6 +310,67 @@ import Nav from "../components/Nav.astro";
   import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
 
   let managerIds: number[] = []
+
+  // ==============================
+  // SWR + localStorage snapshot (Live Standings)
+  // ==============================
+  const LIVE_SNAPSHOT_KEY = 'fpl_live_snapshot_v1';
+  const LIVE_TTL_MS = 60 * 1000; // 60s
+  const LIVE_REFRESH_THROTTLE_MS = 8 * 1000; // avoid hammering refreshes
+
+  type LiveSnapshot = {
+    ts: number;
+    gw: number;
+    compareToId: string;
+    liveSortKey: "livePointsBeforeHits" | "transferCost" | "livePoints" | "totalPoints" | "diff";
+    liveSortDir: "asc" | "desc";
+    managerIds: number[];
+    data: any[];
+    latestGW: number;
+  };
+
+  let lastBackgroundRefreshAt = 0;
+
+  function safeJsonParse<T>(value: string | null): T | null {
+    if (!value) return null;
+    try { return JSON.parse(value) as T; } catch { return null; }
+  }
+
+  function loadLiveSnapshot(): LiveSnapshot | null {
+    return safeJsonParse<LiveSnapshot>(localStorage.getItem(LIVE_SNAPSHOT_KEY));
+  }
+
+  function saveLiveSnapshot(snapshot: LiveSnapshot) {
+    try {
+      localStorage.setItem(LIVE_SNAPSHOT_KEY, JSON.stringify(snapshot));
+    } catch (e) {
+      // storage full / blocked
+      console.warn('Could not save live snapshot', e);
+    }
+  }
+
+  function isSnapshotUsable(s: LiveSnapshot | null, gw: number, ids: number[]) {
+    if (!s) return false;
+    if (!Array.isArray(s.data)) return false;
+    if (Number(s.gw) !== Number(gw)) return false;
+
+    // Make sure it's the same manager set (order-insensitive)
+    const a = [...(s.managerIds || [])].map(Number).sort((x, y) => x - y);
+    const b = [...ids].map(Number).sort((x, y) => x - y);
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+
+    return true;
+  }
+
+  function renderLiveFromState() {
+    const compareId = compareManagerSelect.value;
+    out.innerHTML = makeLiveTable(liveData, compareId);
+    attachManagerButtons();
+    attachLiveSortHandlers();
+    populateCompareManager();
+  }
+
   const managerDataCache = new Map<string, any>();
 
   async function loadManagerIdsFromSupabase() {
@@ -561,7 +622,8 @@ import Nav from "../components/Nav.astro";
       const cacheKey = `${entryId}:${gw}`;
       let rawData = managerDataCache.get(cacheKey);
 
-      const v = cacheBuster || Date.now().toString();
+      const v = cacheBuster || '';
+
 
       if (!rawData) {
          const [picksRes, summaryRes, historyRes] = await Promise.all([
@@ -1141,7 +1203,7 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  async function loadLive(ids: number[], gw: number) {
+  async function loadLive(ids: number[], gw: number, opts?: { force?: boolean; background?: boolean }) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
       return;
@@ -1152,41 +1214,63 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
+    const force = !!opts?.force;
+    const background = !!opts?.background;
+
+    // Throttle background refreshes (e.g., fast tab switching / multiple events)
+    if (background) {
+      const now = Date.now();
+      if (now - lastBackgroundRefreshAt < LIVE_REFRESH_THROTTLE_MS) {
+        return;
+      }
+      lastBackgroundRefreshAt = now;
+    }
+
     const loadToken = ++currentLoadToken;
-    refreshBtn.disabled = true;
-    
-    liveData = [];
-    out.innerHTML = "";
-    loadingStatus.textContent = `Fetching latest data...`;
+
+    // Only show "loading" UI when this is a foreground load
+    if (!background) {
+      refreshBtn.disabled = true;
+      loadingStatus.textContent = `Fetching latest data...`;
+      out.innerHTML = "";
+      liveData = [];
+    } else {
+      loadingStatus.textContent = `Refreshing in background...`;
+    }
 
     fixturesCache = [];
     livePointsCache.clear();
     projectedBonusCache.clear();
     teamStatusCache.clear();
 
-    const cacheBuster = Date.now().toString();
-    
+    // Important: only bust caches if forced (manual refresh) or when background-refreshing stale snapshot
+    const cacheBuster = force ? Date.now().toString() : undefined;
+
     try {
       await Promise.all([
-        fetchFixtures({ 
-          gw, 
-          fixturesCache, 
-          projectedBonusCache, 
-          teamStatusCache, 
+        fetchFixtures({
+          gw,
+          fixturesCache,
+          projectedBonusCache,
+          teamStatusCache,
           includeFinishedProvisional: true,
-          cacheBuster 
+          cacheBuster
         }),
-        fetchLiveGW({ 
-          gw, 
-          livePointsCache, 
+        fetchLiveGW({
+          gw,
+          livePointsCache,
           includeExtendedStats: true,
-          cacheBuster 
+          cacheBuster
         })
       ]);
     } catch (e) {
       console.error('Error fetching fixtures/live data:', e);
-      loadingStatus.innerHTML = `<span class='status status--error'>Error loading fixtures/live data</span>`;
-      refreshBtn.disabled = false;
+      if (!background) {
+        loadingStatus.innerHTML = `<span class='status status--error'>Error loading fixtures/live data</span>`;
+        refreshBtn.disabled = false;
+      } else {
+        loadingStatus.innerHTML = `<span class='status status--error'>Background refresh failed</span>`;
+      }
       return;
     }
 
@@ -1197,7 +1281,9 @@ import Nav from "../components/Nav.astro";
       8,
       async (id) => await fetchManagerLive(id, gw, cacheBuster),
       (completed, total) => {
-        loadingStatus.textContent = `Fetching ${completed}/${total}...`;
+        if (!background) {
+          loadingStatus.textContent = `Fetching ${completed}/${total}...`;
+        }
       }
     );
 
@@ -1206,16 +1292,24 @@ import Nav from "../components/Nav.astro";
     liveData = managerDataResults.filter((data): data is NonNullable<typeof data> => data !== null);
 
     if (liveData.length > 0) {
-      const compareId = compareManagerSelect.value;
-      out.innerHTML = makeLiveTable(liveData, compareId);
-      attachManagerButtons();
-      attachLiveSortHandlers();
-      populateCompareManager();
+      renderLiveFromState();
     }
+
+    // Save snapshot after a successful load
+    saveLiveSnapshot({
+      ts: Date.now(),
+      gw,
+      compareToId: compareManagerSelect.value,
+      liveSortKey,
+      liveSortDir,
+      managerIds: [...ids],
+      data: liveData,
+      latestGW
+    });
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers</span>`;
     lastUpdatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
-    refreshBtn.disabled = false;
+    if (!background) refreshBtn.disabled = false;
   }
 
   async function init() {
@@ -1228,34 +1322,94 @@ import Nav from "../components/Nav.astro";
     managerIds = ids;
     managerCountEl.textContent = `${managerIds.length} managers`;
 
-    if (managerIds.length > 0) {
-      loadLive(managerIds, latestGW);
-    } else {
+    if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
+      return;
     }
+
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
+
+    // 1) Try restore snapshot for instant render
+    const snap = loadLiveSnapshot();
+    if (isSnapshotUsable(snap, gw, managerIds)) {
+      liveData = snap!.data;
+      latestGW = snap!.latestGW || latestGW;
+
+      // Restore UI state
+      if (typeof snap!.compareToId === 'string') {
+        compareManagerSelect.value = snap!.compareToId;
+      }
+      if (snap!.liveSortKey) liveSortKey = snap!.liveSortKey;
+      if (snap!.liveSortDir) liveSortDir = snap!.liveSortDir;
+
+      renderLiveFromState();
+
+      lastUpdatedEl.textContent = `Updated: ${new Date(snap!.ts).toLocaleTimeString()}`;
+
+      // 2) SWR: refresh in background if stale
+      const age = Date.now() - snap!.ts;
+      if (age > LIVE_TTL_MS) {
+        loadLive(managerIds, gw, { force: true, background: true });
+      } else {
+        loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers (cached)</span>`;
+      }
+      return;
+    }
+
+    // No snapshot (or unusable) -> normal foreground load
+    loadLive(managerIds, gw, { force: true, background: false });
   }
 
+  // ==============================
+  // UI event wiring (GW / Compare / Refresh)
+  // ==============================
   gwFilterSelect.addEventListener('change', async () => {
     const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
-      loadLive(managerIds, gw);
+      const snap = loadLiveSnapshot();
+
+      if (isSnapshotUsable(snap, gw, managerIds)) {
+        liveData = snap!.data;
+        latestGW = snap!.latestGW || latestGW;
+
+        if (typeof snap!.compareToId === 'string') {
+          compareManagerSelect.value = snap!.compareToId;
+        }
+        if (snap!.liveSortKey) liveSortKey = snap!.liveSortKey;
+        if (snap!.liveSortDir) liveSortDir = snap!.liveSortDir;
+
+        renderLiveFromState();
+        lastUpdatedEl.textContent = `Updated: ${new Date(snap!.ts).toLocaleTimeString()}`;
+
+        const age = Date.now() - snap!.ts;
+        if (age > LIVE_TTL_MS) {
+          loadLive(managerIds, gw, { force: true, background: true });
+        } else {
+          loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers (cached)</span>`;
+        }
+        return;
+      }
+
+      loadLive(managerIds, gw, { force: true, background: false });
     }
   });
 
   compareManagerSelect.addEventListener('change', () => {
-    const compareId = compareManagerSelect.value;
-    out.innerHTML = makeLiveTable(liveData, compareId);
-    attachManagerButtons();
-    attachLiveSortHandlers();
+    renderLiveFromState();
   });
 
   refreshBtn.addEventListener('click', async () => {
     managerDataCache.clear();
+    localStorage.removeItem(LIVE_SNAPSHOT_KEY);
+
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
+    managerCountEl.textContent = `${managerIds.length} managers`;
+
     const gw = parseInt(gwFilterSelect.value) || latestGW;
-    loadLive(managerIds, gw);
+    loadLive(managerIds, gw, { force: true, background: false });
   });
 
   init();
+
 </script>
