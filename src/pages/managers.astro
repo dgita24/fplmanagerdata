@@ -32,7 +32,7 @@ import Nav from "../components/Nav.astro";
         <div class="card-body card-body--compact">
           <h2 class="card-title card-title--small">Quick Start</h2>
           <ol class="help-list help-list--compact">
-            <li>Enter manager EntryIDs (one per line, max 35)</li>
+            <li>Enter manager EntryIDs (one per line, max 50)</li>
             <li>Click "Save" — IDs sync across all devices</li>
           </ol>
           <p class="tip tip--compact">
@@ -509,7 +509,7 @@ import Nav from "../components/Nav.astro";
   function updateCount() {
     const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
     countEl.textContent = String(ids.length)
-    if (ids.length > 35) {
+    if (ids.length > 50) {
       countEl.style.color = "var(--color-danger)"
       countEl.textContent = `${ids.length} (max 50!)`
     } else {
@@ -547,7 +547,7 @@ import Nav from "../components/Nav.astro";
       return
     }
 
-    if (ids.length > 35) {
+    if (ids.length > 50) {
       status.innerHTML = "<p class='status status--error'>⚠️ Maximum 50 managers allowed.</p>"
       return
     }
