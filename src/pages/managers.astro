@@ -275,21 +275,21 @@ import Nav from "../components/Nav.astro";
     gap: var(--space-2);
   }
 
-  /* One-line layout: Checkbox - Name - Notes - EntryID */
+  /* Two-row layout:
+     Row 1: Name + note (same line)
+     Row 2: Checkbox + EntryID (same row) */
   .featured-item {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    gap: 6px;
     padding: var(--space-2);
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.03);
-    font-size: var(--text-xs); /* Reduced font size */
   }
 
   .featured-item__topline {
-    flex: 1;
-    min-width: 0;
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
@@ -298,30 +298,29 @@ import Nav from "../components/Nav.astro";
 
   .featured-item__name {
     font-weight: 700;
-    font-size: var(--text-xs);
   }
 
   .featured-item__note {
     color: var(--color-text-muted);
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
   }
 
   .featured-item__bottomline {
     display: flex;
     align-items: center;
-    gap: var(--space-1);
-    min-width: 100px;
+    justify-content: space-between;
+    gap: var(--space-2);
   }
 
   .featured-item__left {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 10px;
+    min-width: 0;
   }
 
   .featured-item__id code {
     font-family: var(--font-mono);
-    font-size: var(--text-xs);
   }
 
   .top-sheet__footer {
