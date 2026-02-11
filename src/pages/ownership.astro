@@ -33,6 +33,10 @@ import Nav from "../components/Nav.astro";
           <option value="FWD">FWD</option>
         </select>
       </div>
+      <div class="control-inline">
+        <label class="label-small">&nbsp;</label>
+        <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
+      </div>
     </div>
 
     <div id="loading-status" class="meta-row"></div>
@@ -100,6 +104,28 @@ import Nav from "../components/Nav.astro";
     outline: none;
     border-color: var(--color-primary);
   }
+
+  .btn-row {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+    background: var(--color-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+
+  .btn-row:hover {
+    background: var(--color-primary-hover);
+  }
+
 </style>
 
 <script>
@@ -137,6 +163,7 @@ import Nav from "../components/Nav.astro";
   const positionFilter = document.getElementById("position-filter");
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
+  const refreshBtn = document.getElementById("refresh-btn");
   const ownershipModal = document.getElementById("ownership-modal");
   const ownershipModalContent = document.getElementById("ownership-modal-content");
   const closeOwnershipModal = document.getElementById("close-ownership-modal");
@@ -207,10 +234,16 @@ import Nav from "../components/Nav.astro";
 
   async function fetchBootstrapData(cacheBuster?: string) {
     try {
-      const v = cacheBuster || Date.now().toString();
-      const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`);
+      const url = cacheBuster
+        ? `/api/fpl/bootstrap-static?v=${cacheBuster}`
+        : `/api/fpl/bootstrap-static`;
+
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch bootstrap data");
       const data = await res.json();
+
+      playerCache.clear();
+      teamCache.clear();
 
       data.elements.forEach(player => {
         playerCache.set(player.id, {
@@ -228,7 +261,7 @@ import Nav from "../components/Nav.astro";
 
       const currentEvent = data.events.find(e => e.is_current);
       latestGW = currentEvent ? currentEvent.id : 1;
-      
+
       populateGWSelector(latestGW);
     } catch (e) {
       console.error("Error fetching bootstrap data:", e);
@@ -237,11 +270,22 @@ import Nav from "../components/Nav.astro";
 
   async function fetchManagerSquad(entryId, gw, cacheBuster?: string) {
     try {
-      const v = cacheBuster || Date.now().toString();
+      const picksUrl = cacheBuster
+        ? `/api/fpl/entry/${entryId}/event/${gw}/picks?v=${cacheBuster}`
+        : `/api/fpl/entry/${entryId}/event/${gw}/picks`;
+
+      const summaryUrl = cacheBuster
+        ? `/api/fpl/entry/${entryId}?v=${cacheBuster}`
+        : `/api/fpl/entry/${entryId}`;
+
+      const historyUrl = cacheBuster
+        ? `/api/fpl/entry/${entryId}/history?v=${cacheBuster}`
+        : `/api/fpl/entry/${entryId}/history`;
+
       const [picksRes, summaryRes, historyRes] = await Promise.all([
-        fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`),
-        fetch(`/api/fpl/entry/${entryId}?v=${v}`),
-        fetch(`/api/fpl/entry/${entryId}/history?v=${v}`)
+        fetch(picksUrl),
+        fetch(summaryUrl),
+        fetch(historyUrl)
       ]);
 
       if (!picksRes.ok || !summaryRes.ok || !historyRes.ok) throw new Error("Failed to fetch data");
@@ -459,7 +503,7 @@ import Nav from "../components/Nav.astro";
     });
   }
 
-  async function loadOwnership(ids, gw) {
+  async function loadOwnership(ids, gw, opts = {}) {
     if (ids.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs found. <a href='/managers'>Add managers here</a>.</p>";
       return;
@@ -470,6 +514,8 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
+    const force = !!opts.force;
+
     // Generate load token for cancellation
     const loadToken = ++currentLoadToken;
 
@@ -478,9 +524,9 @@ import Nav from "../components/Nav.astro";
     out.innerHTML = "";
     loadingStatus.textContent = `Fetching latest data...`;
 
-    // Generate single cache-buster token for this load
-    const cacheBuster = Date.now().toString();
-    
+    // Only bust caches when force=true (Refresh button)
+    const cacheBuster = force ? Date.now().toString() : undefined;
+
     // Fetch manager squads concurrently with limit of 8
     const squadResults = await mapWithConcurrency(
       ids,
@@ -505,9 +551,9 @@ import Nav from "../components/Nav.astro";
     }
 
     // Filter out nulls and update data
-    const managerSquads = squadResults.filter((data): data is NonNullable<typeof data> => data !== null);
-    allManagerNames = managerSquads.map(data => data.managerName);
-    freeHitManagers = new Set(managerSquads.filter(data => data.isFreeHit).map(data => data.managerName));
+    const managerSquads = squadResults.filter((data) => data !== null);
+    allManagerNames = managerSquads.map((data) => data.managerName);
+    freeHitManagers = new Set(managerSquads.filter((data) => data.isFreeHit).map((data) => data.managerName));
 
     // Calculate ownership and render table once at the end
     ownershipData = calculateOwnership(managerSquads);
@@ -535,13 +581,14 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
-    await loadOwnership(managerIds, latestGW);
+    await loadOwnership(managerIds, latestGW, { force: false });
+
   }
 
   gwFilterSelect.addEventListener('change', async () => {
     const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
-      await loadOwnership(managerIds, gw);
+      await loadOwnership(managerIds, gw, { force: false });
     }
   });
 
@@ -550,6 +597,22 @@ import Nav from "../components/Nav.astro";
     out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
     attachPlayerButtons();
   });
+  
+  refreshBtn?.addEventListener("click", async () => {
+    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    if (!authenticated) return;
+
+    managerIds = ids;
+    managerCountEl.textContent = `${managerIds.length} managers`;
+
+    // Force fresh bootstrap + ownership reload
+    const bust = Date.now().toString();
+    await fetchBootstrapData(bust);
+
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
+    await loadOwnership(managerIds, gw, { force: true });
+  });
+
 
   init();
 </script>
