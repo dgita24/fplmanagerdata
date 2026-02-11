@@ -18,4 +18,9 @@ export const featuredManagers: FeaturedManager[] = [
   { name: "Matt Corbridge", entryId: 265852, note: "Expert" },
   { name: "Pras", entryId: 3570, note: "YouTube" },
   { name: "BigMan Bakar", entryId: 963, note: "FF Hub" },
+  { name: "Ahmed Shahin", entryId: 14, note: "Expert" },
+  { name: "Ole Martin Stabbetorp", entryId: 32380, note: "Expert" },
+  { name: "Liam McAllister", entryId: 780086, note: "Expert" },
+  { name: "John Walsh", entryId: 1277598, note: "Expert" },
+  { name: "Rob Mayes", entryId: 294590, note: "Expert" },
 ];
