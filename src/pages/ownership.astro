@@ -181,6 +181,63 @@ import Nav from "../components/Nav.astro";
   // Load token for cancellation
   let currentLoadToken = 0;
 
+  // ==============================
+  // Persistent page cache (Ownership) - cached until Refresh
+  // ==============================
+  const OWNERSHIP_SNAPSHOT_KEY = "fpl_ownership_snapshot_v1";
+
+  function safeJsonParse(value) {
+    if (!value) return null;
+    try { return JSON.parse(value); } catch { return null; }
+  }
+
+  function normalizeIds(ids) {
+    return (Array.isArray(ids) ? ids : [])
+      .map((x) => Number(x))
+      .filter((n) => Number.isFinite(n));
+  }
+
+  function sameManagerIds(a, b) {
+    const aa = normalizeIds(a).sort((x, y) => x - y);
+    const bb = normalizeIds(b).sort((x, y) => x - y);
+    if (aa.length !== bb.length) return false;
+    for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
+    return true;
+  }
+
+  function loadOwnershipSnapshot() {
+    return safeJsonParse(localStorage.getItem(OWNERSHIP_SNAPSHOT_KEY));
+  }
+
+  function saveOwnershipSnapshot(gw) {
+    const snap = {
+      savedAt: Date.now(),
+      managerIds: [...managerIds],
+      gw,
+      latestGW,
+      ownershipData,
+      allManagerNames,
+      freeHitManagers: Array.from(freeHitManagers),
+      ui: {
+        gwFilter: gwFilterSelect.value || "",
+        positionFilter: positionFilter.value || "",
+      },
+    };
+
+    try {
+      localStorage.setItem(OWNERSHIP_SNAPSHOT_KEY, JSON.stringify(snap));
+    } catch (e) {
+      console.warn("Could not save ownership snapshot", e);
+    }
+  }
+
+  function renderOwnershipFromState() {
+    const posFilter = positionFilter.value;
+    out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
+    attachPlayerButtons();
+  }
+
+
 
   closeOwnershipModal.addEventListener("click", () => {
     ownershipModal.classList.remove("is-open");
@@ -564,11 +621,12 @@ import Nav from "../components/Nav.astro";
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${managerSquads.length} managers for GW${gw}</span>`;
+    saveOwnershipSnapshot(gw);
+
   }
 
   async function init() {
-    loadingStatus.textContent = "Loading player data...";
-    await fetchBootstrapData();
+    loadingStatus.textContent = "Loading...";
 
     const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
     if (!authenticated) return;
@@ -581,24 +639,74 @@ import Nav from "../components/Nav.astro";
       return;
     }
 
-    await loadOwnership(managerIds, latestGW, { force: false });
+    // 1) Try local snapshot first (instant, no fetch)
+    const snap = loadOwnershipSnapshot();
+    if (
+      snap &&
+      sameManagerIds(snap.managerIds, managerIds) &&
+      Array.isArray(snap.ownershipData) &&
+      snap.ownershipData.length > 0
+    ) {
+      ownershipData = snap.ownershipData || [];
+      allManagerNames = snap.allManagerNames || [];
+      freeHitManagers = new Set(snap.freeHitManagers || []);
+      latestGW = snap.latestGW || latestGW;
 
+      populateGWSelector(latestGW);
+
+      if (typeof snap.ui?.gwFilter === "string" && snap.ui.gwFilter) {
+        gwFilterSelect.value = snap.ui.gwFilter;
+      } else if (snap.gw) {
+        gwFilterSelect.value = String(snap.gw);
+      }
+
+      if (typeof snap.ui?.positionFilter === "string") {
+        positionFilter.value = snap.ui.positionFilter;
+      }
+
+      renderOwnershipFromState();
+      loadingStatus.textContent = "Loaded from cache.";
+      return;
+    }
+
+    // 2) No snapshot -> do one normal load (NOT forced)
+    loadingStatus.textContent = "Loading player data...";
+    await fetchBootstrapData(); // not forced, no ?v=
+    await loadOwnership(managerIds, latestGW, { force: false });
   }
 
-  gwFilterSelect.addEventListener('change', async () => {
+  gwFilterSelect.addEventListener("change", async () => {
     const gw = parseInt(gwFilterSelect.value);
-    if (gw && gw >= 1 && gw <= 38) {
-      await loadOwnership(managerIds, gw, { force: false });
+    if (!(gw && gw >= 1 && gw <= 38)) return;
+
+    const snap = loadOwnershipSnapshot();
+    if (
+      snap &&
+      sameManagerIds(snap.managerIds, managerIds) &&
+      Number(snap.gw) === Number(gw) &&
+      Array.isArray(snap.ownershipData) &&
+      snap.ownershipData.length > 0
+    ) {
+      ownershipData = snap.ownershipData || [];
+      allManagerNames = snap.allManagerNames || [];
+      freeHitManagers = new Set(snap.freeHitManagers || []);
+      renderOwnershipFromState();
+      loadingStatus.textContent = "Loaded from cache.";
+      return;
     }
+
+    await loadOwnership(managerIds, gw, { force: false });
   });
 
   positionFilter.addEventListener('change', () => {
     const posFilter = positionFilter.value;
     out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
     attachPlayerButtons();
+    saveOwnershipSnapshot(parseInt(gwFilterSelect.value) || latestGW);
   });
   
   refreshBtn?.addEventListener("click", async () => {
+    localStorage.removeItem(OWNERSHIP_SNAPSHOT_KEY);
     const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
     if (!authenticated) return;
 
