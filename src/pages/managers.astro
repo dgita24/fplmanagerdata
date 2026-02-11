@@ -626,7 +626,7 @@ import Nav from "../components/Nav.astro";
           <input type="checkbox" class="featured-check" data-id="${entryId}" />
           <span class="featured-item__name">${safeName}</span>
           ${safeNote ? `<span class="featured-item__note">— ${safeNote}</span>` : ``}
-          <span class="featured-item__id"><code>${entryId}</code></span>
+          <span class="featured-item__id">${safeNote ? `— ` : ``}<code>${entryId}</code></span>
         </label>
       `
     }).join('')
