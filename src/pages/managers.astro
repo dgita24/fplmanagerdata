@@ -199,9 +199,13 @@ import Nav from "../components/Nav.astro";
   /* Custom button variant for "Browse featured managers"
      (inherits sizing/typography from your existing .btn styles) */
   .btn--featured {
-    background: #2563eb; /* blue-600 */
-    color: #fff;
-    border: none;
+    white-space: normal;        /* allow multi-line text */
+    overflow-wrap: anywhere;    /* break long words if needed */
+    word-break: break-word;     /* fallback */
+    text-align: center;         /* looks better on 2 lines */
+    line-height: 1.15;
+    padding-top: 10px;          /* optional: keeps vertical balance if it wraps */
+    padding-bottom: 10px;
   }
 
   .btn--featured:hover {
