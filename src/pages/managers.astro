@@ -66,7 +66,8 @@ import Nav from "../components/Nav.astro";
                 <button type="button" id="edit-btn" class="btn btn--neutral btn--full-width">✏️ Edit</button>
                 <button type="submit" id="save-btn" class="btn btn--success btn--full-width" disabled>💾 Save</button>
 
-                <button type="button" id="featured-open" class="linklike">
+                <!-- Now a real button styled like Save (but different colour) -->
+                <button type="button" id="featured-open" class="btn btn--featured btn--full-width">
                   Browse featured managers
                 </button>
               </div>
@@ -172,7 +173,7 @@ import Nav from "../components/Nav.astro";
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    width: 120px;
+    width: 140px;
   }
 
   .ids-count {
@@ -195,18 +196,16 @@ import Nav from "../components/Nav.astro";
     cursor: not-allowed;
   }
 
-  /* Link-like button under Save */
-  .linklike {
-    margin-top: var(--space-1);
-    width: 100%;
-    background: transparent;
+  /* Custom button variant for "Browse featured managers"
+     (inherits sizing/typography from your existing .btn styles) */
+  .btn--featured {
+    background: #2563eb; /* blue-600 */
+    color: #fff;
     border: none;
-    padding: 0;
-    color: var(--color-primary);
-    text-decoration: underline;
-    cursor: pointer;
-    font-size: var(--text-sm);
-    text-align: center;
+  }
+
+  .btn--featured:hover {
+    background: #1d4ed8; /* blue-700 */
   }
 
   /* --- Featured managers TOP SHEET --- */
@@ -216,7 +215,6 @@ import Nav from "../components/Nav.astro";
     left: 0;
     right: 0;
 
-    /* Reduced height so Save stays visible on large phones */
     height: 52vh;
     max-height: 52vh;
 
@@ -275,52 +273,50 @@ import Nav from "../components/Nav.astro";
     gap: var(--space-2);
   }
 
-  /* Two-row layout:
-     Row 1: Name + note (same line)
-     Row 2: Checkbox + EntryID (same row) */
+  /* ONE-LINE layout per manager (wraps when needed) */
   .featured-item {
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto;
-    gap: 6px;
-    padding: var(--space-2);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+
+    padding: 10px var(--space-2);
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.03);
-  }
 
-  .featured-item__topline {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: baseline;
+    font-size: 0.92em;
+    line-height: 1.2;
   }
 
   .featured-item__name {
     font-weight: 700;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .featured-item__note {
     color: var(--color-text-muted);
-    font-size: var(--text-sm);
-  }
-
-  .featured-item__bottomline {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-  }
-
-  .featured-item__left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    font-size: 0.95em;
     min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .featured-item__id {
+    margin-left: auto;
+    flex-shrink: 0;
+    overflow-wrap: anywhere;
   }
 
   .featured-item__id code {
     font-family: var(--font-mono);
+    font-size: 0.95em;
+    white-space: nowrap;
+  }
+
+  .featured-item .featured-check {
+    flex-shrink: 0;
+    transform: scale(0.95);
   }
 
   .top-sheet__footer {
@@ -357,34 +353,28 @@ import Nav from "../components/Nav.astro";
 
     #auth-check .card {
       width: auto;
-      min-width: 400px;
-      max-width: 550px;
-    }
-
-    .ids-layout {
-      max-width: none;
-      justify-content: center;
+      min-width: 440px;
+      max-width: 620px;
     }
 
     .ids-textarea-wrapper {
-      width: 280px;
+      width: 300px;
     }
 
     .ids-textarea-wrapper .textarea {
-      min-height: 300px;
+      min-height: 320px;
     }
 
     .ids-actions {
-      width: 160px;
+      width: 190px;
     }
 
-    /* Reduced desktop sheet height as well */
     .top-sheet {
       height: 70vh;
       max-height: 70vh;
       left: 50%;
       right: auto;
-      width: min(720px, 96vw);
+      width: min(820px, 96vw);
       transform: translate(-50%, -105%);
       border-left: 1px solid rgba(255, 255, 255, 0.12);
       border-right: 1px solid rgba(255, 255, 255, 0.12);
@@ -394,6 +384,10 @@ import Nav from "../components/Nav.astro";
 
     .top-sheet.is-open {
       transform: translate(-50%, 0);
+    }
+
+    .featured-item {
+      font-size: 0.95em;
     }
   }
 
@@ -415,19 +409,6 @@ import Nav from "../components/Nav.astro";
     .ids-actions .btn--full-width {
       flex: 1;
       min-width: 80px;
-    }
-
-    /* Ensure the linklike stays full width on tiny screens */
-    .linklike {
-      flex-basis: 100%;
-      text-align: left;
-      margin-top: var(--space-2);
-    }
-
-    /* Slightly shorter sheet on very small screens */
-    .top-sheet {
-      height: 48vh;
-      max-height: 48vh;
     }
   }
 </style>
@@ -537,7 +518,7 @@ import Nav from "../components/Nav.astro";
     textarea.disabled = !editing
     saveBtn.disabled = !editing
     editBtn.textContent = editing ? '❌ Cancel' : '✏️ Edit'
-    
+
     if (!editing) {
       loadManagerIds()
       status.innerHTML = ''
@@ -552,7 +533,7 @@ import Nav from "../components/Nav.astro";
 
   form.onsubmit = async (e) => {
     e.preventDefault()
-    
+
     if (!isEditing) return
 
     const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
@@ -640,22 +621,12 @@ import Nav from "../components/Nav.astro";
       const safeNote = m.note ? escapeHtml(String(m.note)) : ''
       const entryId = Number(m.entryId)
 
-      // Two-line layout in a single label:
-      // Line 1: name + note
-      // Line 2: checkbox + id
       return `
         <label class="featured-item">
-          <div class="featured-item__topline">
-            <span class="featured-item__name">${safeName}</span>
-            ${safeNote ? `<span class="featured-item__note">— ${safeNote}</span>` : ``}
-          </div>
-
-          <div class="featured-item__bottomline">
-            <div class="featured-item__left">
-              <input type="checkbox" class="featured-check" data-id="${entryId}" />
-              <span class="featured-item__id"><code>${entryId}</code></span>
-            </div>
-          </div>
+          <input type="checkbox" class="featured-check" data-id="${entryId}" />
+          <span class="featured-item__name">${safeName}</span>
+          ${safeNote ? `<span class="featured-item__note">— ${safeNote}</span>` : ``}
+          <span class="featured-item__id"><code>${entryId}</code></span>
         </label>
       `
     }).join('')
@@ -698,7 +669,6 @@ import Nav from "../components/Nav.astro";
   featuredAddBtn?.addEventListener('click', () => {
     if (selectedFeaturedIds.size === 0) return
 
-    // Auto-enable edit mode so textarea is editable
     if (!isEditing) setEditMode(true)
 
     const existing = new Set(parseTextareaIds())
@@ -709,7 +679,6 @@ import Nav from "../components/Nav.astro";
       return
     }
 
-    // Append to end (one per line)
     const current = textarea.value.trim()
     const appended = (current ? current + '\n' : '') + toAdd.join('\n')
     textarea.value = appended + '\n'
@@ -717,12 +686,9 @@ import Nav from "../components/Nav.astro";
     updateCount()
     featuredStatusEl.textContent = `Added ${toAdd.length} manager${toAdd.length === 1 ? '' : 's'}.`
 
-    // Stay open after add, allow adding more
     clearFeaturedSelection()
   })
 
-  // Initialize button text
   updateFeaturedActions()
-
   checkAuth()
 </script>
