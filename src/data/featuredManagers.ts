@@ -23,4 +23,7 @@ export const featuredManagers: FeaturedManager[] = [
   { name: "Liam McAllister", entryId: 780086, note: "Expert" },
   { name: "John Walsh", entryId: 1277598, note: "Expert" },
   { name: "Rob Mayes", entryId: 294590, note: "Expert" },
+  { name: "Cameron Scott", entryId: 43164, note: "Expert" },
+  { name: "Hưng Lân", entryId: 35183, note: "Expert" },
+  { name: "Thomas O'Brien", entryId: 22600, note: "Expert" },  
 ];
