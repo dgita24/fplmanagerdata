@@ -302,6 +302,62 @@ import Nav from "../components/Nav.astro";
     color: var(--color-text-secondary);
     margin-top: var(--space-2);
   }
+
+  :global(.player-modal-bps-table) {
+    margin-top: var(--space-3);
+  }
+
+  :global(.bps-table-wrapper) {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  :global(.bps-table) {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  :global(.bps-table th) {
+    background: var(--color-surface-alt);
+    padding: 6px 8px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  :global(.bps-table td) {
+    padding: 6px 8px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  :global(.bps-cell) {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
+    align-items: center;
+  }
+
+  :global(.bps-player) {
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  :global(.bps-score) {
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  :global(.bps-empty),
+  :global(.bps-table-empty) {
+    color: var(--color-text-muted);
+    text-align: center;
+    padding: var(--space-3);
+  }
 </style>
 
 <script>
@@ -447,6 +503,13 @@ import Nav from "../components/Nav.astro";
     tackles: number;
     defensive_contribution: number;
   }
+
+  type BpsEntry = {
+    name: string;
+    value: number;
+  };
+
+  const BPS_LIMIT = 6;
 
   let liveData: any[] = [];
   let latestGW: number = 1;
@@ -810,6 +873,111 @@ import Nav from "../components/Nav.astro";
     return { points, threshold };
   }
 
+  function normalizeBpsRows(rows: any[], teamId: number): BpsEntry[] {
+    if (!Array.isArray(rows)) return [];
+
+    const mapped = rows
+      .map((row: any) => {
+        const playerId = Number(row?.element);
+        const value = Number(row?.value);
+        const player = playerCache.get(playerId);
+
+        if (!Number.isFinite(playerId) || !Number.isFinite(value)) return null;
+        if (player && player.team !== teamId) return null;
+
+        return { name: player?.name || "Unknown", value };
+      })
+      .filter((row): row is BpsEntry => !!row);
+
+    mapped.sort((a, b) => b.value - a.value);
+    return mapped.slice(0, BPS_LIMIT);
+  }
+
+  function renderBpsCell(entry?: BpsEntry) {
+    if (!entry) {
+      return `<span class="bps-empty">—</span>`;
+    }
+
+    return `
+      <span class="bps-player">${entry.name}</span>
+      <span class="bps-score">${entry.value}</span>
+    `;
+  }
+
+  function renderFixtureBpsTable(fixture: FixtureInfo | null) {
+    const title = `<h3 class="player-modal-section-title">Live BPS</h3>`;
+
+    if (!fixture) {
+      return `
+        <div class="player-modal-bps-table">
+          ${title}
+          <div class="bps-table-empty">Fixture data unavailable.</div>
+        </div>
+      `;
+    }
+
+    const stats = (fixture as any).stats;
+    const bpsStat = Array.isArray(stats) ? stats.find((s: any) => s?.identifier === "bps") : null;
+
+    if (!bpsStat) {
+      const message = fixture.started
+        ? "Live BPS updates unavailable."
+        : "BPS updates available when the match starts.";
+
+      return `
+        <div class="player-modal-bps-table">
+          ${title}
+          <div class="bps-table-empty">${message}</div>
+        </div>
+      `;
+    }
+
+    const home = normalizeBpsRows(bpsStat.h, fixture.team_h);
+    const away = normalizeBpsRows(bpsStat.a, fixture.team_a);
+
+    if (home.length === 0 && away.length === 0) {
+      return `
+        <div class="player-modal-bps-table">
+          ${title}
+          <div class="bps-table-empty">No live BPS yet.</div>
+        </div>
+      `;
+    }
+
+    const homeTeam = teamCache.get(fixture.team_h)?.shortName || "Home";
+    const awayTeam = teamCache.get(fixture.team_a)?.shortName || "Away";
+    const maxRows = Math.max(home.length, away.length);
+
+    let rows = "";
+    for (let i = 0; i < maxRows; i++) {
+      rows += `
+        <tr>
+          <td><div class="bps-cell">${renderBpsCell(home[i])}</div></td>
+          <td><div class="bps-cell">${renderBpsCell(away[i])}</div></td>
+        </tr>
+      `;
+    }
+
+    return `
+      <div class="player-modal-bps-table">
+        ${title}
+        <div class="bps-table-wrapper">
+          <table class="bps-table">
+            <thead>
+              <tr>
+                <th>${homeTeam}</th>
+                <th>${awayTeam}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
   async function showPlayerModal(playerId: number) {
     const gw = parseInt(gwFilterSelect.value) || latestGW;
 
@@ -950,10 +1118,7 @@ import Nav from "../components/Nav.astro";
         </div>
       </div>
 
-      <div class="player-modal-bps">
-        <span class="bps-label">BPS</span>
-        <span class="bps-value">${stats.bps}</span>
-      </div>
+      ${renderFixtureBpsTable(fixture)}
     `;
 
     playerModalContent.innerHTML = html;
