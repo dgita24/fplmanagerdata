@@ -364,11 +364,13 @@ import Nav from "../components/Nav.astro";
   }
 
   function renderLiveFromState() {
+    // Ensure dropdown options exist before we read and render with the value
+    populateCompareManager();
+
     const compareId = compareManagerSelect.value;
     out.innerHTML = makeLiveTable(liveData, compareId);
     attachManagerButtons();
     attachLiveSortHandlers();
-    populateCompareManager();
   }
 
   const managerDataCache = new Map<string, any>();
@@ -505,9 +507,9 @@ import Nav from "../components/Nav.astro";
   
   // ==============================
   // Live table sorting (client-side)
-  // Default: Total desc
+  // Default: GW desc (tie-break: Total desc)
   // ==============================
-  let liveSortKey: "livePointsBeforeHits" | "transferCost" | "livePoints" | "totalPoints" | "diff" = "totalPoints";
+  let liveSortKey: "livePointsBeforeHits" | "transferCost" | "livePoints" | "totalPoints" | "diff" = "livePointsBeforeHits";
   let liveSortDir: "asc" | "desc" = "desc";
 
   function normalizeNumber(v: any) {
@@ -516,13 +518,31 @@ import Nav from "../components/Nav.astro";
     return Number.isFinite(n) ? n : Number.NEGATIVE_INFINITY;
   }
 
+  function forceDefaultLiveSort() {
+    liveSortKey = "livePointsBeforeHits";
+    liveSortDir = "desc";
+  }
+
   function sortLiveRows(rows: any[]) {
     const copy = [...rows];
     copy.sort((a, b) => {
       const av = normalizeNumber(a?.[liveSortKey]);
       const bv = normalizeNumber(b?.[liveSortKey]);
-      const delta = av - bv; // asc
-      return liveSortDir === "asc" ? delta : -delta;
+      const primaryDelta = av - bv; // asc
+
+      // Apply primary sort
+      const primaryResult = liveSortDir === "asc" ? primaryDelta : -primaryDelta;
+      if (primaryResult !== 0) return primaryResult;
+
+      // Tie-breaker: when sorting by GW, sort by Total desc
+      if (liveSortKey === "livePointsBeforeHits") {
+        const at = normalizeNumber(a?.totalPoints);
+        const bt = normalizeNumber(b?.totalPoints);
+        const totalDelta = at - bt; // asc
+        return -totalDelta; // desc
+      }
+
+      return 0;
     });
     return copy;
   }
@@ -534,7 +554,7 @@ import Nav from "../components/Nav.astro";
     }
     liveSortKey = nextKey;
     // default direction by column
-    liveSortDir = nextKey === "transferCost" ? "asc" : "desc";
+    liveSortDir = "desc";
   }
 
   function attachLiveSortHandlers() {
@@ -1155,6 +1175,9 @@ import Nav from "../components/Nav.astro";
 
 
   function populateCompareManager() {
+    // Preserve current selection (string)
+    const selected = String(compareManagerSelect.value ?? "");
+
     compareManagerSelect.innerHTML = '<option value="">Leader</option>';
 
     const sortedManagers = [...liveData].sort((a, b) =>
@@ -1163,10 +1186,13 @@ import Nav from "../components/Nav.astro";
 
     for (const manager of sortedManagers) {
       const option = document.createElement('option');
-      option.value = manager.entryId;
+      option.value = String(manager.entryId);          // force string match
       option.textContent = manager.managerName;
       compareManagerSelect.appendChild(option);
     }
+
+    // Restore selection if it exists; otherwise fall back to Leader
+    compareManagerSelect.value = selected;
   }
 
   function makeLiveTable(managers: any[], compareToId = "") {
@@ -1361,8 +1387,8 @@ import Nav from "../components/Nav.astro";
       ts: Date.now(),
       gw,
       compareToId: compareManagerSelect.value,
-      liveSortKey,
-      liveSortDir,
+      liveSortKey: "livePointsBeforeHits",
+      liveSortDir: "desc",
       managerIds: [...ids],
       data: liveData,
       latestGW
@@ -1398,10 +1424,11 @@ import Nav from "../components/Nav.astro";
 
       // Restore UI state
       if (typeof snap!.compareToId === 'string') {
-        compareManagerSelect.value = snap!.compareToId;
+        compareManagerSelect.value = String(snap!.compareToId ?? "");
       }
-      if (snap!.liveSortKey) liveSortKey = snap!.liveSortKey;
-      if (snap!.liveSortDir) liveSortDir = snap!.liveSortDir;
+
+      // Always default to GW desc when rendering from cache
+      forceDefaultLiveSort();
 
       renderLiveFromState();
 
@@ -1425,15 +1452,17 @@ import Nav from "../components/Nav.astro";
     if (gw && gw >= 1 && gw <= 38) {
       const snap = loadLiveSnapshot();
 
+
       if (isSnapshotUsable(snap, gw, managerIds)) {
         liveData = snap!.data;
         latestGW = snap!.latestGW || latestGW;
 
         if (typeof snap!.compareToId === 'string') {
-          compareManagerSelect.value = snap!.compareToId;
+          compareManagerSelect.value = String(snap!.compareToId ?? "");
         }
-        if (snap!.liveSortKey) liveSortKey = snap!.liveSortKey;
-        if (snap!.liveSortDir) liveSortDir = snap!.liveSortDir;
+        
+        // Always default to GW desc when rendering from cache
+        forceDefaultLiveSort();
 
         renderLiveFromState();
         lastUpdatedEl.textContent = `Updated: ${new Date(snap!.ts).toLocaleTimeString()}`;
@@ -1453,6 +1482,9 @@ import Nav from "../components/Nav.astro";
   });
 
   refreshBtn.addEventListener('click', async () => {
+    // Requirement: after forced refresh, default sort must be GW desc
+    forceDefaultLiveSort();
+
     managerDataCache.clear();
     localStorage.removeItem(LIVE_SNAPSHOT_KEY);
 
