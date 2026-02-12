@@ -314,7 +314,7 @@ import Nav from "../components/Nav.astro";
   // ==============================
   // SWR + localStorage snapshot (Live Standings)
   // ==============================
-  const LIVE_SNAPSHOT_KEY = 'fpl_live_snapshot_v1';
+  const LIVE_SNAPSHOT_KEY_PREFIX = 'fpl_live_snapshot_v1:'; // per-GW key: `${prefix}${gw}`
   const LIVE_TTL_MS = Number.POSITIVE_INFINITY; // cache until manual refresh
   const LIVE_REFRESH_THROTTLE_MS = 8 * 1000; // avoid hammering refreshes
 
@@ -336,15 +336,18 @@ import Nav from "../components/Nav.astro";
     try { return JSON.parse(value) as T; } catch { return null; }
   }
 
-  function loadLiveSnapshot(): LiveSnapshot | null {
-    return safeJsonParse<LiveSnapshot>(localStorage.getItem(LIVE_SNAPSHOT_KEY));
+  function liveSnapshotKeyForGw(gw: number) {
+    return `${LIVE_SNAPSHOT_KEY_PREFIX}${gw}`;
+  }
+
+  function loadLiveSnapshot(gw: number): LiveSnapshot | null {
+    return safeJsonParse<LiveSnapshot>(localStorage.getItem(liveSnapshotKeyForGw(gw)));
   }
 
   function saveLiveSnapshot(snapshot: LiveSnapshot) {
     try {
-      localStorage.setItem(LIVE_SNAPSHOT_KEY, JSON.stringify(snapshot));
+      localStorage.setItem(liveSnapshotKeyForGw(snapshot.gw), JSON.stringify(snapshot));
     } catch (e) {
-      // storage full / blocked
       console.warn('Could not save live snapshot', e);
     }
   }
@@ -1416,8 +1419,8 @@ import Nav from "../components/Nav.astro";
 
     const gw = parseInt(gwFilterSelect.value) || latestGW;
 
-    // 1) Try restore snapshot for instant render
-    const snap = loadLiveSnapshot();
+    // 1) Try restore snapshot for instant render (per GW)
+    const snap = loadLiveSnapshot(gw);
     if (isSnapshotUsable(snap, gw, managerIds)) {
       liveData = snap!.data;
       latestGW = snap!.latestGW || latestGW;
@@ -1450,7 +1453,7 @@ import Nav from "../components/Nav.astro";
   gwFilterSelect.addEventListener('change', async () => {
     const gw = parseInt(gwFilterSelect.value);
     if (gw && gw >= 1 && gw <= 38) {
-      const snap = loadLiveSnapshot();
+      const snap = loadLiveSnapshot(gw);
 
 
       if (isSnapshotUsable(snap, gw, managerIds)) {
@@ -1486,7 +1489,13 @@ import Nav from "../components/Nav.astro";
     forceDefaultLiveSort();
 
     managerDataCache.clear();
-    localStorage.removeItem(LIVE_SNAPSHOT_KEY);
+    // Clear ALL per-GW snapshots
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(LIVE_SNAPSHOT_KEY_PREFIX)) {
+        localStorage.removeItem(k);
+      }
+    }
 
     const { managerIds: ids } = await loadManagerIdsFromSupabase();
     managerIds = ids;
