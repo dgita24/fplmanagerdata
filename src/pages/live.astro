@@ -364,11 +364,13 @@ import Nav from "../components/Nav.astro";
   }
 
   function renderLiveFromState() {
+    // Ensure dropdown options exist before we read and render with the value
+    populateCompareManager();
+
     const compareId = compareManagerSelect.value;
     out.innerHTML = makeLiveTable(liveData, compareId);
     attachManagerButtons();
     attachLiveSortHandlers();
-    populateCompareManager();
   }
 
   const managerDataCache = new Map<string, any>();
@@ -1173,6 +1175,9 @@ import Nav from "../components/Nav.astro";
 
 
   function populateCompareManager() {
+    // Preserve current selection (string)
+    const selected = String(compareManagerSelect.value ?? "");
+
     compareManagerSelect.innerHTML = '<option value="">Leader</option>';
 
     const sortedManagers = [...liveData].sort((a, b) =>
@@ -1181,10 +1186,13 @@ import Nav from "../components/Nav.astro";
 
     for (const manager of sortedManagers) {
       const option = document.createElement('option');
-      option.value = manager.entryId;
+      option.value = String(manager.entryId);          // force string match
       option.textContent = manager.managerName;
       compareManagerSelect.appendChild(option);
     }
+
+    // Restore selection if it exists; otherwise fall back to Leader
+    compareManagerSelect.value = selected;
   }
 
   function makeLiveTable(managers: any[], compareToId = "") {
@@ -1416,7 +1424,7 @@ import Nav from "../components/Nav.astro";
 
       // Restore UI state
       if (typeof snap!.compareToId === 'string') {
-        compareManagerSelect.value = snap!.compareToId;
+        compareManagerSelect.value = String(snap!.compareToId ?? "");
       }
 
       // Always default to GW desc when rendering from cache
@@ -1450,7 +1458,7 @@ import Nav from "../components/Nav.astro";
         latestGW = snap!.latestGW || latestGW;
 
         if (typeof snap!.compareToId === 'string') {
-          compareManagerSelect.value = snap!.compareToId;
+          compareManagerSelect.value = String(snap!.compareToId ?? "");
         }
         
         // Always default to GW desc when rendering from cache
