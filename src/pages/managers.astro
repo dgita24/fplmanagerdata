@@ -1192,7 +1192,24 @@ import Nav from "../components/Nav.astro";
       if (leagueSearchInput) leagueSearchInput.value = ''
 
       previouslyImportedForActiveLeague = await loadPreviouslyImportedForLeague(leagueId)
-      activeSelectedEntryIds = new Set<number>(previouslyImportedForActiveLeague)
+
+      // Build a set of all EntryIDs in this league standings
+      const leagueEntryIdSet = new Set<number>(activeStandings.map((r) => r.entryId))
+
+      // Your current saved managers (manual + featured + any previous imports)
+      const currentManagerIdSet = new Set<number>(parseTextareaIds())
+
+      // Find managers you already have that are in this league
+      const matchesFromCurrentList = new Set<number>()
+      for (const id of currentManagerIdSet) {
+        if (leagueEntryIdSet.has(id)) matchesFromCurrentList.add(id)
+      }
+
+      // Auto-select: union(previouslyImportedForActiveLeague, matchesFromCurrentList)
+      activeSelectedEntryIds = new Set<number>([
+        ...previouslyImportedForActiveLeague,
+        ...matchesFromCurrentList,
+      ])
 
       standingsTitleEl.textContent = standings.leagueName ? standings.leagueName : `League ${leagueId}`
       standingsSubtitleEl.textContent = `Tick/untick managers, then Apply changes.`
