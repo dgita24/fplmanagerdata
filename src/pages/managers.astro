@@ -160,6 +160,17 @@ import Nav from "../components/Nav.astro";
 
         <div class="top-sheet__body">
           <div id="league-standings-banner" class="top-sheet__status" aria-live="polite"></div>
+
+          <div class="control" style="margin-bottom: var(--space-2);">
+            <label class="label" for="league-search">Search</label>
+            <input
+              id="league-search"
+              class="input"
+              placeholder="Search team, manager, or EntryID…"
+              autocomplete="off"
+            />
+          </div>
+ 
           <div id="league-standings-list" class="featured-list"></div>
         </div>
 
@@ -176,6 +187,19 @@ import Nav from "../components/Nav.astro";
 </Layout>
 
 <style>
+  .input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+    outline: none;
+  }
+
+  .input:focus {
+    border-color: rgba(59, 130, 246, 0.65);
+  }
   .card--compact {
     margin-bottom: var(--space-3);
   }
@@ -795,6 +819,7 @@ import Nav from "../components/Nav.astro";
   const standingsSubtitleEl = document.getElementById('league-standings-subtitle') as HTMLElement
   const standingsBannerEl = document.getElementById('league-standings-banner') as HTMLElement
   const standingsListEl = document.getElementById('league-standings-list') as HTMLElement
+  const leagueSearchInput = document.getElementById('league-search') as HTMLInputElement
   const applyStatusEl = document.getElementById('league-apply-status') as HTMLElement
   const selectNoneBtn = document.getElementById('league-select-none') as HTMLButtonElement
   const applyBtn = document.getElementById('league-apply') as HTMLButtonElement
@@ -806,6 +831,7 @@ import Nav from "../components/Nav.astro";
   let activeStandings: StandingRow[] = []
   let activeSelectedEntryIds = new Set<number>()
   let previouslyImportedForActiveLeague = new Set<number>()
+  let standingsSearchQuery = ''
 
   function openLeagueSheet() {
     leagueSheet.classList.add('is-open')
@@ -1023,7 +1049,22 @@ import Nav from "../components/Nav.astro";
   }
 
   function renderStandingsList() {
-    standingsListEl.innerHTML = activeStandings.map((r) => {
+    const q = (standingsSearchQuery || '').trim().toLowerCase()
+
+    const filtered = !q
+      ? activeStandings
+      : activeStandings.filter((r) => {
+          const entryName = (r.entryName || '').toLowerCase()
+          const playerName = (r.playerName || '').toLowerCase()
+          const entryIdStr = String(r.entryId)
+          return (
+            entryName.includes(q) ||
+            playerName.includes(q) ||
+            entryIdStr.includes(q)
+          )
+        })
+
+    standingsListEl.innerHTML = filtered.map((r) => {
       const checked = activeSelectedEntryIds.has(r.entryId) ? 'checked' : ''
       const safeEntryName = escapeHtml(r.entryName || '')
       const safePlayerName = r.playerName ? escapeHtml(r.playerName) : ''
@@ -1034,7 +1075,7 @@ import Nav from "../components/Nav.astro";
           ${safePlayerName ? `<span class="featured-item__note">— ${safePlayerName}</span>` : ``}
           <span class="featured-item__id"><code>${r.entryId}</code></span>
         </label>
-      `
+    `
     }).join('')
 
     standingsListEl.querySelectorAll<HTMLInputElement>('input.league-check').forEach((cb) => {
@@ -1119,8 +1160,11 @@ import Nav from "../components/Nav.astro";
         }, { onConflict: 'user_id,league_id' })
 
       activeStandings = standings.rows
-      previouslyImportedForActiveLeague = await loadPreviouslyImportedForLeague(leagueId)
 
+      standingsSearchQuery = ''
+      if (leagueSearchInput) leagueSearchInput.value = ''
+
+      previouslyImportedForActiveLeague = await loadPreviouslyImportedForLeague(leagueId)
       activeSelectedEntryIds = new Set<number>(previouslyImportedForActiveLeague)
 
       standingsTitleEl.textContent = standings.leagueName ? standings.leagueName : `League ${leagueId}`
@@ -1154,10 +1198,28 @@ import Nav from "../components/Nav.astro";
       for (const id of toRemove) next.delete(id)
       for (const id of toAdd) next.add(id)
 
-      if (next.size > MAX_MANAGERS) {
-        applyStatusEl.textContent = `❌ Too many managers. Limit is ${MAX_MANAGERS}. Reduce your selection.`
-        return
+      previouslyImportedForActiveLeague = new Set<number>(activeSelectedEntryIds)
+
+      // After updating textarea + supabase mapping successfully:
+      const removedCount = toRemove.length
+      const addedCount = toAdd.length
+
+      let msg = ''
+
+      if (addedCount > 0 && removedCount > 0) {
+        msg = `✅ ${addedCount} manager(s) added and ${removedCount} removed. Click “Save” to sync across devices.`
+      } else if (addedCount > 0) {
+        msg = `✅ ${addedCount} manager(s) added to your list. Click “Save” to sync across devices.`
+      } else if (removedCount > 0) {
+        msg = `✅ ${removedCount} manager(s) removed from your list. Click “Save” to sync across devices.`
+      } else {
+        msg = `No changes to apply.`
       }
+
+      applyStatusEl.textContent = msg
+      status.innerHTML = `<p class='status ${msg.startsWith('✅') ? 'status--success' : 'status--warning'}'>${msg}</p>`
+
+      await updateStandingsBannerAndWarnings()
 
       textarea.value = Array.from(next).join('\n') + '\n'
       updateCount()
@@ -1198,7 +1260,19 @@ import Nav from "../components/Nav.astro";
 
       previouslyImportedForActiveLeague = new Set<number>(activeSelectedEntryIds)
 
-      applyStatusEl.textContent = `✅ Applied changes locally. Click “Save” to sync across devices.`
+      // After updating textarea + supabase mapping successfully:
+      const removedCount = toRemove.length
+      const addedCount = toAdd.length
+
+      if (addedCount > 0 && removedCount > 0) {
+        applyStatusEl.textContent = `✅ ${addedCount} manager(s) added and ${removedCount} removed. Click “Save” to sync across devices.`
+      } else if (addedCount > 0) {
+        applyStatusEl.textContent = `✅ ${addedCount} manager(s) added to your list. Click “Save” to sync across devices.`
+      } else if (removedCount > 0) {
+        applyStatusEl.textContent = `✅ ${removedCount} manager(s) removed from your list. Click “Save” to sync across devices.`
+      } else {
+        applyStatusEl.textContent = `No changes to apply.`
+      }
       await updateStandingsBannerAndWarnings()
     } catch (e) {
       console.error(e)
@@ -1220,6 +1294,11 @@ import Nav from "../components/Nav.astro";
   leagueSaveBtn?.addEventListener('click', async () => saveLeagueById())
 
   standingsCloseBtn?.addEventListener('click', () => closeStandingsSheet())
+
+  leagueSearchInput?.addEventListener('input', () => {
+    standingsSearchQuery = leagueSearchInput.value || ''
+    renderStandingsList()
+  })
 
   selectNoneBtn?.addEventListener('click', async () => {
     activeSelectedEntryIds.clear()
