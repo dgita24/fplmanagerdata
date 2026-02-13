@@ -256,7 +256,7 @@ import Nav from "../components/Nav.astro";
   }
 
   .ids-textarea-wrapper {
-    idth: clamp(165px, 42vw, 220px);
+    width: clamp(165px, 42vw, 220px);
     flex-shrink: 0;
   }
 
@@ -302,10 +302,10 @@ import Nav from "../components/Nav.astro";
     justify-content: center; /* centers the Managers: xx text over buttons */
   }
 
-.ids-count--actions {
-  margin: 0;
-  text-align: center;
-}
+  .ids-count--actions {
+    margin: 0;
+    text-align: center;
+  }
 
   .btn--full-width {
     width: 100%;
@@ -387,6 +387,22 @@ import Nav from "../components/Nav.astro";
     justify-content: space-between;
     gap: var(--space-3);
     padding: var(--space-3);
+  }
+
+  /* Compact buttons inside the Import-from-league sheet (mobile) */
+  @media (max-width: 639px) {
+    #league-sheet .btn {
+      min-height: 36px;     /* overrides global 44px from Layout.astro */
+      padding: 6px 10px;    /* overrides global padding */
+      font-size: 0.85rem;
+    }
+  }
+
+  @media (max-width: 639px) {
+    #league-sheet .featured-item {
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
   }
 
   .top-sheet__title {
@@ -535,6 +551,22 @@ import Nav from "../components/Nav.astro";
 
     .featured-item {
       font-size: 0.95em;
+    }
+  }
+
+  /* Make the right-column buttons more compact on mobile */
+  @media (max-width: 639px) {
+    .ids-actions .btn {
+      min-height: 38px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+    }
+
+    .ids-actions .btn--featured,
+    .ids-actions .btn--league {
+      line-height: 1.1;
+      padding-top: 8px;
+      padding-bottom: 8px;
     }
   }
 
@@ -976,8 +1008,9 @@ import Nav from "../components/Nav.astro";
       return `
         <div class="featured-item" style="justify-content: space-between;">
           <div style="display:flex; flex-direction:column; gap:2px;">
-            <div class="featured-item__name" style="margin:0;">${name}</div>
-            <div class="featured-item__note" style="margin:0;">ID: <code>${l.league_id}</code></div>
+            <div class="featured-item__name" style="margin:0;">
+              ${name} <span class="featured-item__note">— ID: <code>${l.league_id}</code></span>
+            </div>
           </div>
 
           <div style="display:flex; gap: var(--space-2); align-items:center;">
