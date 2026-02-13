@@ -189,6 +189,7 @@ import Nav from "../components/Nav.astro";
   </main>
 </Layout>
 
+
 <style>
   .input {
     width: 100%;
@@ -209,7 +210,7 @@ import Nav from "../components/Nav.astro";
   }
 
   .card-body--compact {
-    padding: var(--space-2) var(--space-3)
+    padding: var(--space-2) var(--space-3);
   }
 
   .card-title--small {
@@ -262,6 +263,13 @@ import Nav from "../components/Nav.astro";
     width: 100%;
     font-size: var(--text-sm);
     min-height: 320px;
+  }
+
+  .ids-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    width: 140px;
   }
 
   .ids-header {
@@ -597,6 +605,7 @@ import Nav from "../components/Nav.astro";
       flex-direction: row;
       flex-wrap: wrap;
       width: 100%;
+      gap: var(--space-2);
     }
 
     .ids-actions .btn--full-width {
