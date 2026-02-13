@@ -32,13 +32,17 @@ import Nav from "../components/Nav.astro";
         <div class="card-body card-body--compact">
           <h2 class="card-title card-title--small">Quick Start</h2>
           <ol class="help-list help-list--compact">
-            <li>Enter manager EntryIDs (one per line, max 50)</li>
-            <li>Click "Save" — IDs sync across all devices</li>
+            <li>Add EntryIDs manually (one per line, max 50) <em>or</em> use <strong>Import from league</strong></li>
+            <li>Click <strong>Save</strong> — IDs sync across devices</li>
           </ol>
+
           <p class="tip tip--compact">
-            <strong>Tip:</strong> Find EntryID in the FPL URL:
+            <strong>Tip:</strong> Find IDs in official FPL URLs:
           </p>
-          <code class="code-block code-block--compact">fantasy.premierleague.com/entry/<strong>1234</strong>/event/01</code>
+          <code class="code-block code-block--compact">
+            fantasy.premierleague.com/entry/<strong>1234</strong>/event/01<br />
+            fantasy.premierleague.com/leagues/<strong>1234</strong>/standings/c
+          </code>
         </div>
       </section>
 
