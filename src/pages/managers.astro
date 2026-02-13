@@ -207,6 +207,7 @@ import Nav from "../components/Nav.astro";
   .input:focus {
     border-color: rgba(59, 130, 246, 0.65);
   }
+
   .card--compact {
     margin-bottom: var(--space-3);
   }
@@ -281,12 +282,6 @@ import Nav from "../components/Nav.astro";
     margin-bottom: var(--space-2);
   }
 
-  .ids-count--header {
-    margin: 0;
-    font-size: var(--text-sm);
-    color: var(--color-text-secondary);
-  }
-
   .ids-count {
     font-size: var(--text-sm);
     color: var(--color-text-secondary);
@@ -317,7 +312,7 @@ import Nav from "../components/Nav.astro";
     cursor: not-allowed;
   }
 
-  /* Custom button variant for "Browse featured managers" / "Import from league" */
+  /* Custom button variant for "Browse featured managers" */
   .btn--featured {
     white-space: normal;
     overflow-wrap: anywhere;
@@ -330,9 +325,9 @@ import Nav from "../components/Nav.astro";
 
   /* Bright yellow button for "Import from league" */
   .btn--league {
-    background: #facc15;            /* amber-400 */
-    color: #111827;                 /* slate-900 */
-    border: 1px solid rgba(0,0,0,0.15);
+    background: #facc15; /* amber-400 */
+    color: #111827; /* slate-900 */
+    border: 1px solid rgba(0, 0, 0, 0.15);
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
@@ -343,11 +338,11 @@ import Nav from "../components/Nav.astro";
   }
 
   .btn--league:hover {
-    background: #fbbf24;            /* amber-300 */
+    background: #fbbf24; /* amber-300 */
   }
 
   .btn--league:active {
-    background: #f59e0b;            /* amber-500 */
+    background: #f59e0b; /* amber-500 */
   }
 
   .btn--league:focus-visible {
@@ -387,20 +382,6 @@ import Nav from "../components/Nav.astro";
     justify-content: space-between;
     gap: var(--space-3);
     padding: var(--space-3);
-  }
-
-  /* Mobile tuning for the Import-from-league sheet */
-  @media (max-width: 639px) {
-    #league-sheet .btn {
-      min-height: 36px;     /* overrides global 44px from Layout.astro */
-      padding: 6px 10px;    /* overrides global padding */
-      font-size: 0.85rem;
-    }
-
-    #league-sheet .featured-item {
-      padding-top: 8px;
-      padding-bottom: 8px;
-    }
   }
 
   .top-sheet__title {
@@ -499,7 +480,44 @@ import Nav from "../components/Nav.astro";
     justify-content: flex-end;
   }
 
-  /* Desktop ONLY: Shrink cards to content and center */
+  /* =========================
+     MOBILE (<= 639px)
+     ========================= */
+  @media (max-width: 639px) {
+    /* Make the right-column buttons more compact on mobile */
+    .ids-actions .btn {
+      min-height: 38px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+    }
+
+    .ids-actions .btn--featured,
+    .ids-actions .btn--league {
+      line-height: 1.1;
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+
+    /* Compact saved leagues rows in the import sheet */
+    #league-sheet .featured-item {
+      padding-top: 8px;
+      padding-bottom: 8px;
+    }
+
+    /* FORCE compact buttons inside ALL top-sheet modals on mobile
+       (this overrides Layout.astro's global .btn sizing) */
+    #league-sheet .btn,
+    #league-standings-sheet .btn,
+    #featured-sheet .btn {
+      min-height: 34px !important;
+      padding: 6px 10px !important;
+      font-size: 0.85rem !important;
+    }
+  }
+
+  /* =========================
+     DESKTOP (>= 640px)
+     ========================= */
   @media (min-width: 640px) {
     .page {
       align-items: center;
@@ -552,22 +570,9 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  /* Make the right-column buttons more compact on mobile */
-  @media (max-width: 639px) {
-    .ids-actions .btn {
-      min-height: 38px;
-      padding: 8px 12px;
-      font-size: 0.85rem;
-    }
-
-    .ids-actions .btn--featured,
-    .ids-actions .btn--league {
-      line-height: 1.1;
-      padding-top: 8px;
-      padding-bottom: 8px;
-    }
-  }
-
+  /* =========================
+     VERY SMALL PHONES (<= 360px)
+     ========================= */
   @media (max-width: 360px) {
     .ids-layout {
       flex-direction: column;
@@ -587,32 +592,6 @@ import Nav from "../components/Nav.astro";
       flex: 1;
       min-width: 80px;
     }
-
-    /* Make the right-column buttons more compact on mobile */
-    .ids-actions .btn {
-      min-height: 38px;           /* override global 44px */
-      padding: 8px 12px;          /* override global padding */
-      font-size: 0.85rem;         /* slightly smaller than --text-sm */
-    }
-
-    /* Keep "Browse featured managers" readable when it wraps */
-    .ids-actions .btn--featured {
-      line-height: 1.1;
-      padding-top: 8px;
-      padding-bottom: 8px;
-    }
- 
-    /* FORCE compact buttons inside the top-sheet modals on mobile */
-    @media (max-width: 639px) {
-      #league-sheet .btn,
-      #league-standings-sheet .btn,
-      #featured-sheet .btn {
-        min-height: 34px !important;
-        padding: 6px 10px !important;
-        font-size: 0.85rem !important;
-      }
-    }
-
   }
 </style>
 
