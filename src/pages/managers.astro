@@ -66,9 +66,12 @@ import Nav from "../components/Nav.astro";
                 <button type="button" id="edit-btn" class="btn btn--neutral btn--full-width">✏️ Edit</button>
                 <button type="submit" id="save-btn" class="btn btn--success btn--full-width" disabled>💾 Save</button>
 
-                <!-- Now a real button styled like Save (but different colour) -->
                 <button type="button" id="featured-open" class="btn btn--featured btn--full-width">
                   Browse featured managers
+                </button>
+
+                <button type="button" id="league-open" class="btn btn--featured btn--full-width">
+                  Import from league
                 </button>
               </div>
             </div>
@@ -102,6 +105,69 @@ import Nav from "../components/Nav.astro";
             <button type="button" id="featured-add" class="btn btn--success" disabled>
               Add selected (0)
             </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- League import sheet (save league IDs, choose a league) -->
+      <section id="league-sheet" class="top-sheet" aria-hidden="true">
+        <div class="top-sheet__header">
+          <div>
+            <div class="top-sheet__title">Import from league</div>
+            <div class="top-sheet__subtitle">Save a league, then choose teams to import.</div>
+          </div>
+          <button type="button" id="league-close" class="top-sheet__close" aria-label="Close">✕</button>
+        </div>
+
+        <div class="top-sheet__body">
+          <div class="control" style="margin-bottom: var(--space-2);">
+            <label class="label" for="league-id-input">League ID</label>
+            <input id="league-id-input" class="input" inputmode="numeric" placeholder="e.g. 649356" />
+            <div class="text-muted" style="margin-top: 6px; font-size: var(--text-sm);">
+              Tip: from URL <code>/leagues/<strong>649356</strong>/standings/c</code>
+            </div>
+          </div>
+
+          <div style="display:flex; gap: var(--space-2); margin-bottom: var(--space-3);">
+            <button type="button" id="league-save" class="btn btn--success">Save league</button>
+            <button type="button" id="league-refresh" class="btn btn--neutral">Refresh list</button>
+          </div>
+
+          <div id="league-status" class="top-sheet__status" aria-live="polite"></div>
+
+          <div style="margin-top: var(--space-3);">
+            <div class="text-muted" style="margin-bottom: var(--space-2);">Saved leagues</div>
+            <div id="league-list" class="featured-list"></div>
+          </div>
+        </div>
+
+        <div class="top-sheet__footer">
+          <div class="top-sheet__status">
+            Open a league to select managers. Changes apply to your manager list.
+          </div>
+        </div>
+      </section>
+
+      <!-- League standings sheet (tick/untick managers, then apply) -->
+      <section id="league-standings-sheet" class="top-sheet" aria-hidden="true">
+        <div class="top-sheet__header">
+          <div>
+            <div id="league-standings-title" class="top-sheet__title">League standings</div>
+            <div id="league-standings-subtitle" class="top-sheet__subtitle"></div>
+          </div>
+          <button type="button" id="league-standings-close" class="top-sheet__close" aria-label="Close">✕</button>
+        </div>
+
+        <div class="top-sheet__body">
+          <div id="league-standings-banner" class="top-sheet__status" aria-live="polite"></div>
+          <div id="league-standings-list" class="featured-list"></div>
+        </div>
+
+        <div class="top-sheet__footer">
+          <div id="league-apply-status" class="top-sheet__status" aria-live="polite"></div>
+          <div class="top-sheet__actions">
+            <button type="button" id="league-select-none" class="btn btn--neutral">Select none</button>
+            <button type="button" id="league-apply" class="btn btn--success" disabled>Apply changes</button>
           </div>
         </div>
       </section>
@@ -196,15 +262,14 @@ import Nav from "../components/Nav.astro";
     cursor: not-allowed;
   }
 
-  /* Custom button variant for "Browse featured managers"
-     (inherits sizing/typography from your existing .btn styles) */
+  /* Custom button variant for "Browse featured managers" / "Import from league" */
   .btn--featured {
-    white-space: normal;        /* allow multi-line text */
-    overflow-wrap: anywhere;    /* break long words if needed */
-    word-break: break-word;     /* fallback */
-    text-align: center;         /* looks better on 2 lines */
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-align: center;
     line-height: 1.15;
-    padding-top: 10px;          /* optional: keeps vertical balance if it wraps */
+    padding-top: 10px;
     padding-bottom: 10px;
   }
 
@@ -212,7 +277,7 @@ import Nav from "../components/Nav.astro";
     background: #1d4ed8; /* blue-700 */
   }
 
-  /* --- Featured managers TOP SHEET --- */
+  /* --- TOP SHEET --- */
   .top-sheet {
     position: fixed;
     top: 0;
@@ -277,7 +342,6 @@ import Nav from "../components/Nav.astro";
     gap: var(--space-2);
   }
 
-  /* ONE-LINE layout per manager (wraps when needed) */
   .featured-item {
     display: flex;
     align-items: center;
@@ -318,7 +382,8 @@ import Nav from "../components/Nav.astro";
     white-space: nowrap;
   }
 
-  .featured-item .featured-check {
+  .featured-item .featured-check,
+  .featured-item .league-check {
     flex-shrink: 0;
     transform: scale(0.95);
   }
@@ -421,6 +486,11 @@ import Nav from "../components/Nav.astro";
   import { supabase } from '../lib/supabase.ts'
   import { featuredManagers } from '../data/featuredManagers'
 
+  // =========================
+  // Single source of truth
+  // =========================
+  const MAX_MANAGERS = 50
+
   const authCheckDiv = document.getElementById('auth-check') as HTMLElement
   const loadingDiv = document.getElementById('loading') as HTMLElement
   const requireLoginDiv = document.getElementById('require-login') as HTMLElement
@@ -463,6 +533,9 @@ import Nav from "../components/Nav.astro";
 
       if (data && data.manager_ids) {
         textarea.value = data.manager_ids.join('\n')
+        updateCount()
+      } else {
+        textarea.value = ''
         updateCount()
       }
     } catch (e) {
@@ -509,9 +582,9 @@ import Nav from "../components/Nav.astro";
   function updateCount() {
     const ids = textarea.value.trim().split(/[\s,]+/).filter(x => x.match(/^\d+$/))
     countEl.textContent = String(ids.length)
-    if (ids.length > 50) {
+    if (ids.length > MAX_MANAGERS) {
       countEl.style.color = "var(--color-danger)"
-      countEl.textContent = `${ids.length} (max 50!)`
+      countEl.textContent = `${ids.length} (max ${MAX_MANAGERS}!)`
     } else {
       countEl.style.color = ids.length > 0 ? "var(--color-success)" : "var(--color-text-muted)"
     }
@@ -547,8 +620,8 @@ import Nav from "../components/Nav.astro";
       return
     }
 
-    if (ids.length > 50) {
-      status.innerHTML = "<p class='status status--error'>⚠️ Maximum 50 managers allowed.</p>"
+    if (ids.length > MAX_MANAGERS) {
+      status.innerHTML = `<p class='status status--error'>⚠️ Maximum ${MAX_MANAGERS} managers allowed.</p>`
       return
     }
 
@@ -571,7 +644,9 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  // --- Featured managers top sheet ---
+  // =========================
+  // Featured managers top sheet
+  // =========================
   const featuredOpenBtn = document.getElementById('featured-open') as HTMLButtonElement
   const featuredSheet = document.getElementById('featured-sheet') as HTMLElement
   const featuredCloseBtn = document.getElementById('featured-close') as HTMLButtonElement
@@ -683,6 +758,12 @@ import Nav from "../components/Nav.astro";
       return
     }
 
+    const combinedCount = existing.size + toAdd.length
+    if (combinedCount > MAX_MANAGERS) {
+      featuredStatusEl.textContent = `Too many managers. Limit is ${MAX_MANAGERS}.`
+      return
+    }
+
     const current = textarea.value.trim()
     const appended = (current ? current + '\n' : '') + toAdd.join('\n')
     textarea.value = appended + '\n'
@@ -694,5 +775,466 @@ import Nav from "../components/Nav.astro";
   })
 
   updateFeaturedActions()
+
+  // =========================
+  // League import
+  // =========================
+
+  const leagueOpenBtn = document.getElementById('league-open') as HTMLButtonElement
+  const leagueSheet = document.getElementById('league-sheet') as HTMLElement
+  const leagueCloseBtn = document.getElementById('league-close') as HTMLButtonElement
+  const leagueIdInput = document.getElementById('league-id-input') as HTMLInputElement
+  const leagueSaveBtn = document.getElementById('league-save') as HTMLButtonElement
+  const leagueRefreshBtn = document.getElementById('league-refresh') as HTMLButtonElement
+  const leagueStatusEl = document.getElementById('league-status') as HTMLElement
+  const leagueListEl = document.getElementById('league-list') as HTMLElement
+
+  const standingsSheet = document.getElementById('league-standings-sheet') as HTMLElement
+  const standingsCloseBtn = document.getElementById('league-standings-close') as HTMLButtonElement
+  const standingsTitleEl = document.getElementById('league-standings-title') as HTMLElement
+  const standingsSubtitleEl = document.getElementById('league-standings-subtitle') as HTMLElement
+  const standingsBannerEl = document.getElementById('league-standings-banner') as HTMLElement
+  const standingsListEl = document.getElementById('league-standings-list') as HTMLElement
+  const applyStatusEl = document.getElementById('league-apply-status') as HTMLElement
+  const selectNoneBtn = document.getElementById('league-select-none') as HTMLButtonElement
+  const applyBtn = document.getElementById('league-apply') as HTMLButtonElement
+
+  type SavedLeague = { league_id: number; league_name: string | null }
+  type StandingRow = { rank: number; entryId: number; entryName: string; playerName?: string | null }
+
+  let activeLeague: { id: number; name: string | null } | null = null
+  let activeStandings: StandingRow[] = []
+  let activeSelectedEntryIds = new Set<number>()
+  let previouslyImportedForActiveLeague = new Set<number>()
+
+  function openLeagueSheet() {
+    leagueSheet.classList.add('is-open')
+    leagueSheet.setAttribute('aria-hidden', 'false')
+  }
+  function closeLeagueSheet() {
+    leagueSheet.classList.remove('is-open')
+    leagueSheet.setAttribute('aria-hidden', 'true')
+  }
+  function openStandingsSheet() {
+    standingsSheet.classList.add('is-open')
+    standingsSheet.setAttribute('aria-hidden', 'false')
+  }
+  function closeStandingsSheet() {
+    standingsSheet.classList.remove('is-open')
+    standingsSheet.setAttribute('aria-hidden', 'true')
+  }
+
+  async function fetchLeagueMeta(leagueId: number) {
+    const res = await fetch(`/api/fpl/league/${leagueId}`)
+    if (!res.ok) throw new Error('League lookup failed')
+    return await res.json() as { leagueId: number; leagueName: string | null }
+  }
+
+  async function fetchAllStandingsClassic(leagueId: number): Promise<{ leagueName: string | null; rows: StandingRow[] }> {
+    let page = 1
+    let all: StandingRow[] = []
+    let leagueName: string | null = null
+
+    while (true) {
+      const res = await fetch(`/api/fpl/league/${leagueId}/standings?page=${page}`)
+      if (!res.ok) throw new Error('Standings fetch failed')
+      const data = await res.json() as any
+      leagueName = leagueName ?? data?.league?.name ?? null
+      const results = Array.isArray(data?.results) ? data.results : []
+      all = all.concat(results)
+      if (!data?.hasNext) break
+      page++
+      if (page > 50) break
+    }
+
+    all.sort((a, b) => a.rank - b.rank)
+    return { leagueName, rows: all }
+  }
+
+  async function loadSavedLeagues() {
+    leagueListEl.innerHTML = ''
+    leagueStatusEl.textContent = ''
+
+    const { data, error } = await supabase
+      .from('user_saved_leagues')
+      .select('league_id, league_name')
+      .eq('user_id', currentUser.id)
+      .order('updated_at', { ascending: false })
+
+    if (error) {
+      console.error(error)
+      leagueStatusEl.textContent = 'Error loading saved leagues.'
+      return
+    }
+
+    const leagues: SavedLeague[] = (data || []).map((x: any) => ({
+      league_id: Number(x.league_id),
+      league_name: x.league_name ? String(x.league_name) : null,
+    }))
+
+    if (leagues.length === 0) {
+      leagueListEl.innerHTML = `<div class="text-muted">No saved leagues yet.</div>`
+      return
+    }
+
+    leagueListEl.innerHTML = leagues.map((l) => {
+      const name = l.league_name ? escapeHtml(l.league_name) : `League ${l.league_id}`
+      return `
+        <div class="featured-item" style="justify-content: space-between;">
+          <div style="display:flex; flex-direction:column; gap:2px;">
+            <div class="featured-item__name" style="margin:0;">${name}</div>
+            <div class="featured-item__note" style="margin:0;">ID: <code>${l.league_id}</code></div>
+          </div>
+
+          <div style="display:flex; gap: var(--space-2); align-items:center;">
+            <button type="button" class="btn btn--neutral" data-action="open" data-league-id="${l.league_id}">Open</button>
+            <button type="button" class="btn btn--neutral" data-action="remove" data-league-id="${l.league_id}">Remove</button>
+          </div>
+        </div>
+      `
+    }).join('')
+
+    leagueListEl.querySelectorAll<HTMLButtonElement>('button[data-action="open"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const leagueId = Number(btn.dataset.leagueId)
+        await openLeagueStandings(leagueId)
+      })
+    })
+
+    leagueListEl.querySelectorAll<HTMLButtonElement>('button[data-action="remove"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const leagueId = Number(btn.dataset.leagueId)
+        const ok = confirm(`Remove league ${leagueId}? (This does not change your manager list yet.)`)
+        if (!ok) return
+        const { error } = await supabase
+          .from('user_saved_leagues')
+          .delete()
+          .eq('user_id', currentUser.id)
+          .eq('league_id', leagueId)
+        if (error) {
+          console.error(error)
+          leagueStatusEl.textContent = 'Failed to remove league.'
+          return
+        }
+        await supabase
+          .from('user_league_imports')
+          .delete()
+          .eq('user_id', currentUser.id)
+          .eq('league_id', leagueId)
+
+        await loadSavedLeagues()
+      })
+    })
+  }
+
+  async function saveLeagueById() {
+    leagueStatusEl.textContent = ''
+    const raw = (leagueIdInput.value || '').trim()
+    if (!raw.match(/^\d+$/)) {
+      leagueStatusEl.textContent = 'Enter a valid numeric league ID.'
+      return
+    }
+
+    const leagueId = Number(raw)
+
+    leagueSaveBtn.disabled = true
+    try {
+      const meta = await fetchLeagueMeta(leagueId)
+
+      const { error } = await supabase
+        .from('user_saved_leagues')
+        .upsert({
+          user_id: currentUser.id,
+          league_id: leagueId,
+          league_name: meta.leagueName,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,league_id' })
+
+      if (error) throw error
+
+      leagueStatusEl.textContent = `Saved: ${meta.leagueName || `League ${leagueId}`}`
+      leagueIdInput.value = ''
+      await loadSavedLeagues()
+    } catch (e) {
+      console.error(e)
+      leagueStatusEl.textContent = 'Could not save league. Check the ID and try again.'
+    } finally {
+      leagueSaveBtn.disabled = false
+    }
+  }
+
+  async function loadPreviouslyImportedForLeague(leagueId: number) {
+    const { data, error } = await supabase
+      .from('user_league_imports')
+      .select('entry_id')
+      .eq('user_id', currentUser.id)
+      .eq('league_id', leagueId)
+
+    if (error) {
+      console.error(error)
+      return new Set<number>()
+    }
+
+    return new Set<number>((data || []).map((r: any) => Number(r.entry_id)))
+  }
+
+  async function leagueNamesByIds(leagueIds: number[]) {
+    if (leagueIds.length === 0) return new Map<number, string>()
+    const { data, error } = await supabase
+      .from('user_saved_leagues')
+      .select('league_id, league_name')
+      .eq('user_id', currentUser.id)
+      .in('league_id', leagueIds)
+
+    if (error) {
+      console.error(error)
+      return new Map<number, string>()
+    }
+
+    const m = new Map<number, string>()
+    for (const row of (data || []) as any[]) {
+      m.set(Number(row.league_id), row.league_name ? String(row.league_name) : `League ${row.league_id}`)
+    }
+    return m
+  }
+
+  async function loadCrossLeagueInfoForEntries(entryIds: number[], excludeLeagueId: number) {
+    const { data, error } = await supabase
+      .from('user_league_imports')
+      .select('entry_id, league_id')
+      .eq('user_id', currentUser.id)
+      .in('entry_id', entryIds)
+
+    if (error) {
+      console.error(error)
+      return new Map<number, number[]>()
+    }
+
+    const map = new Map<number, number[]>()
+    for (const row of (data || []) as any[]) {
+      const entryId = Number(row.entry_id)
+      const leagueId = Number(row.league_id)
+      if (leagueId === excludeLeagueId) continue
+      const arr = map.get(entryId) || []
+      arr.push(leagueId)
+      map.set(entryId, arr)
+    }
+    return map
+  }
+
+  function renderStandingsList() {
+    standingsListEl.innerHTML = activeStandings.map((r) => {
+      const checked = activeSelectedEntryIds.has(r.entryId) ? 'checked' : ''
+      const safeEntryName = escapeHtml(r.entryName || '')
+      const safePlayerName = r.playerName ? escapeHtml(r.playerName) : ''
+      return `
+        <label class="featured-item">
+          <input type="checkbox" class="league-check" data-entry-id="${r.entryId}" ${checked} />
+          <span class="featured-item__name">#${r.rank} ${safeEntryName}</span>
+          ${safePlayerName ? `<span class="featured-item__note">— ${safePlayerName}</span>` : ``}
+          <span class="featured-item__id"><code>${r.entryId}</code></span>
+        </label>
+      `
+    }).join('')
+
+    standingsListEl.querySelectorAll<HTMLInputElement>('input.league-check').forEach((cb) => {
+      cb.addEventListener('change', async () => {
+        const entryId = Number(cb.dataset.entryId)
+        if (!Number.isFinite(entryId)) return
+
+        if (cb.checked) activeSelectedEntryIds.add(entryId)
+        else activeSelectedEntryIds.delete(entryId)
+
+        await updateStandingsBannerAndWarnings()
+      })
+    })
+  }
+
+  async function updateStandingsBannerAndWarnings() {
+    const currentManagerIds = new Set<number>(parseTextareaIds())
+
+    const selected = [...activeSelectedEntryIds]
+    const selectedCount = selected.length
+
+    const toRemove = [...previouslyImportedForActiveLeague].filter((id) => !activeSelectedEntryIds.has(id))
+    const toAdd = selected.filter((id) => !currentManagerIds.has(id))
+
+    const totalAfter = currentManagerIds.size - toRemove.filter((id) => currentManagerIds.has(id)).length + toAdd.length
+    const remaining = MAX_MANAGERS - totalAfter
+
+    const hasDelta = (toRemove.length > 0) || (toAdd.length > 0)
+    applyBtn.disabled = !hasDelta
+
+    const allRelevant = Array.from(new Set([...toRemove, ...toAdd]))
+    const crossLeagueIdsMap = await loadCrossLeagueInfoForEntries(allRelevant, activeLeague!.id)
+    const otherLeagueIds = Array.from(new Set(Array.from(crossLeagueIdsMap.values()).flat()))
+    const namesMap = await leagueNamesByIds(otherLeagueIds)
+
+    const lines: string[] = []
+    lines.push(`Selected in this league: ${selectedCount}`)
+    lines.push(`Total after apply: ${totalAfter} / ${MAX_MANAGERS}`)
+    lines.push(`Remaining slots after apply: ${remaining}`)
+
+    const warnLines: string[] = []
+
+    for (const id of toAdd) {
+      const other = crossLeagueIdsMap.get(id) || []
+      if (other.length > 0) {
+        const leagues = other.map((lid) => namesMap.get(lid) || `League ${lid}`).join(', ')
+        warnLines.push(`⚠️ EntryID ${id} is already selected in: ${leagues}.`)
+      }
+    }
+
+    for (const id of toRemove) {
+      const other = crossLeagueIdsMap.get(id) || []
+      if (other.length > 0) {
+        const leagues = other.map((lid) => namesMap.get(lid) || `League ${lid}`).join(', ')
+        warnLines.push(`⚠️ EntryID ${id} is also selected in: ${leagues}. Unticking here will remove it from your manager list entirely.`)
+      }
+    }
+
+    standingsBannerEl.textContent = lines.join(' • ')
+    applyStatusEl.textContent = warnLines.join(' ')
+  }
+
+  async function openLeagueStandings(leagueId: number) {
+    applyStatusEl.textContent = ''
+    standingsBannerEl.textContent = 'Loading league standings...'
+    standingsListEl.innerHTML = ''
+    applyBtn.disabled = true
+
+    closeLeagueSheet()
+
+    try {
+      const standings = await fetchAllStandingsClassic(leagueId)
+      activeLeague = { id: leagueId, name: standings.leagueName }
+
+      await supabase
+        .from('user_saved_leagues')
+        .upsert({
+          user_id: currentUser.id,
+          league_id: leagueId,
+          league_name: standings.leagueName,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,league_id' })
+
+      activeStandings = standings.rows
+      previouslyImportedForActiveLeague = await loadPreviouslyImportedForLeague(leagueId)
+
+      activeSelectedEntryIds = new Set<number>(previouslyImportedForActiveLeague)
+
+      standingsTitleEl.textContent = standings.leagueName ? standings.leagueName : `League ${leagueId}`
+      standingsSubtitleEl.textContent = `Tick/untick managers, then Apply changes.`
+
+      renderStandingsList()
+      openStandingsSheet()
+      await updateStandingsBannerAndWarnings()
+    } catch (e) {
+      console.error(e)
+      standingsBannerEl.textContent = 'Failed to load standings. Check league ID and try again.'
+      openStandingsSheet()
+    }
+  }
+
+  async function applyLeagueChanges() {
+    if (!activeLeague) return
+
+    applyBtn.disabled = true
+    selectNoneBtn.disabled = true
+
+    try {
+      if (!isEditing) setEditMode(true)
+
+      const current = new Set<number>(parseTextareaIds())
+
+      const toRemove = [...previouslyImportedForActiveLeague].filter((id) => !activeSelectedEntryIds.has(id))
+      const toAdd = [...activeSelectedEntryIds].filter((id) => !current.has(id))
+
+      const next = new Set<number>(current)
+      for (const id of toRemove) next.delete(id)
+      for (const id of toAdd) next.add(id)
+
+      if (next.size > MAX_MANAGERS) {
+        applyStatusEl.textContent = `❌ Too many managers. Limit is ${MAX_MANAGERS}. Reduce your selection.`
+        return
+      }
+
+      textarea.value = Array.from(next).join('\n') + '\n'
+      updateCount()
+
+      if (toRemove.length > 0) {
+        const { error } = await supabase
+          .from('user_league_imports')
+          .delete()
+          .eq('user_id', currentUser.id)
+          .eq('league_id', activeLeague.id)
+          .in('entry_id', toRemove as any)
+
+        if (error) throw error
+      }
+
+      if (activeSelectedEntryIds.size > 0) {
+        const lookup = new Map<number, StandingRow>()
+        activeStandings.forEach((r) => lookup.set(r.entryId, r))
+
+        const payload = [...activeSelectedEntryIds].map((entryId) => {
+          const row = lookup.get(entryId)
+          return {
+            user_id: currentUser.id,
+            league_id: activeLeague!.id,
+            entry_id: entryId,
+            entry_name: row?.entryName || null,
+            rank: row?.rank || null,
+            updated_at: new Date().toISOString(),
+          }
+        })
+
+        const { error } = await supabase
+          .from('user_league_imports')
+          .upsert(payload, { onConflict: 'user_id,league_id,entry_id' })
+
+        if (error) throw error
+      }
+
+      previouslyImportedForActiveLeague = new Set<number>(activeSelectedEntryIds)
+
+      applyStatusEl.textContent = `✅ Applied changes locally. Click “Save” to sync across devices.`
+      await updateStandingsBannerAndWarnings()
+    } catch (e) {
+      console.error(e)
+      applyStatusEl.textContent = '❌ Failed to apply changes. Please try again.'
+    } finally {
+      selectNoneBtn.disabled = false
+      await updateStandingsBannerAndWarnings()
+    }
+  }
+
+  leagueOpenBtn?.addEventListener('click', async () => {
+    leagueStatusEl.textContent = ''
+    openLeagueSheet()
+    await loadSavedLeagues()
+  })
+
+  leagueCloseBtn?.addEventListener('click', () => closeLeagueSheet())
+  leagueRefreshBtn?.addEventListener('click', async () => loadSavedLeagues())
+  leagueSaveBtn?.addEventListener('click', async () => saveLeagueById())
+
+  standingsCloseBtn?.addEventListener('click', () => closeStandingsSheet())
+
+  selectNoneBtn?.addEventListener('click', async () => {
+    activeSelectedEntryIds.clear()
+    standingsListEl.querySelectorAll<HTMLInputElement>('input.league-check').forEach((cb) => (cb.checked = false))
+    await updateStandingsBannerAndWarnings()
+  })
+
+  applyBtn?.addEventListener('click', async () => {
+    const toRemove = [...previouslyImportedForActiveLeague].filter((id) => !activeSelectedEntryIds.has(id))
+    if (toRemove.length > 0) {
+      const ok = confirm(`Apply changes?\n\nThis will remove ${toRemove.length} manager(s) from your list if unticked here.`)
+      if (!ok) return
+    }
+    await applyLeagueChanges()
+  })
+
   checkAuth()
 </script>
