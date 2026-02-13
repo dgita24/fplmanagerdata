@@ -52,7 +52,6 @@ import Nav from "../components/Nav.astro";
           <form id="manager-form">
             <div class="ids-header">
               <label class="label" for="ids">Manager EntryIDs</label>
-              <span class="ids-count ids-count--header">Managers: <strong id="count">0</strong></span>
             </div>
 
             <div class="ids-layout">
@@ -67,6 +66,10 @@ import Nav from "../components/Nav.astro";
               </div>
 
               <div class="ids-actions">
+                <div class="ids-actions__header">
+                  <span class="ids-count ids-count--actions">Managers: <strong id="count">0</strong></span>
+                </div>
+
                 <button type="button" id="edit-btn" class="btn btn--neutral btn--full-width">✏️ Edit</button>
                 <button type="submit" id="save-btn" class="btn btn--success btn--full-width" disabled>💾 Save</button>
 
@@ -278,11 +281,11 @@ import Nav from "../components/Nav.astro";
     margin-bottom: var(--space-2);
   }
 
-.ids-count--header {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-}
+  .ids-count--header {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
 
   .ids-count {
     font-size: var(--text-sm);
@@ -293,6 +296,16 @@ import Nav from "../components/Nav.astro";
   .ids-count strong {
     color: var(--color-success);
   }
+
+  .ids-actions__header {
+    display: flex;
+    justify-content: center; /* centers the Managers: xx text over buttons */
+  }
+
+.ids-count--actions {
+  margin: 0;
+  text-align: center;
+}
 
   .btn--full-width {
     width: 100%;
