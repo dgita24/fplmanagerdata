@@ -75,7 +75,7 @@ import Nav from "../components/Nav.astro";
                 </button>
 
                 <button type="button" id="league-open" class="btn btn--featured btn--full-width">
-                  Import from league
+                  Import from mini league
                 </button>
               </div>
             </div>
@@ -301,8 +301,31 @@ import Nav from "../components/Nav.astro";
     padding-bottom: 10px;
   }
 
-  .btn--featured:hover {
-    background: #1d4ed8; /* blue-700 */
+  /* Bright yellow button for "Import from league" */
+  .btn--league {
+    background: #facc15;            /* amber-400 */
+    color: #111827;                 /* slate-900 */
+    border: 1px solid rgba(0,0,0,0.15);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-align: center;
+    line-height: 1.15;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .btn--league:hover {
+    background: #fbbf24;            /* amber-300 */
+  }
+
+  .btn--league:active {
+    background: #f59e0b;            /* amber-500 */
+  }
+
+  .btn--league:focus-visible {
+    outline: 2px solid rgba(250, 204, 21, 0.6);
+    outline-offset: 2px;
   }
 
   /* --- TOP SHEET --- */
