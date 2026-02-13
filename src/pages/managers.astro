@@ -52,6 +52,7 @@ import Nav from "../components/Nav.astro";
           <form id="manager-form">
             <div class="ids-header">
               <label class="label" for="ids">Manager EntryIDs</label>
+              <span class="ids-count">Managers: <strong id="count">0</strong></span>
             </div>
 
             <div class="ids-layout">
@@ -66,10 +67,6 @@ import Nav from "../components/Nav.astro";
               </div>
 
               <div class="ids-actions">
-                <div class="ids-actions__header">
-                  <span class="ids-count ids-count--actions">Managers: <strong id="count">0</strong></span>
-                </div>
-
                 <button type="button" id="edit-btn" class="btn btn--neutral btn--full-width">✏️ Edit</button>
                 <button type="submit" id="save-btn" class="btn btn--success btn--full-width" disabled>💾 Save</button>
 
@@ -83,7 +80,6 @@ import Nav from "../components/Nav.astro";
               </div>
             </div>
           </form>
-
           <div id="status" style="margin-top: var(--space-3);"></div>
         </div>
       </section>
@@ -193,6 +189,7 @@ import Nav from "../components/Nav.astro";
   </main>
 </Layout>
 
+
 <style>
   .input {
     width: 100%;
@@ -209,11 +206,11 @@ import Nav from "../components/Nav.astro";
   }
 
   .card--compact {
-    margin-bottom: var(--space-3);
+    margin-bottom: var(--space-2);
   }
 
   .card-body--compact {
-    padding: var(--space-3);
+    padding: var(--space-2) var(--space-3);
   }
 
   .card-title--small {
@@ -225,27 +222,28 @@ import Nav from "../components/Nav.astro";
     padding-left: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 2px;
     font-size: var(--text-xs);
     color: var(--color-text-secondary);
-    margin-bottom: var(--space-2);
+    margin-bottom: var(--space-1);
   }
 
   .tip--compact {
     font-size: var(--text-xs);
     margin-top: 0;
-    margin-bottom: var(--space-1);
+    margin-bottom: 2px;
   }
 
   .code-block--compact {
     display: block;
-    padding: var(--space-2);
+    padding: var(--space-1) var(--space-2);
     font-family: var(--font-mono);
     font-size: var(--text-xs);
     background: var(--color-surface-alt);
     border-radius: var(--radius-sm);
     word-break: break-all;
     overflow-wrap: break-word;
+    line-height: 1.4;
   }
 
   .ids-layout {
@@ -264,7 +262,7 @@ import Nav from "../components/Nav.astro";
   .ids-textarea-wrapper .textarea {
     width: 100%;
     font-size: var(--text-sm);
-    min-height: 200px;
+    min-height: 320px;
   }
 
   .ids-actions {
@@ -285,23 +283,13 @@ import Nav from "../components/Nav.astro";
   .ids-count {
     font-size: var(--text-sm);
     color: var(--color-text-secondary);
-    margin-bottom: var(--space-1);
+    margin: 0;
   }
 
   .ids-count strong {
     color: var(--color-success);
   }
-
-  .ids-actions__header {
-    display: flex;
-    justify-content: center; /* centers the Managers: xx text over buttons */
-  }
-
-  .ids-count--actions {
-    margin: 0;
-    text-align: center;
-  }
-
+  
   .btn--full-width {
     width: 100%;
   }
@@ -500,8 +488,8 @@ import Nav from "../components/Nav.astro";
 
     /* Compact saved leagues rows in the import sheet */
     #league-sheet .featured-item {
-      padding-top: 8px;
-      padding-bottom: 8px;
+      padding-top: 6px;
+      padding-bottom: 6px;
     }
 
     /* FORCE compact buttons inside ALL top-sheet modals on mobile
@@ -512,6 +500,37 @@ import Nav from "../components/Nav.astro";
       min-height: 34px !important;
       padding: 6px 10px !important;
       font-size: 0.85rem !important;
+    }
+
+    /* FIX: Tighter spacing in league import sheet */
+    #league-sheet .control {
+      gap: var(--space-1);
+      margin-bottom: var(--space-1);
+    }
+
+    #league-sheet .input {
+      min-height: 36px;
+      padding: 6px 10px;
+    }
+
+    #league-sheet .text-muted {
+      margin-top: 4px !important;
+      margin-bottom: 0 !important;
+    }
+
+    /* Move saved leagues header closer to buttons */
+    #league-sheet .top-sheet__body > div:last-child {
+      margin-top: var(--space-1) !important;
+    }
+
+    #league-sheet .top-sheet__body > div:last-child > .text-muted {
+      margin-bottom: var(--space-1) !important;
+    }
+
+    /* Make top-sheet taller on mobile */
+    .top-sheet {
+      height: 62vh;
+      max-height: 62vh;
     }
   }
 
@@ -586,6 +605,7 @@ import Nav from "../components/Nav.astro";
       flex-direction: row;
       flex-wrap: wrap;
       width: 100%;
+      gap: var(--space-2);
     }
 
     .ids-actions .btn--full-width {
