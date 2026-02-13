@@ -389,16 +389,14 @@ import Nav from "../components/Nav.astro";
     padding: var(--space-3);
   }
 
-  /* Compact buttons inside the Import-from-league sheet (mobile) */
+  /* Mobile tuning for the Import-from-league sheet */
   @media (max-width: 639px) {
     #league-sheet .btn {
       min-height: 36px;     /* overrides global 44px from Layout.astro */
       padding: 6px 10px;    /* overrides global padding */
       font-size: 0.85rem;
     }
-  }
 
-  @media (max-width: 639px) {
     #league-sheet .featured-item {
       padding-top: 8px;
       padding-bottom: 8px;
@@ -603,6 +601,18 @@ import Nav from "../components/Nav.astro";
       padding-top: 8px;
       padding-bottom: 8px;
     }
+ 
+    /* FORCE compact buttons inside the top-sheet modals on mobile */
+    @media (max-width: 639px) {
+      #league-sheet .btn,
+      #league-standings-sheet .btn,
+      #featured-sheet .btn {
+        min-height: 34px !important;
+        padding: 6px 10px !important;
+        font-size: 0.85rem !important;
+      }
+    }
+
   }
 </style>
 
