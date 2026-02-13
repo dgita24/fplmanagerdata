@@ -1189,6 +1189,9 @@ import Nav from "../components/Nav.astro";
     try {
       if (!isEditing) setEditMode(true)
 
+      // clear any old main-page message
+      status.innerHTML = ''
+
       const current = new Set<number>(parseTextareaIds())
 
       const toRemove = [...previouslyImportedForActiveLeague].filter((id) => !activeSelectedEntryIds.has(id))
@@ -1198,32 +1201,18 @@ import Nav from "../components/Nav.astro";
       for (const id of toRemove) next.delete(id)
       for (const id of toAdd) next.add(id)
 
-      previouslyImportedForActiveLeague = new Set<number>(activeSelectedEntryIds)
-
-      // After updating textarea + supabase mapping successfully:
-      const removedCount = toRemove.length
-      const addedCount = toAdd.length
-
-      let msg = ''
-
-      if (addedCount > 0 && removedCount > 0) {
-        msg = `✅ ${addedCount} manager(s) added and ${removedCount} removed. Click “Save” to sync across devices.`
-      } else if (addedCount > 0) {
-        msg = `✅ ${addedCount} manager(s) added to your list. Click “Save” to sync across devices.`
-      } else if (removedCount > 0) {
-        msg = `✅ ${removedCount} manager(s) removed from your list. Click “Save” to sync across devices.`
-      } else {
-        msg = `No changes to apply.`
+      if (next.size > MAX_MANAGERS) {
+        const msg = `❌ Too many managers. Limit is ${MAX_MANAGERS}. Reduce your selection.`
+        applyStatusEl.textContent = msg
+        status.innerHTML = `<p class='status status--error'>${msg}</p>`
+        return
       }
 
-      applyStatusEl.textContent = msg
-      status.innerHTML = `<p class='status ${msg.startsWith('✅') ? 'status--success' : 'status--warning'}'>${msg}</p>`
-
-      await updateStandingsBannerAndWarnings()
-
+      // Update textarea (local) first
       textarea.value = Array.from(next).join('\n') + '\n'
       updateCount()
 
+      // Update import mapping table to reflect current selection for this league
       if (toRemove.length > 0) {
         const { error } = await supabase
           .from('user_league_imports')
@@ -1258,25 +1247,33 @@ import Nav from "../components/Nav.astro";
         if (error) throw error
       }
 
+      // Sync "previously imported" set to the current selection
       previouslyImportedForActiveLeague = new Set<number>(activeSelectedEntryIds)
 
-      // After updating textarea + supabase mapping successfully:
+      // Success message (once)
       const removedCount = toRemove.length
       const addedCount = toAdd.length
 
+      let msg = ''
       if (addedCount > 0 && removedCount > 0) {
-        applyStatusEl.textContent = `✅ ${addedCount} manager(s) added and ${removedCount} removed. Click “Save” to sync across devices.`
+        msg = `✅ ${addedCount} manager(s) added and ${removedCount} removed. Click “Save” to sync across devices.`
       } else if (addedCount > 0) {
-        applyStatusEl.textContent = `✅ ${addedCount} manager(s) added to your list. Click “Save” to sync across devices.`
+        msg = `✅ ${addedCount} manager(s) added to your list. Click “Save” to sync across devices.`
       } else if (removedCount > 0) {
-        applyStatusEl.textContent = `✅ ${removedCount} manager(s) removed from your list. Click “Save” to sync across devices.`
+        msg = `✅ ${removedCount} manager(s) removed from your list. Click “Save” to sync across devices.`
       } else {
-        applyStatusEl.textContent = `No changes to apply.`
+        msg = `No changes to apply.`
       }
+
+      applyStatusEl.textContent = msg
+      status.innerHTML = `<p class='status ${msg.startsWith('✅') ? 'status--success' : 'status--warning'}'>${msg}</p>`
+
       await updateStandingsBannerAndWarnings()
     } catch (e) {
       console.error(e)
-      applyStatusEl.textContent = '❌ Failed to apply changes. Please try again.'
+      const msg = '❌ Failed to apply changes. Please try again.'
+      applyStatusEl.textContent = msg
+      status.innerHTML = `<p class='status status--error'>${msg}</p>`
     } finally {
       selectNoneBtn.disabled = false
       await updateStandingsBannerAndWarnings()
