@@ -127,7 +127,7 @@ import Nav from "../components/Nav.astro";
             <label class="label" for="league-id-input">League ID</label>
             <input id="league-id-input" class="input" inputmode="numeric" placeholder="e.g. 649356" />
             <div class="text-muted" style="margin-top: 6px; font-size: var(--text-sm);">
-              Tip: from URL <code>/leagues/<strong>649356</strong>/standings/c</code>
+              Tip: from URL <code>fantasy.premierleague.com/leagues/<strong>676856</strong>/standings/c</code>
             </div>
           </div>
 
@@ -1164,15 +1164,29 @@ import Nav from "../components/Nav.astro";
     })
   }
 
+  function parseLeagueIdFromInput(raw: string): number | null {
+    const s = (raw ?? "").trim();
+    if (!s) return null;
+
+    if (/^\d+$/.test(s)) return Number(s);
+
+    const m = s.match(/\/leagues\/(\d+)(?:\/|$)/i);
+    if (m?.[1]) return Number(m[1]);
+
+    const n = s.match(/\b(\d{3,})\b/);
+    if (n?.[1]) return Number(n[1]);
+
+    return null;
+  }
+
   async function saveLeagueById() {
     leagueStatusEl.textContent = ''
-    const raw = (leagueIdInput.value || '').trim()
-    if (!raw.match(/^\d+$/)) {
-      leagueStatusEl.textContent = 'Enter a valid numeric league ID.'
-      return
-    }
 
-    const leagueId = Number(raw)
+    const leagueId = parseLeagueIdFromInput(leagueIdInput.value)
+    if (!leagueId || !Number.isFinite(leagueId)) {
+     leagueStatusEl.textContent = 'Paste a League ID (number) or league URL.'
+     return
+    }
 
     leagueSaveBtn.disabled = true
     try {
@@ -1194,7 +1208,7 @@ import Nav from "../components/Nav.astro";
       await loadSavedLeagues()
     } catch (e) {
       console.error(e)
-      leagueStatusEl.textContent = 'Could not save league. Check the ID and try again.'
+      leagueStatusEl.textContent = 'Could not save. Check the league ID/URL and try again.'
     } finally {
       leagueSaveBtn.disabled = false
     }
