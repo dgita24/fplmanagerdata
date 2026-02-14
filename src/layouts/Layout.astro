@@ -1833,6 +1833,34 @@ const { title = "FPL Manager Data" } = Astro.props;
     line-height: 1.8;
   }
 
+  .chips-table{
+    table-layout: fixed !important;
+    width: 100% !important;
+  }
+
+  /* Manager about a third */
+  .chips-table th:first-child,
+  .chips-table td.manager-cell{
+    width: 35% !important;
+  }
+
+  /* Cap Used + Remaining so they can't steal width */
+  .chips-table thead th:nth-child(2),
+  .chips-table tbody td:nth-child(2){
+    width: 40% !important;
+  }
+
+  .chips-table thead th:nth-child(3),
+  .chips-table tbody td:nth-child(3){
+    width: 25% !important;
+  }
+
+  /* Let chips wrap within their cells */
+  .chips-table .chip-used-btn,
+  .chips-table .chip-remaining{
+    white-space: normal !important;
+  }
+
   .chip-used-btn {
     display: inline-flex;
     align-items: center;
