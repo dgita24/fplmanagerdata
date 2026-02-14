@@ -32,7 +32,7 @@ import Nav from "../components/Nav.astro";
         <div class="card-body card-body--compact">
           <h2 class="card-title card-title--small">Quick Start</h2>
           <ol class="help-list help-list--compact">
-            <li>Add EntryIDs manually (one per line, max 50) <em>or</em> use <strong>Import from league</strong></li>
+            <li>Add EntryIDs manually (<strong>one per line</strong>, max 50) <em>or</em> use <strong>Import from league</strong></li>
             <li>Click <strong>Save</strong> — IDs sync across devices</li>
           </ol>
 
@@ -40,8 +40,8 @@ import Nav from "../components/Nav.astro";
             <strong>Tip:</strong> Find IDs in official FPL URLs:
           </p>
           <code class="code-block code-block--compact">
-            Manager ID - fantasy.premierleague.com/entry/<strong>1234</strong>/event/01<br />
-            League ID - fantasy.premierleague.com/leagues/<strong>1234</strong>/standings/c
+            <span class="qs-hl">Manager ID</span> - fantasy.premierleague.com/entry/<strong class="qs-hl">1234</strong>/event/01<br />
+            <span class="qs-hl">League ID</span> - fantasy.premierleague.com/leagues/<strong class="qs-hl">1234</strong>/standings/c
           </code>
         </div>
       </section>
@@ -67,7 +67,7 @@ import Nav from "../components/Nav.astro";
               </div>
 
               <div class="ids-actions">
-                <button type="button" id="edit-btn" class="btn btn--neutral btn--full-width">✏️ Edit Manager ID</button>
+                <button type="button" id="edit-btn" class="btn btn--neutral btn--full-width">Manually edit Manager IDs</button>
                 <button type="submit" id="save-btn" class="btn btn--success btn--full-width" disabled>💾 Save</button>
 
                 <button type="button" id="featured-open" class="btn btn--featured btn--full-width">
@@ -125,9 +125,9 @@ import Nav from "../components/Nav.astro";
         <div class="top-sheet__body">
           <div class="control" style="margin-bottom: var(--space-2);">
             <label class="label" for="league-id-input">League ID</label>
-            <input id="league-id-input" class="input" inputmode="numeric" placeholder="e.g. 649356" />
+            <input id="league-id-input" class="input" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="League ID, e.g. 67893 or League URL" />
             <div class="text-muted" style="margin-top: 6px; font-size: var(--text-sm);">
-              Tip: from URL <code>/leagues/<strong>649356</strong>/standings/c</code>
+              Tip: from URL <code>fantasy.premierleague.com/leagues/<strong>676856</strong>/standings/c</code>
             </div>
           </div>
 
@@ -204,6 +204,13 @@ import Nav from "../components/Nav.astro";
   .input:focus {
     border-color: rgba(59, 130, 246, 0.65);
   }
+
+  /* Quick Start highlight tokens */
+  .code-block--compact .qs-hl {
+    color: var(--color-warning); /* bright yellow in dark theme */
+    font-weight: 800;
+  }
+
 
   .card--compact {
     margin-bottom: var(--space-2);
@@ -293,6 +300,15 @@ import Nav from "../components/Nav.astro";
   .btn--full-width {
     width: 100%;
   }
+  
+  /* Allow Edit button text to fit on small devices */
+  #edit-btn {
+    white-space: normal;      /* overrides Layout's .btn { white-space: nowrap } */
+    overflow-wrap: anywhere;
+    line-height: 1.15;
+    font-size: 0.9rem;
+  }
+
 
   .textarea:disabled {
     background: var(--color-surface-alt);
@@ -508,12 +524,27 @@ import Nav from "../components/Nav.astro";
       font-size: 0.85rem;
     }
 
+    #edit-btn { font-size: 0.85rem; }
+
     .ids-actions .btn--featured,
     .ids-actions .btn--league {
       line-height: 1.1;
       padding-top: 8px;
       padding-bottom: 8px;
     }
+
+    #league-sheet .text-muted code {
+      display: inline-block;
+      max-width: 100%;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    #league-sheet #league-id-input::placeholder {
+      font-size: 0.75em;
+    }
+
 
     /* Compact saved leagues rows in the import sheet */
     #league-sheet .featured-item {
@@ -1146,15 +1177,29 @@ import Nav from "../components/Nav.astro";
     })
   }
 
+  function parseLeagueIdFromInput(raw: string): number | null {
+    const s = (raw ?? "").trim();
+    if (!s) return null;
+
+    if (/^\d+$/.test(s)) return Number(s);
+
+    const m = s.match(/\/leagues\/(\d+)(?:\/|$)/i);
+    if (m?.[1]) return Number(m[1]);
+
+    const n = s.match(/\b(\d{3,})\b/);
+    if (n?.[1]) return Number(n[1]);
+
+    return null;
+  }
+
   async function saveLeagueById() {
     leagueStatusEl.textContent = ''
-    const raw = (leagueIdInput.value || '').trim()
-    if (!raw.match(/^\d+$/)) {
-      leagueStatusEl.textContent = 'Enter a valid numeric league ID.'
-      return
-    }
 
-    const leagueId = Number(raw)
+    const leagueId = parseLeagueIdFromInput(leagueIdInput.value)
+    if (!leagueId || !Number.isFinite(leagueId)) {
+     leagueStatusEl.textContent = 'Paste a League ID (number) or league URL.'
+     return
+    }
 
     leagueSaveBtn.disabled = true
     try {
@@ -1176,7 +1221,7 @@ import Nav from "../components/Nav.astro";
       await loadSavedLeagues()
     } catch (e) {
       console.error(e)
-      leagueStatusEl.textContent = 'Could not save league. Check the ID and try again.'
+      leagueStatusEl.textContent = 'Could not save. Check the league ID/URL and try again.'
     } finally {
       leagueSaveBtn.disabled = false
     }
