@@ -545,6 +545,27 @@ import Nav from "../components/Nav.astro";
       font-size: 0.75em;
     }
 
+    /* Fullscreen Featured managers sheet on mobile (like league sheets) */
+    #featured-sheet.top-sheet {
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 100vh;   /* fallback */
+      height: 100dvh;  /* better on mobile browsers */
+      max-height: 100dvh;
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+
+    /* Notch-safe padding */
+    #featured-sheet .top-sheetheader {
+      padding-top: calc(var(--space-3) + env(safe-area-inset-top));
+    }
+
+    #featured-sheet .top-sheetfooter {
+      padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
+    }
 
     /* Compact saved leagues rows in the import sheet */
     #league-sheet .featured-item {
