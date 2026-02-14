@@ -33,7 +33,7 @@ import Nav from "../components/Nav.astro";
           <h2 class="card-title card-title--small">Quick Start</h2>
           <ol class="help-list help-list--compact">
             <li>Add EntryIDs manually (<strong>one per line</strong>, max 50) <em>or</em> use <strong>Import from league</strong></li>
-            <li>Click <strong>Save</strong> — IDs sync across devices</li>
+            <li>Changes save automatically — IDs sync across devices</li>
           </ol>
 
           <p class="tip tip--compact">
@@ -179,6 +179,7 @@ import Nav from "../components/Nav.astro";
         </div>
 
         <div class="top-sheet__footer">
+          <div id="league-apply-success" class="top-sheet__status" aria-live="polite"></div>
           <div id="league-apply-status" class="top-sheet__status" aria-live="polite"></div>
           <div class="top-sheet__actions">
             <button type="button" id="league-select-none" class="btn btn--neutral">Select none</button>
@@ -839,6 +840,24 @@ import Nav from "../components/Nav.astro";
         if (error) throw error
       }
 
+      if (ids.length === 0) {
+        const { error: cleanupError } = await supabase
+          .from('user_league_imports')
+          .delete()
+          .eq('user_id', currentUser.id)
+
+        if (cleanupError) throw cleanupError
+      } else {
+        const idsCsv = `(${ids.join(',')})`
+        const { error: cleanupError } = await supabase
+          .from('user_league_imports')
+          .delete()
+          .eq('user_id', currentUser.id)
+          .not('entry_id', 'in', idsCsv)
+
+        if (cleanupError) throw cleanupError
+      }
+
       return true
     } catch (e) {
       console.error('Error saving manager IDs:', e)
@@ -857,7 +876,7 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  function setEditMode(editing: boolean) {
+  function setEditMode(editing: boolean, options: { preserveStatus?: boolean } = {}) {
     isEditing = editing
     textarea.disabled = !editing
     saveBtn.disabled = !editing
@@ -865,10 +884,11 @@ import Nav from "../components/Nav.astro";
 
     if (!editing) {
       loadManagerIds()
-      status.innerHTML = ''
+      if (!options.preserveStatus) {
+        status.innerHTML = ''
+      }
     }
   }
-
   editBtn.addEventListener('click', () => {
     setEditMode(!isEditing)
   })
@@ -1012,7 +1032,7 @@ import Nav from "../components/Nav.astro";
     clearFeaturedSelection()
   })
 
-  featuredAddBtn?.addEventListener('click', () => {
+  featuredAddBtn?.addEventListener('click', async () => {
     if (selectedFeaturedIds.size === 0) return
 
     if (!isEditing) setEditMode(true)
@@ -1036,7 +1056,19 @@ import Nav from "../components/Nav.astro";
     textarea.value = appended + '\n'
 
     updateCount()
-    featuredStatusEl.textContent = `Added ${toAdd.length} manager${toAdd.length === 1 ? '' : 's'}.`
+    const nextIds = Array.from(new Set(parseTextareaIds()))
+    const saved = await saveManagerIds(nextIds)
+
+    if (saved) {
+      setEditMode(false, { preserveStatus: true })
+      const msg = `✅ Added ${toAdd.length} manager${toAdd.length === 1 ? '' : 's'} and saved.`
+      featuredStatusEl.textContent = msg
+      status.innerHTML = `<p class='status status--success'>${msg}</p>`
+    } else {
+      const msg = '❌ Failed to save changes. Please try again.'
+      featuredStatusEl.textContent = msg
+      status.innerHTML = `<p class='status status--error'>${msg}</p>`
+    }
 
     clearFeaturedSelection()
   })
@@ -1064,6 +1096,7 @@ import Nav from "../components/Nav.astro";
   const standingsListEl = document.getElementById('league-standings-list') as HTMLElement
   const leagueSearchInput = document.getElementById('league-search') as HTMLInputElement
   const applyStatusEl = document.getElementById('league-apply-status') as HTMLElement
+  const applySuccessEl = document.getElementById('league-apply-success') as HTMLElement
   const selectNoneBtn = document.getElementById('league-select-none') as HTMLButtonElement
   const applyBtn = document.getElementById('league-apply') as HTMLButtonElement
 
@@ -1075,6 +1108,18 @@ import Nav from "../components/Nav.astro";
   let activeSelectedEntryIds = new Set<number>()
   let previouslyImportedForActiveLeague = new Set<number>()
   let standingsSearchQuery = ''
+
+  function syncActiveSelectedEntryIdsFromDom() {
+    const next = new Set<number>()
+    standingsListEl
+      .querySelectorAll<HTMLInputElement>('input.league-check')
+      .forEach((cb) => {
+        const entryId = Number(cb.dataset.entryId)
+        if (!Number.isFinite(entryId)) return
+        if (cb.checked) next.add(entryId)
+      })
+    activeSelectedEntryIds = next
+  }
 
   function openLeagueSheet() {
     leagueSheet.classList.add('is-open')
@@ -1350,12 +1395,15 @@ import Nav from "../components/Nav.astro";
   }
 
   async function updateStandingsBannerAndWarnings() {
+    syncActiveSelectedEntryIdsFromDom()
     const currentManagerIds = new Set<number>(parseTextareaIds())
 
     const selected = [...activeSelectedEntryIds]
     const selectedCount = selected.length
 
-    const toRemove = [...previouslyImportedForActiveLeague].filter((id) => !activeSelectedEntryIds.has(id))
+    const leagueEntryIdSet = new Set<number>(activeStandings.map((r) => r.entryId))
+    const toRemove = [...leagueEntryIdSet]
+      .filter((id) => currentManagerIds.has(id) && !activeSelectedEntryIds.has(id))
     const toAdd = selected.filter((id) => !currentManagerIds.has(id))
 
     const totalAfter = currentManagerIds.size - toRemove.filter((id) => currentManagerIds.has(id)).length + toAdd.length
@@ -1398,6 +1446,7 @@ import Nav from "../components/Nav.astro";
 
   async function openLeagueStandings(leagueId: number) {
     applyStatusEl.textContent = ''
+    applySuccessEl.textContent = ''
     standingsBannerEl.textContent = 'Loading league standings...'
     standingsListEl.innerHTML = ''
     applyBtn.disabled = true
@@ -1466,10 +1515,14 @@ import Nav from "../components/Nav.astro";
 
       // clear any old main-page message
       status.innerHTML = ''
+      applySuccessEl.textContent = ''
+      syncActiveSelectedEntryIdsFromDom()
 
       const current = new Set<number>(parseTextareaIds())
 
-      const toRemove = [...previouslyImportedForActiveLeague].filter((id) => !activeSelectedEntryIds.has(id))
+      const leagueEntryIdSet = new Set<number>(activeStandings.map((r) => r.entryId))
+      const toRemove = [...leagueEntryIdSet]
+        .filter((id) => current.has(id) && !activeSelectedEntryIds.has(id))
       const toAdd = [...activeSelectedEntryIds].filter((id) => !current.has(id))
 
       const next = new Set<number>(current)
@@ -1524,6 +1577,9 @@ import Nav from "../components/Nav.astro";
 
       // Sync "previously imported" set to the current selection
       previouslyImportedForActiveLeague = new Set<number>(activeSelectedEntryIds)
+      const saved = await saveManagerIds(Array.from(next))
+      if (!saved) throw new Error('Save failed')
+      setEditMode(false, { preserveStatus: true })
 
       // Success message (once)
       const removedCount = toRemove.length
@@ -1531,7 +1587,7 @@ import Nav from "../components/Nav.astro";
 
       let msg = ''
       if (addedCount > 0 && removedCount > 0) {
-        msg = `✅ ${addedCount} manager(s) added and ${removedCount} removed. Click “Save” to sync across devices.`
+        msg = `✅ ${addedCount} manager(s) added and ${removedCount} removed. Changes saved.`
       } else if (addedCount > 0) {
         msg = `✅ ${addedCount} manager(s) added to your list. Click “Save” to sync across devices.`
       } else if (removedCount > 0) {
@@ -1540,7 +1596,7 @@ import Nav from "../components/Nav.astro";
         msg = `No changes to apply.`
       }
 
-      applyStatusEl.textContent = msg
+      applySuccessEl.textContent = msg
       status.innerHTML = `<p class='status ${msg.startsWith('✅') ? 'status--success' : 'status--warning'}'>${msg}</p>`
 
       await updateStandingsBannerAndWarnings()
@@ -1579,7 +1635,11 @@ import Nav from "../components/Nav.astro";
   })
 
   applyBtn?.addEventListener('click', async () => {
-    const toRemove = [...previouslyImportedForActiveLeague].filter((id) => !activeSelectedEntryIds.has(id))
+    syncActiveSelectedEntryIdsFromDom()
+    const current = new Set<number>(parseTextareaIds())
+    const leagueEntryIdSet = new Set<number>(activeStandings.map((r) => r.entryId))
+    const toRemove = [...leagueEntryIdSet]
+      .filter((id) => current.has(id) && !activeSelectedEntryIds.has(id))
     if (toRemove.length > 0) {
       const ok = confirm(`Apply changes?\n\nThis will remove ${toRemove.length} manager(s) from your list if unticked here.`)
       if (!ok) return
