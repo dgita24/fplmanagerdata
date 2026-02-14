@@ -271,6 +271,41 @@ import Nav from "../components/Nav.astro";
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
+
+  function populateManagerSelectorFromHistories() {
+    if (!managerFilterSelect) return
+
+    const prev = managerFilterSelect.value || ""
+
+    // Build unique managers from histories
+    const seen = new Set()
+    const mgrs = []
+
+    for (const history of allHistories || []) {
+      const entryId = String(history?.[0]?.entryId ?? "")
+      const managerName = String(history?.[0]?.managerName ?? "")
+      if (!entryId || !managerName) continue
+      if (seen.has(entryId)) continue
+      seen.add(entryId)
+      mgrs.push({ entryId, managerName })
+    }
+
+    mgrs.sort((a, b) => a.managerName.localeCompare(b.managerName))
+
+    managerFilterSelect.innerHTML = `<option value="">All</option>`
+    for (const m of mgrs) {
+      const opt = document.createElement("option")
+      opt.value = m.entryId
+      opt.textContent = m.managerName
+      managerFilterSelect.appendChild(opt)
+    }
+
+    // restore selection if it still exists
+    if (prev && mgrs.some((m) => m.entryId === prev)) managerFilterSelect.value = prev
+    else managerFilterSelect.value = ""
+  }
+  
+
   const transferModal = document.getElementById("transfer-modal");
   const modalContent = document.getElementById("modal-content");
   const chipModal = document.getElementById("chip-modal");
@@ -838,6 +873,8 @@ import Nav from "../components/Nav.astro";
     }
 
     allHistories = historyResults.filter((history) => history !== null);
+    populateManagerSelectorFromHistories()
+
 
     for (const history of allHistories) {
       const managerMaxGW = Math.max(...history.map(h => h.gw));
@@ -939,6 +976,7 @@ import Nav from "../components/Nav.astro";
 
     if (canUseSnap) {
       allHistories = snap.allHistories;
+      populateManagerSelectorFromHistories()
       latestGW = snap.latestGW ?? null;
       allPlayersMap = snap.allPlayersMap || {};
 
