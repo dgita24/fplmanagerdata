@@ -443,6 +443,28 @@ import Nav from "../components/Nav.astro";
     white-space: nowrap;
   }
 
+  /* Saved leagues: force 2-row layout (title row, then actions row) */
+  #league-sheet #league-list .saved-league-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #league-sheet #league-list .saved-league-title {
+    display: block; /* natural wrapping */
+    min-width: 0;
+  }
+
+  #league-sheet #league-list .saved-league-actions {
+    display: flex;
+    justify-content: space-between; /* Open left, Remove right */
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+
+  #league-sheet #league-list .saved-league-actions .btn {
+    width: calc(50% - (var(--space-2) / 2));
+  }
+
   .featured-item .featured-check,
   .featured-item .league-check {
     flex-shrink: 0;
@@ -1049,18 +1071,18 @@ import Nav from "../components/Nav.astro";
     leagueListEl.innerHTML = leagues.map((l) => {
       const name = l.league_name ? escapeHtml(l.league_name) : `League ${l.league_id}`
       return `
-        <div class="featured-item" style="justify-content: space-between;">
-          <div style="display:flex; flex-direction:column; gap:2px;">
-            <div class="featured-item__name" style="margin:0;">
-              ${name} <span class="featured-item__note">— ID: <code>${l.league_id}</code></span>
-            </div>
+        <div class="featured-item saved-league-card">
+          <div class="saved-league-title">
+            <span class="featured-item__name">${name}</span>
+            <span class="featured-item__note">— ID: <code>${l.league_id}</code></span>
           </div>
 
-          <div style="display:flex; gap: var(--space-2); align-items:center;">
+          <div class="saved-league-actions">
             <button type="button" class="btn btn--neutral" data-action="open" data-league-id="${l.league_id}">Open</button>
             <button type="button" class="btn btn--neutral" data-action="remove" data-league-id="${l.league_id}">Remove</button>
-          </div>
+         </div>
         </div>
+
       `
     }).join('')
 
