@@ -16,10 +16,20 @@ import Nav from "../components/Nav.astro";
       <a href="/managers" class="badge badge-wide">⚙ Manage IDs</a>
     </div>
 
-    <div class="status-row">
-      <div id="loading-status" class="status-text"></div>
-      <button id="refresh-btn" class="btn-refresh" type="button">🔄 Refresh</button>
+    <div class="controls-inline chips-controls">
+      <div class="control-inline">
+        <label class="label-small" for="manager-filter">Manager</label>
+        <select class="select-small" id="manager-filter">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="control-inline">
+        <label class="label-small">&nbsp;</label>
+        <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
+      </div>
     </div>
+
+    <div id="loading-status" class="meta-row"></div>
 
     <section id="chips-output" aria-live="polite"></section>
   </main>
