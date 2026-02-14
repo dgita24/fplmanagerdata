@@ -637,8 +637,8 @@ import Nav from "../components/Nav.astro";
     }
 
     .top-sheet {
-      height: 70vh;
-      max-height: 70vh;
+      height: 88vh;
+      max-height: 88vh;
       left: 50%;
       right: auto;
       width: min(820px, 96vw);
@@ -653,8 +653,14 @@ import Nav from "../components/Nav.astro";
       transform: translate(-50%, 0);
     }
 
-    .featured-item {
-      font-size: 0.95em;
+    /* Desktop-only compact rows inside sheets */
+    #featured-sheet .featured-item,
+    #league-sheet .featured-item,
+    #league-standings-sheet .featured-item {
+      padding-top: 6px;
+      padding-bottom: 6px;
+      gap: 4px 8px;
+      font-size: 0.9em;
     }
   }
 
