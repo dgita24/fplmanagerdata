@@ -345,8 +345,8 @@ import Nav from "../components/Nav.astro";
     left: 0;
     right: 0;
 
-    height: 95vh;
-    max-height: 95vh;
+    height: 62vh;
+    max-height:62vh;
 
     background: var(--color-surface, #111827);
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
@@ -527,11 +527,33 @@ import Nav from "../components/Nav.astro";
       margin-bottom: var(--space-1) !important;
     }
 
-    /* Make top-sheet taller on mobile */
-    .top-sheet {
-      height: 62vh;
-      max-height: 62vh;
+    /* Fullscreen the two league sheets on mobile */
+    #league-sheet.top-sheet,
+    #league-standings-sheet.top-sheet {
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+
+      height: 100vh;    /* fallback */
+      height: 100dvh;   /* preferred */
+      max-height: 100dvh;
+
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
     }
+
+    /* Notch / safe-area padding */
+    #league-sheet .top-sheet__header,
+    #league-standings-sheet .top-sheet__header {
+      padding-top: calc(var(--space-3) + env(safe-area-inset-top));
+    }
+
+    #league-sheet .top-sheet__footer,
+    #league-standings-sheet .top-sheet__footer {
+      padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
+    }
+
   }
 
   /* =========================
