@@ -131,7 +131,7 @@ import Nav from "../components/Nav.astro";
             </div>
           </div>
 
-          <div style="display:flex; gap: var(--space-2); margin-bottom: var(--space-3);">
+          <div style="display:flex; gap: var(--space-2); margin-bottom: var(--space-1);">
             <button type="button" id="league-save" class="btn btn--success">Save league</button>
             <button type="button" id="league-refresh" class="btn btn--neutral">Refresh list</button>
           </div>
@@ -190,7 +190,7 @@ import Nav from "../components/Nav.astro";
 </Layout>
 
 
-<style>
+<style is:global>
   .input {
     width: 100%;
     padding: 10px 12px;
@@ -517,6 +517,18 @@ import Nav from "../components/Nav.astro";
       margin-top: 4px !important;
       margin-bottom: 0 !important;
     }
+  
+    /* Remove the reserved gap when status is empty */
+    #league-sheet #league-status:empty {
+      display: none;
+    }
+
+    /* When it does show, keep it tight */
+    #league-sheet #league-status {
+      min-height: 0 !important;
+      margin: 0 0 var(--space-1) 0 !important;
+    }
+
 
     /* Fullscreen the two league sheets on mobile */
     #league-sheet.top-sheet,
@@ -543,13 +555,6 @@ import Nav from "../components/Nav.astro";
     #league-sheet .top-sheet__footer,
     #league-standings-sheet .top-sheet__footer {
       padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
-    }
-
-    /* Saved league row buttons: make Open/Remove same height as Save league */
-    #league-sheet #league-list .btn {
-      min-height: 38px !important;
-      padding: 8px 12px !important;
-      font-size: 0.85rem !important;
     }
 
     /* Saved league name smaller */
