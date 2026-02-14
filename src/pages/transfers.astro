@@ -24,6 +24,12 @@ import Nav from "../components/Nav.astro";
         </select>
       </div>
       <div class="control-inline">
+        <label class="label-small" for="manager-filter">Manager</label>
+        <select class="select-small" id="manager-filter">
+         <option value="">All</option>
+       </select>
+      </div>
+      <div class="control-inline">
         <label class="label-small">&nbsp;</label>
         <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
       </div>
@@ -261,9 +267,45 @@ import Nav from "../components/Nav.astro";
 
   const out = document.getElementById("transfers-table");
   const gwFilterSelect = document.getElementById("gw-filter");
+  const managerFilterSelect = document.getElementById("manager-filter")
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
+
+  function populateManagerSelectorFromHistories() {
+    if (!managerFilterSelect) return
+
+    const prev = managerFilterSelect.value || ""
+
+    // Build unique managers from histories
+    const seen = new Set()
+    const mgrs = []
+
+    for (const history of allHistories || []) {
+      const entryId = String(history?.[0]?.entryId ?? "")
+      const managerName = String(history?.[0]?.managerName ?? "")
+      if (!entryId || !managerName) continue
+      if (seen.has(entryId)) continue
+      seen.add(entryId)
+      mgrs.push({ entryId, managerName })
+    }
+
+    mgrs.sort((a, b) => a.managerName.localeCompare(b.managerName))
+
+    managerFilterSelect.innerHTML = `<option value="">All</option>`
+    for (const m of mgrs) {
+      const opt = document.createElement("option")
+      opt.value = m.entryId
+      opt.textContent = m.managerName
+      managerFilterSelect.appendChild(opt)
+    }
+
+    // restore selection if it still exists
+    if (prev && mgrs.some((m) => m.entryId === prev)) managerFilterSelect.value = prev
+    else managerFilterSelect.value = ""
+  }
+  
+
   const transferModal = document.getElementById("transfer-modal");
   const modalContent = document.getElementById("modal-content");
   const chipModal = document.getElementById("chip-modal");
@@ -309,6 +351,7 @@ import Nav from "../components/Nav.astro";
         sortKey,
         sortDir,
         gwFilter: gwFilterSelect.value || "",
+        managerFilter: managerFilterSelect?.value ?? "",
       },
     };
     localStorage.setItem(TRANSFERS_CACHE_KEY, JSON.stringify(snapshot));
@@ -830,6 +873,8 @@ import Nav from "../components/Nav.astro";
     }
 
     allHistories = historyResults.filter((history) => history !== null);
+    populateManagerSelectorFromHistories()
+
 
     for (const history of allHistories) {
       const managerMaxGW = Math.max(...history.map(h => h.gw));
@@ -845,6 +890,31 @@ import Nav from "../components/Nav.astro";
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allHistories.length} managers</span>`;
+
+    if (managerFilterSelect) {
+      const prev = managerFilterSelect.value
+      managerFilterSelect.innerHTML = `<option value="">All</option>`
+
+      // Build unique managers list from loaded histories
+      const mgrs = allHistories
+        .map((h) => ({
+          entryId: String(h?.[0]?.entryId ?? ""),
+          managerName: String(h?.[0]?.managerName ?? ""),
+        }))
+        .filter((m) => m.entryId && m.managerName)
+
+      mgrs.sort((a, b) => a.managerName.localeCompare(b.managerName))
+
+      for (const m of mgrs) {
+        const opt = document.createElement("option")
+        opt.value = m.entryId
+        opt.textContent = m.managerName
+        managerFilterSelect.appendChild(opt)
+      }
+
+      managerFilterSelect.value = prev
+    }
+
 
     if (latestGW) {
       if (!gwFilterSelect.value) {
@@ -871,11 +941,24 @@ import Nav from "../components/Nav.astro";
   }
 
   function filterByGW() {
-    const filterGW = gwFilterSelect.value;
-    out.innerHTML = makeTable(allHistories, filterGW);
-    attachManagerLinks();
-    attachSortHandlers();
+    const filterGW = gwFilterSelect.value || ""
+    const managerEntryId = managerFilterSelect?.value || ""
+
+    let historiesToRender = allHistories
+
+    // IMPORTANT: filter allHistories (array of manager histories), not the flattened rows
+    if (managerEntryId) {
+      historiesToRender = allHistories.filter((history) => {
+        const entryId = String(history?.[0]?.entryId ?? "")
+        return entryId === managerEntryId
+      })
+    }
+
+    out.innerHTML = makeTable(historiesToRender, filterGW)
+    attachManagerLinks()
+   attachSortHandlers()
   }
+
 
   (async function init() {
     const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
@@ -893,6 +976,7 @@ import Nav from "../components/Nav.astro";
 
     if (canUseSnap) {
       allHistories = snap.allHistories;
+      populateManagerSelectorFromHistories()
       latestGW = snap.latestGW ?? null;
       allPlayersMap = snap.allPlayersMap || {};
 
@@ -901,6 +985,11 @@ import Nav from "../components/Nav.astro";
 
       populateGWSelector(latestGW || 1);
       gwFilterSelect.value = (snap.ui?.gwFilter ?? (latestGW || "")) + "";
+      
+      if (managerFilterSelect) {
+        managerFilterSelect.value = snap.ui?.managerFilter ?? ""
+      }
+
 
       filterByGW();
       loadingStatus.textContent = `Loaded from cache.`;
@@ -933,8 +1022,13 @@ import Nav from "../components/Nav.astro";
 
   gwFilterSelect.addEventListener('change', () => {
     filterByGW();
-    saveTransfersSnapshot();
-  });
+    saveTransfersSnapshot()
+  })
+
+  managerFilterSelect?.addEventListener("change", () => {
+    filterByGW()
+    saveTransfersSnapshot()
+  })
 
   refreshBtn.addEventListener('click', async () => {
     const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
