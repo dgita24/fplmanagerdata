@@ -839,6 +839,24 @@ import Nav from "../components/Nav.astro";
         if (error) throw error
       }
 
+      if (ids.length === 0) {
+        const { error: cleanupError } = await supabase
+          .from('user_league_imports')
+          .delete()
+          .eq('user_id', currentUser.id)
+
+        if (cleanupError) throw cleanupError
+      } else {
+        const idsCsv = `(${ids.join(',')})`
+        const { error: cleanupError } = await supabase
+          .from('user_league_imports')
+          .delete()
+          .eq('user_id', currentUser.id)
+          .not('entry_id', 'in', idsCsv)
+
+        if (cleanupError) throw cleanupError
+      }
+
       return true
     } catch (e) {
       console.error('Error saving manager IDs:', e)
@@ -1075,6 +1093,18 @@ import Nav from "../components/Nav.astro";
   let activeSelectedEntryIds = new Set<number>()
   let previouslyImportedForActiveLeague = new Set<number>()
   let standingsSearchQuery = ''
+
+  function syncActiveSelectedEntryIdsFromDom() {
+    const next = new Set<number>()
+    standingsListEl
+      .querySelectorAll<HTMLInputElement>('input.league-check')
+      .forEach((cb) => {
+        const entryId = Number(cb.dataset.entryId)
+        if (!Number.isFinite(entryId)) return
+        if (cb.checked) next.add(entryId)
+      })
+    activeSelectedEntryIds = next
+  }
 
   function openLeagueSheet() {
     leagueSheet.classList.add('is-open')
@@ -1350,6 +1380,7 @@ import Nav from "../components/Nav.astro";
   }
 
   async function updateStandingsBannerAndWarnings() {
+    syncActiveSelectedEntryIdsFromDom()
     const currentManagerIds = new Set<number>(parseTextareaIds())
 
     const selected = [...activeSelectedEntryIds]
@@ -1468,6 +1499,7 @@ import Nav from "../components/Nav.astro";
 
       // clear any old main-page message
       status.innerHTML = ''
+      syncActiveSelectedEntryIdsFromDom()
 
       const current = new Set<number>(parseTextareaIds())
 
@@ -1583,7 +1615,11 @@ import Nav from "../components/Nav.astro";
   })
 
   applyBtn?.addEventListener('click', async () => {
-    const toRemove = [...previouslyImportedForActiveLeague].filter((id) => !activeSelectedEntryIds.has(id))
+    syncActiveSelectedEntryIdsFromDom()
+    const current = new Set<number>(parseTextareaIds())
+    const leagueEntryIdSet = new Set<number>(activeStandings.map((r) => r.entryId))
+    const toRemove = [...leagueEntryIdSet]
+      .filter((id) => current.has(id) && !activeSelectedEntryIds.has(id))
     if (toRemove.length > 0) {
       const ok = confirm(`Apply changes?\n\nThis will remove ${toRemove.length} manager(s) from your list if unticked here.`)
       if (!ok) return
