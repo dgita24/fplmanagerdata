@@ -138,7 +138,7 @@ import Nav from "../components/Nav.astro";
 
           <div id="league-status" class="top-sheet__status" aria-live="polite"></div>
 
-          <div style="margin-top: var(--space-3);">
+          <div style="margin-top: var(--space-1);">
             <div class="text-muted" style="margin-bottom: var(--space-2);">Saved leagues</div>
             <div id="league-list" class="featured-list"></div>
           </div>
@@ -518,15 +518,6 @@ import Nav from "../components/Nav.astro";
       margin-bottom: 0 !important;
     }
 
-    /* Move saved leagues header closer to buttons */
-    #league-sheet .top-sheet__body > div:last-child {
-      margin-top: var(--space-1) !important;
-    }
-
-    #league-sheet .top-sheet__body > div:last-child > .text-muted {
-      margin-bottom: var(--space-1) !important;
-    }
-
     /* Fullscreen the two league sheets on mobile */
     #league-sheet.top-sheet,
     #league-standings-sheet.top-sheet {
@@ -554,6 +545,22 @@ import Nav from "../components/Nav.astro";
       padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
     }
 
+    /* Saved league row buttons: make Open/Remove same height as Save league */
+    #league-sheet #league-list .btn {
+      min-height: 38px !important;
+      padding: 8px 12px !important;
+      font-size: 0.85rem !important;
+    }
+
+    /* Saved league name smaller */
+    #league-sheet #league-list .featured-item__name {
+      font-size: 0.85rem;
+      line-height: 1.15;
+    }
+
+    #league-sheet #league-list .featured-item__note {
+      font-size: 0.8rem;
+    }
   }
 
   /* =========================
