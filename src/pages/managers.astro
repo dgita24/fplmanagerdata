@@ -40,8 +40,8 @@ import Nav from "../components/Nav.astro";
             <strong>Tip:</strong> Find IDs in official FPL URLs:
           </p>
           <code class="code-block code-block--compact">
-            Manager ID - fantasy.premierleague.com/entry/<strong>1234</strong>/event/01<br />
-            League ID - fantasy.premierleague.com/leagues/<strong>1234</strong>/standings/c
+            <span class="qs-hl">Manager ID</span> - fantasy.premierleague.com/entry/<strong class="qs-hl">1234</strong>/event/01<br />
+            <span class="qs-hl">League ID</span> - fantasy.premierleague.com/leagues/<strong class="qs-hl">1234</strong>/standings/c
           </code>
         </div>
       </section>
@@ -205,6 +205,13 @@ import Nav from "../components/Nav.astro";
     border-color: rgba(59, 130, 246, 0.65);
   }
 
+  /* Quick Start highlight tokens */
+  .code-block--compact .qs-hl {
+    color: var(--color-warning); /* bright yellow in dark theme */
+    font-weight: 800;
+  }
+
+
   .card--compact {
     margin-bottom: var(--space-2);
   }
@@ -293,6 +300,15 @@ import Nav from "../components/Nav.astro";
   .btn--full-width {
     width: 100%;
   }
+  
+  /* Allow Edit button text to fit on small devices */
+  #edit-btn {
+    white-space: normal;      /* overrides Layout's .btn { white-space: nowrap } */
+    overflow-wrap: anywhere;
+    line-height: 1.15;
+    font-size: 0.9rem;
+  }
+
 
   .textarea:disabled {
     background: var(--color-surface-alt);
@@ -507,6 +523,8 @@ import Nav from "../components/Nav.astro";
       padding: 8px 12px;
       font-size: 0.85rem;
     }
+
+    #edit-btn { font-size: 0.85rem; }
 
     .ids-actions .btn--featured,
     .ids-actions .btn--league {
