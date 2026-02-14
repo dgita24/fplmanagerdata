@@ -51,8 +51,9 @@ import Nav from "../components/Nav.astro";
         <div class="card-body">
           <form id="manager-form">
             <div class="ids-header">
-              <label class="label" for="ids">Manager EntryIDs</label>
-              <span class="ids-count">Managers: <strong id="count">0</strong></span>
+              <label class="label" for="ids">
+                 Manager EntryIDs <span class="ids-count-inline">(<strong id="count">0</strong>)</span>
+              </label>
             </div>
 
             <div class="ids-layout">
@@ -280,21 +281,19 @@ import Nav from "../components/Nav.astro";
   }
 
   .ids-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-2);
     margin-bottom: var(--space-2);
   }
 
-  .ids-count {
-    font-size: var(--text-sm);
+  .ids-count-inline {
+    font-size: inherit;
+    font-weight: inherit;
     color: var(--color-text-secondary);
-    margin: 0;
+    margin-left: var(--space-1);
   }
 
-  .ids-count strong {
+  .ids-count-inline strong {
     color: var(--color-success);
+    font-weight: inherit;
   }
   
   .btn--full-width {
