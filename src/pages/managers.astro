@@ -33,7 +33,7 @@ import Nav from "../components/Nav.astro";
           <h2 class="card-title card-title--small">Quick Start</h2>
           <ol class="help-list help-list--compact">
             <li>Add EntryIDs manually (<strong>one per line</strong>, max 50) <em>or</em> use <strong>Import from league</strong></li>
-            <li>Click <strong>Save</strong> — IDs sync across devices</li>
+            <li>Changes save automatically — IDs sync across devices</li>
           </ol>
 
           <p class="tip tip--compact">
@@ -179,6 +179,7 @@ import Nav from "../components/Nav.astro";
         </div>
 
         <div class="top-sheet__footer">
+          <div id="league-apply-success" class="top-sheet__status" aria-live="polite"></div>
           <div id="league-apply-status" class="top-sheet__status" aria-live="polite"></div>
           <div class="top-sheet__actions">
             <button type="button" id="league-select-none" class="btn btn--neutral">Select none</button>
@@ -875,7 +876,7 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  function setEditMode(editing: boolean) {
+  function setEditMode(editing: boolean, options: { preserveStatus?: boolean } = {}) {
     isEditing = editing
     textarea.disabled = !editing
     saveBtn.disabled = !editing
@@ -883,10 +884,11 @@ import Nav from "../components/Nav.astro";
 
     if (!editing) {
       loadManagerIds()
-      status.innerHTML = ''
+      if (!options.preserveStatus) {
+        status.innerHTML = ''
+      }
     }
   }
-
   editBtn.addEventListener('click', () => {
     setEditMode(!isEditing)
   })
@@ -1030,7 +1032,7 @@ import Nav from "../components/Nav.astro";
     clearFeaturedSelection()
   })
 
-  featuredAddBtn?.addEventListener('click', () => {
+  featuredAddBtn?.addEventListener('click', async () => {
     if (selectedFeaturedIds.size === 0) return
 
     if (!isEditing) setEditMode(true)
@@ -1054,7 +1056,19 @@ import Nav from "../components/Nav.astro";
     textarea.value = appended + '\n'
 
     updateCount()
-    featuredStatusEl.textContent = `Added ${toAdd.length} manager${toAdd.length === 1 ? '' : 's'}.`
+    const nextIds = Array.from(new Set(parseTextareaIds()))
+    const saved = await saveManagerIds(nextIds)
+
+    if (saved) {
+      setEditMode(false, { preserveStatus: true })
+      const msg = `✅ Added ${toAdd.length} manager${toAdd.length === 1 ? '' : 's'} and saved.`
+      featuredStatusEl.textContent = msg
+      status.innerHTML = `<p class='status status--success'>${msg}</p>`
+    } else {
+      const msg = '❌ Failed to save changes. Please try again.'
+      featuredStatusEl.textContent = msg
+      status.innerHTML = `<p class='status status--error'>${msg}</p>`
+    }
 
     clearFeaturedSelection()
   })
@@ -1082,6 +1096,7 @@ import Nav from "../components/Nav.astro";
   const standingsListEl = document.getElementById('league-standings-list') as HTMLElement
   const leagueSearchInput = document.getElementById('league-search') as HTMLInputElement
   const applyStatusEl = document.getElementById('league-apply-status') as HTMLElement
+  const applySuccessEl = document.getElementById('league-apply-success') as HTMLElement
   const selectNoneBtn = document.getElementById('league-select-none') as HTMLButtonElement
   const applyBtn = document.getElementById('league-apply') as HTMLButtonElement
 
@@ -1431,6 +1446,7 @@ import Nav from "../components/Nav.astro";
 
   async function openLeagueStandings(leagueId: number) {
     applyStatusEl.textContent = ''
+    applySuccessEl.textContent = ''
     standingsBannerEl.textContent = 'Loading league standings...'
     standingsListEl.innerHTML = ''
     applyBtn.disabled = true
@@ -1499,6 +1515,7 @@ import Nav from "../components/Nav.astro";
 
       // clear any old main-page message
       status.innerHTML = ''
+      applySuccessEl.textContent = ''
       syncActiveSelectedEntryIdsFromDom()
 
       const current = new Set<number>(parseTextareaIds())
@@ -1560,6 +1577,9 @@ import Nav from "../components/Nav.astro";
 
       // Sync "previously imported" set to the current selection
       previouslyImportedForActiveLeague = new Set<number>(activeSelectedEntryIds)
+      const saved = await saveManagerIds(Array.from(next))
+      if (!saved) throw new Error('Save failed')
+      setEditMode(false, { preserveStatus: true })
 
       // Success message (once)
       const removedCount = toRemove.length
@@ -1567,7 +1587,7 @@ import Nav from "../components/Nav.astro";
 
       let msg = ''
       if (addedCount > 0 && removedCount > 0) {
-        msg = `✅ ${addedCount} manager(s) added and ${removedCount} removed. Click “Save” to sync across devices.`
+        msg = `✅ ${addedCount} manager(s) added and ${removedCount} removed. Changes saved.`
       } else if (addedCount > 0) {
         msg = `✅ ${addedCount} manager(s) added to your list. Click “Save” to sync across devices.`
       } else if (removedCount > 0) {
@@ -1576,7 +1596,7 @@ import Nav from "../components/Nav.astro";
         msg = `No changes to apply.`
       }
 
-      applyStatusEl.textContent = msg
+      applySuccessEl.textContent = msg
       status.innerHTML = `<p class='status ${msg.startsWith('✅') ? 'status--success' : 'status--warning'}'>${msg}</p>`
 
       await updateStandingsBannerAndWarnings()
