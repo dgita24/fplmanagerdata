@@ -46,19 +46,48 @@ import Nav from "../components/Nav.astro";
     text-align: center;
   }
 
-  .status-row {
+  .controls-inline {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
     gap: var(--space-2);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2);
   }
 
-  .status-text {
-    font-size: var(--text-sm);
+  .control-inline {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .label-small {
+    font-size: 12px;
+    font-weight: 600;
     color: var(--color-text-secondary);
+    text-align: center;
   }
 
-  .btn-refresh {
+  .select-small {
+    width: 100%;
+    min-height: 32px;
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  .select-small:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+
+  .btn-row {
+    width: 100%;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -72,10 +101,9 @@ import Nav from "../components/Nav.astro";
     border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
-    white-space: nowrap;
   }
 
-  .btn-refresh:hover {
+  .btn-row:hover {
     background: var(--color-primary-hover);
   }
 </style>
@@ -114,6 +142,7 @@ import Nav from "../components/Nav.astro";
   const loadingStatus = document.getElementById("loading-status");
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
+  const managerFilterSelect = document.getElementById("manager-filter");
   const chipModal = document.getElementById("chip-modal");
   const chipModalContent = document.getElementById("chip-modal-content");
   const closeChipModal = document.getElementById("close-chip-modal");
@@ -121,12 +150,56 @@ import Nav from "../components/Nav.astro";
   let managerIds = [];
   let playerCache = new Map();
   let teamCache = new Map();
+  let allManagersData = [];
 
   // Load token for cancellation
   let currentLoadToken = 0;
 
+  function populateManagerFilter(data) {
+    if (!managerFilterSelect) return;
+
+    const prev = managerFilterSelect.value || "";
+    managerFilterSelect.innerHTML = `<option value="">All</option>`;
+
+    const managers = data
+      .map((m) => ({
+        entryId: String(m.entryId ?? ""),
+        managerName: String(m.managerName ?? ""),
+      }))
+      .filter((m) => m.entryId && m.managerName);
+
+    managers.sort((a, b) => a.managerName.localeCompare(b.managerName));
+
+    for (const m of managers) {
+      const opt = document.createElement("option");
+      opt.value = m.entryId;
+      opt.textContent = m.managerName;
+      managerFilterSelect.appendChild(opt);
+    }
+
+    managerFilterSelect.value = prev;
+  }
+
+  function renderChipsTable() {
+    const filterId = managerFilterSelect?.value || "";
+    const filtered = filterId
+      ? allManagersData.filter((m) => String(m.entryId) === filterId)
+      : allManagersData;
+
+    if (filtered.length > 0) {
+      out.innerHTML = makeChipsTable(filtered);
+      attachChipButtons();
+    } else {
+      out.innerHTML = "<p class='status status--error'>No managers match this filter.</p>";
+    }
+  }
+
   closeChipModal.addEventListener("click", () => {
     chipModal.classList.remove("is-open");
+  });
+
+  managerFilterSelect?.addEventListener("change", () => {
+    renderChipsTable();
   });
 
   // ==== Persistent cache (localStorage) ====
@@ -557,8 +630,9 @@ import Nav from "../components/Nav.astro";
     const allData = managerDataResults.filter((data) => data !== null);
 
     if (allData.length > 0) {
-      out.innerHTML = makeChipsTable(allData);
-      attachChipButtons();
+      allManagersData = allData;
+      populateManagerFilter(allManagersData);
+      renderChipsTable();
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allData.length} managers</span>`;
