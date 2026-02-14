@@ -1824,7 +1824,9 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .chips-table .manager-cell {
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word    
   }
 
   .chips-table .chips-cell {
