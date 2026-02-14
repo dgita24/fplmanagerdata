@@ -24,6 +24,12 @@ import Nav from "../components/Nav.astro";
         </select>
       </div>
       <div class="control-inline">
+        <label class="label-small" for="manager-filter">Manager</label>
+        <select class="select-small" id="manager-filter">
+           <option value="All">All</option>
+        </select>
+      </div>
+      <div class="control-inline">
         <label class="label-small">&nbsp;</label>
         <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
       </div>
@@ -262,6 +268,7 @@ import Nav from "../components/Nav.astro";
       statsSortKey: "gwPoints" | "totalPoints" | "overallRank";
       statsSortDir: "asc" | "desc";
       gwFilter: string;
+      managerFilter: string
     };
   };
 
@@ -299,6 +306,7 @@ import Nav from "../components/Nav.astro";
         statsSortKey,
         statsSortDir,
         gwFilter: gwFilterSelect.value || "",
+        managerFilter: managerFilter?.value ?? "All",
       },
     };
 
@@ -310,11 +318,16 @@ import Nav from "../components/Nav.astro";
   }
 
   function renderStatsFromState(gw: number) {
-    out.innerHTML = makeStatsTable(allManagerData, gw);
-    attachManagerButtons();
-    attachStatsSortHandlers();
-  }
+    const managerValue = managerFilter?.value ?? "All"
+    const dataToRender =
+      managerValue && managerValue !== "All"
+        ? allManagerData.filter(m => String(m.entryId) === String(managerValue))
+        : allManagerData
 
+    out.innerHTML = makeStatsTable(dataToRender, gw)
+    attachManagerButtons()
+    attachStatsSortHandlers()
+  }
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -389,6 +402,7 @@ import Nav from "../components/Nav.astro";
   const managerCountEl = document.getElementById("manager-count")!;
   const refreshBtn = document.getElementById("refresh-btn")!;
   const gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
+  const managerFilter = document.getElementById("manager-filter") as HTMLSelectElement
   const statsModal = document.getElementById("stats-modal")!;
   const statsModalContent = document.getElementById("stats-modal-content")!;
   const closeStatsModal = document.getElementById("close-stats-modal")!;
@@ -421,6 +435,29 @@ import Nav from "../components/Nav.astro";
       gwFilterSelect.appendChild(option);
     }
   }
+
+  function populateManagerFilter() {
+    if (!managerFilter) return
+
+    const current = managerFilter.value || "All"
+    managerFilter.innerHTML = `<option value="All">All</option>`
+
+    const sorted = [...allManagerData].sort((a, b) =>
+      a.managerName.localeCompare(b.managerName)
+    )
+
+    for (const m of sorted) {
+      const opt = document.createElement("option")
+      opt.value = String(m.entryId)
+      opt.textContent = m.managerName
+      managerFilter.appendChild(opt)
+    }
+
+    // Restore selection if still valid; otherwise fall back to All
+    const stillExists = Array.from(managerFilter.options).some(o => o.value === current)
+    managerFilter.value = stillExists ? current : "All"
+  }
+
 
   function positionLabel(elementType: number): string {
     if (elementType === 1) return "GK";
@@ -1179,6 +1216,7 @@ import Nav from "../components/Nav.astro";
 
     // Filter out nulls and update allManagerData
     allManagerData = managerDataResults.filter((data): data is ManagerData => data !== null);
+    populateManagerFilter()
 
     // Render table once at the end
     if (allManagerData.length > 0) {
@@ -1239,6 +1277,10 @@ import Nav from "../components/Nav.astro";
 
       populateGWSelector(latestGW);
 
+      populateManagerFilter()
+      if (typeof snap.ui?.managerFilter === "string") managerFilter.value = snap.ui.managerFilter
+
+
       if (typeof snap.ui?.gwFilter === "string" && snap.ui.gwFilter) {
         gwFilterSelect.value = snap.ui.gwFilter;
       }
@@ -1279,6 +1321,12 @@ import Nav from "../components/Nav.astro";
     // Otherwise load once (not forced) and it will save a new snapshot
     await loadStats(managerIds, gw, { force: false });
   });
+
+  managerFilter.addEventListener("change", () => {
+    const gw = parseInt(gwFilterSelect.value || String(latestGW))
+    renderStatsFromState(gw)
+    saveStatsSnapshot(gw)
+  })
 
   refreshBtn.addEventListener("click", async () => {
     managerStatsCache.clear();
