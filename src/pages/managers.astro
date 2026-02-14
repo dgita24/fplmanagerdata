@@ -458,12 +458,16 @@ import Nav from "../components/Nav.astro";
     display: flex;
     justify-content: space-between; /* Open left, Remove right */
     gap: var(--space-2);
-    margin-top: var(--space-2);
+    margin-top: var(--space-1);
+    align-items: center;
+
   }
 
-  #league-sheet #league-list .saved-league-actions .btn {
-    width: calc(50% - (var(--space-2) / 2));
+  /* Push Remove to the far right, keep buttons compact */
+  #league-sheet #league-list .saved-league-actions .btn:last-child {
+    margin-left: auto;
   }
+
 
   .featured-item .featured-check,
   .featured-item .league-check {
