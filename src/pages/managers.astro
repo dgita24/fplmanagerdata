@@ -611,6 +611,14 @@ import Nav from "../components/Nav.astro";
       align-items: center;
     }
 
+    /* Desktop-only: shallower buttons in league sheets (does not affect mobile) */
+    #league-sheet .btn,
+    #league-standings-sheet .btn {
+      min-height: 32px !important;
+      padding: 6px 10px !important;
+      font-size: 0.85rem !important;
+    }
+
     #auth-check {
       display: flex;
       flex-direction: column;
