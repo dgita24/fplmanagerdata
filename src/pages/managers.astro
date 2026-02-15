@@ -40,8 +40,10 @@ import Nav from "../components/Nav.astro";
             <strong>Tip:</strong> Find IDs in official FPL URLs:
           </p>
           <code class="code-block code-block--compact">
-            <span class="qs-hl">Manager ID</span> - fantasy.premierleague.com/entry/<strong class="qs-hl">1234</strong>/event/01<br />
-            <span class="qs-hl">League ID</span> - fantasy.premierleague.com/leagues/<strong class="qs-hl">1234</strong>/standings/c
+            <strong><em class="qs-hl">Manager ID</em></strong> -
+            fantasy.premierleague.com/entry/<strong class="qs-hl"><em>1234</em></strong>/event/01<br />
+            <strong><em class="qs-hl">League ID</em></strong> -
+            fantasy.premierleague.com/leagues/<strong class="qs-hl"><em>1234</em></strong>/standings/c
           </code>
         </div>
       </section>
@@ -78,6 +80,9 @@ import Nav from "../components/Nav.astro";
                 <button type="button" id="league-open" class="btn btn--league btn--full-width">
                   Import from mini league
                 </button>
+                <button type="button" id="manager-leagues-open" class="btn btn--league btn--full-width">
+                  Import leagues from any manager
+                </button>
               </div>
             </div>
           </form>
@@ -99,6 +104,15 @@ import Nav from "../components/Nav.astro";
         </div>
 
         <div class="top-sheet__body">
+          <div class="control" style="margin-bottom: var(--space-2);">
+            <label class="label" for="featured-search">Search</label>
+            <input
+              id="featured-search"
+              class="input"
+              placeholder="Search featured managers…"
+              autocomplete="off"
+            />
+          </div>
           <div id="featured-list" class="featured-list"></div>
         </div>
 
@@ -129,7 +143,7 @@ import Nav from "../components/Nav.astro";
             <label class="label" for="league-id-input">League ID</label>
             <input id="league-id-input" class="input" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="League ID, e.g. 67893 or League URL" />
             <div class="text-muted" style="margin-top: 6px; font-size: var(--text-sm);">
-              Tip: from URL <code>fantasy.premierleague.com/leagues/<strong>676856</strong>/standings/c</code>
+              Tip: Use URL or ID within URL <code>fantasy.premierleague.com/leagues/<strong>123456</strong>/standings/c</code>
             </div>
           </div>
 
@@ -149,6 +163,43 @@ import Nav from "../components/Nav.astro";
         <div class="top-sheet__footer">
           <div class="top-sheet__status">
             Open a league to select/deselect manager(s). Changes apply to your manager list.
+          </div>
+        </div>
+      </section>
+
+      <section id="manager-leagues-sheet" class="top-sheet" aria-hidden="true">
+        <div class="top-sheet__header">
+          <div>
+            <div class="top-sheet__title">Import leagues from manager</div>
+            <div class="top-sheet__subtitle">Enter a <strong><em>Manager ID</em></strong>, then choose which leagues to save. Remove leagues in the 'Import from mini league' sheet.</div>
+          </div>
+          <button type="button" id="manager-leagues-close" class="top-sheet__close" aria-label="Close">✕</button>
+        </div>
+
+        <div class="top-sheet__body">
+          <div class="control" style="margin-bottom: var(--space-2);">
+            <label class="label" for="manager-leagues-entry">Manager ID</label>
+            <input id="manager-leagues-entry" class="input" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="Manager ID or URL" />
+            <div class="text-muted" style="margin-top: 6px; font-size: var(--text-sm);">
+              Tip: Use URL or ID within URL <code>fantasy.premierleague.com/entry/<strong>123456</strong>/event/01</code>
+            </div>
+          </div>
+
+          <div style="display:flex; gap: var(--space-2); margin-bottom: var(--space-1);">
+            <button type="button" id="manager-leagues-fetch" class="btn btn--success">Fetch leagues</button>
+          </div>
+
+          <div id="manager-leagues-status" class="top-sheet__status" aria-live="polite"></div>
+
+          <div id="manager-leagues-list" class="featured-list"></div>
+         </div>
+
+        <div class="top-sheet__footer">
+          <div class="top-sheet__status" aria-live="polite">Max saved leagues: 15</div>
+          <div class="top-sheet__actions">
+            <button type="button" id="manager-leagues-apply" class="btn btn--success" disabled>
+              Save selected leagues
+            </button>
           </div>
         </div>
       </section>
@@ -210,10 +261,17 @@ import Nav from "../components/Nav.astro";
 
   /* Quick Start highlight tokens */
   .code-block--compact .qs-hl {
-    color: var(--color-warning); /* bright yellow in dark theme */
-    font-weight: 800;
+    color: var(--color-warning);
+    font-family: var(--font-sans);
+    font-weight: 800 !important;
+    font-style: italic;
+    font-size: 1.10em;
   }
 
+  #manager-leagues-sheet .top-sheet__subtitle strong {
+    color: var(--color-warning);
+    font-weight: 800;
+  }
 
   .card--compact {
     margin-bottom: var(--space-2);
@@ -409,6 +467,22 @@ import Nav from "../components/Nav.astro";
     cursor: pointer;
   }
 
+  #featured-sheet .top-sheet__close,
+  #manager-leagues-sheet .top-sheet__close,
+  #league-sheet .top-sheet__close,
+  #league-standings-sheet .top-sheet__close {
+    width: 56px;
+    height: 40px;
+    min-width: 56px;
+    flex: 0 0 56px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 1.3rem;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
   .top-sheet__body {
     overflow: auto;
     padding: 0 var(--space-3) var(--space-3);
@@ -495,6 +569,10 @@ import Nav from "../components/Nav.astro";
     transform: scale(0.95);
   }
 
+  #manager-leagues-sheet input[type="checkbox"] {
+    accent-color: var(--color-primary);
+  }
+
   .top-sheet__footer {
     border-top: 1px solid rgba(255, 255, 255, 0.10);
     padding: var(--space-2) var(--space-3);
@@ -574,7 +652,8 @@ import Nav from "../components/Nav.astro";
     }
 
     /* Compact saved leagues rows in the import sheet */
-    #league-sheet .featured-item {
+    #league-sheet .featured-item,
+    #manager-leagues-sheet .featured-item {
       padding-top: 6px;
       padding-bottom: 6px;
     }
@@ -589,10 +668,18 @@ import Nav from "../components/Nav.astro";
        (this overrides Layout.astro's global .btn sizing) */
     #league-sheet .btn,
     #league-standings-sheet .btn,
-    #featured-sheet .btn {
+    #featured-sheet .btn,
+    #manager-leagues-sheet .btn {
       min-height: 34px !important;
       padding: 6px 10px !important;
       font-size: 0.85rem !important;
+    }
+
+    #manager-leagues-sheet code {
+      display: inline-block;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-all;
     }
 
     /* FIX: Tighter spacing in league import sheet */
@@ -625,7 +712,8 @@ import Nav from "../components/Nav.astro";
 
     /* Fullscreen the two league sheets on mobile */
     #league-sheet.top-sheet,
-    #league-standings-sheet.top-sheet {
+    #league-standings-sheet.top-sheet,
+    #manager-leagues-sheet.top-sheet {
       top: 0;
       right: 0;
       bottom: 0;
@@ -641,12 +729,14 @@ import Nav from "../components/Nav.astro";
 
     /* Notch / safe-area padding */
     #league-sheet .top-sheet__header,
-    #league-standings-sheet .top-sheet__header {
+    #league-standings-sheet .top-sheet__header,
+    #manager-leagues-sheet .top-sheet__header {
       padding-top: calc(var(--space-3) + env(safe-area-inset-top));
     }
 
     #league-sheet .top-sheet__footer,
-    #league-standings-sheet .top-sheet__footer {
+    #league-standings-sheet .top-sheet__footer,
+    #manager-leagues-sheet .top-sheet__footer {
       padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
     }
 
@@ -722,7 +812,8 @@ import Nav from "../components/Nav.astro";
     /* Desktop-only compact rows inside sheets */
     #featured-sheet .featured-item,
     #league-sheet .featured-item,
-    #league-standings-sheet .featured-item {
+    #league-standings-sheet .featured-item,
+    #manager-leagues-sheet .featured-item {
       padding-top: 6px;
       padding-bottom: 6px;
       gap: 4px 8px;
@@ -759,6 +850,7 @@ import Nav from "../components/Nav.astro";
 <script>
   import { supabase } from '../lib/supabase.ts'
   import { featuredManagers } from '../data/featuredManagers'
+  import { setupManagerLeagueImport } from '../scripts/manager-leagues'
 
   // =========================
   // Single source of truth
@@ -786,6 +878,7 @@ import Nav from "../components/Nav.astro";
       loadingDiv.style.display = 'none'
       authCheckDiv.style.display = 'block'
       loadManagerIds()
+      setupManagerLeagueImport({ supabase, currentUser, loadSavedLeagues })
     } else {
       loadingDiv.style.display = 'none'
       requireLoginDiv.style.display = 'block'
@@ -944,6 +1037,7 @@ import Nav from "../components/Nav.astro";
   const featuredSheet = document.getElementById('featured-sheet') as HTMLElement
   const featuredCloseBtn = document.getElementById('featured-close') as HTMLButtonElement
   const featuredListEl = document.getElementById('featured-list') as HTMLElement
+  const featuredSearchInput = document.getElementById('featured-search') as HTMLInputElement
   const featuredApplyBtn = document.getElementById('featured-apply') as HTMLButtonElement
   const featuredClearBtn = document.getElementById('featured-clear') as HTMLButtonElement
   const featuredStatusEl = document.getElementById('featured-status') as HTMLElement
@@ -1013,7 +1107,18 @@ import Nav from "../components/Nav.astro";
   }
 
   function renderFeaturedList() {
-    featuredListEl.innerHTML = featuredManagers.map((m) => {
+    const query = featuredSearchInput?.value?.trim().toLowerCase() || ''
+
+    const filtered = query
+      ? featuredManagers.filter((m) => {
+          const name = String(m.name ?? '').toLowerCase()
+          const note = String(m.note ?? '').toLowerCase()
+          const entryId = String(m.entryId ?? '').toLowerCase()
+          return name.includes(query) || note.includes(query) || entryId.includes(query)
+        })
+      : featuredManagers
+
+    featuredListEl.innerHTML = filtered.map((m) => {
       const safeName = escapeHtml(String(m.name ?? ''))
       const safeNote = m.note ? escapeHtml(String(m.note)) : ''
       const entryId = Number(m.entryId)
@@ -1066,6 +1171,10 @@ import Nav from "../components/Nav.astro";
   featuredClearBtn?.addEventListener('click', () => {
     featuredStatusEl.textContent = ''
     clearFeaturedSelection()
+  })
+
+  featuredSearchInput?.addEventListener('input', () => {
+    renderFeaturedList()
   })
 
   featuredApplyBtn?.addEventListener('click', async () => {
