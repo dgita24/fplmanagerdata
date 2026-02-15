@@ -1589,9 +1589,9 @@ import Nav from "../components/Nav.astro";
       if (addedCount > 0 && removedCount > 0) {
         msg = `✅ ${addedCount} manager(s) added and ${removedCount} removed. Changes saved.`
       } else if (addedCount > 0) {
-        msg = `✅ ${addedCount} manager(s) added to your list. Click “Save” to sync across devices.`
+        msg = `✅ ${addedCount} manager(s) added to your list. Changes saved.`
       } else if (removedCount > 0) {
-        msg = `✅ ${removedCount} manager(s) removed from your list. Click “Save” to sync across devices.`
+        msg = `✅ ${removedCount} manager(s) removed from your list. Changes savded.`
       } else {
         msg = `No changes to apply.`
       }
@@ -1621,7 +1621,11 @@ import Nav from "../components/Nav.astro";
   leagueRefreshBtn?.addEventListener('click', async () => loadSavedLeagues())
   leagueSaveBtn?.addEventListener('click', async () => saveLeagueById())
 
-  standingsCloseBtn?.addEventListener('click', () => closeStandingsSheet())
+  standingsCloseBtn?.addEventListener('click', () => {
+    applySuccessEl.textContent = ''
+    applyStatusEl.textContent = ''
+    closeStandingsSheet()
+  })
 
   leagueSearchInput?.addEventListener('input', () => {
     standingsSearchQuery = leagueSearchInput.value || ''
