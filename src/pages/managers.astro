@@ -103,13 +103,12 @@ import Nav from "../components/Nav.astro";
         </div>
 
         <div class="top-sheet__footer">
+          <div id="featured-delta" class="top-sheet__status" aria-live="polite"></div>
           <div id="featured-status" class="top-sheet__status" aria-live="polite"></div>
           <div class="top-sheet__actions">
             <button type="button" id="featured-clear" class="btn btn--neutral">Clear</button>
             <button type="button" id="featured-apply" class="btn btn--success" disabled>
               Apply changes
-            </button>
-              Add selected (0)
             </button>
           </div>
         </div>
@@ -513,6 +512,11 @@ import Nav from "../components/Nav.astro";
     display: flex;
     gap: var(--space-2);
     justify-content: flex-end;
+  }
+
+  #featured-apply {
+    white-space: nowrap;
+    min-width: 0;
   }
 
   /* =========================
@@ -943,6 +947,7 @@ import Nav from "../components/Nav.astro";
   const featuredApplyBtn = document.getElementById('featured-apply') as HTMLButtonElement
   const featuredClearBtn = document.getElementById('featured-clear') as HTMLButtonElement
   const featuredStatusEl = document.getElementById('featured-status') as HTMLElement
+  const featuredDeltaEl = document.getElementById('featured-delta') as HTMLElement
 
   const selectedFeaturedIds = new Set<number>()
   
@@ -1000,9 +1005,11 @@ import Nav from "../components/Nav.astro";
     const hasDelta = toRemove.length > 0 || toAdd.length > 0
 
     featuredApplyBtn.disabled = !hasDelta
-    featuredApplyBtn.textContent = hasDelta
-      ? `Apply changes (${toAdd.length} add, ${toRemove.length} remove)`
-      : 'Apply changes'
+    featuredApplyBtn.textContent = 'Apply changes'
+
+    featuredDeltaEl.textContent = hasDelta
+      ? `${toAdd.length} add • ${toRemove.length} remove`
+      : ''
   }
 
   function renderFeaturedList() {
@@ -1077,6 +1084,7 @@ import Nav from "../components/Nav.astro";
     if (next.size > MAX_MANAGERS) {
       const msg = `❌ Too many managers. Limit is ${MAX_MANAGERS}.`
       featuredStatusEl.textContent = msg
+      featuredDeltaEl.textContent = ''
       status.innerHTML = `<p class='status status--error'>${msg}</p>`
       return
     }
