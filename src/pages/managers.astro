@@ -981,11 +981,6 @@ import Nav from "../components/Nav.astro";
   }
 
   function updateFeaturedActions() {
-    featuredAddBtn.disabled = selectedFeaturedIds.size === 0
-    featuredAddBtn.textContent = `Add selected (${selectedFeaturedIds.size})`
-  }
-
-  function updateFeaturedActions() {
     const current = new Set(parseTextareaIds())
     const toRemove = [...featuredEntryIds].filter((id) => current.has(id) && !selectedFeaturedIds.has(id))
     const toAdd = [...selectedFeaturedIds].filter((id) => !current.has(id))
