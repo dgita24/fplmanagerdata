@@ -78,6 +78,9 @@ import Nav from "../components/Nav.astro";
                 <button type="button" id="league-open" class="btn btn--league btn--full-width">
                   Import from mini league
                 </button>
+                <button type="button" id="manager-leagues-open" class="btn btn--league btn--full-width">
+                  Import leagues from manager
+                </button>
               </div>
             </div>
           </form>
@@ -149,6 +152,43 @@ import Nav from "../components/Nav.astro";
         <div class="top-sheet__footer">
           <div class="top-sheet__status">
             Open a league to select/deselect manager(s). Changes apply to your manager list.
+          </div>
+        </div>
+      </section>
+
+      <section id="manager-leagues-sheet" class="top-sheet" aria-hidden="true">
+        <div class="top-sheet__header">
+          <div>
+            <div class="top-sheet__title">Import leagues from manager</div>
+            <div class="top-sheet__subtitle">Enter a manager ID, then choose which leagues to save.</div>
+          </div>
+          <button type="button" id="manager-leagues-close" class="top-sheet__close" aria-label="Close">✕</button>
+        </div>
+
+        <div class="top-sheet__body">
+          <div class="control" style="margin-bottom: var(--space-2);">
+            <label class="label" for="manager-leagues-entry">Manager ID</label>
+            <input id="manager-leagues-entry" class="input" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="Manager ID or URL" />
+            <div class="text-muted" style="margin-top: 6px; font-size: var(--text-sm);">
+              Tip: from URL <code>fantasy.premierleague.com/entry/<strong>123456</strong>/event/01</code>
+            </div>
+          </div>
+
+          <div style="display:flex; gap: var(--space-2); margin-bottom: var(--space-1);">
+            <button type="button" id="manager-leagues-fetch" class="btn btn--success">Fetch leagues</button>
+          </div>
+
+          <div id="manager-leagues-status" class="top-sheet__status" aria-live="polite"></div>
+
+          <div id="manager-leagues-list" class="featured-list"></div>
+         </div>
+
+        <div class="top-sheet__footer">
+          <div class="top-sheet__status" aria-live="polite">Max saved leagues: 15</div>
+          <div class="top-sheet__actions">
+            <button type="button" id="manager-leagues-apply" class="btn btn--success" disabled>
+              Save selected leagues
+            </button>
           </div>
         </div>
       </section>
@@ -574,7 +614,8 @@ import Nav from "../components/Nav.astro";
     }
 
     /* Compact saved leagues rows in the import sheet */
-    #league-sheet .featured-item {
+    #league-sheet .featured-item,
+    #manager-leagues-sheet .featured-item {
       padding-top: 6px;
       padding-bottom: 6px;
     }
@@ -589,7 +630,8 @@ import Nav from "../components/Nav.astro";
        (this overrides Layout.astro's global .btn sizing) */
     #league-sheet .btn,
     #league-standings-sheet .btn,
-    #featured-sheet .btn {
+    #featured-sheet .btn,
+    #manager-leagues-sheet .btn {
       min-height: 34px !important;
       padding: 6px 10px !important;
       font-size: 0.85rem !important;
@@ -625,7 +667,8 @@ import Nav from "../components/Nav.astro";
 
     /* Fullscreen the two league sheets on mobile */
     #league-sheet.top-sheet,
-    #league-standings-sheet.top-sheet {
+    #league-standings-sheet.top-sheet,
+    #manager-leagues-sheet.top-sheet {
       top: 0;
       right: 0;
       bottom: 0;
@@ -641,12 +684,14 @@ import Nav from "../components/Nav.astro";
 
     /* Notch / safe-area padding */
     #league-sheet .top-sheet__header,
-    #league-standings-sheet .top-sheet__header {
+    #league-standings-sheet .top-sheet__header,
+    #manager-leagues-sheet .top-sheet__header {
       padding-top: calc(var(--space-3) + env(safe-area-inset-top));
     }
 
     #league-sheet .top-sheet__footer,
-    #league-standings-sheet .top-sheet__footer {
+    #league-standings-sheet .top-sheet__footer,
+    #manager-leagues-sheet .top-sheet__footer {
       padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
     }
 
@@ -722,7 +767,8 @@ import Nav from "../components/Nav.astro";
     /* Desktop-only compact rows inside sheets */
     #featured-sheet .featured-item,
     #league-sheet .featured-item,
-    #league-standings-sheet .featured-item {
+    #league-standings-sheet .featured-item,
+    #manager-leagues-sheet .featured-item {
       padding-top: 6px;
       padding-bottom: 6px;
       gap: 4px 8px;
@@ -759,6 +805,7 @@ import Nav from "../components/Nav.astro";
 <script>
   import { supabase } from '../lib/supabase.ts'
   import { featuredManagers } from '../data/featuredManagers'
+  import { setupManagerLeagueImport } from '../scripts/manager-leagues'
 
   // =========================
   // Single source of truth
@@ -786,6 +833,7 @@ import Nav from "../components/Nav.astro";
       loadingDiv.style.display = 'none'
       authCheckDiv.style.display = 'block'
       loadManagerIds()
+      setupManagerLeagueImport({ supabase, currentUser, loadSavedLeagues })
     } else {
       loadingDiv.style.display = 'none'
       requireLoginDiv.style.display = 'block'
