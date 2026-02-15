@@ -106,7 +106,9 @@ import Nav from "../components/Nav.astro";
           <div id="featured-status" class="top-sheet__status" aria-live="polite"></div>
           <div class="top-sheet__actions">
             <button type="button" id="featured-clear" class="btn btn--neutral">Clear</button>
-            <button type="button" id="featured-add" class="btn btn--success" disabled>
+            <button type="button" id="featured-apply" class="btn btn--success" disabled>
+              Apply changes
+            </button>
               Add selected (0)
             </button>
           </div>
@@ -938,11 +940,26 @@ import Nav from "../components/Nav.astro";
   const featuredSheet = document.getElementById('featured-sheet') as HTMLElement
   const featuredCloseBtn = document.getElementById('featured-close') as HTMLButtonElement
   const featuredListEl = document.getElementById('featured-list') as HTMLElement
-  const featuredAddBtn = document.getElementById('featured-add') as HTMLButtonElement
+  const featuredApplyBtn = document.getElementById('featured-apply') as HTMLButtonElement
   const featuredClearBtn = document.getElementById('featured-clear') as HTMLButtonElement
   const featuredStatusEl = document.getElementById('featured-status') as HTMLElement
 
   const selectedFeaturedIds = new Set<number>()
+  
+  const featuredEntryIds = new Set<number>(featuredManagers.map((m) => Number(m.entryId)))
+
+  function syncSelectedFeaturedIdsFromDom() {
+    const next = new Set<number>()
+    featuredListEl
+      .querySelectorAll<HTMLInputElement>('input.featured-check')
+      .forEach((cb) => {
+        const entryId = Number(cb.dataset.id)
+        if (!Number.isFinite(entryId)) return
+        if (cb.checked) next.add(entryId)
+      })
+    selectedFeaturedIds.clear()
+    next.forEach((id) => selectedFeaturedIds.add(id))
+  }
 
   function openFeaturedSheet() {
     featuredSheet.classList.add('is-open')
@@ -968,17 +985,16 @@ import Nav from "../components/Nav.astro";
     featuredAddBtn.textContent = `Add selected (${selectedFeaturedIds.size})`
   }
 
-  function escapeHtml(s: string) {
-    return s.replace(/[&<>"']/g, (ch) => {
-      switch (ch) {
-        case '&': return '&amp;'
-        case '<': return '&lt;'
-        case '>': return '&gt;'
-        case '"': return '&quot;'
-        case "'": return '&#39;'
-        default: return ch
-      }
-    })
+  function updateFeaturedActions() {
+    const current = new Set(parseTextareaIds())
+    const toRemove = [...featuredEntryIds].filter((id) => current.has(id) && !selectedFeaturedIds.has(id))
+    const toAdd = [...selectedFeaturedIds].filter((id) => !current.has(id))
+    const hasDelta = toRemove.length > 0 || toAdd.length > 0
+
+    featuredApplyBtn.disabled = !hasDelta
+    featuredApplyBtn.textContent = hasDelta
+      ? `Apply changes (${toAdd.length} add, ${toRemove.length} remove)`
+      : 'Apply changes'
   }
 
   function renderFeaturedList() {
@@ -986,10 +1002,11 @@ import Nav from "../components/Nav.astro";
       const safeName = escapeHtml(String(m.name ?? ''))
       const safeNote = m.note ? escapeHtml(String(m.note)) : ''
       const entryId = Number(m.entryId)
+      const checked = selectedFeaturedIds.has(entryId) ? 'checked' : ''
 
       return `
         <label class="featured-item">
-          <input type="checkbox" class="featured-check" data-id="${entryId}" />
+          <input type="checkbox" class="featured-check" data-id="${entryId}" ${checked} />
           <span class="featured-item__name">${safeName}</span>
           ${safeNote ? `<span class="featured-item__note">— ${safeNote}</span>` : ``}
           <span class="featured-item__id">${safeNote ? `— ` : ``}<code>${entryId}</code></span>
@@ -1017,12 +1034,16 @@ import Nav from "../components/Nav.astro";
   }
 
   featuredOpenBtn?.addEventListener('click', () => {
-    if (!featuredListEl.dataset.rendered) {
-      renderFeaturedList()
-      featuredListEl.dataset.rendered = 'true'
-    }
+    selectedFeaturedIds.clear()
+    const current = new Set(parseTextareaIds())
+    featuredEntryIds.forEach((id) => {
+      if (current.has(id)) selectedFeaturedIds.add(id)
+    })
+
+    renderFeaturedList()
     featuredStatusEl.textContent = ''
     openFeaturedSheet()
+    updateFeaturedActions()
   })
 
   featuredCloseBtn?.addEventListener('click', () => closeFeaturedSheet())
@@ -1032,47 +1053,55 @@ import Nav from "../components/Nav.astro";
     clearFeaturedSelection()
   })
 
-  featuredAddBtn?.addEventListener('click', async () => {
-    if (selectedFeaturedIds.size === 0) return
+  featuredApplyBtn?.addEventListener('click', async () => {
+    syncSelectedFeaturedIdsFromDom()
 
     if (!isEditing) setEditMode(true)
 
-    const existing = new Set(parseTextareaIds())
-    const toAdd = [...selectedFeaturedIds].filter(id => !existing.has(id))
+    const current = new Set(parseTextareaIds())
+    const toRemove = [...featuredEntryIds].filter((id) => current.has(id) && !selectedFeaturedIds.has(id))
+    const toAdd = [...selectedFeaturedIds].filter((id) => !current.has(id))
 
-    if (toAdd.length === 0) {
-      featuredStatusEl.textContent = 'All selected managers are already in your list.'
-      return
-    }
+    const next = new Set<number>(current)
+    toRemove.forEach((id) => next.delete(id))
+    toAdd.forEach((id) => next.add(id))
 
-    const combinedCount = existing.size + toAdd.length
-    if (combinedCount > MAX_MANAGERS) {
-      featuredStatusEl.textContent = `Too many managers. Limit is ${MAX_MANAGERS}.`
-      return
-    }
-
-    const current = textarea.value.trim()
-    const appended = (current ? current + '\n' : '') + toAdd.join('\n')
-    textarea.value = appended + '\n'
-
-    updateCount()
-    const nextIds = Array.from(new Set(parseTextareaIds()))
-    const saved = await saveManagerIds(nextIds)
-
-    if (saved) {
-      setEditMode(false, { preserveStatus: true })
-      const msg = `✅ Added ${toAdd.length} manager${toAdd.length === 1 ? '' : 's'} and saved.`
+    if (next.size > MAX_MANAGERS) {
+      const msg = `❌ Too many managers. Limit is ${MAX_MANAGERS}.`
       featuredStatusEl.textContent = msg
-      status.innerHTML = `<p class='status status--success'>${msg}</p>`
-    } else {
+      status.innerHTML = `<p class='status status--error'>${msg}</p>`
+      return
+    }
+
+    textarea.value = Array.from(next).join('\n') + '\n'
+    updateCount()
+
+    const saved = await saveManagerIds(Array.from(next))
+    if (!saved) {
       const msg = '❌ Failed to save changes. Please try again.'
       featuredStatusEl.textContent = msg
       status.innerHTML = `<p class='status status--error'>${msg}</p>`
+      return
     }
 
-    clearFeaturedSelection()
-  })
+    setEditMode(false, { preserveStatus: true })
 
+    let msg = ''
+    if (toAdd.length > 0 && toRemove.length > 0) {
+      msg = `✅ ${toAdd.length} added, ${toRemove.length} removed. Changes saved.`
+    } else if (toAdd.length > 0) {
+      msg = `✅ ${toAdd.length} added. Changes saved.`
+    } else if (toRemove.length > 0) {
+      msg = `✅ ${toRemove.length} removed. Changes saved.`
+    } else {
+      msg = 'No changes to apply.'
+    }
+
+    featuredStatusEl.textContent = msg
+    status.innerHTML = `<p class='status ${msg.startsWith('✅') ? 'status--success' : 'status--warning'}'>${msg}</p>`
+
+    updateFeaturedActions()
+  })
   updateFeaturedActions()
 
   // =========================
