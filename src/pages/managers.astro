@@ -90,7 +90,7 @@ import Nav from "../components/Nav.astro";
         <div class="top-sheet__header">
           <div>
             <div class="top-sheet__title">Featured managers</div>
-            <div class="top-sheet__subtitle">Select one or more, then add them to your list.</div>
+            <div class="top-sheet__subtitle">Tick/untick manager(s), then 'Apply changes'.</div>
           </div>
 
           <button type="button" id="featured-close" class="top-sheet__close" aria-label="Close">
@@ -119,7 +119,7 @@ import Nav from "../components/Nav.astro";
         <div class="top-sheet__header">
           <div>
             <div class="top-sheet__title">Import from league</div>
-            <div class="top-sheet__subtitle">Save a league, then choose teams to import.</div>
+            <div class="top-sheet__subtitle">Import and save a league, then choose manager(s) to add to your list.</div>
           </div>
           <button type="button" id="league-close" class="top-sheet__close" aria-label="Close">✕</button>
         </div>
@@ -148,7 +148,7 @@ import Nav from "../components/Nav.astro";
 
         <div class="top-sheet__footer">
           <div class="top-sheet__status">
-            Open a league to select managers. Changes apply to your manager list.
+            Open a league to select/deselect manager(s). Changes apply to your manager list.
           </div>
         </div>
       </section>
@@ -1537,7 +1537,7 @@ import Nav from "../components/Nav.astro";
       ])
 
       standingsTitleEl.textContent = standings.leagueName ? standings.leagueName : `League ${leagueId}`
-      standingsSubtitleEl.textContent = `Tick/untick managers, then Apply changes.`
+      standingsSubtitleEl.textContent = `Tick/untick manager(s), then 'Apply changes'.`
 
       renderStandingsList()
       openStandingsSheet()
