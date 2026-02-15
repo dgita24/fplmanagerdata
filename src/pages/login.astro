@@ -12,9 +12,11 @@ import Layout from "../layouts/Layout.astro";
           <input type="email" id="email" class="input" required />
         </div>
 
-        <div class="control">
-          <label class="label" for="password">Password</label>
+        <div class="password-field">
           <input type="password" id="password" class="input" required />
+          <button type="button" id="toggle-password" class="password-toggle" aria-label="Show password">
+            👁
+          </button>
         </div>
 
         <div class="remember-row">
@@ -102,12 +104,36 @@ import Layout from "../layouts/Layout.astro";
     gap: var(--space-2);
     font-size: var(--text-sm);
   }
+
+  .password-field {
+    position: relative;
+  }
+
+  .password-toggle {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0;
+  }
 </style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
 
   const form = document.getElementById('login-form') as HTMLFormElement
+  const passwordInput = document.getElementById('password') as HTMLInputElement
+  const togglePasswordBtn = document.getElementById('toggle-password') as HTMLButtonElement
+  togglePasswordBtn?.addEventListener('click', () => {
+    const isPassword = passwordInput.type === 'password'
+    passwordInput.type = isPassword ? 'text' : 'password'
+    togglePasswordBtn.textContent = isPassword ? '🙈' : '👁'
+  })
   const errorMessage = document.getElementById('error-message') as HTMLElement
   const successMessage = document.getElementById('success-message') as HTMLElement
 
