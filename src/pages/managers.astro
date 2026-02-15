@@ -102,6 +102,15 @@ import Nav from "../components/Nav.astro";
         </div>
 
         <div class="top-sheet__body">
+          <div class="control" style="margin-bottom: var(--space-2);">
+            <label class="label" for="featured-search">Search</label>
+            <input
+              id="featured-search"
+              class="input"
+              placeholder="Search featured managers…"
+              autocomplete="off"
+            />
+          </div>
           <div id="featured-list" class="featured-list"></div>
         </div>
 
@@ -999,6 +1008,7 @@ import Nav from "../components/Nav.astro";
   const featuredSheet = document.getElementById('featured-sheet') as HTMLElement
   const featuredCloseBtn = document.getElementById('featured-close') as HTMLButtonElement
   const featuredListEl = document.getElementById('featured-list') as HTMLElement
+  const featuredSearchInput = document.getElementById('featured-search') as HTMLInputElement
   const featuredApplyBtn = document.getElementById('featured-apply') as HTMLButtonElement
   const featuredClearBtn = document.getElementById('featured-clear') as HTMLButtonElement
   const featuredStatusEl = document.getElementById('featured-status') as HTMLElement
@@ -1068,7 +1078,18 @@ import Nav from "../components/Nav.astro";
   }
 
   function renderFeaturedList() {
-    featuredListEl.innerHTML = featuredManagers.map((m) => {
+    const query = featuredSearchInput?.value?.trim().toLowerCase() || ''
+
+    const filtered = query
+      ? featuredManagers.filter((m) => {
+          const name = String(m.name ?? '').toLowerCase()
+          const note = String(m.note ?? '').toLowerCase()
+          const entryId = String(m.entryId ?? '').toLowerCase()
+          return name.includes(query) || note.includes(query) || entryId.includes(query)
+        })
+      : featuredManagers
+
+    featuredListEl.innerHTML = filtered.map((m) => {
       const safeName = escapeHtml(String(m.name ?? ''))
       const safeNote = m.note ? escapeHtml(String(m.note)) : ''
       const entryId = Number(m.entryId)
@@ -1121,6 +1142,10 @@ import Nav from "../components/Nav.astro";
   featuredClearBtn?.addEventListener('click', () => {
     featuredStatusEl.textContent = ''
     clearFeaturedSelection()
+  })
+
+  featuredSearchInput?.addEventListener('input', () => {
+    renderFeaturedList()
   })
 
   featuredApplyBtn?.addEventListener('click', async () => {
