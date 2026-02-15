@@ -79,7 +79,7 @@ import Nav from "../components/Nav.astro";
                   Import from mini league
                 </button>
                 <button type="button" id="manager-leagues-open" class="btn btn--league btn--full-width">
-                  Import leagues from manager
+                  Import leagues from any manager
                 </button>
               </div>
             </div>
@@ -169,7 +169,7 @@ import Nav from "../components/Nav.astro";
         <div class="top-sheet__header">
           <div>
             <div class="top-sheet__title">Import leagues from manager</div>
-            <div class="top-sheet__subtitle">Enter a manager ID, then choose which leagues to save. Remove leagues in the 'Import from mini league' sheet.</div>
+            <div class="top-sheet__subtitle">Enter a <strong>manager ID</strong>, then choose which leagues to save. Remove leagues in the 'Import from mini league' sheet.</div>
           </div>
           <button type="button" id="manager-leagues-close" class="top-sheet__close" aria-label="Close">✕</button>
         </div>
@@ -263,6 +263,10 @@ import Nav from "../components/Nav.astro";
     font-weight: 800;
   }
 
+  #manager-leagues-sheet .top-sheet__subtitle strong {
+    color: var(--color-warning);
+    font-weight: 800;
+  }
 
   .card--compact {
     margin-bottom: var(--space-2);
