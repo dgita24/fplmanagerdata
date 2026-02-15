@@ -971,6 +971,19 @@ import Nav from "../components/Nav.astro";
     featuredSheet.setAttribute('aria-hidden', 'true')
   }
 
+  function escapeHtml(s: string) {
+    return s.replace(/[&<>"']/g, (ch) => {
+      switch (ch) {
+        case '&': return '&amp;'
+        case '<': return '&lt;'
+        case '>': return '&gt;'
+        case '"': return '&quot;'
+        case "'": return '&#39;'
+        default: return ch
+      }
+    })
+  }
+
   function parseTextareaIds(): number[] {
     const trimmed = textarea.value.trim()
     if (!trimmed) return []
