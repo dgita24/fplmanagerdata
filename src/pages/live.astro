@@ -433,6 +433,7 @@ import Nav from "../components/Nav.astro";
   }
 
   const managerDataCache = new Map<string, any>();
+  const squadPicksCache = new Map<string, any>();
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -1156,12 +1157,19 @@ import Nav from "../components/Nav.astro";
       // Make sure the live caches are populated for this GW
       await ensureLiveCaches(gw);
 
-      const v = Date.now();
-      const picksRes = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`, { cache: "no-store" });
+      const cacheKey = `${entryId}:${gw}`;
+      let picksData =
+        squadPicksCache.get(cacheKey) || managerDataCache.get(cacheKey)?.picksData;
 
-      if (!picksRes.ok) throw new Error("Failed to fetch picks");
+      if (!picksData) {
+        const v = Date.now();
+        const picksRes = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${v}`, { cache: "no-store" });
 
-      const picksData = await picksRes.json();
+        if (!picksRes.ok) throw new Error("Failed to fetch picks");
+
+        picksData = await picksRes.json();
+        squadPicksCache.set(cacheKey, picksData);
+      }
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
 
       const chipCode = chipPlayed || "None";
@@ -1655,6 +1663,7 @@ import Nav from "../components/Nav.astro";
     forceDefaultLiveSort();
 
     managerDataCache.clear();
+    squadPicksCache.clear();
     // Clear ALL per-GW snapshots
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
