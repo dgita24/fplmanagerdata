@@ -497,6 +497,7 @@ import Nav from "../components/Nav.astro";
   let managerIds = [];
   let allSquadsData = [];
   let latestGW = 1;
+  const SQUADS_FETCH_CONCURRENCY = 4;
   
   // ==============================
   // Persistent page cache (Squads) - cached until Refresh
@@ -1517,7 +1518,7 @@ import Nav from "../components/Nav.astro";
 
     const squadResults = await mapWithConcurrency(
       ids,
-      8,
+      SQUADS_FETCH_CONCURRENCY,
       async (id) => {
         try {
           return await fetchManagerData(id, gw, cacheBuster);
