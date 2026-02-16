@@ -619,7 +619,7 @@ import Nav from "../components/Nav.astro";
 
     const managerDataResults = await mapWithConcurrency(
       ids,
-      8,
+      DEFAULT_FETCH_CONCURRENCY,
       async (id) => {
         try {
           return await fetchManagerData(id, cacheBuster);
