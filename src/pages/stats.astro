@@ -36,6 +36,7 @@ import Nav from "../components/Nav.astro";
     </div>
 
     <div id="loading-status" class="meta-row"></div>
+    <div id="last-updated" class="meta-row"></div>
     <section id="stats-output" aria-live="polite"></section>
   </main>
 
@@ -400,6 +401,7 @@ import Nav from "../components/Nav.astro";
 
   const out = document.getElementById("stats-output")!;
   const loadingStatus = document.getElementById("loading-status")!;
+  const lastUpdatedEl = document.getElementById("last-updated")!;
   const managerCountEl = document.getElementById("manager-count")!;
   const refreshBtn = document.getElementById("refresh-btn")!;
   const gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
@@ -421,6 +423,19 @@ import Nav from "../components/Nav.astro";
   closeSquadModal.addEventListener("click", () => {
     squadModal.classList.remove("is-open");
   });
+
+  function formatUpdateTime(timestamp: number): string {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    
+    if (isToday) {
+      return `Updated: ${date.toLocaleTimeString()}`;
+    } else {
+      return `Updated: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+    }
+  }
+
 
   closeOrHistoryModal.addEventListener("click", () => {
     orHistoryModal.classList.remove("is-open");
@@ -1225,6 +1240,9 @@ import Nav from "../components/Nav.astro";
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allManagerData.length} managers</span>`;
+    if (lastUpdatedEl) {
+      lastUpdatedEl.textContent = formatUpdateTime(Date.now());
+    }
 
     // Persist snapshot (so back-navigation/browser restart is instant)
     saveStatsSnapshot(gw);
@@ -1289,7 +1307,10 @@ import Nav from "../components/Nav.astro";
       const gwToRender = parseInt(gwFilterSelect.value) || gw || latestGW;
       renderStatsFromState(gwToRender);
 
-      loadingStatus.textContent = `Loaded from cache.`;
+      loadingStatus.textContent = "";
+      if (lastUpdatedEl) {
+        lastUpdatedEl.textContent = formatUpdateTime(snap.savedAt);
+      }
       return;
     }
 
@@ -1315,7 +1336,10 @@ import Nav from "../components/Nav.astro";
       statsSortKey = snap.ui?.statsSortKey || statsSortKey;
       statsSortDir = snap.ui?.statsSortDir || statsSortDir;
       renderStatsFromState(gw);
-      loadingStatus.textContent = `Loaded from cache.`;
+      loadingStatus.textContent = "";
+      if (lastUpdatedEl) {
+        lastUpdatedEl.textContent = formatUpdateTime(snap.savedAt);
+      }
       return;
     }
 
