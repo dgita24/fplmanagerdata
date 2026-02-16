@@ -182,6 +182,18 @@ import Nav from "../components/Nav.astro";
   
   // Load token for cancellation
   let currentLoadToken = 0;
+
+  function formatUpdateTime(timestamp) {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    
+    if (isToday) {
+      return `Updated: ${date.toLocaleTimeString()}`;
+    } else {
+      return `Updated: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+    }
+  }
   const DEFAULT_FETCH_CONCURRENCY = 4;
 
   // ==============================
@@ -625,7 +637,7 @@ import Nav from "../components/Nav.astro";
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${managerSquads.length} managers for GW${gw}</span>`;
     if (lastUpdatedEl) {
-      lastUpdatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+      lastUpdatedEl.textContent = formatUpdateTime(Date.now());
     }
     saveOwnershipSnapshot(gw);
 
@@ -673,7 +685,7 @@ import Nav from "../components/Nav.astro";
       renderOwnershipFromState();
       loadingStatus.textContent = "";
       if (lastUpdatedEl) {
-        lastUpdatedEl.textContent = `Updated: ${new Date(snap.savedAt).toLocaleTimeString()}`;
+        lastUpdatedEl.textContent = formatUpdateTime(snap.savedAt);
       }
       return;
     }
@@ -702,7 +714,7 @@ import Nav from "../components/Nav.astro";
       renderOwnershipFromState();
       loadingStatus.textContent = "";
       if (lastUpdatedEl) {
-        lastUpdatedEl.textContent = `Updated: ${new Date(snap.savedAt).toLocaleTimeString()}`;
+        lastUpdatedEl.textContent = formatUpdateTime(snap.savedAt);
       }
       return;
     }
