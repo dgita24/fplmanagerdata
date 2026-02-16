@@ -1000,7 +1000,7 @@ import Nav from "../components/Nav.astro";
       filterByGW();
       loadingStatus.textContent = ``;
       if (lastUpdatedEl) {
-        lastUpdatedEl.textContent = `Updated: ${new Date(snap.savedAt).toLocaleTimeString()} • Data stays the same until next GW deadline`;
+        lastUpdatedEl.textContent = `Updated: ${new Date(snap.savedAt).toLocaleTimeString()}`;
       }
 
       if (!isFresh(snap.savedAt, TRANSFERS_CACHE_TTL_MS)) {
@@ -1012,7 +1012,7 @@ import Nav from "../components/Nav.astro";
             await loadManagers(managerIds, bust);
             loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Updated</span>`;
             if (lastUpdatedEl) {
-              lastUpdatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()} • Data stays the same until next GW deadline`;
+              lastUpdatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
             }
           } catch (e) {
             console.warn("Background refresh failed:", e);
