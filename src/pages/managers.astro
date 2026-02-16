@@ -56,6 +56,7 @@ import Nav from "../components/Nav.astro";
               <label class="label" for="ids">
                  Manager EntryIDs <span class="ids-count-inline">(<strong id="count">0</strong>)</span>
               </label>
+              <button type="button" id="manager-sources-open" class="btn-icon-info" title="View manager sources">ℹ️</button>
             </div>
 
             <div class="ids-layout">
@@ -89,6 +90,26 @@ import Nav from "../components/Nav.astro";
           <div id="status" style="margin-top: var(--space-3);"></div>
         </div>
       </section>
+
+      <!-- Manager Sources Sheet -->
+      <section id="manager-sources-sheet" class="top-sheet" aria-hidden="true">
+        <div class="top-sheet__header">
+          <div>
+            <div class="top-sheet__title">Manager sources</div>
+            <div class="top-sheet__subtitle">View where each manager was imported from</div>
+          </div>
+          <button type="button" id="manager-sources-close" class="top-sheet__close" aria-label="Close">✕</button>
+        </div>
+
+        <div class="top-sheet__body">
+          <div class="control" style="margin-bottom: var(--space-2);">
+            <input id="manager-sources-search" class="input" type="text" placeholder="Search by ID or name..." autocomplete="off" />
+          </div>
+
+          <div id="manager-sources-list" class="manager-sources-list"></div>
+        </div>
+      </section>
+
 
       <!-- Featured managers top sheet (non-blocking; keeps textarea editable) -->
       <section id="featured-sheet" class="top-sheet" aria-hidden="true">
@@ -344,6 +365,134 @@ import Nav from "../components/Nav.astro";
     margin-bottom: var(--space-2);
   }
 
+  .btn-icon-info {
+    border: none;
+    background: transparent;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 2px 6px;
+    margin-left: 4px;
+    opacity: 0.7;
+    transition: opacity 0.15s ease;
+    vertical-align: middle;
+    line-height: 1; 
+  }
+
+  .btn-icon-info:hover {
+    opacity: 1;
+  }
+
+  .manager-sources-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Ensure checkboxes stay blue when checked */
+    input[type="checkbox"]:checked {
+      accent-color: var(--color-primary);
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--color-border);
+      border-top-color: var(--color-primary);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .manager-source-item {
+      padding: 10px 12px;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      background: var(--color-bg);
+      line-height: 1.4;
+    }
+
+    .manager-source-item__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .manager-source-item__name {
+      font-size: 0.95rem;
+      font-weight: 500;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .manager-source-item__id {
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: var(--color-primary);
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .manager-source-item__source {
+      margin-top: 4px;
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+    }
+
+    .manager-source-item__footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 4px;
+      gap: 8px;
+    }
+
+    .manager-source-item__delete {
+      border: none;
+      background: transparent;
+      font-size: 0.95rem;
+      cursor: pointer;
+      padding: 4px;
+      opacity: 0.5;
+      transition: opacity 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .manager-source-item__delete:hover {
+      opacity: 1;
+    }
+
+    /* Make the sheet narrower on desktop, fullscreen on mobile */
+    #manager-sources-sheet.top-sheet {
+      max-width: 500px;
+    }
+
+    @media (max-width: 640px) {
+      #manager-sources-sheet.top-sheet {
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        max-width: 100%;
+        height: 100vh;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+
+      #manager-sources-sheet .top-sheet__header {
+        padding-top: calc(var(--space-3) + env(safe-area-inset-top));
+      }
+    }
   .ids-count-inline {
     font-size: inherit;
     font-weight: inherit;
@@ -1092,6 +1241,179 @@ import Nav from "../components/Nav.astro";
       .map(x => parseInt(x, 10))
   }
 
+  // Manager Sources Sheet
+  const managerSourcesOpenBtn = document.getElementById('manager-sources-open') as HTMLButtonElement
+  const managerSourcesSheet = document.getElementById('manager-sources-sheet') as HTMLElement
+  const managerSourcesCloseBtn = document.getElementById('manager-sources-close') as HTMLButtonElement
+  const managerSourcesSearchInput = document.getElementById('manager-sources-search') as HTMLInputElement
+  const managerSourcesListEl = document.getElementById('manager-sources-list') as HTMLElement
+
+  type ManagerSourceInfo = {
+    entryId: number
+    name: string
+    source: string
+  }
+
+  let allManagerSources: ManagerSourceInfo[] = []
+
+  function openManagerSourcesSheet() {
+    managerSourcesSheet.classList.add('is-open')
+    managerSourcesSheet.setAttribute('aria-hidden', 'false')
+  }
+
+  function closeManagerSourcesSheet() {
+    managerSourcesSheet.classList.remove('is-open')
+    managerSourcesSheet.setAttribute('aria-hidden', 'true')
+  }
+
+  async function fetchManagerName(entryId: number): Promise<string> {
+    try {
+      const res = await fetch(`/api/fpl/entry/${entryId}/`)
+      if (!res.ok) throw new Error('Entry lookup failed')
+      const data = await res.json()
+      const first = data?.player_first_name ?? ''
+      const last = data?.player_last_name ?? ''
+      const name = `${first} ${last}`.trim()
+      return name || `Manager ${entryId}`
+    } catch {
+      return `Manager ${entryId}`
+    }
+  }
+
+  async function fetchManagerImportSource(entryId: number): Promise<string> {
+    // Check if it's a featured manager
+    const isFeatured = featuredEntryIds.has(entryId)
+    
+    // Check if imported from a league
+    const { data, error } = await supabase
+      .from('user_league_imports')
+      .select('league_id')
+      .eq('user_id', currentUser.id)
+      .eq('entry_id', entryId)
+      .maybeSingle()
+
+    if (!error && data?.league_id) {
+      const leagueId = Number(data.league_id)
+      const { data: leagueData } = await supabase
+        .from('user_saved_leagues')
+        .select('league_name')
+        .eq('user_id', currentUser.id)
+        .eq('league_id', leagueId)
+        .maybeSingle()
+
+      if (leagueData?.league_name) {
+        return `Imported from: ${leagueData.league_name}`
+      }
+
+      return `Imported from: League ${leagueId}`
+    }
+
+    // If not from a league, check if featured
+    if (isFeatured) {
+      return 'Added from: Featured managers'
+    }
+
+    return 'Manually added'
+  }
+
+  async function loadManagerSources() {
+    const ids = parseTextareaIds()
+    if (ids.length === 0) {
+      allManagerSources = []
+      renderManagerSourcesList()
+      return
+    }
+
+    managerSourcesListEl.innerHTML = `<div class="text-muted">Loading ${ids.length} managers...</div>`
+
+    const results = await Promise.all(
+      ids.map(async (entryId) => {
+        const [name, source] = await Promise.all([
+          fetchManagerName(entryId),
+          fetchManagerImportSource(entryId)
+        ])
+        return { entryId, name, source }
+      })
+    )
+
+    allManagerSources = results
+    renderManagerSourcesList()
+  }
+
+  function renderManagerSourcesList() {
+    const query = managerSourcesSearchInput?.value?.trim().toLowerCase() || ''
+
+    const filtered = query
+      ? allManagerSources.filter((m) => {
+          const idStr = String(m.entryId).toLowerCase()
+          const name = m.name.toLowerCase()
+          const source = m.source.toLowerCase()
+          return idStr.includes(query) || name.includes(query) || source.includes(query)
+        })
+      : allManagerSources
+
+    if (filtered.length === 0) {
+      managerSourcesListEl.innerHTML = `<div class="text-muted">No managers found</div>`
+      return
+    }
+
+    managerSourcesListEl.innerHTML = filtered
+      .map((m) => `
+        <div class="manager-source-item">
+          <div class="manager-source-item__header">
+            <span class="manager-source-item__name">${escapeHtml(m.name)}</span>
+            <span class="manager-source-item__id">${m.entryId}</span>
+          </div>
+          <div class="manager-source-item__footer">
+            <span class="manager-source-item__source">${escapeHtml(m.source)}</span>
+            <button type="button" class="manager-source-item__delete" data-entry-id="${m.entryId}" title="Remove manager">🗑️</button>
+          </div>
+        </div>
+      `)
+      .join('')
+
+    // Attach delete handlers
+    managerSourcesListEl
+      .querySelectorAll<HTMLButtonElement>('.manager-source-item__delete')
+      .forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const entryId = Number(btn.dataset.entryId)
+          if (!Number.isFinite(entryId)) return
+          
+          if (!confirm(`Remove manager ${entryId} from your list?`)) return
+
+          // Remove from textarea
+          const currentIds = parseTextareaIds()
+          const updatedIds = currentIds.filter(id => id !== entryId)
+          textarea.value = updatedIds.join('\n')
+          
+          // Save to database
+          const success = await saveManagerIds(updatedIds)
+          if (success) {
+            updateCount()
+            // Reload the sources list
+            await loadManagerSources()
+          } else {
+            alert('Failed to remove manager. Please try again.')
+          }
+        })
+      })
+  }
+
+  managerSourcesOpenBtn?.addEventListener('click', () => {
+    managerSourcesSearchInput.value = ''
+    openManagerSourcesSheet()
+    loadManagerSources()
+  })
+
+  managerSourcesCloseBtn?.addEventListener('click', () => {
+    closeManagerSourcesSheet()
+  })
+
+  managerSourcesSearchInput?.addEventListener('input', () => {
+    renderManagerSourcesList()
+  })
+
   function updateFeaturedActions() {
     const current = new Set(parseTextareaIds())
     const toRemove = [...featuredEntryIds].filter((id) => current.has(id) && !selectedFeaturedIds.has(id))
@@ -1594,14 +1916,15 @@ import Nav from "../components/Nav.astro";
       }
     }
 
-    standingsBannerEl.textContent = lines.join(' • ')
+    standingsBannerEl.innerHTML = lines.join(' • ')
     applyStatusEl.textContent = warnLines.join(' ')
   }
 
   async function openLeagueStandings(leagueId: number) {
+    openStandingsSheet()
     applyStatusEl.textContent = ''
     applySuccessEl.textContent = ''
-    standingsBannerEl.textContent = 'Loading league standings...'
+    standingsBannerEl.innerHTML = '<div class="loading-spinner"></div> Loading league standings...'
     standingsListEl.innerHTML = ''
     applyBtn.disabled = true
 
@@ -1653,7 +1976,7 @@ import Nav from "../components/Nav.astro";
       await updateStandingsBannerAndWarnings()
     } catch (e) {
       console.error(e)
-      standingsBannerEl.textContent = 'Failed to load standings. Check league ID and try again.'
+      standingsBannerEl.innerHTML = 'Failed to load standings. Check league ID and try again.'
       openStandingsSheet()
     }
   }
