@@ -39,17 +39,11 @@ import Nav from "../components/Nav.astro";
       </div>
     </div>
 
+      <div id="loading-status" class="meta-row"></div>
+      <div id="last-updated" class="meta-row"></div>
+      <div style="display: flex; justify-content: flex-end;">
+        <button id="refresh-btn" class="btn-refresh" type="button">🔄 Refresh</button>
       </div>
-      <div class="control-inline">
-        <label class="label-small">&nbsp;</label>
-        <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
-      </div>
-    </div>
-
-    <div id="loading-status" class="meta-row"></div>
-    <div id="last-updated" class="meta-row"></div>
-
-    <section id="squads-output" aria-live="polite"></section>
 
     <section id="squads-output" aria-live="polite"></section>
   </main>
