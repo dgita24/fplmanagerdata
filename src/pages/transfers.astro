@@ -36,6 +36,7 @@ import Nav from "../components/Nav.astro";
     </div>
 
     <div id="loading-status" class="meta-row"></div>
+    <div id="last-updated" class="meta-row"></div>
     <section id="transfers-table" aria-live="polite"></section>
   </main>
 
@@ -269,6 +270,7 @@ import Nav from "../components/Nav.astro";
   const gwFilterSelect = document.getElementById("gw-filter");
   const managerFilterSelect = document.getElementById("manager-filter")
   const loadingStatus = document.getElementById("loading-status");
+  const lastUpdatedEl = document.getElementById("last-updated");
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
 
@@ -318,6 +320,19 @@ import Nav from "../components/Nav.astro";
 
   // Load token for cancellation
   let currentLoadToken = 0;
+
+  function formatUpdateTime(timestamp) {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    
+    if (isToday) {
+      return `Updated: ${date.toLocaleTimeString()}`;
+    } else {
+      return `Updated: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+    }
+  }
+
   const DEFAULT_FETCH_CONCURRENCY = 4;
 
   closeChipModal.addEventListener("click", () => {
@@ -891,6 +906,9 @@ import Nav from "../components/Nav.astro";
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allHistories.length} managers</span>`;
+    if (lastUpdatedEl) {
+      lastUpdatedEl.textContent = formatUpdateTime(Date.now());
+    }
 
     if (managerFilterSelect) {
       const prev = managerFilterSelect.value
@@ -993,7 +1011,10 @@ import Nav from "../components/Nav.astro";
 
 
       filterByGW();
-      loadingStatus.textContent = `Loaded from cache.`;
+      loadingStatus.textContent = ``;
+      if (lastUpdatedEl) {
+        lastUpdatedEl.textContent = formatUpdateTime(snap.savedAt);
+      }
 
       if (!isFresh(snap.savedAt, TRANSFERS_CACHE_TTL_MS)) {
         (async () => {
@@ -1003,6 +1024,9 @@ import Nav from "../components/Nav.astro";
             await fetchPlayers(bust);
             await loadManagers(managerIds, bust);
             loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Updated</span>`;
+            if (lastUpdatedEl) {
+              lastUpdatedEl.textContent = formatUpdateTime(Date.now());
+            }
           } catch (e) {
             console.warn("Background refresh failed:", e);
             loadingStatus.textContent = `Loaded from cache. (Background refresh failed)`;

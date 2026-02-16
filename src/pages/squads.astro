@@ -40,7 +40,10 @@ import Nav from "../components/Nav.astro";
     </div>
 
     <div class="status-row">
-      <div id="loading-status" class="status-text"></div>
+      <div>
+        <div id="loading-status" class="status-text"></div>
+        <div id="last-updated" class="status-text"></div>
+      </div>
       <button id="refresh-btn" class="btn-refresh" type="button">🔄 Refresh</button>
     </div>
 
@@ -491,6 +494,7 @@ import Nav from "../components/Nav.astro";
   const managerFilter = document.getElementById("manager-filter");
   const viewFilter = document.getElementById("view-filter");
   const loadingStatus = document.getElementById("loading-status");
+  const lastUpdatedEl = document.getElementById("last-updated");
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
 
@@ -498,6 +502,19 @@ import Nav from "../components/Nav.astro";
   let allSquadsData = [];
   let latestGW = 1;
   const DEFAULT_FETCH_CONCURRENCY = 4;
+
+
+  function formatUpdateTime(timestamp: number): string {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    
+    if (isToday) {
+      return `Updated: ${date.toLocaleTimeString()}`;
+    } else {
+      return `Updated: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+    }
+  }
   
   // ==============================
   // Persistent page cache (Squads) - cached until Refresh FORCE REDEPLOY
@@ -563,6 +580,7 @@ import Nav from "../components/Nav.astro";
   function renderSquadsFromState() {
     populateManagerFilter();
     renderOutput();
+    attachManagerLinkButtons();
   }
 
 
@@ -1543,6 +1561,9 @@ import Nav from "../components/Nav.astro";
     renderSquadsFromState();
 
     loadingStatus.innerHTML = `<span class="text-success font-bold">✅ Loaded ${allSquadsData.length} managers for GW${gw}</span>`;
+    if (lastUpdatedEl) {
+      lastUpdatedEl.textContent = formatUpdateTime(Date.now());
+    }
 
     // Persist snapshot
     saveSquadsSnapshot(gw);
@@ -1593,7 +1614,10 @@ import Nav from "../components/Nav.astro";
       }
 
       renderSquadsFromState();
-      loadingStatus.textContent = "Loaded from cache.";
+      loadingStatus.textContent = "";
+      if (lastUpdatedEl) {
+        lastUpdatedEl.textContent = formatUpdateTime(snap.savedAt);
+      }
       return;
     }
 
@@ -1649,7 +1673,10 @@ import Nav from "../components/Nav.astro";
     ) {
       allSquadsData = snap.allSquadsData;
       renderSquadsFromState();
-      loadingStatus.textContent = "Loaded from cache.";
+      loadingStatus.textContent = "";
+      if (lastUpdatedEl) {
+        lastUpdatedEl.textContent = formatUpdateTime(snap.savedAt);
+      }
       return;
     }
 
