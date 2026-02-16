@@ -8,6 +8,35 @@ import {
 
 export const prerender = false;
 
+const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  opts: { retries?: number; baseDelayMs?: number } = {}
+): Promise<Response> {
+  const retries = opts.retries ?? 2;
+  const baseDelayMs = opts.baseDelayMs ?? 400;
+
+  let attempt = 0;
+  while (true) {
+    const res = await fetch(url, init);
+
+    if (!RETRY_STATUS.has(res.status) || attempt >= retries) {
+      return res;
+    }
+
+    const jitter = Math.floor(Math.random() * 200);
+    const delay = baseDelayMs * Math.pow(2, attempt) + jitter;
+    await sleep(delay);
+    attempt++;
+  }
+}
+
 function pickEnv(ctx: any) {
   // Try every known place Astro/Cloudflare may expose env/bindings.
   const candidates: Array<{ name: string; env: any }> = [
@@ -45,7 +74,7 @@ export async function GET(ctx: any) {
   const useCache = isPathAllowedForCache(fplPath);
 
   const fetcher = async (): Promise<Response> => {
-    const res = await fetch(target, {
+    const res = await fetchWithRetry(target, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/json",

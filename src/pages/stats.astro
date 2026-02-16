@@ -369,6 +369,7 @@ import Nav from "../components/Nav.astro";
   
   // Load token for cancellation
   let currentLoadToken = 0;
+  const DEFAULT_FETCH_CONCURRENCY = 4;
 
   interface HistoryRow {
     event: number;
@@ -1199,7 +1200,7 @@ import Nav from "../components/Nav.astro";
     // Fetch manager data concurrently with limit of 8
     const managerDataResults = await mapWithConcurrency(
       ids,
-      8,
+      DEFAULT_FETCH_CONCURRENCY,
       async (id) => {
         return await fetchManagerData(id, gw, cacheBuster);
       },
