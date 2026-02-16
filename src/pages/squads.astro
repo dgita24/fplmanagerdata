@@ -1089,6 +1089,10 @@ import Nav from "../components/Nav.astro";
       </div>
     `;
     historyModal.classList.add("is-open");
+    // Ensure bootstrap caches exist when page was restored from snapshot
+    if (playerCache.size === 0 || teamCache.size === 0) {
+      await fetchBootstrapData();
+    }
 
     try {
         const maxGw = latestGW; 
