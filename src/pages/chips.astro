@@ -215,6 +215,7 @@ import Nav from "../components/Nav.astro";
   // ==== Persistent cache (localStorage) ====
   const CHIPS_CACHE_KEY = "fpl_cache_v1_chips";
   const CHIPS_CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12h
+  const DEFAULT_FETCH_CONCURRENCY = 4;
 
   function safeJsonParse(v) {
     try { return JSON.parse(v); } catch { return null; }
