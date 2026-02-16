@@ -998,7 +998,7 @@ import Nav from "../components/Nav.astro";
 
 
       filterByGW();
-      loadingStatus.textContent = `Loaded from cache.`;
+      loadingStatus.textContent = ``;
       if (lastUpdatedEl) {
         lastUpdatedEl.textContent = `Updated: ${new Date(snap.savedAt).toLocaleTimeString()}`;
       }
