@@ -56,6 +56,7 @@ import Nav from "../components/Nav.astro";
               <label class="label" for="ids">
                  Manager EntryIDs <span class="ids-count-inline">(<strong id="count">0</strong>)</span>
               </label>
+              <button type="button" id="manager-sources-open" class="btn-icon-info" title="View manager sources">ℹ️</button>
             </div>
 
             <div class="ids-layout">
@@ -89,6 +90,26 @@ import Nav from "../components/Nav.astro";
           <div id="status" style="margin-top: var(--space-3);"></div>
         </div>
       </section>
+
+      <!-- Manager Sources Sheet -->
+      <section id="manager-sources-sheet" class="top-sheet" aria-hidden="true">
+        <div class="top-sheet__header">
+          <div>
+            <div class="top-sheet__title">Manager sources</div>
+            <div class="top-sheet__subtitle">View where each manager was imported from</div>
+          </div>
+          <button type="button" id="manager-sources-close" class="top-sheet__close" aria-label="Close">✕</button>
+        </div>
+
+        <div class="top-sheet__body">
+          <div class="control" style="margin-bottom: var(--space-2);">
+            <input id="manager-sources-search" class="input" type="text" placeholder="Search by ID or name..." autocomplete="off" />
+          </div>
+
+          <div id="manager-sources-list" class="manager-sources-list"></div>
+        </div>
+      </section>
+
 
       <!-- Featured managers top sheet (non-blocking; keeps textarea editable) -->
       <section id="featured-sheet" class="top-sheet" aria-hidden="true">
@@ -343,6 +364,53 @@ import Nav from "../components/Nav.astro";
   .ids-header {
     margin-bottom: var(--space-2);
   }
+
+  .btn-icon-info {
+      border: none;
+      background: transparent;
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 4px 8px;
+      margin-left: 6px;
+      opacity: 0.7;
+      transition: opacity 0.15s ease;
+    }
+
+    .btn-icon-info:hover {
+      opacity: 1;
+    }
+
+    .manager-sources-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .manager-source-item {
+      padding: var(--space-2);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      background: var(--color-bg);
+    }
+
+    .manager-source-item__id {
+      font-family: monospace;
+      font-size: 0.9rem;
+      color: var(--color-primary);
+      font-weight: 600;
+    }
+
+    .manager-source-item__name {
+      margin-top: 4px;
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+
+    .manager-source-item__source {
+      margin-top: 4px;
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+    }
 
   .ids-count-inline {
     font-size: inherit;
@@ -1091,6 +1159,138 @@ import Nav from "../components/Nav.astro";
       .filter(x => x.match(/^\d+$/))
       .map(x => parseInt(x, 10))
   }
+
+  // Manager Sources Sheet
+  const managerSourcesOpenBtn = document.getElementById('manager-sources-open') as HTMLButtonElement
+  const managerSourcesSheet = document.getElementById('manager-sources-sheet') as HTMLElement
+  const managerSourcesCloseBtn = document.getElementById('manager-sources-close') as HTMLButtonElement
+  const managerSourcesSearchInput = document.getElementById('manager-sources-search') as HTMLInputElement
+  const managerSourcesListEl = document.getElementById('manager-sources-list') as HTMLElement
+
+  type ManagerSourceInfo = {
+    entryId: number
+    name: string
+    source: string
+  }
+
+  let allManagerSources: ManagerSourceInfo[] = []
+
+  function openManagerSourcesSheet() {
+    managerSourcesSheet.classList.add('is-open')
+    managerSourcesSheet.setAttribute('aria-hidden', 'false')
+  }
+
+  function closeManagerSourcesSheet() {
+    managerSourcesSheet.classList.remove('is-open')
+    managerSourcesSheet.setAttribute('aria-hidden', 'true')
+  }
+
+  async function fetchManagerName(entryId: number): Promise<string> {
+    try {
+      const res = await fetch(`/api/fpl/entry/${entryId}/`)
+      if (!res.ok) throw new Error('Entry lookup failed')
+      const data = await res.json()
+      const first = data?.player_first_name ?? ''
+      const last = data?.player_last_name ?? ''
+      const name = `${first} ${last}`.trim()
+      return name || `Manager ${entryId}`
+    } catch {
+      return `Manager ${entryId}`
+    }
+  }
+
+  async function fetchManagerImportSource(entryId: number): Promise<string> {
+    const { data, error } = await supabase
+      .from('user_league_imports')
+      .select('league_id')
+      .eq('user_id', currentUser.id)
+      .eq('entry_id', entryId)
+      .maybeSingle()
+
+    if (error || !data?.league_id) {
+      return 'Manually added'
+    }
+
+    const leagueId = Number(data.league_id)
+    const { data: leagueData } = await supabase
+      .from('user_saved_leagues')
+      .select('league_name')
+      .eq('user_id', currentUser.id)
+      .eq('league_id', leagueId)
+      .maybeSingle()
+
+    if (leagueData?.league_name) {
+      return `Imported from: ${leagueData.league_name}`
+    }
+
+    return `Imported from: League ${leagueId}`
+  }
+
+  async function loadManagerSources() {
+    const ids = parseTextareaIds()
+    if (ids.length === 0) {
+      allManagerSources = []
+      renderManagerSourcesList()
+      return
+    }
+
+    managerSourcesListEl.innerHTML = `<div class="text-muted">Loading ${ids.length} managers...</div>`
+
+    const results = await Promise.all(
+      ids.map(async (entryId) => {
+        const [name, source] = await Promise.all([
+          fetchManagerName(entryId),
+          fetchManagerImportSource(entryId)
+        ])
+        return { entryId, name, source }
+      })
+    )
+
+    allManagerSources = results
+    renderManagerSourcesList()
+  }
+
+  function renderManagerSourcesList() {
+    const query = managerSourcesSearchInput?.value?.trim().toLowerCase() || ''
+
+    const filtered = query
+      ? allManagerSources.filter((m) => {
+          const idStr = String(m.entryId).toLowerCase()
+          const name = m.name.toLowerCase()
+          const source = m.source.toLowerCase()
+          return idStr.includes(query) || name.includes(query) || source.includes(query)
+        })
+      : allManagerSources
+
+    if (filtered.length === 0) {
+      managerSourcesListEl.innerHTML = `<div class="text-muted">No managers found</div>`
+      return
+    }
+
+    managerSourcesListEl.innerHTML = filtered
+      .map((m) => `
+        <div class="manager-source-item">
+          <div class="manager-source-item__id">${m.entryId}</div>
+          <div class="manager-source-item__name">${escapeHtml(m.name)}</div>
+          <div class="manager-source-item__source">${escapeHtml(m.source)}</div>
+        </div>
+      `)
+      .join('')
+  }
+
+  managerSourcesOpenBtn?.addEventListener('click', () => {
+    managerSourcesSearchInput.value = ''
+    openManagerSourcesSheet()
+    loadManagerSources()
+  })
+
+  managerSourcesCloseBtn?.addEventListener('click', () => {
+    closeManagerSourcesSheet()
+  })
+
+  managerSourcesSearchInput?.addEventListener('input', () => {
+    renderManagerSourcesList()
+  })
 
   function updateFeaturedActions() {
     const current = new Set(parseTextareaIds())
