@@ -320,6 +320,19 @@ import Nav from "../components/Nav.astro";
 
   // Load token for cancellation
   let currentLoadToken = 0;
+
+  function formatUpdateTime(timestamp) {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    
+    if (isToday) {
+      return `Updated: ${date.toLocaleTimeString()}`;
+    } else {
+      return `Updated: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+    }
+  }
+
   const DEFAULT_FETCH_CONCURRENCY = 4;
 
   closeChipModal.addEventListener("click", () => {
@@ -894,7 +907,7 @@ import Nav from "../components/Nav.astro";
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allHistories.length} managers</span>`;
     if (lastUpdatedEl) {
-      lastUpdatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+      lastUpdatedEl.textContent = formatUpdateTime(Date.now());
     }
 
     if (managerFilterSelect) {
@@ -1000,7 +1013,7 @@ import Nav from "../components/Nav.astro";
       filterByGW();
       loadingStatus.textContent = ``;
       if (lastUpdatedEl) {
-        lastUpdatedEl.textContent = `Updated: ${new Date(snap.savedAt).toLocaleTimeString()}`;
+        lastUpdatedEl.textContent = formatUpdateTime(snap.savedAt);
       }
 
       if (!isFresh(snap.savedAt, TRANSFERS_CACHE_TTL_MS)) {
@@ -1012,7 +1025,7 @@ import Nav from "../components/Nav.astro";
             await loadManagers(managerIds, bust);
             loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Updated</span>`;
             if (lastUpdatedEl) {
-              lastUpdatedEl.textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+              lastUpdatedEl.textContent = formatUpdateTime(Date.now());
             }
           } catch (e) {
             console.warn("Background refresh failed:", e);
