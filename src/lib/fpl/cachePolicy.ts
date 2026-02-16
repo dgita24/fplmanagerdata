@@ -24,8 +24,9 @@ export const DEFAULT_TTLS = {
   FIXTURES_PAST: -1,
 
   // Manager data
-  ENTRY: 0, // CRITICAL: never cache entry/{id} (contains OR/Total/etc)
-  ENTRY_HISTORY_CURRENT: 0,
+  // NOTE: short TTL (30s) to reduce 429s without materially affecting live UX
+  ENTRY: 30, // short cache to reduce upstream load (seconds) // Change to 0 for CRITICAL: never cache entry/{id} (contains OR/Total/etc)
+  ENTRY_HISTORY_CURRENT: 30, // change to 0 if above changed to 0
   ENTRY_HISTORY_PAST: -1, // not used unless you later split history into past-only endpoint
 
   // Picks
