@@ -388,6 +388,11 @@ import Nav from "../components/Nav.astro";
       gap: 8px;
     }
 
+    /* Ensure checkboxes stay blue when checked */
+    input[type="checkbox"]:checked {
+      accent-color: var(--color-primary);
+    }
+
     .manager-source-item {
       padding: 10px 12px;
       border: 1px solid var(--color-border);
@@ -1895,14 +1900,14 @@ import Nav from "../components/Nav.astro";
       }
     }
 
-    standingsBannerEl.textContent = lines.join(' • ')
+    standingsBannerEl.innerHTML = lines.join(' • ')
     applyStatusEl.textContent = warnLines.join(' ')
   }
 
   async function openLeagueStandings(leagueId: number) {
     applyStatusEl.textContent = ''
     applySuccessEl.textContent = ''
-    standingsBannerEl.textContent = 'Loading league standings...'
+    standingsBannerEl.innerHTML = '<div class="loading-spinner"></div> Loading league standings...'
     standingsListEl.innerHTML = ''
     applyBtn.disabled = true
 
@@ -1954,7 +1959,7 @@ import Nav from "../components/Nav.astro";
       await updateStandingsBannerAndWarnings()
     } catch (e) {
       console.error(e)
-      standingsBannerEl.textContent = 'Failed to load standings. Check league ID and try again.'
+      standingsBannerEl.innerHTML = 'Failed to load standings. Check league ID and try again.'
       openStandingsSheet()
     }
   }
