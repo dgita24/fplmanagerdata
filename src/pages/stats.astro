@@ -369,6 +369,7 @@ import Nav from "../components/Nav.astro";
   
   // Load token for cancellation
   let currentLoadToken = 0;
+  const DEFAULT_FETCH_CONCURRENCY = 4;
 
   interface HistoryRow {
     event: number;
