@@ -852,7 +852,7 @@ import Nav from "../components/Nav.astro";
 
     const historyResults = await mapWithConcurrency(
       ids,
-      8,
+      DEFAULT_FETCH_CONCURRENCY,
       async (id) => {
         try {
           const history = await fetchHistory(id, cacheBuster);
