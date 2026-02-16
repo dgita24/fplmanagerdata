@@ -1518,7 +1518,7 @@ import Nav from "../components/Nav.astro";
 
     const squadResults = await mapWithConcurrency(
       ids,
-      SQUADS_FETCH_CONCURRENCY,
+      DEFAULT_FETCH_CONCURRENCY,
       async (id) => {
         try {
           return await fetchManagerData(id, gw, cacheBuster);
