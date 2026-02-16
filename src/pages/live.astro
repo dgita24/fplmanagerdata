@@ -642,6 +642,7 @@ import Nav from "../components/Nav.astro";
 
   // Load token for cancellation
   let currentLoadToken = 0;
+  const LIVE_FETCH_CONCURRENCY = 4;
 
   closeSquadModal.addEventListener("click", () => {
     squadModal.classList.remove("is-open");
@@ -1533,7 +1534,7 @@ import Nav from "../components/Nav.astro";
 
     const managerDataResults = await mapWithConcurrency(
       ids,
-      8,
+      LIVE_FETCH_CONCURRENCY,
       async (id) => await fetchManagerLive(id, gw, cacheBuster),
       (completed, total) => {
         if (!background) {
