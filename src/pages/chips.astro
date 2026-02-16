@@ -30,6 +30,7 @@ import Nav from "../components/Nav.astro";
     </div>
 
     <div id="loading-status" class="meta-row"></div>
+    <div id="last-updated" class="meta-row"></div>
 
     <section id="chips-output" aria-live="polite"></section>
   </main>
@@ -150,6 +151,7 @@ import Nav from "../components/Nav.astro";
 
   const out = document.getElementById("chips-output");
   const loadingStatus = document.getElementById("loading-status");
+  const lastUpdatedEl = document.getElementById("last-updated");
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
   const managerFilterSelect = document.getElementById("manager-filter");
@@ -165,6 +167,17 @@ import Nav from "../components/Nav.astro";
   // Load token for cancellation
   let currentLoadToken = 0;
 
+  function formatUpdateTime(timestamp) {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    
+    if (isToday) {
+      return `Updated: ${date.toLocaleTimeString()}`;
+    } else {
+      return `Updated: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+    }
+  }
   function populateManagerFilter(data) {
     if (!managerFilterSelect) return;
 
@@ -647,6 +660,9 @@ import Nav from "../components/Nav.astro";
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${allData.length} managers</span>`;
+    if (lastUpdatedEl) {
+      lastUpdatedEl.textContent = formatUpdateTime(Date.now());
+    }
     refreshBtn.disabled = false;
 
     // Persist snapshot for restarts
@@ -676,8 +692,10 @@ import Nav from "../components/Nav.astro";
       out.innerHTML = makeChipsTable(snap.allData);
       attachChipButtons();
 
-      const ageMins = Math.round((Date.now() - Number(snap.savedAt)) / 60000);
-      loadingStatus.textContent = `Loaded from cache (${ageMins}m old).`;
+      loadingStatus.textContent = "";
+      if (lastUpdatedEl) {
+        lastUpdatedEl.textContent = formatUpdateTime(snap.savedAt);
+      }
 
       if (!isFresh(snap.savedAt, CHIPS_CACHE_TTL_MS)) {
         (async () => {
@@ -688,7 +706,7 @@ import Nav from "../components/Nav.astro";
             await loadChips(managerIds, bust);
           } catch (e) {
             console.warn("Background refresh failed:", e);
-            loadingStatus.textContent = `Loaded from cache. (Background refresh failed)`;
+            loadingStatus.textContent = `Background refresh failed`;
           }
         })();
       }
