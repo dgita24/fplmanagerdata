@@ -1905,6 +1905,7 @@ import Nav from "../components/Nav.astro";
   }
 
   async function openLeagueStandings(leagueId: number) {
+    openStandingsSheet()
     applyStatusEl.textContent = ''
     applySuccessEl.textContent = ''
     standingsBannerEl.innerHTML = '<div class="loading-spinner"></div> Loading league standings...'
