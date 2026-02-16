@@ -426,6 +426,29 @@ import Nav from "../components/Nav.astro";
       color: var(--color-text-muted);
     }
 
+    .manager-source-item__footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 4px;
+      gap: 8px;
+    }
+
+    .manager-source-item__delete {
+      border: none;
+      background: transparent;
+      font-size: 0.95rem;
+      cursor: pointer;
+      padding: 4px;
+      opacity: 0.5;
+      transition: opacity 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .manager-source-item__delete:hover {
+      opacity: 1;
+    }
+
     /* Make the sheet narrower on desktop, fullscreen on mobile */
     #manager-sources-sheet.top-sheet {
       max-width: 500px;
@@ -1237,6 +1260,10 @@ import Nav from "../components/Nav.astro";
   }
 
   async function fetchManagerImportSource(entryId: number): Promise<string> {
+    // Check if it's a featured manager
+    const isFeatured = featuredEntryIds.has(entryId)
+    
+    // Check if imported from a league
     const { data, error } = await supabase
       .from('user_league_imports')
       .select('league_id')
@@ -1244,23 +1271,28 @@ import Nav from "../components/Nav.astro";
       .eq('entry_id', entryId)
       .maybeSingle()
 
-    if (error || !data?.league_id) {
-      return 'Manually added'
+    if (!error && data?.league_id) {
+      const leagueId = Number(data.league_id)
+      const { data: leagueData } = await supabase
+        .from('user_saved_leagues')
+        .select('league_name')
+        .eq('user_id', currentUser.id)
+        .eq('league_id', leagueId)
+        .maybeSingle()
+
+      if (leagueData?.league_name) {
+        return `Imported from: ${leagueData.league_name}`
+      }
+
+      return `Imported from: League ${leagueId}`
     }
 
-    const leagueId = Number(data.league_id)
-    const { data: leagueData } = await supabase
-      .from('user_saved_leagues')
-      .select('league_name')
-      .eq('user_id', currentUser.id)
-      .eq('league_id', leagueId)
-      .maybeSingle()
-
-    if (leagueData?.league_name) {
-      return `Imported from: ${leagueData.league_name}`
+    // If not from a league, check if featured
+    if (isFeatured) {
+      return 'Added from: Featured managers'
     }
 
-    return `Imported from: League ${leagueId}`
+    return 'Manually added'
   }
 
   async function loadManagerSources() {
@@ -1311,10 +1343,40 @@ import Nav from "../components/Nav.astro";
             <span class="manager-source-item__name">${escapeHtml(m.name)}</span>
             <span class="manager-source-item__id">${m.entryId}</span>
           </div>
-          <div class="manager-source-item__source">${escapeHtml(m.source)}</div>
+          <div class="manager-source-item__footer">
+            <span class="manager-source-item__source">${escapeHtml(m.source)}</span>
+            <button type="button" class="manager-source-item__delete" data-entry-id="${m.entryId}" title="Remove manager">🗑️</button>
+          </div>
         </div>
       `)
       .join('')
+
+    // Attach delete handlers
+    managerSourcesListEl
+      .querySelectorAll<HTMLButtonElement>('.manager-source-item__delete')
+      .forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const entryId = Number(btn.dataset.entryId)
+          if (!Number.isFinite(entryId)) return
+          
+          if (!confirm(`Remove manager ${entryId} from your list?`)) return
+
+          // Remove from textarea
+          const currentIds = parseTextareaIds()
+          const updatedIds = currentIds.filter(id => id !== entryId)
+          textarea.value = updatedIds.join('\n')
+          
+          // Save to database
+          const success = await saveManagerIds(updatedIds)
+          if (success) {
+            updateCount()
+            // Reload the sources list
+            await loadManagerSources()
+          } else {
+            alert('Failed to remove manager. Please try again.')
+          }
+        })
+      })
   }
 
   managerSourcesOpenBtn?.addEventListener('click', () => {
