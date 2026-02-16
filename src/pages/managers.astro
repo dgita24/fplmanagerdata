@@ -366,51 +366,53 @@ import Nav from "../components/Nav.astro";
   }
 
   .btn-icon-info {
-      border: none;
-      background: transparent;
-      font-size: 1.1rem;
-      cursor: pointer;
-      padding: 4px 8px;
-      margin-left: 6px;
-      opacity: 0.7;
-      transition: opacity 0.15s ease;
-    }
+    border: none;
+    background: transparent;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 2px 6px;
+    margin-left: 4px;
+    opacity: 0.7;
+    transition: opacity 0.15s ease;
+    vertical-align: middle;
+    line-height: 1; 
+  }
 
-    .btn-icon-info:hover {
-      opacity: 1;
-    }
+  .btn-icon-info:hover {
+    opacity: 1;
+  }
 
-    .manager-sources-list {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
+  .manager-sources-list {
+    display: flex;
+     flex-direction: column;
+    gap: var(--space-2);
+  }
 
-    .manager-source-item {
-      padding: var(--space-2);
-      border: 1px solid var(--color-border);
-      border-radius: 8px;
-      background: var(--color-bg);
-    }
+  .manager-source-item {
+    padding: var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-bg);
+  }
 
-    .manager-source-item__id {
-      font-family: monospace;
-      font-size: 0.9rem;
-      color: var(--color-primary);
-      font-weight: 600;
-    }
+  .manager-source-item__id {
+    font-family: monospace;
+    font-size: 0.9rem;
+    color: var(--color-primary);
+    font-weight: 600;
+  }
 
-    .manager-source-item__name {
-      margin-top: 4px;
-      font-size: 0.95rem;
-      font-weight: 500;
-    }
+  .manager-source-item__name {
+    margin-top: 4px;
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
 
-    .manager-source-item__source {
-      margin-top: 4px;
-      font-size: 0.85rem;
-      color: var(--color-text-muted);
-    }
+  .manager-source-item__source {
+    margin-top: 4px;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
 
   .ids-count-inline {
     font-size: inherit;
