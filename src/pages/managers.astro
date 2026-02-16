@@ -383,37 +383,72 @@ import Nav from "../components/Nav.astro";
   }
 
   .manager-sources-list {
-    display: flex;
-     flex-direction: column;
-    gap: var(--space-1);
-  }
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
 
-  .manager-source-item {
-    padding: var(--space-1);
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    background: var(--color-bg);
-  }
+    .manager-source-item {
+      padding: 10px 12px;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      background: var(--color-bg);
+      line-height: 1.4;
+    }
 
-  .manager-source-item__id {
-    font-family: monospace;
-    font-size: 0.9rem;
-    color: var(--color-primary);
-    font-weight: 600;
-  }
+    .manager-source-item__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
 
-  .manager-source-item__name {
-    margin-top: 4px;
-    font-size: 0.95rem;
-    font-weight: 500;
-  }
+    .manager-source-item__name {
+      font-size: 0.95rem;
+      font-weight: 500;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
-  .manager-source-item__source {
-    margin-top: 4px;
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-  }
+    .manager-source-item__id {
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: var(--color-primary);
+      font-weight: 600;
+      flex-shrink: 0;
+    }
 
+    .manager-source-item__source {
+      margin-top: 4px;
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+    }
+
+    /* Make the sheet narrower on desktop, fullscreen on mobile */
+    #manager-sources-sheet.top-sheet {
+      max-width: 500px;
+    }
+
+    @media (max-width: 640px) {
+      #manager-sources-sheet.top-sheet {
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        max-width: 100%;
+        height: 100vh;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+
+      #manager-sources-sheet .top-sheet__header {
+        padding-top: calc(var(--space-3) + env(safe-area-inset-top));
+      }
+    }
   .ids-count-inline {
     font-size: inherit;
     font-weight: inherit;
@@ -1272,8 +1307,10 @@ import Nav from "../components/Nav.astro";
     managerSourcesListEl.innerHTML = filtered
       .map((m) => `
         <div class="manager-source-item">
-          <div class="manager-source-item__id">${m.entryId}</div>
-          <div class="manager-source-item__name">${escapeHtml(m.name)}</div>
+          <div class="manager-source-item__header">
+            <span class="manager-source-item__name">${escapeHtml(m.name)}</span>
+            <span class="manager-source-item__id">${m.entryId}</span>
+          </div>
           <div class="manager-source-item__source">${escapeHtml(m.source)}</div>
         </div>
       `)
