@@ -588,7 +588,7 @@ import Nav from "../components/Nav.astro";
     // Fetch manager squads concurrently with limit of 8
     const squadResults = await mapWithConcurrency(
       ids,
-      8,
+      DEFAULT_FETCH_CONCURRENCY,
       async (id) => {
         try {
           return await fetchManagerSquad(id, gw, cacheBuster);
