@@ -9,7 +9,7 @@ export const featuredManagers: FeaturedManager[] = [
   { name: "Andy LTFPL", entryId: 44, note: "YouTube" },
   { name: "FPL Harry", entryId: 1320, note: "YouTube" },
   { name: "FPL Raptor", entryId: 1587, note: "YouTube" },
-  { name: "FPL Focal", entryId: 200, note: "YouTube" },
+  { name: "FPL Pickle", entryId: 14501, note: "YouTube" },
   { name: "Ben Crellin", entryId: 6586, note: "Expert" },
   { name: "Tom Dollimore", entryId: 497000, note: "Expert" },
   { name: "Fabio Borges", entryId: 4783108, note: "Expert" },
