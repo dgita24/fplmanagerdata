@@ -1327,7 +1327,7 @@ import Nav from "../components/Nav.astro";
     openManagerHistorySheet()
 
     try {
-      const res = await fetch(`/api/entry/${entryId}/history/`)
+      const res = await fetch(`/api/fpl/entry/${entryId}/history`)
       if (!res.ok) throw new Error('History fetch failed')
       const data = await res.json()
       const past = Array.isArray(data?.past) ? data.past : []
