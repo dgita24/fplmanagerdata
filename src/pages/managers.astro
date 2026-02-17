@@ -730,7 +730,7 @@ import Nav from "../components/Nav.astro";
 
   .manager-history-row {
     display: grid;
-    grid-template-columns: 1.1fr 0.85fr 1.3fr;
+    grid-template-columns: 1fr 1.05fr 1.15fr; /* give points more space */
     column-gap: 6px; /* tighter between season + points */
     padding: 8px 10px;
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -751,7 +751,8 @@ import Nav from "../components/Nav.astro";
 
   .manager-history-col--points {
     color: var(--color-text-muted);
-    padding-right: 18px; /* extra space before Rank column */
+    padding-right: 12px;
+    white-space: nowrap;
   }
 
   .manager-history-col--rank {
