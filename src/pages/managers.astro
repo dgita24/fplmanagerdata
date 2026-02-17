@@ -155,6 +155,7 @@ import Nav from "../components/Nav.astro";
           <div>
             <div id="manager-history-title" class="top-sheet__title">Manager history</div>
             <div class="top-sheet__subtitle">Season-ending ranks from previous years.</div>
+            <div id="manager-history-summary" class="top-sheet__subtitle manager-history-summary"></div>
           </div>
           <button type="button" id="manager-history-close" class="top-sheet__close" aria-label="Close">✕</button>
         </div>
@@ -728,30 +729,41 @@ import Nav from "../components/Nav.astro";
   }
 
   .manager-history-row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-2);
+    display: grid;
+    grid-template-columns: 1.1fr 0.85fr 1.3fr;
+    column-gap: 6px; /* tighter between season + points */
     padding: 8px 10px;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.03);
   }
 
-  .manager-history-row__season {
-    font-weight: 700;
-  }
-
-  .manager-history-row__meta {
-    display: flex;
-    gap: 12px;
-    color: var(--color-text-muted);
+  .manager-history-col {
+    padding: 0 6px;
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
     font-size: var(--text-sm);
   }
 
-  .manager-history-row__rank {
+  .manager-history-col--season {
+    font-weight: 700;
+    padding-left: 0;
+  }
+
+  .manager-history-col--points {
+    color: var(--color-text-muted);
+    padding-right: 18px; /* extra space before Rank column */
+  }
+
+  .manager-history-col--rank {
+    border-right: none;
     font-weight: 600;
   }
+
+  .manager-history-summary {
+    display: grid;
+    gap: 2px;
+  }
+
 
   /* Saved leagues: force 2-row layout (title row, then actions row) */
   #league-sheet #league-list .saved-league-card {
@@ -1264,6 +1276,7 @@ import Nav from "../components/Nav.astro";
   const managerHistoryTitleEl = document.getElementById('manager-history-title') as HTMLElement
   const managerHistoryStatusEl = document.getElementById('manager-history-status') as HTMLElement
   const managerHistoryListEl = document.getElementById('manager-history-list') as HTMLElement
+  const managerHistorySummaryEl = document.getElementById('manager-history-summary') as HTMLElement
 
   const selectedFeaturedIds = new Set<number>()
   
@@ -1334,25 +1347,48 @@ import Nav from "../components/Nav.astro";
 
       if (past.length === 0) {
         managerHistoryStatusEl.textContent = 'No season history found.'
+        managerHistorySummaryEl.textContent = ''
         return
       }
 
+      const sortedPast = [...past].sort((a: any, b: any) => {
+        const ay = Number(String(a?.season_name ?? '').slice(0, 4)) || 0
+        const by = Number(String(b?.season_name ?? '').slice(0, 4)) || 0
+        return by - ay
+      })
+
+      function avgRankForLast(n: number) {
+        const ranks = sortedPast.slice(0, n)
+          .map((row: any) => Number(row?.rank))
+          .filter((r: number) => Number.isFinite(r))
+        if (ranks.length === 0) return '—'
+        const avg = Math.round(ranks.reduce((sum, r) => sum + r, 0) / ranks.length)
+        return formatHistoryNumber(avg)
+      }
+
+      const avg3 = avgRankForLast(3)
+      const avg5 = avgRankForLast(5)
+
+      managerHistorySummaryEl.innerHTML = `
+        <div>Avg rank (last 3 seasons): <strong>${avg3}</strong></div>
+        <div>Avg rank (last 5 seasons): <strong>${avg5}</strong></div>
+      `
+
       managerHistoryStatusEl.textContent = ''
-      managerHistoryListEl.innerHTML = past.map((row: any) => {
+      managerHistoryListEl.innerHTML = sortedPast.map((row: any) => {
         const season = escapeHtml(String(row?.season_name ?? 'Unknown season'))
         const points = formatHistoryNumber(row?.total_points)
         const rank = formatHistoryNumber(row?.rank)
 
         return `
           <div class="manager-history-row">
-            <span class="manager-history-row__season">${season}</span>
-            <span class="manager-history-row__meta">
-              <span>${points} pts</span>
-              <span class="manager-history-row__rank">Rank ${rank}</span>
-            </span>
+            <div class="manager-history-col manager-history-col--season">${season}</div>
+            <div class="manager-history-col manager-history-col--points">${points} pts</div>
+            <div class="manager-history-col manager-history-col--rank">Rank ${rank}</div>
           </div>
         `
       }).join('')
+
     } catch (e) {
       console.error(e)
       managerHistoryStatusEl.textContent = 'Failed to load history. Please try again.'
