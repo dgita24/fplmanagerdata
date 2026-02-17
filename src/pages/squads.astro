@@ -1342,7 +1342,14 @@ import Nav from "../components/Nav.astro";
   }
 
   async function showPlayerModal(playerId) {
-    const player = playerCache.get(playerId);
+    let player = playerCache.get(playerId);
+
+    if (!player && (playerCache.size === 0 || teamCache.size === 0)) {
+      const snap = loadSquadsSnapshot();
+      const cacheBuster = snap?.savedAt ? String(snap.savedAt) : undefined;
+      await fetchBootstrapData(cacheBuster);
+      player = playerCache.get(playerId);
+    }
     
     if (!player) {
       const playerModalContent = document.getElementById("player-modal-content");
@@ -1600,6 +1607,11 @@ import Nav from "../components/Nav.astro";
       snap.allSquadsData.length > 0
     ) {
       allSquadsData = snap.allSquadsData;
+      // Ensure bootstrap caches exist when page was restored from snapshot
+      const cacheBuster = String(snap.savedAt || Date.now());
+      if (playerCache.size === 0 || teamCache.size === 0) {
+        await fetchBootstrapData(cacheBuster);
+      }
       latestGW = snap.latestGW || latestGW;
 
       populateGWSelector(latestGW);
