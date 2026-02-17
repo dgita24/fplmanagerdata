@@ -149,6 +149,22 @@ import Nav from "../components/Nav.astro";
         </div>
       </section>
 
+      <!-- Manager history sheet -->
+      <section id="manager-history-sheet" class="top-sheet" aria-hidden="true">
+        <div class="top-sheet__header">
+          <div>
+            <div id="manager-history-title" class="top-sheet__title">Manager history</div>
+            <div class="top-sheet__subtitle">Season-ending ranks from previous years.</div>
+          </div>
+          <button type="button" id="manager-history-close" class="top-sheet__close" aria-label="Close">✕</button>
+        </div>
+
+        <div class="top-sheet__body">
+          <div id="manager-history-status" class="top-sheet__status" aria-live="polite"></div>
+          <div id="manager-history-list" class="manager-history-list"></div>
+        </div>
+      </section>
+
       <!-- League import sheet (save league IDs, choose a league) -->
       <section id="league-sheet" class="top-sheet" aria-hidden="true">
         <div class="top-sheet__header">
@@ -686,6 +702,57 @@ import Nav from "../components/Nav.astro";
     white-space: nowrap;
   }
 
+  .featured-item__name-button {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: var(--color-primary);
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .featured-item__name-button:hover {
+    color: #93c5fd; /* light blue */
+    text-decoration: underline;
+  }
+
+  .featured-item__name-button:hover {
+    text-decoration: underline;
+  }
+
+  .manager-history-list {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .manager-history-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .manager-history-row__season {
+    font-weight: 700;
+  }
+
+  .manager-history-row__meta {
+    display: flex;
+    gap: 12px;
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  .manager-history-row__rank {
+    font-weight: 600;
+  }
+
   /* Saved leagues: force 2-row layout (title row, then actions row) */
   #league-sheet #league-list .saved-league-card {
     flex-direction: column;
@@ -862,7 +929,8 @@ import Nav from "../components/Nav.astro";
     /* Fullscreen the two league sheets on mobile */
     #league-sheet.top-sheet,
     #league-standings-sheet.top-sheet,
-    #manager-leagues-sheet.top-sheet {
+    #manager-leagues-sheet.top-sheet,
+    #manager-history-sheet.top-sheet {
       top: 0;
       right: 0;
       bottom: 0;
@@ -1191,6 +1259,11 @@ import Nav from "../components/Nav.astro";
   const featuredClearBtn = document.getElementById('featured-clear') as HTMLButtonElement
   const featuredStatusEl = document.getElementById('featured-status') as HTMLElement
   const featuredDeltaEl = document.getElementById('featured-delta') as HTMLElement
+  const managerHistorySheet = document.getElementById('manager-history-sheet') as HTMLElement
+  const managerHistoryCloseBtn = document.getElementById('manager-history-close') as HTMLButtonElement
+  const managerHistoryTitleEl = document.getElementById('manager-history-title') as HTMLElement
+  const managerHistoryStatusEl = document.getElementById('manager-history-status') as HTMLElement
+  const managerHistoryListEl = document.getElementById('manager-history-list') as HTMLElement
 
   const selectedFeaturedIds = new Set<number>()
   
@@ -1230,6 +1303,60 @@ import Nav from "../components/Nav.astro";
         default: return ch
       }
     })
+  }
+
+  function openManagerHistorySheet() {
+    managerHistorySheet.classList.add('is-open')
+    managerHistorySheet.setAttribute('aria-hidden', 'false')
+  }
+
+  function closeManagerHistorySheet() {
+    managerHistorySheet.classList.remove('is-open')
+    managerHistorySheet.setAttribute('aria-hidden', 'true')
+  }
+
+  function formatHistoryNumber(value: number | null | undefined) {
+    if (!Number.isFinite(Number(value))) return '—'
+    return new Intl.NumberFormat('en-GB').format(Number(value))
+  }
+
+  async function loadManagerHistory(entryId: number, name: string) {
+    managerHistoryTitleEl.textContent = `${name} — Season history`
+    managerHistoryStatusEl.textContent = 'Loading history...'
+    managerHistoryListEl.innerHTML = ''
+    openManagerHistorySheet()
+
+    try {
+      const res = await fetch(`/api/entry/${entryId}/history/`)
+      if (!res.ok) throw new Error('History fetch failed')
+      const data = await res.json()
+      const past = Array.isArray(data?.past) ? data.past : []
+
+      if (past.length === 0) {
+        managerHistoryStatusEl.textContent = 'No season history found.'
+        return
+      }
+
+      managerHistoryStatusEl.textContent = ''
+      managerHistoryListEl.innerHTML = past.map((row: any) => {
+        const season = escapeHtml(String(row?.season_name ?? 'Unknown season'))
+        const points = formatHistoryNumber(row?.total_points)
+        const rank = formatHistoryNumber(row?.rank)
+
+        return `
+          <div class="manager-history-row">
+            <span class="manager-history-row__season">${season}</span>
+            <span class="manager-history-row__meta">
+              <span>${points} pts</span>
+              <span class="manager-history-row__rank">Rank ${rank}</span>
+            </span>
+          </div>
+        `
+      }).join('')
+    } catch (e) {
+      console.error(e)
+      managerHistoryStatusEl.textContent = 'Failed to load history. Please try again.'
+    }
   }
 
   function parseTextareaIds(): number[] {
@@ -1449,11 +1576,19 @@ import Nav from "../components/Nav.astro";
       return `
         <label class="featured-item">
           <input type="checkbox" class="featured-check" data-id="${entryId}" ${checked} />
-          <span class="featured-item__name">${safeName}</span>
+          <button
+            type="button"
+            class="featured-item__name featured-item__name-button"
+            data-entry-id="${entryId}"
+            data-name="${safeName}"
+          >
+            ${safeName}
+          </button>
           ${safeNote ? `<span class="featured-item__note">— ${safeNote}</span>` : ``}
           <span class="featured-item__id">${safeNote ? `— ` : ``}<code>${entryId}</code></span>
         </label>
       `
+
     }).join('')
 
     featuredListEl.querySelectorAll<HTMLInputElement>('input.featured-check').forEach((cb) => {
@@ -1465,6 +1600,19 @@ import Nav from "../components/Nav.astro";
         else selectedFeaturedIds.delete(id)
 
         updateFeaturedActions()
+      })
+    })
+
+    featuredListEl.querySelectorAll<HTMLButtonElement>('button.featured-item__name-button').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+
+        const entryId = Number(btn.dataset.entryId)
+        if (!Number.isFinite(entryId)) return
+
+        const managerName = btn.dataset.name ? String(btn.dataset.name) : `Manager ${entryId}`
+        loadManagerHistory(entryId, managerName)
       })
     })
   }
@@ -1489,6 +1637,7 @@ import Nav from "../components/Nav.astro";
   })
 
   featuredCloseBtn?.addEventListener('click', () => closeFeaturedSheet())
+  managerHistoryCloseBtn?.addEventListener('click', () => closeManagerHistorySheet())
 
   featuredClearBtn?.addEventListener('click', () => {
     featuredStatusEl.textContent = ''
