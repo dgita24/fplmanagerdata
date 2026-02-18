@@ -861,12 +861,19 @@ import Nav from "../components/Nav.astro";
     } catch (e) {
       console.error(`Error fetching live data for manager ${entryId}:`, e);
       return null;
+
     }
   }
 
-  function getPlayerFixture(teamId: number): FixtureInfo | null {
-    return fixturesCache.find(f => f.team_h === teamId || f.team_a === teamId) || null;
-  }
+  function getPlayerFixtures(teamId: number): FixtureInfo[] {
+  return fixturesCache
+    .filter(f => f.team_h === teamId || f.team_a === teamId)
+    .sort((a, b) => {
+      const aTime = a.kickoff_time ? new Date(a.kickoff_time).getTime() : 0;
+      const bTime = b.kickoff_time ? new Date(b.kickoff_time).getTime() : 0;
+      return aTime - bTime;
+    });
+}
 
   function calculateDefcon(position: number, defensiveContribution: number): { points: number; threshold: number } {
     if (position === 1) return { points: 0, threshold: 0 };
@@ -874,6 +881,74 @@ import Nav from "../components/Nav.astro";
     const points = defensiveContribution >= threshold ? 2 : 0;
     return { points, threshold };
   }
+
+  function buildStatsFromExplain(statsRows: any[]): LiveStats {
+  const base: LiveStats = {
+    points: 0,
+    bonus: 0,
+    minutes: 0,
+    bps: 0,
+    goals_scored: 0,
+    assists: 0,
+    clean_sheets: 0,
+    goals_conceded: 0,
+    own_goals: 0,
+    penalties_saved: 0,
+    penalties_missed: 0,
+    yellow_cards: 0,
+    red_cards: 0,
+    saves: 0,
+    clearances_blocks_interceptions: 0,
+    recoveries: 0,
+    tackles: 0,
+    defensive_contribution: 0
+  };
+
+  if (!Array.isArray(statsRows)) return base;
+
+  statsRows.forEach((row: any) => {
+    const key = row?.identifier as keyof LiveStats;
+    if (!key) return;
+    if (key in base) {
+      (base as any)[key] = Number(row?.value || 0);
+    }
+  });
+
+  return base;
+}
+
+function buildBreakdownRows(
+  stats: LiveStats,
+  position: number,
+  isFinished: boolean,
+  projBonus: number
+) {
+  const isGK = position === 1;
+  const isDef = position === 2;
+  const defcon = calculateDefcon(position, stats.defensive_contribution);
+
+  return [
+    { label: "Minutes", value: stats.minutes, points: stats.minutes >= 60 ? 2 : (stats.minutes > 0 ? 1 : 0), show: true },
+    { label: "Goals", value: stats.goals_scored, points: getGoalPoints(position, stats.goals_scored), show: stats.goals_scored > 0 },
+    { label: "Assists", value: stats.assists, points: stats.assists * 3, show: stats.assists > 0 },
+    { label: "Clean Sheet", value: stats.clean_sheets, points: getCleanSheetPoints(position, stats.clean_sheets), show: stats.clean_sheets > 0 && getCleanSheetPoints(position, stats.clean_sheets) > 0 },
+    { label: "Goals Conceded", value: stats.goals_conceded, points: (isGK || isDef) ? -Math.floor(stats.goals_conceded / 2) : 0, show: (isGK || isDef) && stats.goals_conceded >= 2 },
+    { label: "Saves", value: stats.saves, points: Math.floor(stats.saves / 3), show: isGK && stats.saves > 0 },
+    { label: "Pen Saved", value: stats.penalties_saved, points: stats.penalties_saved * 5, show: stats.penalties_saved > 0 },
+    { label: "Pen Missed", value: stats.penalties_missed, points: stats.penalties_missed * -2, show: stats.penalties_missed > 0 },
+    { label: "Own Goals", value: stats.own_goals, points: stats.own_goals * -2, show: stats.own_goals > 0 },
+    { label: "Yellow Card", value: stats.yellow_cards, points: stats.yellow_cards * -1, show: stats.yellow_cards > 0 },
+    { label: "Red Card", value: stats.red_cards, points: stats.red_cards * -3, show: stats.red_cards > 0 },
+    { label: "Bonus", value: stats.bonus || projBonus, points: stats.bonus || projBonus, show: (stats.bonus > 0) || (projBonus > 0 && isFinished) },
+    {
+      label: "DEFCON",
+      value: `${stats.defensive_contribution}/${defcon.threshold}`,
+      points: defcon.points,
+      show: !isGK && stats.minutes > 0,
+      isProgress: true
+    }
+  ];
+}
 
   function normalizeBpsRows(rows: any[], teamId: number): BpsEntry[] {
     if (!Array.isArray(rows)) return [];
@@ -996,29 +1071,25 @@ import Nav from "../components/Nav.astro";
     }
 
     const teamInfo = teamCache.get(player.team);
-    const fixture = getPlayerFixture(player.team);
+    const fixtures = getPlayerFixtures(player.team);
     const { started, finished, finishedProvisional } = getTeamGwStatusLocal(player.team, gw);
     const isFinished = finished || finishedProvisional;
     const computed = getPlayerLiveComputedLocal(playerId, player.team, gw);
-
-    let opponentStr = "";
-    let scoreStr = "";
-    if (fixture) {
-      const isHome = fixture.team_h === player.team;
-      const oppTeamId = isHome ? fixture.team_a : fixture.team_h;
-      const oppTeam = teamCache.get(oppTeamId);
-      opponentStr = isHome ? `vs ${oppTeam?.shortName || '???'}` : `@ ${oppTeam?.shortName || '???'}`;
-
-      if (fixture.started) {
-        const homeScore = fixture.team_h_score ?? 0;
-        const awayScore = fixture.team_a_score ?? 0;
-        scoreStr = isHome ? `${homeScore} - ${awayScore}` : `${awayScore} - ${homeScore}`;
+        const explainByFixtureId = new Map<number, any[]>();
+    try {
+      const summaryRes = await fetch(`/api/fpl/element-summary/${playerId}/?v=${Date.now()}`);
+      if (summaryRes.ok) {
+        const summary = await summaryRes.json();
+        const explainRows = Array.isArray(summary.explain) ? summary.explain : [];
+        explainRows.forEach((row: any) => {
+          explainByFixtureId.set(Number(row.fixture), Array.isArray(row.stats) ? row.stats : []);
+        });
       }
+    } catch (e) {
+      console.warn("Failed to load element-summary explain data", e);
     }
 
-    const statusText = isFinished ? "Full Time" : (started ? "🔴 Live" : "Not Started");
-    const statusClass = isFinished ? "status-fin" : (started ? "status-live" : "status-ns");
-
+    
     const stats = liveStats || {
       points: 0, bonus: 0, minutes: 0, bps: 0,
       goals_scored: 0, assists: 0, clean_sheets: 0, goals_conceded: 0,
@@ -1028,33 +1099,6 @@ import Nav from "../components/Nav.astro";
     };
 
     const projBonus = projectedBonusCache.get(`${gw}:${playerId}`) || 0;
-    const isGK = player.position === 1;
-    const isDef = player.position === 2;
-
-    const defcon = calculateDefcon(player.position, stats.defensive_contribution);
-
-    const breakdown: { label: string; value: string | number; points: number; show: boolean; isProgress?: boolean }[] = [
-      { label: "Minutes", value: stats.minutes, points: stats.minutes >= 60 ? 2 : (stats.minutes > 0 ? 1 : 0), show: true },
-      { label: "Goals", value: stats.goals_scored, points: getGoalPoints(player.position, stats.goals_scored), show: stats.goals_scored > 0 },
-      { label: "Assists", value: stats.assists, points: stats.assists * 3, show: stats.assists > 0 },
-      { label: "Clean Sheet", value: stats.clean_sheets, points: getCleanSheetPoints(player.position, stats.clean_sheets), show: stats.clean_sheets > 0 && getCleanSheetPoints(player.position, stats.clean_sheets) > 0 },
-      { label: "Goals Conceded", value: stats.goals_conceded, points: (isGK || isDef) ? -Math.floor(stats.goals_conceded / 2) : 0, show: (isGK || isDef) && stats.goals_conceded >= 2 },
-      { label: "Saves", value: stats.saves, points: Math.floor(stats.saves / 3), show: isGK && stats.saves > 0 },
-      { label: "Pen Saved", value: stats.penalties_saved, points: stats.penalties_saved * 5, show: stats.penalties_saved > 0 },
-      { label: "Pen Missed", value: stats.penalties_missed, points: stats.penalties_missed * -2, show: stats.penalties_missed > 0 },
-      { label: "Own Goals", value: stats.own_goals, points: stats.own_goals * -2, show: stats.own_goals > 0 },
-      { label: "Yellow Card", value: stats.yellow_cards, points: stats.yellow_cards * -1, show: stats.yellow_cards > 0 },
-      { label: "Red Card", value: stats.red_cards, points: stats.red_cards * -3, show: stats.red_cards > 0 },
-      { label: "Bonus", value: stats.bonus || projBonus, points: stats.bonus || projBonus, show: (stats.bonus > 0) || (projBonus > 0 && isFinished) },
-      {
-        label: "DEFCON",
-        value: `${stats.defensive_contribution}/${defcon.threshold}`,
-        points: defcon.points,
-        show: !isGK && stats.minutes > 0,
-        isProgress: true
-      }
-    ];
-
     let html = `
       <div class="player-modal-header">
         <div class="player-modal-info">
@@ -1062,7 +1106,6 @@ import Nav from "../components/Nav.astro";
           <div class="player-modal-meta">
             <span class="player-modal-team">${teamInfo?.shortName || '???'}</span>
             <span class="player-modal-pos">${positionLabel(player.position)}</span>
-            ${opponentStr ? `<span class="player-modal-opp">${opponentStr}</span>` : ''}
           </div>
         </div>
         <div class="player-modal-points">
@@ -1070,61 +1113,101 @@ import Nav from "../components/Nav.astro";
           <span class="player-modal-pts-label">pts</span>
         </div>
       </div>
-
-      <div class="player-modal-match">
-        <span class="player-modal-status ${statusClass}">${statusText}</span>
-        ${scoreStr ? `<span class="player-modal-score">${scoreStr}</span>` : ''}
-      </div>
-
-      <div class="player-modal-breakdown">
-        <h3 class="player-modal-section-title">Points Breakdown</h3>
-        <div class="breakdown-list">
     `;
 
-    for (const item of breakdown) {
-      if (!item.show) continue;
+    const fixtureBlocks = fixtures.length ? fixtures : [null];
 
-      let pointsClass = item.points > 0 ? 'points-positive' : (item.points < 0 ? 'points-negative' : '');
-      let pointsDisplay: string = item.points > 0 ? `+${item.points}` : String(item.points);
-      let valueClass = '';
+    for (const fx of fixtureBlocks) {
+      if (!fx) {
+        continue;
+      }
 
-      if (item.isProgress) {
-        const achieved = item.points > 0;
-        pointsClass = achieved ? 'points-positive' : 'points-pending';
-        valueClass = achieved ? 'value-achieved' : 'value-progress';
-        if (!achieved) {
-          pointsDisplay = '—';
+      const isHome = fx.team_h === player.team;
+      const oppTeamId = isHome ? fx.team_a : fx.team_h;
+      const oppTeam = teamCache.get(oppTeamId);
+      const opponentStr = isHome ? `vs ${oppTeam?.shortName || '???'}` : `@ ${oppTeam?.shortName || '???'}`;
+
+      const started = !!fx.started;
+      const finished = !!fx.finished;
+      const finishedProvisional = !!fx.finished_provisional;
+      const isFinished = finished || finishedProvisional;
+
+      let scoreStr = "";
+      if (started) {
+        const homeScore = fx.team_h_score ?? 0;
+        const awayScore = fx.team_a_score ?? 0;
+        scoreStr = isHome ? `${homeScore} - ${awayScore}` : `${awayScore} - ${homeScore}`;
+      }
+
+      const statusText = isFinished ? "Full Time" : (started ? "🔴 Live" : "Not Started");
+      const statusClass = isFinished ? "status-fin" : (started ? "status-live" : "status-ns");
+
+      const explainStatsRows = explainByFixtureId.get(Number(fx.id)) || [];
+      const fixtureStats = explainStatsRows.length ? buildStatsFromExplain(explainStatsRows) : stats;
+
+      const breakdown = buildBreakdownRows(
+        fixtureStats,
+        player.position,
+        isFinished,
+        explainStatsRows.length ? 0 : projBonus
+      );
+
+      html += `
+        <div class="player-modal-match">
+          <span class="player-modal-status ${statusClass}">${statusText}</span>
+          ${scoreStr ? `<span class="player-modal-score">${scoreStr}</span>` : ''}
+          <span class="player-modal-opp">${opponentStr}</span>
+        </div>
+
+        <div class="player-modal-breakdown">
+          <h3 class="player-modal-section-title">Points Breakdown</h3>
+          <div class="breakdown-list">
+      `;
+
+      for (const item of breakdown) {
+        if (!item.show) continue;
+
+        let pointsClass = item.points > 0 ? 'points-positive' : (item.points < 0 ? 'points-negative' : '');
+        let pointsDisplay: string = item.points > 0 ? `+${item.points}` : String(item.points);
+        let valueClass = '';
+
+        if (item.isProgress) {
+          const achieved = item.points > 0;
+          pointsClass = achieved ? 'points-positive' : 'points-pending';
+          valueClass = achieved ? 'value-achieved' : 'value-progress';
+          if (!achieved) {
+            pointsDisplay = '—';
+          }
         }
+
+        html += `
+          <div class="breakdown-row ${item.isProgress ? 'breakdown-row--defcon' : ''}">
+            <span class="breakdown-label">${item.label}</span>
+            <span class="breakdown-value ${valueClass}">${item.value}</span>
+            <span class="breakdown-points ${pointsClass}">${pointsDisplay}</span>
+          </div>
+        `;
+      }
+
+      if (!isFinished && !explainStatsRows.length && projBonus > 0) {
+        html += `
+          <div class="breakdown-row breakdown-row--projected">
+            <span class="breakdown-label">Proj. Bonus</span>
+            <span class="breakdown-value">—</span>
+            <span class="breakdown-points points-projected">+${projBonus}</span>
+          </div>
+        `;
       }
 
       html += `
-        <div class="breakdown-row ${item.isProgress ? 'breakdown-row--defcon' : ''}">
-          <span class="breakdown-label">${item.label}</span>
-          <span class="breakdown-value ${valueClass}">${item.value}</span>
-          <span class="breakdown-points ${pointsClass}">${pointsDisplay}</span>
+          </div>
         </div>
+
+        ${renderFixtureBpsTable(fx)}
       `;
     }
-
-    if (!isFinished && projBonus > 0) {
-      html += `
-        <div class="breakdown-row breakdown-row--projected">
-          <span class="breakdown-label">Proj. Bonus</span>
-          <span class="breakdown-value">—</span>
-          <span class="breakdown-points points-projected">+${projBonus}</span>
-        </div>
-      `;
-    }
-
-    html += `
-        </div>
-      </div>
-
-      ${renderFixtureBpsTable(fixture)}
-    `;
 
     playerModalContent.innerHTML = html;
-
     const playerNameEl = playerModalContent.querySelector('.player-modal-name');
     if (playerNameEl && gwPointsModal) {
       makePlayerNameClickable(playerNameEl, playerId, player.name, gwPointsModal, teamCache);
