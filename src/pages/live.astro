@@ -950,6 +950,33 @@ function buildBreakdownRows(
   ];
 }
 
+  function buildStatsFromHistoryRow(row: any): LiveStats {
+    return {
+      points: Number(row?.total_points || 0),
+      bonus: Number(row?.bonus || 0),
+      minutes: Number(row?.minutes || 0),
+      bps: Number(row?.bps || 0),
+      goals_scored: Number(row?.goals_scored || 0),
+      assists: Number(row?.assists || 0),
+      clean_sheets: Number(row?.clean_sheets || 0),
+      goals_conceded: Number(row?.goals_conceded || 0),
+      own_goals: Number(row?.own_goals || 0),
+      penalties_saved: Number(row?.penalties_saved || 0),
+      penalties_missed: Number(row?.penalties_missed || 0),
+      yellow_cards: Number(row?.yellow_cards || 0),
+      red_cards: Number(row?.red_cards || 0),
+      saves: Number(row?.saves || 0),
+      clearances_blocks_interceptions: Number(row?.clearances_blocks_interceptions || 0),
+      recoveries: Number(row?.recoveries || 0),
+      tackles: Number(row?.tackles || 0),
+      defensive_contribution: Number(row?.defensive_contribution || 0)
+    };
+  }
+
+  function makeFixtureKey(round: number, opponentTeamId: number, wasHome: boolean) {
+    return `${round}:${opponentTeamId}:${wasHome ? 'H' : 'A'}`;
+  }
+
   function normalizeBpsRows(rows: any[], teamId: number): BpsEntry[] {
     if (!Array.isArray(rows)) return [];
 
@@ -1075,22 +1102,30 @@ function buildBreakdownRows(
     const { started, finished, finishedProvisional } = getTeamGwStatusLocal(player.team, gw);
     const isFinished = finished || finishedProvisional;
     const computed = getPlayerLiveComputedLocal(playerId, player.team, gw);
-        const explainByFixtureId = new Map<number, any[]>();
+    const explainByFixtureId = new Map<number, any[]>();
+    const historyStatsByKey = new Map<string, LiveStats>();
     try {
       const summaryRes = await fetch(`/api/fpl/element-summary/${playerId}/?v=${Date.now()}`);
       if (summaryRes.ok) {
         const summary = await summaryRes.json();
+
         const explainRows = Array.isArray(summary.explain) ? summary.explain : [];
         explainRows.forEach((row: any) => {
           explainByFixtureId.set(Number(row.fixture), Array.isArray(row.stats) ? row.stats : []);
         });
+
+        const historyRows = Array.isArray(summary.history) ? summary.history : [];
+        historyRows.forEach((row: any) => {
+          const key = makeFixtureKey(Number(row.round), Number(row.opponent_team), !!row.was_home);
+          historyStatsByKey.set(key, buildStatsFromHistoryRow(row));
+        });
       }
     } catch (e) {
-      console.warn("Failed to load element-summary explain data", e);
+      console.warn("Failed to load element-summary explain/history data", e);
     }
 
     
-    const stats = liveStats || {
+    const emptyStats: LiveStats = {
       points: 0, bonus: 0, minutes: 0, bps: 0,
       goals_scored: 0, assists: 0, clean_sheets: 0, goals_conceded: 0,
       own_goals: 0, penalties_saved: 0, penalties_missed: 0,
@@ -1143,7 +1178,12 @@ function buildBreakdownRows(
       const statusClass = isFinished ? "status-fin" : (started ? "status-live" : "status-ns");
 
       const explainStatsRows = explainByFixtureId.get(Number(fx.id)) || [];
-      const fixtureStats = explainStatsRows.length ? buildStatsFromExplain(explainStatsRows) : stats;
+      const fixtureKey = makeFixtureKey(Number(fx.event), Number(oppTeamId), !!fx.is_home);
+      const historyStats = historyStatsByKey.get(fixtureKey);
+
+      const fixtureStats = historyStats
+        ? historyStats
+        : (explainStatsRows.length ? buildStatsFromExplain(explainStatsRows) : emptyStats);
 
       const breakdown = buildBreakdownRows(
         fixtureStats,
