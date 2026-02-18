@@ -190,54 +190,12 @@ export function initGWPointsModal(modalId = 'gw-points-modal') {
         throw new Error(`Failed to fetch player data: ${response.status}`);
       }
       const data = await response.json();
-      const history = Array.isArray(data.history) ? data.history : [];
-      const fixtures = Array.isArray(data.fixtures) ? data.fixtures : [];
-      const explain = Array.isArray(data.explain) ? data.explain : [];
-
-      const fixtureById = new Map(fixtures.map(f => [Number(f.id), f]));
-
-      const explainRows = explain
-        .map(entry => {
-          const fixture = fixtureById.get(Number(entry.fixture));
-          if (!fixture) return null;
-
-          const stats = Array.isArray(entry.stats) ? entry.stats : [];
-          const minutesStat = stats.find(s => s?.identifier === 'minutes');
-          const minutes = Number(minutesStat?.value || 0);
-          const totalPoints = stats.reduce((sum, s) => sum + Number(s?.points || 0), 0);
-
-          const opponentTeamId = fixture.is_home ? fixture.team_a : fixture.team_h;
-
-          return {
-            fixture: Number(entry.fixture),
-            round: fixture.event,
-            opponent_team: opponentTeamId,
-            was_home: !!fixture.is_home,
-            minutes,
-            total_points: totalPoints,
-          };
-        })
-        .filter(Boolean);
-
-      const rowKey = (row) => {
-        if (Number.isFinite(row.fixture)) return `fixture:${row.fixture}`;
-        return `round:${row.round}|opp:${row.opponent_team}|home:${row.was_home ? 1 : 0}`;
-      };
-
-      const mergedByKey = new Map();
-
-      history.forEach(row => {
-        mergedByKey.set(rowKey(row), row);
-      });
-
-      explainRows.forEach(row => {
-        mergedByKey.set(rowKey(row), row);
-      });
-
-      const merged = Array.from(mergedByKey.values());
-
+      const history = data.history || [];
+      
+      // Enrich with team short names if teamCache is provided
       if (teamCache) {
-        return merged.map(gw => {
+        return history.map(gw => {
+          // Ensure opponent_team is a number to match teamCache key type
           const opponentTeamId = Number(gw.opponent_team);
           const team = teamCache.get(opponentTeamId);
           const shortName = typeof team === 'string' ? team : team?.shortName;
@@ -247,8 +205,8 @@ export function initGWPointsModal(modalId = 'gw-points-modal') {
           };
         });
       }
-
-      return merged;
+      
+      return history;
     } catch (error) {
       console.error('Error fetching player GW history:', error);
       throw error;
