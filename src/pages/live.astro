@@ -366,7 +366,7 @@ import Nav from "../components/Nav.astro";
 
 <script>
   import { supabase } from '../lib/supabase.ts'
-  import { applyAutoSubsAndMultipliers, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { applyAutoSubsAndMultipliers, bonusFromBpsRows, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
   import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
 
   let managerIds: number[] = []
@@ -921,6 +921,23 @@ import Nav from "../components/Nav.astro";
   return base;
 }
 
+function getFixtureProjectedBonus(fixture: FixtureInfo, playerId: number): number {
+  const stats = (fixture as any).stats;
+  const bpsStat = Array.isArray(stats) ? stats.find((s: any) => s?.identifier === "bps") : null;
+  if (!bpsStat) return 0;
+
+  const h = Array.isArray(bpsStat.h) ? bpsStat.h : [];
+  const a = Array.isArray(bpsStat.a) ? bpsStat.a : [];
+  const rows = [...h, ...a]
+    .map((row: any) => ({
+      element: Number(row?.element),
+      value: Number(row?.value)
+    }))
+    .filter(row => Number.isFinite(row.element) && Number.isFinite(row.value));
+
+  return bonusFromBpsRows(rows).get(playerId) || 0;
+}
+
 function buildBreakdownRows(
   stats: LiveStats,
   position: number,
@@ -1189,11 +1206,13 @@ function buildBreakdownRows(
         ? historyStats
         : (explainStatsRows.length ? buildStatsFromExplain(explainStatsRows) : emptyStats);
 
+      const fixtureProjBonus = getFixtureProjectedBonus(fx, playerId);
+
       const breakdown = buildBreakdownRows(
         fixtureStats,
         player.position,
         isFinished,
-        explainStatsRows.length ? 0 : projBonus
+        explainStatsRows.length ? 0 : fixtureProjBonus
       );
 
       html += `
@@ -1233,7 +1252,7 @@ function buildBreakdownRows(
         `;
       }
 
-      if (!isFinished && !explainStatsRows.length && projBonus > 0) {
+      if (!isFinished && !explainStatsRows.length && fixtureProjBonus > 0) {
         html += `
           <div class="breakdown-row breakdown-row--projected">
             <span class="breakdown-label">Proj. Bonus</span>
