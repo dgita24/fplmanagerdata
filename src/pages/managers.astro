@@ -6,9 +6,6 @@ import Nav from "../components/Nav.astro";
   <Nav />
 
   <main class="page">
-    <header class="page-header">
-      <h1 class="page-title">Manager IDs Setup</h1>
-    </header>
 
     <div id="loading" class="card">
       <div class="card-body text-center">
@@ -30,7 +27,7 @@ import Nav from "../components/Nav.astro";
       <!-- Quick Start - Compact -->
       <section class="card card--compact">
         <div class="card-body card-body--compact">
-          <h2 class="card-title card-title--small">Quick Start</h2>
+          <h2 class="card-title card-title--small">Quick Start: Manager IDs Setup</h2>
           <ol class="help-list help-list--compact">
             <li>Add EntryIDs manually (<strong>one per line</strong>, max 50) <em>or</em> use <strong>Import from league</strong></li>
             <li>Changes save automatically — IDs sync across devices</li>
@@ -71,7 +68,7 @@ import Nav from "../components/Nav.astro";
               </div>
 
               <div class="ids-actions">
-                <button type="button" id="edit-btn" class="btn btn--neutral btn--full-width">Manually edit Manager IDs</button>
+                <button type="button" id="edit-btn" class="btn btn--neutral btn--full-width">Edit Manager IDs</button>
                 <button type="submit" id="save-btn" class="btn btn--success btn--full-width" disabled>💾 Save</button>
 
                 <button type="button" id="featured-open" class="btn btn--featured btn--full-width">
@@ -368,7 +365,7 @@ import Nav from "../components/Nav.astro";
   .ids-textarea-wrapper .textarea {
     width: 100%;
     font-size: var(--text-sm);
-    min-height: 320px;
+    min-height: 380px;
   }
 
   .ids-actions {
@@ -525,7 +522,16 @@ import Nav from "../components/Nav.astro";
   .btn--full-width {
     width: 100%;
   }
-  
+
+  /* Managers page: slightly taller action buttons on tablet/desktop */
+  @media (min-width: 640px) {
+    .ids-actions .btn {
+      min-height: 44px;              /* taller tap target */
+      padding-top: 12px;
+      padding-bottom: 12px;
+    }
+  }
+
   /* Allow Edit button text to fit on small devices */
   #edit-btn {
     white-space: normal;      /* overrides Layout's .btn { white-space: nowrap } */
@@ -826,10 +832,19 @@ import Nav from "../components/Nav.astro";
     min-width: 0;
   }
 
-  /* =========================
-     MOBILE (<= 639px)
-     ========================= */
+   /* =========================
+   MOBILE (<= 639px)
+   ========================= */
   @media (max-width: 639px) {
+    /* Mobile: size textarea relative to viewport so buttons stay higher,
+       while still leaving room for Quick Start above */
+    .ids-textarea-wrapper .textarea {
+      height: min(22dvh, 180px);
+      min-height: 140px;
+      max-height: 240px;
+      resize: none; /* optional */
+    }
+
     /* Make the right-column buttons more compact on mobile */
     .ids-actions .btn {
       min-height: 38px;
@@ -837,6 +852,16 @@ import Nav from "../components/Nav.astro";
       font-size: 0.85rem;
     }
 
+    /* Mobile-only: make the top 3 buttons shorter to reduce total card height */
+    #edit-btn,
+    #save-btn,
+    #featured-open {
+      min-height: 32px;
+      padding-top: 6px;
+      padding-bottom: 6px; 
+    }
+
+    /* IMPORTANT: these must remain INSIDE the media query */
     #edit-btn { font-size: 0.85rem; }
 
     .ids-actions .btn--featured,
@@ -986,7 +1011,7 @@ import Nav from "../components/Nav.astro";
      ========================= */
   @media (min-width: 640px) {
     .page {
-      align-items: center;
+      align-items: stretch;
     }
 
     /* Desktop-only: shallower buttons in league sheets (does not affect mobile) */
@@ -1000,26 +1025,43 @@ import Nav from "../components/Nav.astro";
     #auth-check {
       display: flex;
       flex-direction: column;
-      align-items: center;
+      align-items: stretch;
       width: 100%;
     }
 
     #auth-check .card {
-      width: auto;
-      min-width: 440px;
-      max-width: 620px;
+      width: min(820px, 100%);
+      margin-inline: auto;
+    }
+
+    /* Responsive two-column layout for the IDs textarea + actions */
+    .ids-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) minmax(170px, 220px);
+      gap: var(--space-4);
+      align-items: stretch;
     }
 
     .ids-textarea-wrapper {
-      width: 300px;
-    }
-
-    .ids-textarea-wrapper .textarea {
-      min-height: 320px;
+      width: auto;
+      flex-shrink: initial;
     }
 
     .ids-actions {
-      width: 190px;
+      width: auto;
+      height: 100%;
+
+      display: grid;
+      grid-auto-rows: 1fr;          /* every button row same height */
+      gap: 8px;                     /* small, consistent gap (adjust if you want) */
+      align-content: stretch;
+    }
+
+    /* Make each action button fill its grid row */
+    .ids-actions .btn {
+      height: 100%;
+      width: 100%;
+      justify-content: center;
     }
 
     .top-sheet {
@@ -1054,7 +1096,7 @@ import Nav from "../components/Nav.astro";
   /* =========================
      VERY SMALL PHONES (<= 360px)
      ========================= */
-  @media (max-width: 360px) {
+  @media (max-width: 639px) {
     .ids-layout {
       flex-direction: column;
     }
