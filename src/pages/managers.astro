@@ -836,9 +836,14 @@ import Nav from "../components/Nav.astro";
   }
 
   /* =========================
-     MOBILE (<= 639px)
-     ========================= */
+   MOBILE (<= 639px)
+   ========================= */
   @media (max-width: 639px) {
+    /* Mobile: keep the textarea shorter so actions stay higher on screen */
+    .ids-textarea-wrapper .textarea {
+      min-height: 200px;
+    }
+
     /* Make the right-column buttons more compact on mobile */
     .ids-actions .btn {
       min-height: 38px;
