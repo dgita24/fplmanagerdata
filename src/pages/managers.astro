@@ -833,26 +833,26 @@ import Nav from "../components/Nav.astro";
   }
 
    /* =========================
-     MOBILE (<= 639px)
-     ========================= */
-    @media (max-width: 639px) {
-      /* Mobile: size textarea relative to viewport so buttons stay higher,
-         while still leaving room for Quick Start above */
-      .ids-textarea-wrapper .textarea {
-        height: min(32dvh, 240px);
-        min-height: 140px;
-        max-height: 240px;
-        resize: none; /* optional */
-      }
-
-      /* Make the right-column buttons more compact on mobile */
-      .ids-actions .btn {
-        min-height: 38px;
-        padding: 8px 12px;
-        font-size: 0.85rem;
-      }
+   MOBILE (<= 639px)
+   ========================= */
+  @media (max-width: 639px) {
+    /* Mobile: size textarea relative to viewport so buttons stay higher,
+       while still leaving room for Quick Start above */
+    .ids-textarea-wrapper .textarea {
+      height: min(32dvh, 240px);
+      min-height: 140px;
+      max-height: 240px;
+      resize: none; /* optional */
     }
 
+    /* Make the right-column buttons more compact on mobile */
+    .ids-actions .btn {
+      min-height: 38px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+    }
+
+    /* IMPORTANT: these must remain INSIDE the media query */
     #edit-btn { font-size: 0.85rem; }
 
     .ids-actions .btn--featured,
