@@ -836,16 +836,11 @@ import Nav from "../components/Nav.astro";
    MOBILE (<= 639px)
    ========================= */
   @media (max-width: 639px) {
-    /* Mobile: pull the EntryIDs header closer to the top of the card */
-    .ids-header {
-      margin-top: -6px;   /* moves "Manager EntryIDs (x) + info icon" up */
-      margin-bottom: 6px; /* slightly tighter gap to the textarea */
-    }
-
-    /* Mobile: make textarea taller (but still capped) so it uses screen space better */
+    /* Mobile: size textarea relative to viewport so buttons stay higher,
+       while still leaving room for Quick Start above */
     .ids-textarea-wrapper .textarea {
-      height: min(30dvh, 240px);
-      min-height: 160px;
+      height: min(22dvh, 180px);
+      min-height: 140px;
       max-height: 240px;
       resize: none; /* optional */
     }
@@ -864,14 +859,6 @@ import Nav from "../components/Nav.astro";
       min-height: 32px;
       padding-top: 6px;
       padding-bottom: 6px; 
-    }
-
-    /* Mobile: make the bottom (yellow) buttons taller to fill the card */
-    #league-open,
-    #manager-leagues-open {
-      min-height: 44px;
-      padding-top: 10px;
-      padding-bottom: 10px;
     }
 
     /* IMPORTANT: these must remain INSIDE the media query */
