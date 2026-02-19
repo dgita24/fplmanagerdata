@@ -68,7 +68,7 @@ import Nav from "../components/Nav.astro";
               </div>
 
               <div class="ids-actions">
-                <button type="button" id="edit-btn" class="btn btn--neutral btn--full-width">Manually edit Manager IDs</button>
+                <button type="button" id="edit-btn" class="btn btn--neutral btn--full-width">Edit Manager IDs</button>
                 <button type="submit" id="save-btn" class="btn btn--success btn--full-width" disabled>💾 Save</button>
 
                 <button type="button" id="featured-open" class="btn btn--featured btn--full-width">
@@ -850,6 +850,15 @@ import Nav from "../components/Nav.astro";
       min-height: 38px;
       padding: 8px 12px;
       font-size: 0.85rem;
+    }
+
+    /* Mobile-only: make the top 3 buttons shorter to reduce total card height */
+    #edit-btn,
+    #save-btn,
+    #featured-open {
+      min-height: 32px;
+      padding-top: 6px;
+      padding-bottom: 6px; 
     }
 
     /* IMPORTANT: these must remain INSIDE the media query */
