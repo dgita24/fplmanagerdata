@@ -368,7 +368,7 @@ import Nav from "../components/Nav.astro";
   .ids-textarea-wrapper .textarea {
     width: 100%;
     font-size: var(--text-sm);
-    min-height: 320px;
+    min-height: 380px;
   }
 
   .ids-actions {
@@ -525,7 +525,16 @@ import Nav from "../components/Nav.astro";
   .btn--full-width {
     width: 100%;
   }
-  
+
+  /* Managers page: slightly taller action buttons on tablet/desktop */
+  @media (min-width: 640px) {
+    .ids-actions .btn {
+      min-height: 44px;              /* taller tap target */
+      padding-top: 12px;
+      padding-bottom: 12px;
+    }
+  }
+
   /* Allow Edit button text to fit on small devices */
   #edit-btn {
     white-space: normal;      /* overrides Layout's .btn { white-space: nowrap } */
@@ -1014,7 +1023,7 @@ import Nav from "../components/Nav.astro";
       display: grid;
       grid-template-columns: minmax(280px, 1fr) minmax(170px, 220px);
       gap: var(--space-4);
-      align-items: start;
+      align-items: stretch;
     }
 
     .ids-textarea-wrapper {
@@ -1024,10 +1033,11 @@ import Nav from "../components/Nav.astro";
 
     .ids-actions {
       width: auto;
-    }
-
-    .ids-textarea-wrapper .textarea {
-      min-height: 320px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between; /* spreads buttons down the column */
+      gap: var(--space-2);
     }
 
     .top-sheet {
