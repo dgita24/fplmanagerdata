@@ -113,17 +113,21 @@ import Nav from "../components/Nav.astro";
     if (loading) loading.style.display = 'none'
   }
 
+  const failSafe = setTimeout(() => render(null), 3000)
+
   async function initAuthUI() {
     try {
       const { data, error } = await supabase.auth.getSession()
       if (error) throw error
+      clearTimeout(failSafe)
       render(data.session)
     } catch (err) {
-      // Fail safe: show guest content so page never ends up blank
+      clearTimeout(failSafe)
       render(null)
       console.error('Auth UI init failed:', err)
     }
   }
+
 
   initAuthUI()
 
