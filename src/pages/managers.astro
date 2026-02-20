@@ -532,13 +532,77 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  /* Allow Edit button text to fit on small devices */
   #edit-btn {
     white-space: normal;      /* overrides Layout's .btn { white-space: nowrap } */
     overflow-wrap: anywhere;
     line-height: 1.15;
     font-size: 0.9rem;
+
+    background: #020617;        /* slate-950 */
+    color: #e5e7eb;             /* gray-200 */
+    border: 1px solid #1f2937;  /* gray-800 */
   }
+
+
+  #edit-btn:hover {
+    border-color: #374151;
+  }
+
+  #edit-btn:focus-visible {
+    outline: 2px solid rgba(148, 163, 184, 0.55); /* slate-ish */
+    outline-offset: 2px;
+  }
+
+  /* Save (emerald) */
+  #save-btn {
+    background: #10b981;        /* emerald-500 */
+    color: #ecfdf5;             /* emerald-50 */
+    border: 1px solid #065f46;  /* emerald-800 */
+  }
+
+  #save-btn:hover {
+    background: #059669;        /* emerald-600 */
+  }
+
+  #save-btn:focus-visible {
+    outline: 2px solid rgba(16, 185, 129, 0.55);
+    outline-offset: 2px;
+  }
+
+  /* Browse featured managers (indigo) */
+  #featured-open {
+    background: #312e81;        /* indigo-900 */
+    color: #e0e7ff;             /* indigo-100 */
+    border: 1px solid #4338ca;  /* indigo-600 */
+  }
+
+  #featured-open:hover {
+    background: #3730a3;        /* indigo-800 */
+  }
+
+  #featured-open:focus-visible {
+    outline: 2px solid rgba(99, 102, 241, 0.55); /* indigo-500-ish */
+    outline-offset: 2px;
+  }
+
+  /* Import from mini league: uses base orange from .btn--league (no override) */
+  #league-open { }
+
+  /* Import leagues from any manager: slightly deeper orange variant */
+  #manager-leagues-open {
+    background: #9a3412;        /* orange-800 */
+    border-color: #7c2d12;      /* orange-900 */
+  }
+
+  #manager-leagues-open:hover {
+    background: #c2410c;        /* orange-700 */
+  }
+
+  #manager-leagues-open:focus-visible {
+    outline: 2px solid rgba(234, 88, 12, 0.65); /* orange-600 */
+    outline-offset: 2px;
+  }
+
 
 
   .textarea:disabled {
@@ -558,11 +622,12 @@ import Nav from "../components/Nav.astro";
     padding-bottom: 10px;
   }
 
-  /* Bright yellow button for "Import from league" */
+    /* Base style for "Import" buttons */
   .btn--league {
-    background: #facc15; /* amber-400 */
-    color: #111827; /* slate-900 */
-    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: #ea580c;        /* orange-600 */
+    color: #f9fafb;             /* near-white */
+    border: 1px solid rgba(0, 0, 0, 0.35);
+
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
@@ -573,15 +638,15 @@ import Nav from "../components/Nav.astro";
   }
 
   .btn--league:hover {
-    background: #fbbf24; /* amber-300 */
+    background: #f97316;        /* orange-500 */
   }
 
   .btn--league:active {
-    background: #f59e0b; /* amber-500 */
+    background: #c2410c;        /* orange-700 */
   }
 
   .btn--league:focus-visible {
-    outline: 2px solid rgba(250, 204, 21, 0.6);
+    outline: 2px solid rgba(249, 115, 22, 0.7);
     outline-offset: 2px;
   }
 
