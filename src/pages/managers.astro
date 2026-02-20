@@ -386,14 +386,24 @@ import Nav from "../components/Nav.astro";
     cursor: pointer;
     padding: 2px 6px;
     margin-left: 4px;
-    opacity: 0.7;
-    transition: opacity 0.15s ease;
+
+    color: #60a5fa;            /* blue-400 */
+    opacity: 0.95;
+    transition: opacity 0.15s ease, color 0.15s ease;
+
     vertical-align: middle;
-    line-height: 1; 
+    line-height: 1;
+    border-radius: 8px;         /* so focus ring looks clean */
   }
 
   .btn-icon-info:hover {
+    color: #93c5fd;            /* blue-300 */
     opacity: 1;
+  }
+
+  .btn-icon-info:focus-visible {
+    outline: 2px solid rgba(96, 165, 250, 0.55);
+    outline-offset: 2px;
   }
 
   .manager-sources-list {
@@ -532,13 +542,77 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-  /* Allow Edit button text to fit on small devices */
   #edit-btn {
     white-space: normal;      /* overrides Layout's .btn { white-space: nowrap } */
     overflow-wrap: anywhere;
     line-height: 1.15;
     font-size: 0.9rem;
+
+    background: #020617;        /* slate-950 */
+    color: #e5e7eb;             /* gray-200 */
+    border: 1px solid #1f2937;  /* gray-800 */
   }
+
+
+  #edit-btn:hover {
+    border-color: #374151;
+  }
+
+  #edit-btn:focus-visible {
+    outline: 2px solid rgba(148, 163, 184, 0.55); /* slate-ish */
+    outline-offset: 2px;
+  }
+
+  /* Save (emerald) */
+  #save-btn {
+    background: #10b981;        /* emerald-500 */
+    color: #ecfdf5;             /* emerald-50 */
+    border: 1px solid #065f46;  /* emerald-800 */
+  }
+
+  #save-btn:hover {
+    background: #059669;        /* emerald-600 */
+  }
+
+  #save-btn:focus-visible {
+    outline: 2px solid rgba(16, 185, 129, 0.55);
+    outline-offset: 2px;
+  }
+
+  /* Browse featured managers (indigo) */
+  #featured-open {
+    background: #312e81;        /* indigo-900 */
+    color: #e0e7ff;             /* indigo-100 */
+    border: 1px solid #4338ca;  /* indigo-600 */
+  }
+
+  #featured-open:hover {
+    background: #3730a3;        /* indigo-800 */
+  }
+
+  #featured-open:focus-visible {
+    outline: 2px solid rgba(99, 102, 241, 0.55); /* indigo-500-ish */
+    outline-offset: 2px;
+  }
+
+  /* Import from mini league: uses base orange from .btn--league (no override) */
+  #league-open { }
+
+  /* Import leagues from any manager: slightly deeper orange variant */
+  #manager-leagues-open {
+    background: #9a3412;        /* orange-800 */
+    border-color: #7c2d12;      /* orange-900 */
+  }
+
+  #manager-leagues-open:hover {
+    background: #c2410c;        /* orange-700 */
+  }
+
+  #manager-leagues-open:focus-visible {
+    outline: 2px solid rgba(234, 88, 12, 0.65); /* orange-600 */
+    outline-offset: 2px;
+  }
+
 
 
   .textarea:disabled {
@@ -558,11 +632,12 @@ import Nav from "../components/Nav.astro";
     padding-bottom: 10px;
   }
 
-  /* Bright yellow button for "Import from league" */
+    /* Base style for "Import" buttons */
   .btn--league {
-    background: #facc15; /* amber-400 */
-    color: #111827; /* slate-900 */
-    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: #ea580c;        /* orange-600 */
+    color: #f9fafb;             /* near-white */
+    border: 1px solid rgba(0, 0, 0, 0.35);
+
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
@@ -573,15 +648,15 @@ import Nav from "../components/Nav.astro";
   }
 
   .btn--league:hover {
-    background: #fbbf24; /* amber-300 */
+    background: #f97316;        /* orange-500 */
   }
 
   .btn--league:active {
-    background: #f59e0b; /* amber-500 */
+    background: #c2410c;        /* orange-700 */
   }
 
   .btn--league:focus-visible {
-    outline: 2px solid rgba(250, 204, 21, 0.6);
+    outline: 2px solid rgba(249, 115, 22, 0.7);
     outline-offset: 2px;
   }
 
@@ -832,20 +907,71 @@ import Nav from "../components/Nav.astro";
     min-width: 0;
   }
 
-   /* =========================
+  /* =========================
    MOBILE (<= 639px)
    ========================= */
   @media (max-width: 639px) {
-    /* Mobile: size textarea relative to viewport so buttons stay higher,
-       while still leaving room for Quick Start above */
-    .ids-textarea-wrapper .textarea {
-      height: min(22dvh, 180px);
-      min-height: 140px;
-      max-height: 240px;
-      resize: none; /* optional */
+    /* Make the Manager EntryIDs form fill within its card */
+    .card-body > #manager-form {
+      display: flex;
+      flex-direction: column;
     }
 
-    /* Make the right-column buttons more compact on mobile */
+    .ids-layout {
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      gap: var(--space-3);
+    }
+
+    .ids-textarea-wrapper,
+    .ids-actions {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Mobile: size textarea relative to viewport so the card grows */
+    .ids-textarea-wrapper .textarea {
+      width: 100%;
+      font-size: var(--text-sm);
+      height: min(44dvh, 380px);   /* TALLER than before */
+      min-height: 260px;
+      max-height: 520px;
+      resize: none;
+    }
+
+    /* Make all four buttons share equal height and match textarea column height */
+    .ids-actions {
+      gap: var(--space-2);
+    }
+
+    .ids-actions .btn {
+      flex: 1 1 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+    }
+
+    /* MOBILE-only: tighten the 3 gaps on the EntryIDs card */
+    .ids-header {
+      margin-top: clamp(-8px, -1.6vw, -4px);
+      margin-bottom: clamp(4px, 1.2vw, 8px);
+    }
+
+    .ids-layout {
+      gap: clamp(8px, 2.2vw, 14px);
+    }
+
+    .ids-actions {
+      gap: clamp(8px, 2.2vw, 12px);
+    }
+
+    /* Remove the reserved gap from: <div id="status" style="margin-top: var(--space-3);"></div> */
+    #status:empty { display: none; }
+    #status { margin-top: clamp(6px, 1.6vw, 12px) !important; }
+
+    /* Make the right-column buttons more compact on mobile (padding/font) */
     .ids-actions .btn {
       min-height: 38px;
       padding: 8px 12px;
@@ -859,6 +985,14 @@ import Nav from "../components/Nav.astro";
       min-height: 32px;
       padding-top: 6px;
       padding-bottom: 6px; 
+    }
+
+    /* Mobile-only: make the two bottom import buttons taller */
+    #league-open,
+    #manager-leagues-open {
+      min-height: clamp(42px, 10vw, 50px);
+      padding-top: clamp(9px, 2.2vw, 12px);
+      padding-bottom: clamp(9px, 2.2vw, 12px);
     }
 
     /* IMPORTANT: these must remain INSIDE the media query */
@@ -963,7 +1097,6 @@ import Nav from "../components/Nav.astro";
       margin: 0 0 var(--space-1) 0 !important;
     }
 
-
     /* Fullscreen the two league sheets on mobile */
     #league-sheet.top-sheet,
     #league-standings-sheet.top-sheet,
@@ -1005,6 +1138,9 @@ import Nav from "../components/Nav.astro";
       font-size: 0.8rem;
     }
   }
+
+
+
 
   /* =========================
      DESKTOP (>= 640px)
@@ -1096,7 +1232,7 @@ import Nav from "../components/Nav.astro";
   /* =========================
      VERY SMALL PHONES (<= 360px)
      ========================= */
-  @media (max-width: 639px) {
+  @media (max-width: 360px) {
     .ids-layout {
       flex-direction: column;
     }
