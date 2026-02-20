@@ -1234,4 +1234,4 @@
     await applyLeagueChanges()
   })
 
-  checkAuth()
+  checkAuth();
