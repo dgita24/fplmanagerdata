@@ -836,14 +836,54 @@ import Nav from "../components/Nav.astro";
    MOBILE (<= 639px)
    ========================= */
   @media (max-width: 639px) {
+     /* Make the Manager EntryIDs card fill vertically on mobile */
+    .card-body > #manager-form {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .ids-layout {
+      /* This row (textarea + buttons) should take the remaining space
+         after the label/banner at the top. */
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      gap: var(--space-3);
+    }
+
+    .ids-textarea-wrapper,
+    .ids-actions {
+      flex: 1 1 0;
+      display: flex;
+      flex-direction: column;
+    }
+
     /* Mobile: size textarea relative to viewport so buttons stay higher,
        while still leaving room for Quick Start above */
     .ids-textarea-wrapper .textarea {
-      height: min(22dvh, 180px);
-      min-height: 140px;
-      max-height: 240px;
-      resize: none; /* optional */
+      /* Let flexbox control height; fill column, but stay scrollable */
+      flex: 1 1 auto;
+      min-height: 0;
+      height: 100%;
+      resize: none;
     }
+
+    /* Make all four buttons share equal height and match textarea height
+       (within the right column). */
+    .ids-actions {
+      gap: var(--space-2);
+    }
+
+    .ids-actions .btn {
+      flex: 1 1 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;         /* allow flex to shrink evenly */
+    }
+
 
     //* MOBILE-only: tighten the 3 gaps on the EntryIDs card */
     .ids-header {
