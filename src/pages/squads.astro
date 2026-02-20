@@ -1645,7 +1645,8 @@ import Nav from "../components/Nav.astro";
   }
 
 
-  async function updateDisplay() {
+  async function updateDisplay(opts?: { force?: boolean }) {
+    const force = !!opts?.force;
     managerCountEl.textContent = `${managerIds.length} managers`;
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
@@ -1659,8 +1660,7 @@ import Nav from "../components/Nav.astro";
 
     if (managerParam) {
       const managerId = parseInt(managerParam);
-      await loadSquads([managerId], gw, { force: false });
-
+      await loadSquads([managerId], gw, { force });
 
       const checkAndSetFilter = () => {
         if (managerFilter.options.length > 1) {
@@ -1671,7 +1671,7 @@ import Nav from "../components/Nav.astro";
       };
       setTimeout(checkAndSetFilter, 50);
     } else {
-      await loadSquads(managerIds, gw, { force: false });
+      await loadSquads(managerIds, gw, { force });
     }
   }
 
@@ -1728,10 +1728,7 @@ import Nav from "../components/Nav.astro";
     const bust = Date.now().toString();
     await fetchBootstrapData(bust);
 
-    await updateDisplay(); // updateDisplay now calls loadSquads(..., { force:false }) by default
-    // Force an actual refetch for the current GW dataset:
-    const gw = parseInt(gwFilterSelect.value as any) || latestGW;
-    await loadSquads(managerIds, gw, { force: true });
+    await updateDisplay({ force: true });
   });
 
 
