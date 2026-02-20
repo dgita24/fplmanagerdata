@@ -832,15 +832,37 @@ import Nav from "../components/Nav.astro";
     min-width: 0;
   }
 
-   /* =========================
+  /* =========================
    MOBILE (<= 639px)
    ========================= */
   @media (max-width: 639px) {
-     /* Make the Manager EntryIDs card fill vertically on mobile */
-    .card-body > #manager-form {
+    /* Mobile-only: let the Entry IDs card grow and fill spare vertical space */
+    #auth-check {
       display: flex;
       flex-direction: column;
-      height: 100%;
+      align-items: stretch;
+      min-height: 100vh;
+      gap: var(--space-3);
+    }
+
+    /* First card = Quick Start (natural height), second card = Entry IDs (flexes) */
+    #auth-check > .card:last-of-type {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #auth-check > .card:last-of-type .card-body {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Make the Manager EntryIDs card fill vertically on mobile */
+    .card-body > #manager-form {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
     }
 
     .ids-layout {
@@ -860,10 +882,8 @@ import Nav from "../components/Nav.astro";
       flex-direction: column;
     }
 
-    /* Mobile: size textarea relative to viewport so buttons stay higher,
-       while still leaving room for Quick Start above */
+    /* Mobile: textarea fills its column and scrolls if needed */
     .ids-textarea-wrapper .textarea {
-      /* Let flexbox control height; fill column, but stay scrollable */
       flex: 1 1 auto;
       min-height: 0;
       height: 100%;
@@ -884,8 +904,7 @@ import Nav from "../components/Nav.astro";
       min-height: 0;         /* allow flex to shrink evenly */
     }
 
-
-    //* MOBILE-only: tighten the 3 gaps on the EntryIDs card */
+    /* MOBILE-only: tighten the 3 gaps on the EntryIDs card */
     .ids-header {
       /* A) Pull “Manager EntryIDs (n) + info” closer to the card top */
       margin-top: clamp(-8px, -1.6vw, -4px);
@@ -905,8 +924,7 @@ import Nav from "../components/Nav.astro";
     #status:empty { display: none; }
     #status { margin-top: clamp(6px, 1.6vw, 12px) !important; }
 
-
-    /* Make the right-column buttons more compact on mobile */
+    /* Make the right-column buttons more compact on mobile (padding/font) */
     .ids-actions .btn {
       min-height: 38px;
       padding: 8px 12px;
@@ -922,14 +940,13 @@ import Nav from "../components/Nav.astro";
       padding-bottom: 6px; 
     }
 
-    //* B) Mobile-only: make the two bottom import buttons taller */
+    /* B) Mobile-only: make the two bottom import buttons taller */
     #league-open,
     #manager-leagues-open {
       min-height: clamp(42px, 10vw, 50px);
       padding-top: clamp(9px, 2.2vw, 12px);
       padding-bottom: clamp(9px, 2.2vw, 12px);
     }
-
 
     /* IMPORTANT: these must remain INSIDE the media query */
     #edit-btn { font-size: 0.85rem; }
@@ -1033,7 +1050,6 @@ import Nav from "../components/Nav.astro";
       margin: 0 0 var(--space-1) 0 !important;
     }
 
-
     /* Fullscreen the two league sheets on mobile */
     #league-sheet.top-sheet,
     #league-standings-sheet.top-sheet,
@@ -1075,6 +1091,7 @@ import Nav from "../components/Nav.astro";
       font-size: 0.8rem;
     }
   }
+
 
   /* =========================
      DESKTOP (>= 640px)
