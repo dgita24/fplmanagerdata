@@ -13,6 +13,13 @@ import Nav from "../components/Nav.astro";
       </p>
     </header>
 
+    <section id="auth-loading" class="card">
+      <div class="card-body">
+        <h2 class="card-title">Checking login…</h2>
+        <p class="text-muted">One moment.</p>
+      </div>
+    </section>
+
     <!-- Show when NOT logged in -->
     <section id="guest-content" class="card" style="display: none;">
       <div class="card-body">
@@ -91,27 +98,44 @@ import Nav from "../components/Nav.astro";
   }
 </style>
 
-<script>
+<script type="module">
   import { supabase } from '../lib/supabase.ts'
 
+  const loading = document.getElementById('auth-loading')
   const guestContent = document.getElementById('guest-content')
   const userContent = document.getElementById('user-content')
 
-  async function checkAuth() {
-    const { data: { user } } = await supabase.auth.getUser()
+  function render(session) {
+    const isAuthed = !!session?.user
 
-    if (user) {
-      if (userContent) userContent.style.display = 'block'
-      if (guestContent) guestContent.style.display = 'none'
-    } else {
-      if (guestContent) guestContent.style.display = 'block'
-      if (userContent) userContent.style.display = 'none'
+    if (userContent) userContent.style.display = isAuthed ? 'block' : 'none'
+    if (guestContent) guestContent.style.display = isAuthed ? 'none' : 'block'
+    if (loading) loading.style.display = 'none'
+  }
+
+  async function initAuthUI() {
+    try {
+      const { data, error } = await supabase.auth.getSession()
+      if (error) throw error
+      render(data.session)
+    } catch (err) {
+      // Fail safe: show guest content so page never ends up blank
+      render(null)
+      console.error('Auth UI init failed:', err)
     }
   }
 
-  checkAuth()
+  initAuthUI()
 
-  supabase.auth.onAuthStateChange(() => {
-    checkAuth()
+  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+  render(session)
   })
+  const subscription = data?.subscription
+
+
+  // optional cleanup
+  window.addEventListener('beforeunload', () => {
+    subscription?.unsubscribe()
+  })
+
 </script>
