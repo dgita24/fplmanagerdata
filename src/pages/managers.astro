@@ -836,12 +836,25 @@ import Nav from "../components/Nav.astro";
    MOBILE (<= 639px)
    ========================= */
   @media (max-width: 639px) {
-    /* Mobile-only: let the Entry IDs card grow and fill spare vertical space */
+    /* Make the whole page fill the viewport on mobile */
+    .page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    main.page {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Mobile-only: let the auth container stretch */
     #auth-check {
+      flex: 1 1 auto;
       display: flex;
       flex-direction: column;
       align-items: stretch;
-      min-height: 100vh;
       gap: var(--space-3);
     }
 
@@ -858,7 +871,7 @@ import Nav from "../components/Nav.astro";
       flex-direction: column;
     }
 
-    /* Make the Manager EntryIDs card fill vertically on mobile */
+    /* Make the Manager EntryIDs form fill vertically inside its card */
     .card-body > #manager-form {
       flex: 1 1 auto;
       display: flex;
@@ -940,7 +953,7 @@ import Nav from "../components/Nav.astro";
       padding-bottom: 6px; 
     }
 
-    /* B) Mobile-only: make the two bottom import buttons taller */
+    /* Mobile-only: make the two bottom import buttons taller */
     #league-open,
     #manager-leagues-open {
       min-height: clamp(42px, 10vw, 50px);
@@ -1091,6 +1104,7 @@ import Nav from "../components/Nav.astro";
       font-size: 0.8rem;
     }
   }
+
 
 
   /* =========================
