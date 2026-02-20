@@ -836,52 +836,13 @@ import Nav from "../components/Nav.astro";
    MOBILE (<= 639px)
    ========================= */
   @media (max-width: 639px) {
-    /* Make the whole page fill the viewport on mobile */
-    .page {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    main.page {
-      flex: 1 1 auto;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* Mobile-only: let the auth container stretch */
-    #auth-check {
-      flex: 1 1 auto;
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      gap: var(--space-3);
-    }
-
-    /* First card = Quick Start (natural height), second card = Entry IDs (flexes) */
-    #auth-check > .card:last-of-type {
-      flex: 1 1 auto;
-      display: flex;
-      flex-direction: column;
-    }
-
-    #auth-check > .card:last-of-type .card-body {
-      flex: 1 1 auto;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* Make the Manager EntryIDs form fill vertically inside its card */
+    /* Make the Manager EntryIDs form fill within its card */
     .card-body > #manager-form {
-      flex: 1 1 auto;
       display: flex;
       flex-direction: column;
     }
 
     .ids-layout {
-      /* This row (textarea + buttons) should take the remaining space
-         after the label/banner at the top. */
-      flex: 1 1 auto;
       display: flex;
       flex-direction: row;
       align-items: stretch;
@@ -890,21 +851,21 @@ import Nav from "../components/Nav.astro";
 
     .ids-textarea-wrapper,
     .ids-actions {
-      flex: 1 1 0;
       display: flex;
       flex-direction: column;
     }
 
-    /* Mobile: textarea fills its column and scrolls if needed */
+    /* Mobile: size textarea relative to viewport so the card grows */
     .ids-textarea-wrapper .textarea {
-      flex: 1 1 auto;
-      min-height: 0;
-      height: 100%;
+      width: 100%;
+      font-size: var(--text-sm);
+      height: min(38dvh, 320px);   /* TALLER than before */
+      min-height: 220px;
+      max-height: 360px;
       resize: none;
     }
 
-    /* Make all four buttons share equal height and match textarea height
-       (within the right column). */
+    /* Make all four buttons share equal height and match textarea column height */
     .ids-actions {
       gap: var(--space-2);
     }
@@ -914,18 +875,16 @@ import Nav from "../components/Nav.astro";
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 0;         /* allow flex to shrink evenly */
+      min-height: 0;
     }
 
     /* MOBILE-only: tighten the 3 gaps on the EntryIDs card */
     .ids-header {
-      /* A) Pull “Manager EntryIDs (n) + info” closer to the card top */
       margin-top: clamp(-8px, -1.6vw, -4px);
       margin-bottom: clamp(4px, 1.2vw, 8px);
     }
 
     .ids-layout {
-      /* C) Bring textarea bottom closer to top of the buttons block */
       gap: clamp(8px, 2.2vw, 14px);
     }
 
@@ -1104,6 +1063,7 @@ import Nav from "../components/Nav.astro";
       font-size: 0.8rem;
     }
   }
+
 
 
 
