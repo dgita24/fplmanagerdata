@@ -845,6 +845,27 @@ import Nav from "../components/Nav.astro";
       resize: none; /* optional */
     }
 
+    //* MOBILE-only: tighten the 3 gaps on the EntryIDs card */
+    .ids-header {
+      /* A) Pull “Manager EntryIDs (n) + info” closer to the card top */
+      margin-top: clamp(-8px, -1.6vw, -4px);
+      margin-bottom: clamp(4px, 1.2vw, 8px);
+    }
+
+    .ids-layout {
+      /* C) Bring textarea bottom closer to top of the buttons block */
+      gap: clamp(8px, 2.2vw, 14px);
+    }
+
+    .ids-actions {
+      gap: clamp(8px, 2.2vw, 12px);
+    }
+
+    /* Remove the reserved gap from: <div id="status" style="margin-top: var(--space-3);"></div> */
+    #status:empty { display: none; }
+    #status { margin-top: clamp(6px, 1.6vw, 12px) !important; }
+
+
     /* Make the right-column buttons more compact on mobile */
     .ids-actions .btn {
       min-height: 38px;
@@ -860,6 +881,15 @@ import Nav from "../components/Nav.astro";
       padding-top: 6px;
       padding-bottom: 6px; 
     }
+
+    //* B) Mobile-only: make the two bottom import buttons taller */
+    #league-open,
+    #manager-leagues-open {
+      min-height: clamp(42px, 10vw, 50px);
+      padding-top: clamp(9px, 2.2vw, 12px);
+      padding-bottom: clamp(9px, 2.2vw, 12px);
+    }
+
 
     /* IMPORTANT: these must remain INSIDE the media query */
     #edit-btn { font-size: 0.85rem; }
@@ -1096,7 +1126,7 @@ import Nav from "../components/Nav.astro";
   /* =========================
      VERY SMALL PHONES (<= 360px)
      ========================= */
-  @media (max-width: 639px) {
+  @media (max-width: 360px) {
     .ids-layout {
       flex-direction: column;
     }
