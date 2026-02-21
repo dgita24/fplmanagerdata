@@ -1,6 +1,16 @@
  import { supabase } from '../lib/supabase.ts'
   import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive'
   import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
+  import {
+  SQUADS_SNAPSHOT_KEY,
+  type SquadsSnapshot,
+  safeJsonParse,
+  normalizeIds,
+  sameManagerIds,
+  loadSquadsSnapshot,
+  saveSquadsSnapshot,
+} from '../lib/squadsCache.ts';
+
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -53,67 +63,6 @@
       return `Updated: ${date.toLocaleTimeString()}`;
     } else {
       return `Updated: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
-    }
-  }
-  
-  // ==============================
-  // Persistent page cache (Squads) - cached until Refresh FORCE REDEPLOY
-  // ==============================
-  const SQUADS_SNAPSHOT_KEY = "fpl_squads_snapshot_v1";
-
-  type SquadsSnapshot = {
-    savedAt: number;
-    managerIds: number[];
-    gw: number;
-    latestGW: number;
-    allSquadsData: any[];
-    ui: {
-      gwFilter: string;
-      managerFilter: string;
-      viewFilter: string;
-    };
-  };
- 
-  function safeJsonParse(value: string | null) {
-    if (!value) return null;
-    try { return JSON.parse(value); } catch { return null; }
-  }
-
-  function normalizeIds(ids: any): number[] {
-    return (Array.isArray(ids) ? ids : []).map((x) => Number(x)).filter((n) => Number.isFinite(n));
-  }
-
-  // Order-insensitive compare (cache survives reordering of IDs)
-  function sameManagerIds(a: any, b: any) {
-    const aa = normalizeIds(a).sort((x, y) => x - y);
-    const bb = normalizeIds(b).sort((x, y) => x - y);
-    if (aa.length !== bb.length) return false;
-    for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
-    return true;
-  }
-
-  function loadSquadsSnapshot(): SquadsSnapshot | null {
-    return safeJsonParse(localStorage.getItem(SQUADS_SNAPSHOT_KEY));
-  }
-
-  function saveSquadsSnapshot(gw: number) {
-    const snap: SquadsSnapshot = {
-      savedAt: Date.now(),
-      managerIds: [...managerIds],
-      gw,
-      latestGW,
-      allSquadsData,
-      ui: {
-        gwFilter: (gwFilterSelect as HTMLSelectElement).value || "",
-        managerFilter: (managerFilter as HTMLSelectElement).value || "",
-        viewFilter: (viewFilter as HTMLSelectElement).value || "all",
-      },
-    };
-
-    try {
-      localStorage.setItem(SQUADS_SNAPSHOT_KEY, JSON.stringify(snap));
-    } catch (e) {
-      console.warn("Could not save squads snapshot", e);
     }
   }
 
@@ -1117,7 +1066,17 @@
     }
 
     // Persist snapshot
-    saveSquadsSnapshot(gw);
+    saveSquadsSnapshot(
+      SQUADS_SNAPSHOT_KEY,
+      managerIds,
+      latestGW,
+      allSquadsData,
+      (gwFilterSelect as HTMLSelectElement).value || "",
+      (managerFilter as HTMLSelectElement).value || "",
+      (viewFilter as HTMLSelectElement).value || "all",
+      gw
+    );
+
 
     refreshBtn.disabled = false;
   }
@@ -1242,14 +1201,34 @@
   managerFilter.addEventListener("change", () => {
     renderOutput();
     const gw = parseInt(gwFilterSelect.value as any) || latestGW;
-    saveSquadsSnapshot(gw);
+    saveSquadsSnapshot(
+      SQUADS_SNAPSHOT_KEY,
+      managerIds,
+      latestGW,
+      allSquadsData,
+      (gwFilterSelect as HTMLSelectElement).value || "",
+      (managerFilter as HTMLSelectElement).value || "",
+      (viewFilter as HTMLSelectElement).value || "all",
+      gw
+    );
+
   });
 
 
   viewFilter.addEventListener("change", () => {
     renderOutput();
     const gw = parseInt(gwFilterSelect.value as any) || latestGW;
-    saveSquadsSnapshot(gw);
+    saveSquadsSnapshot(
+      SQUADS_SNAPSHOT_KEY,
+      managerIds,
+      latestGW,
+      allSquadsData,
+      (gwFilterSelect as HTMLSelectElement).value || "",
+      (managerFilter as HTMLSelectElement).value || "",
+      (viewFilter as HTMLSelectElement).value || "all",
+      gw
+    );
+
   });
 
   refreshBtn.addEventListener("click", async () => {
