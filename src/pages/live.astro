@@ -887,7 +887,7 @@ function buildBreakdownRows(
       const statusClass = isFinished ? "status-fin" : (started ? "status-live" : "status-ns");
 
       const explainStatsRows = explainByFixtureId.get(Number(fx.id)) || [];
-      const fixtureKey = makeFixtureKey(Number(fx.event), Number(oppTeamId), !!fx.is_home);
+      const fixtureKey = makeFixtureKey(Number(fx.event), Number(oppTeamId), isHome);
       const historyStats = historyStatsByKey.get(fixtureKey);
 
       const fixtureStats = historyStats
