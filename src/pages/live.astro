@@ -1,6 +1,10 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
+import SquadModal from "../components/modals/SquadModal.astro";
+import PlayerModal from "../components/modals/PlayerModal.astro";
+import GWPointsModal from "../components/modals/GWPointsModal.astro";
+import "../styles/pages/live.css";
 ---
 <Layout title="Live League Standings - FPL Manager Data">
   <Nav />
@@ -40,34 +44,13 @@ import Nav from "../components/Nav.astro";
     <section id="live-output" aria-live="polite"></section>
   </main>
 
-  <!-- Squad Modal -->
-  <div id="squad-modal" class="modal">
-    <div class="modal-panel">
-      <button id="close-squad-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
-      <div id="squad-modal-content"></div>
-    </div>
-  </div>
+  <SquadModal />
+ 
+  <PlayerModal />
 
-  <!-- Player Stats Modal -->
-  <div id="player-modal" class="modal modal--nested">
-    <div class="modal-panel modal-panel--compact">
-      <button id="close-player-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
-      <div id="player-modal-content"></div>
-    </div>
-  </div>
+  <GWPointsModal />
 
-  <!-- GW Points Modal (nested on top of player modal) -->
-  <div id="gw-points-modal" class="modal modal--nested modal--gw-points">
-    <div class="modal-panel modal-panel--gw-points">
-      <button class="btn btn--danger btn--small modal-close" type="button">✕</button>
-      <div class="gw-points-modal-content"></div>
-    </div>
-  </div>
 </Layout>
-
-<style>
-  
-</style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
