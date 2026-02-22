@@ -62,22 +62,18 @@ import { supabase } from '../lib/supabase.ts'
   }
 
   function renderLiveFromState() {
-    // Ensure dropdown options exist before we read and render with the value
-    populateCompareManager();
+   // Ensure dropdown options exist before we read and render with the value
+   populateCompareManager();
+   populateManagerFilter();
 
-    const compareId = compareManagerSelect.value;
-    const dataToRender = showFavouritesOnly
-      ? liveData.filter(m => favouriteIds.has(m.entryId))
-      : liveData;
+   const compareId = compareManagerSelect.value;
+   const managerFilterId = managerFilterSelect.value;
+   let dataToRender = showFavouritesOnly
+     ? liveData.filter(m => favouriteIds.has(m.entryId))
+     : liveData;
 
-    if (showFavouritesOnly && dataToRender.length === 0) {
-      out.innerHTML = "<p class='status status--warning'>No favourites set yet. Tap a manager name → tap ⭐ to add.</p>";
-      return;
-    }
-
-    out.innerHTML = makeLiveTable(dataToRender, compareId);
-    attachManagerButtons();
-    attachLiveSortHandlers();
+  if (managerFilterId) {
+    dataToRender = dataToRender.filter(m => m.entryId.toString() === managerFilterId);
   }
 
   const managerDataCache = new Map<string, any>();
@@ -117,6 +113,7 @@ import { supabase } from '../lib/supabase.ts'
   const out = document.getElementById("live-output")!;
   const gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
   const compareManagerSelect = document.getElementById("compare-manager") as HTMLSelectElement;
+  const managerFilterSelect = document.getElementById("manager-filter") as HTMLSelectElement;
   const loadingStatus = document.getElementById("loading-status")!;
   const lastUpdatedEl = document.getElementById("last-updated")!;
   const managerCountEl = document.getElementById("manager-count")!;
@@ -1207,6 +1204,24 @@ function buildBreakdownRows(
     }
   } 
 
+  function populateManagerFilter() {
+    const selected = String(managerFilterSelect.value ?? "");
+
+    managerFilterSelect.innerHTML = '<option value="">All</option>';
+
+    const sortedManagers = [...liveData].sort((a, b) =>
+      a.managerName.localeCompare(b.managerName)
+    );
+
+    for (const manager of sortedManagers) {
+      const option = document.createElement('option');
+      option.value = String(manager.entryId);
+      option.textContent = manager.managerName;
+      managerFilterSelect.appendChild(option);
+    }
+
+    managerFilterSelect.value = selected;
+  }
 
   function populateCompareManager() {
     // Preserve current selection (string)
@@ -1521,6 +1536,10 @@ function buildBreakdownRows(
     renderLiveFromState();
   });
 
+  managerFilterSelect.addEventListener('change', () => {
+    renderLiveFromState();
+  });
+    
   managerCountEl.addEventListener('click', () => {
     showFavouritesOnly = !showFavouritesOnly;
     updateManagerCountButton();
