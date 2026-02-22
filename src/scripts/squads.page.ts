@@ -670,8 +670,8 @@
 
             const teamPicks = pickData.picks.map(p => {
                 const pHist = playerHistoryMap.get(p.element);
-                const gwStats = pHist ? pHist.find(h => h.round === gw) : null;
-                const minutes = gwStats ? gwStats.minutes : 0;
+                const gwEntries = pHist ? pHist.filter(h => h.round === gw) : [];
+                const totalMinutes = gwEntries.reduce((sum, h) => sum + (h.minutes || 0), 0);
                 
                 return {
                     position: p.position,
@@ -679,7 +679,7 @@
                     isCaptain: p.is_captain,
                     isViceCaptain: p.is_vice_captain,
                     playerPosition: playerCache.get(p.element)?.position || "MID",
-                    dnp: minutes === 0
+                    dnp: totalMinutes === 0
                 };
             });
 
@@ -699,8 +699,8 @@
                     stats.games++;
                     
                     const pHist = playerHistoryMap.get(p.playerId);
-                    const gwStats = pHist ? pHist.find(h => h.round === gw) : null;
-                    const rawPoints = gwStats ? gwStats.total_points : 0;
+                    const gwEntries = pHist ? pHist.filter(h => h.round === gw) : [];
+                    const rawPoints = gwEntries.reduce((sum, h) => sum + (h.total_points || 0), 0);
 
                     let multiplier = 1;
                     if (p.isCaptain && !p.dnp) multiplier = isTC ? 3 : 2;
@@ -723,7 +723,6 @@
             <h2 class="modal-title">${managerName}</h2>
             <p class="text-muted" style="margin-bottom:1rem;">
                 Contribution History (GW1 - GW${maxGw}) <br>
-                <span class="text-success">Total Contributed: ${totalPointsSum} pts</span>
                 <span class="text-success">Total Contributed: ${totalPointsSum} pts</span>
                 ${totalHitsCost > 0 ? `<br><span class="text-muted" style="font-size:11px;">Your FPL total is ${totalPointsSum - totalHitsCost} after ${totalHitsCost} pts in transfer hits</span>` : ''}
 
