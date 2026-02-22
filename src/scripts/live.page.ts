@@ -76,7 +76,17 @@ import { supabase } from '../lib/supabase.ts'
     dataToRender = dataToRender.filter(m => m.entryId.toString() === managerFilterId);
   }
 
-  const managerDataCache = new Map<string, any>();
+  if (showFavouritesOnly && dataToRender.length === 0) {
+    out.innerHTML = "<p class='status status--warning'>No favourites set yet. Tap a manager name → tap ⭐ to add.</p>";
+    return;
+  }
+
+  out.innerHTML = makeLiveTable(dataToRender, compareId);
+  attachManagerButtons();
+  attachLiveSortHandlers();
+}
+
+const managerDataCache = new Map<string, any>();
   const squadPicksCache = new Map<string, any>();
 
   async function loadManagerIdsFromSupabase() {
