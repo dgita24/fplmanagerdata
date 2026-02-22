@@ -50,37 +50,37 @@
     border-color: var(--color-primary);
   }
 
-.status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
+  .status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
 
-.status-text {
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-}
+  .status-text {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
 
-.btn-refresh {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  padding: var(--space-2) var(--space-3);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  color: white;
-  background: var(--color-primary);
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
+  .btn-refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: var(--space-2) var(--space-3);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: white;
+    background: var(--color-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+  }
 
-.btn-refresh:hover {
-  background: var(--color-primary-hover);
-}
+  .btn-refresh:hover {
+    background: var(--color-primary-hover);
+  }
 
   .buttons-row {
     display: flex;
