@@ -34,13 +34,20 @@ import "../styles/pages/live.css";
         </select>
       </div>
       <div class="control-inline">
-        <label class="label-small">&nbsp;</label>
-        <button id="refresh-btn" class="btn-row" type="button">🔄 Refresh</button>
+        <label class="label-small" for="manager-filter">Manager</label>
+        <select class="select-small" id="manager-filter">
+          <option value="">All</option>
+        </select>
       </div>
     </div>
 
-    <div id="loading-status" class="meta-row"></div>
-    <div id="last-updated" class="meta-row"></div>
+    <div class="status-row">
+      <div>
+        <div id="loading-status" class="status-text"></div>
+        <div id="last-updated" class="status-text"></div>
+      </div>
+      <button id="refresh-btn" class="btn-refresh" type="button">🔄 Refresh</button>
+    </div>
     <section id="live-output" aria-live="polite"></section>
   </main>
 
