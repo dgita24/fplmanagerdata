@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase.ts'
   import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
 
   let managerIds: number[] = []
+  let favouriteIds: Set<number> = new Set();
+  let showFavouritesOnly = false;
 
   // ==============================
   // SWR + localStorage snapshot (Live Standings)
@@ -64,7 +66,16 @@ import { supabase } from '../lib/supabase.ts'
     populateCompareManager();
 
     const compareId = compareManagerSelect.value;
-    out.innerHTML = makeLiveTable(liveData, compareId);
+    const dataToRender = showFavouritesOnly
+      ? liveData.filter(m => favouriteIds.has(m.entryId))
+      : liveData;
+
+    if (showFavouritesOnly && dataToRender.length === 0) {
+      out.innerHTML = "<p class='status status--warning'>No favourites set yet. Tap a manager name → tap ⭐ to add.</p>";
+      return;
+    }
+
+    out.innerHTML = makeLiveTable(dataToRender, compareId);
     attachManagerButtons();
     attachLiveSortHandlers();
   }
@@ -77,25 +88,48 @@ import { supabase } from '../lib/supabase.ts'
 
     if (!user) {
       window.location.replace('/login')
-      return { authenticated: false, managerIds: [] }
+      return { authenticated: false, managerIds: [], favouriteManagerIds: [] }
     }
 
     try {
       const { data, error } = await supabase
         .from('user_manager_lists')
-        .select('manager_ids')
+        .select('manager_ids, favourite_manager_ids')
         .eq('user_id', user.id)
         .single()
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error loading manager IDs:', error)
-        return { authenticated: true, managerIds: [] }
+        return { authenticated: true, managerIds: [], favouriteManagerIds: [] }
       }
 
-      return { authenticated: true, managerIds: data?.manager_ids || [] }
+      return {
+        authenticated: true,
+        managerIds: data?.manager_ids || [],
+        favouriteManagerIds: data?.favourite_manager_ids || []
+      }
     } catch (e) {
       console.error('Error:', e)
-      return { authenticated: false, managerIds: [] }
+      return { authenticated: false, managerIds: [], favouriteManagerIds: [] }
+    }
+  }
+
+  async function saveFavouritesToSupabase(ids: number[]) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('user_manager_lists')
+        .update({
+          favourite_manager_ids: ids,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id);
+
+      if (error) console.error('Error saving favourites:', error);
+    } catch (e) {
+      console.error('Error saving favourites:', e);
     }
   }
 
@@ -112,6 +146,27 @@ import { supabase } from '../lib/supabase.ts'
   const playerModal = document.getElementById("player-modal")!;
   const playerModalContent = document.getElementById("player-modal-content")!;
   const closePlayerModal = document.getElementById("close-player-modal")!;
+
+  function updateManagerCountButton() {
+    if (showFavouritesOnly) {
+      managerCountEl.textContent = `⭐ ${favouriteIds.size} favourites`;
+      managerCountEl.classList.add('badge-toggle--active');
+    } else {
+      managerCountEl.textContent = `👥 ${managerIds.length} managers`;
+      managerCountEl.classList.remove('badge-toggle--active');
+    }
+  }
+
+  async function toggleFavourite(entryId: number) {
+    if (favouriteIds.has(entryId)) {
+      favouriteIds.delete(entryId);
+    } else {
+      favouriteIds.add(entryId);
+    }
+    updateManagerCountButton();
+    renderLiveFromState();
+    await saveFavouritesToSupabase([...favouriteIds]);
+  }
 
   interface PlayerInfo {
     name: string;
@@ -985,11 +1040,19 @@ function buildBreakdownRows(
                         chipPlayed === "TC" ? "👑" :
                         chipPlayed === "FH" ? "🎯" : "";
 
+      const isFav = favouriteIds.has(entryId);
       let html = `
-        <h2 class="modal-title" style="padding-right:40px;">
-          ${managerName}
-          ${chipPlayed ? `<span class="badge" style="margin-left:8px;">${chipEmoji} ${chipPlayed}</span>` : ""}
-        </h2>
+        <div style="display:flex;align-items:center;gap:var(--space-2);padding-right:40px;">
+          <h2 class="modal-title" style="flex:1;min-width:0;">
+            ${managerName}
+            ${chipPlayed ? `<span class="badge" style="margin-left:8px;">${chipEmoji} ${chipPlayed}</span>` : ""}
+          </h2>
+          <button type="button" class="fav-toggle-btn ${isFav ? 'fav-toggle-btn--active' : ''}"
+            data-entry-id="${entryId}"
+            title="${isFav ? 'Remove from favourites' : 'Add to favourites'}">
+            ${isFav ? '⭐' : '☆'}
+          </button>
+        </div>
         <p class="text-muted" style="margin-bottom:var(--space-3);">
           ${teamName} · GW${gw} · <span class="text-success font-bold">${finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0)} pts</span>
         </p>
@@ -1121,6 +1184,18 @@ function buildBreakdownRows(
 
       squadModalContent.innerHTML = html;
 
+      const favBtn = squadModalContent.querySelector('.fav-toggle-btn');
+      if (favBtn) {
+        favBtn.addEventListener('click', () => {
+          const id = parseInt((favBtn as HTMLElement).dataset.entryId || '0');
+          if (id) toggleFavourite(id);
+          const nowFav = favouriteIds.has(id);
+          favBtn.textContent = nowFav ? '⭐' : '☆';
+          favBtn.classList.toggle('fav-toggle-btn--active', nowFav);
+          (favBtn as HTMLElement).title = nowFav ? 'Remove from favourites' : 'Add to favourites';
+        });
+      }
+
       squadModalContent.querySelectorAll('.player-name-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           const button = e.target as HTMLElement;
@@ -1218,6 +1293,7 @@ function buildBreakdownRows(
               data-live-points="${m.livePoints}"
             >${m.managerName}</button>
             ${m.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${m.chipPlayed}</span>` : ""}
+            ${favouriteIds.has(m.entryId) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}
           </td>
           <td class="gw-col">${m.livePointsBeforeHits}</td>
           <td class="hit-col ${hitClass}">${m.transferCost}</td>
@@ -1365,11 +1441,12 @@ function buildBreakdownRows(
     loadingStatus.textContent = "Loading player data...";
     await fetchBootstrapData();
 
-    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    const { authenticated, managerIds: ids, favouriteManagerIds: favIds } = await loadManagerIdsFromSupabase();
     if (!authenticated) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    favouriteIds = new Set(favIds.map(Number));
+    updateManagerCountButton();
 
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
@@ -1443,6 +1520,12 @@ function buildBreakdownRows(
     renderLiveFromState();
   });
 
+  managerCountEl.addEventListener('click', () => {
+    showFavouritesOnly = !showFavouritesOnly;
+    updateManagerCountButton();
+    renderLiveFromState();
+  });
+
   refreshBtn.addEventListener('click', async () => {
     // Requirement: after forced refresh, default sort must be GW desc
     forceDefaultLiveSort();
@@ -1457,9 +1540,10 @@ function buildBreakdownRows(
       }
     }
 
-    const { managerIds: ids } = await loadManagerIdsFromSupabase();
+    const { managerIds: ids, favouriteManagerIds: favIds } = await loadManagerIdsFromSupabase();
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    favouriteIds = new Set(favIds.map(Number));
+    updateManagerCountButton();
 
     const gw = parseInt(gwFilterSelect.value) || latestGW;
     loadLive(managerIds, gw, { force: true, background: false });
