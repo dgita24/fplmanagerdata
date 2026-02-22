@@ -659,7 +659,7 @@
             }
         }
 
-        for(let i=0; i<picksResults.length; i++) {
+            for(let i=0; i<picksResults.length; i++) {
             const gw = i + 1;
             const pickData = picksResults[i];
             if (!pickData) continue;
@@ -668,43 +668,49 @@
             const isBB = chipName === "bboost";
             const isTC = chipName === "3xc";
 
-            const teamPicks = pickData.picks.map(p => {
-                const pHist = playerHistoryMap.get(p.element);
-                const gwEntries = pHist ? pHist.filter(h => h.round === gw) : [];
-                const totalMinutes = gwEntries.reduce((sum, h) => sum + (h.minutes || 0), 0);
-                
-                return {
-                    position: p.position,
-                    playerId: p.element,
-                    isCaptain: p.is_captain,
-                    isViceCaptain: p.is_vice_captain,
-                    playerPosition: playerCache.get(p.element)?.position || "MID",
-                    dnp: totalMinutes === 0
-                };
-            });
+            // Use FPL's actual automatic_subs from the API
+            const autoSubs = pickData.automatic_subs || [];
+            const subbedOutIds = new Set(autoSubs.map(s => s.element_out));
+            const subbedInIds = new Set(autoSubs.map(s => s.element_in));
 
-            const chipCode = chipName === "bboost" ? "BB" : chipName === "3xc" ? "TC" : chipName === "wildcard" ? "WC" : chipName === "freehit" ? "FH" : "None";
-            const squadWithSubs = applyAutoSubsKeepAll(teamPicks, chipCode);
-
-            for (const p of squadWithSubs) {
-                const stats = playerTotals.get(p.playerId);
+            for (const p of pickData.picks) {
+                const pid = p.element;
+                const stats = playerTotals.get(pid);
                 if (!stats) continue;
 
                 if (gw === maxGw) stats.currentlyOwned = true;
 
                 const isStarter = p.position <= 11;
-                const played = (isStarter && !p.subOff) || p.subOn || (isBB && !isStarter);
+                const wasSubbedOut = subbedOutIds.has(pid);
+                const wasSubbedIn = subbedInIds.has(pid);
+
+                // A player contributed points if:
+                // - They were a starter and NOT subbed out, OR
+                // - They were on bench and subbed IN, OR
+                // - Bench Boost: all bench players count
+                const played = (isStarter && !wasSubbedOut) || wasSubbedIn || (isBB && !isStarter);
 
                 if (played) {
                     stats.games++;
-                    
-                    const pHist = playerHistoryMap.get(p.playerId);
+
+                    const pHist = playerHistoryMap.get(pid);
                     const gwEntries = pHist ? pHist.filter(h => h.round === gw) : [];
                     const rawPoints = gwEntries.reduce((sum, h) => sum + (h.total_points || 0), 0);
 
                     let multiplier = 1;
-                    if (p.isCaptain && !p.dnp) multiplier = isTC ? 3 : 2;
-                    else if (p.isViceCaptain && !p.dnp && squadWithSubs.find(s => s.isCaptain)?.dnp) multiplier = isTC ? 3 : 2;
+                    const capPick = pickData.picks.find(pk => pk.is_captain);
+                    const vcPick = pickData.picks.find(pk => pk.is_vice_captain);
+
+                    // Captain played = starter not subbed out, or subbed in
+                    const capPlayed = capPick && ((capPick.position <= 11 && !subbedOutIds.has(capPick.element)) || subbedInIds.has(capPick.element));
+
+                    if (p.is_captain && capPlayed) {
+                        multiplier = isTC ? 3 : 2;
+                    } else if (p.is_vice_captain && !capPlayed) {
+                        // VC gets captaincy only if captain didn't play at all
+                        const vcPlayed = (p.position <= 11 && !wasSubbedOut) || wasSubbedIn;
+                        if (vcPlayed) multiplier = isTC ? 3 : 2;
+                    }
 
                     stats.points += (rawPoints * multiplier);
                 }
