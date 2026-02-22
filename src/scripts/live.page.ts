@@ -324,11 +324,8 @@ import { supabase } from '../lib/supabase.ts'
 
         setLiveSort(key);
 
-        // Re-render without refetch
-        const compareId = compareManagerSelect.value;
-        out.innerHTML = makeLiveTable(liveData, compareId);
-        attachManagerButtons();
-        attachLiveSortHandlers();
+        // Re-render through renderLiveFromState so favourites filter is respected
+        renderLiveFromState();
       });
     });
   }
@@ -1235,9 +1232,13 @@ function buildBreakdownRows(
   function makeLiveTable(managers: any[], compareToId = "") {
     const base = [...managers];
 
-    // Determine compare target (leader or selected manager)
-    const leader = [...base].sort((a, b) => b.totalPoints - a.totalPoints)[0];
-    const compareManager = compareToId ? base.find(m => m.entryId.toString() === compareToId) : leader;
+    // Determine compare target from ALL managers (not just filtered subset)
+    // so that comparing to a non-favourite manager still works correctly
+    const allManagers = liveData;
+    const leader = [...allManagers].sort((a, b) => b.totalPoints - a.totalPoints)[0];
+    const compareManager = compareToId
+      ? allManagers.find(m => m.entryId.toString() === compareToId)
+      : leader;
 
     // Compute numeric diff (used for display + sorting)
     base.forEach(m => {
