@@ -683,7 +683,8 @@
                 };
             });
 
-            const squadWithSubs = applyAutoSubsKeepAll(teamPicks, chipName || "None");
+            const chipCode = chipName === "bboost" ? "BB" : chipName === "3xc" ? "TC" : chipName === "wildcard" ? "WC" : chipName === "freehit" ? "FH" : "None";
+            const squadWithSubs = applyAutoSubsKeepAll(teamPicks, chipCode);
 
             for (const p of squadWithSubs) {
                 const stats = playerTotals.get(p.playerId);
@@ -716,12 +717,16 @@
         rows.sort((a, b) => b.points - a.points);
 
         const totalPointsSum = rows.reduce((acc, r) => acc + r.points, 0);
+        const totalHitsCost = (historyData?.current || []).reduce((acc, row) => acc + (Number(row.event_transfers_cost) || 0), 0);
 
         let html = `
             <h2 class="modal-title">${managerName}</h2>
             <p class="text-muted" style="margin-bottom:1rem;">
                 Contribution History (GW1 - GW${maxGw}) <br>
                 <span class="text-success">Total Contributed: ${totalPointsSum} pts</span>
+                <span class="text-success">Total Contributed: ${totalPointsSum} pts</span>
+                ${totalHitsCost > 0 ? `<br><span class="text-muted" style="font-size:11px;">Your FPL total is ${totalPointsSum - totalHitsCost} after ${totalHitsCost} pts in transfer hits</span>` : ''}
+
             </p>
             
             <div class="table-container" style="max-height: 50vh; overflow-y:auto;">
