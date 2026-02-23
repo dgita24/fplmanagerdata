@@ -11,11 +11,11 @@ const navLinks = [
 ---
 <header class="nav-header">
   <nav class="nav">
-    <a href="/" class="nav-brand">FPL Manager Watch</a>
-
     <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Toggle menu" aria-expanded="false">
       <span class="hamburger"></span>
     </button>
+
+    <a href="/" class="nav-brand">FPL Manager Watch</a>
 
     <div id="nav-menu" class="nav-menu">
       <div class="nav-menu-header">
@@ -69,7 +69,8 @@ const navLinks = [
   .nav {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    position: relative;
     max-width: var(--container-max);
     margin: 0 auto;
     padding: var(--space-3) var(--space-4);
@@ -88,6 +89,9 @@ const navLinks = [
   }
 
   .menu-toggle {
+    position: absolute;
+    left: var(--space-4);
+
     display: flex;
     align-items: center;
     justify-content: center;
