@@ -647,6 +647,7 @@ import Nav from "../components/Nav.astro";
         <tr>
           <td class="manager-cell">
             <span class="strong">${m.managerName}</span>
+            ${favouriteIds.has(Number(m.entryId)) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}
           </td>
           <td class="chips-cell">${usedHtml}</td>
           <td class="chips-cell">${remainingHtml}</td>

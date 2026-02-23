@@ -429,6 +429,7 @@
       const target = manager.squad.find(p => isCaptainView ? p.isCaptain : p.isViceCaptain);
       if (target) {
         rows.push({
+          entryId: manager.entryId,
           managerName: manager.managerName,
           chipPlayed: manager.chipPlayed,
           playerId: target.playerId,
@@ -465,7 +466,7 @@
 
       html += `
         <tr>
-          <td class="manager-cell">${row.managerName}${chipBadge}</td>
+          <td class="manager-cell">${row.managerName}${chipBadge}${favouriteIds.has(row.entryId) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}</td>
           <td class="player-cell">
             <button type="button" class="player-name-btn" data-player-id="${row.playerId}">${row.playerName}</button>
           </td>
@@ -502,6 +503,7 @@
           <!-- UPDATED HEADER: Centered with Dash -->
           <div class="squad-header">
             <button class="manager-link-btn" data-manager-id="${manager.entryId}">${manager.managerName}</button>
+            ${favouriteIds.has(manager.entryId) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}
             <span class="team-name-span">— ${manager.teamName}</span>
           </div>
           ${manager.chipPlayed ? `<div class="squad-chip-indicator">${getChipFullName(manager.chipPlayed)} played</div>` : ''}

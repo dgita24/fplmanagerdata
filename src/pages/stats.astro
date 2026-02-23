@@ -933,6 +933,7 @@ import Nav from "../components/Nav.astro";
             <button type="button" class="manager-btn" data-entry-id="${m.entryId}">
               ${m.managerName}
             </button>
+            ${favouriteIds.has(Number(m.entryId)) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}
           </td>
           <td class="pts-col">${m.gwPoints}</td>
           <td class="total-col"><button type="button" class="total-pts-btn" data-entry-id="${m.entryId}">${m.totalPoints.toLocaleString()}</button></td>

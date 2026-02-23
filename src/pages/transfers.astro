@@ -865,6 +865,7 @@ import Nav from "../components/Nav.astro";
         <tr class="${rowClass}">
           <td class="strong nowrap">
             <a href="#" class="manager-link" data-id="${r.entryId}" data-name="${r.managerName}">${r.managerName}</a>
+            ${favouriteIds.has(r.entryId) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}
           </td>
           <td class="num ${hitClass}">${r.transferCost || 0}</td>
           <td class="num">${r.gwPoints ?? ""}</td>
