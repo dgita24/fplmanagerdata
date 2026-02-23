@@ -77,7 +77,7 @@ import { supabase } from '../lib/supabase.ts'
   }
 
   if (showFavouritesOnly && dataToRender.length === 0) {
-    out.innerHTML = "<p class='status status--warning'>No favourites set yet. Tap a manager name → tap ⭐ to add.</p>";
+    out.innerHTML = "<p class='status status--warning'>Not set as a favoutite. Tap manager name → tap ⭐ to add.</p>";
     return;
   }
 
