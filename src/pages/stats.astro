@@ -417,7 +417,10 @@ import Nav from "../components/Nav.astro";
   const out = document.getElementById("stats-output")!;
   const loadingStatus = document.getElementById("loading-status")!;
   const lastUpdatedEl = document.getElementById("last-updated")!;
-  const managerCountEl = document.getElementById("manager-count")!;
+  const managerCountEl = document.getElementById("manager-count");
+  if (!managerCountEl) {
+    console.error("Missing #manager-count element in stats page HTML");
+  }
   const refreshBtn = document.getElementById("refresh-btn")!;
   const gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
   const managerFilter = document.getElementById("manager-filter") as HTMLSelectElement
@@ -431,6 +434,8 @@ import Nav from "../components/Nav.astro";
   const orHistoryModalContent = document.getElementById("or-history-modal-content")!;
   const closeOrHistoryModal = document.getElementById("close-or-history-modal")!;
   function updateManagerCountButton() {
+    if (!managerCountEl) return;
+
     managerCountEl.textContent = `⭐ Toggle Favourites`;
     if (showFavouritesOnly) {
       managerCountEl.classList.add("badge-toggle--active");
@@ -1275,7 +1280,7 @@ import Nav from "../components/Nav.astro";
   }
 
   async function updateDisplay() {
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    updateManagerCountButton();
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured.</p>";
       return;
@@ -1293,7 +1298,7 @@ import Nav from "../components/Nav.astro";
     managerIds = ids;
     favouriteIds = new Set((favIds || []).map(Number));
     updateManagerCountButton();
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    
 
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured.</p>";
@@ -1343,7 +1348,7 @@ import Nav from "../components/Nav.astro";
     await updateDisplay();
   })();
 
-  managerCountEl.addEventListener("click", () => {
+  managerCountEl?.addEventListener("click", () => {
     showFavouritesOnly = !showFavouritesOnly;
     updateManagerCountButton();
     const gw = parseInt(gwFilterSelect.value) || latestGW;
@@ -1393,7 +1398,7 @@ import Nav from "../components/Nav.astro";
     managerIds = ids;
     favouriteIds = new Set((favIds || []).map(Number));
     updateManagerCountButton();
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    
 
     const bust = Date.now().toString();
     await fetchBootstrapData(bust);
