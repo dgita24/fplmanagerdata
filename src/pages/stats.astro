@@ -12,7 +12,7 @@ import Nav from "../components/Nav.astro";
     </header>
 
     <div class="meta-row-wide">
-      <span id="manager-count" class="badge badge-wide">Loading...</span>
+      <button id="manager-count" class="badge badge-wide badge-toggle" type="button">⭐ Toggle Favourites</button>
       <a href="/managers" class="badge badge-wide">⚙ Manage IDs</a>
     </div>
 
@@ -76,6 +76,24 @@ import Nav from "../components/Nav.astro";
     justify-content: center;
     padding: var(--space-2) var(--space-3);
     text-align: center;
+  }
+
+  .badge-toggle {
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    border: 1px solid var(--color-border);
+  }
+
+  .badge-toggle:hover {
+    background: var(--color-surface-alt);
+  }
+
+  .badge-toggle--active {
+    background: rgb(245 158 11 / 0.15) !important;
+    border-color: rgb(245 158 11 / 0.4) !important;
+    color: var(--color-warning) !important;
   }
 
   .controls-inline {
@@ -319,48 +337,75 @@ import Nav from "../components/Nav.astro";
     }
   }
 
+  async function loadManagerIdsFromSupabase() {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      window.location.replace("/login");
+      return { authenticated: false, managerIds: [], favouriteManagerIds: [] };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("user_manager_lists")
+        .select("manager_ids, favourite_manager_ids")
+        .eq("user_id", user.id)
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        console.error("Error loading manager IDs:", error);
+        return { authenticated: true, managerIds: [], favouriteManagerIds: [] };
+      }
+
+      return {
+        authenticated: true,
+        managerIds: data?.manager_ids || [],
+        favouriteManagerIds: data?.favourite_manager_ids || [],
+      };
+    } catch (e) {
+      console.error("Error:", e);
+      return { authenticated: false, managerIds: [], favouriteManagerIds: [] };
+    }
+  }
+
   function renderStatsFromState(gw: number) {
     const managerValue = managerFilter?.value ?? "All"
-    const dataToRender =
+
+    // Start from all data
+    let dataToRender =
       managerValue && managerValue !== "All"
-        ? allManagerData.filter(m => String(m.entryId) === String(managerValue))
+        ? allManagerData.filter((m) => String(m.entryId) === String(managerValue))
         : allManagerData
+
+    // Apply favourites-only filter (after manager selection)
+    if (showFavouritesOnly) {
+      dataToRender = dataToRender.filter((m) => favouriteIds.has(Number(m.entryId)))
+
+      // If user picked a specific manager but it's not favourited, show a clear message
+      if (managerValue && managerValue !== "All" && dataToRender.length === 0) {
+        out.innerHTML =
+          "<p class='status status--warning'>The selected manager is not in your favourites list. Set Manager to All or turn off ⭐ favourites.</p>"
+        return
+      }
+
+      // If no favourites at all (or none present in loaded data), show the usual favourites empty message
+      if (dataToRender.length === 0) {
+        out.innerHTML =
+          "<p class='status status--warning'>No favourites set yet. Add favourites on the Live page (⭐) then come back here.</p>"
+        return
+      }
+    }
 
     out.innerHTML = makeStatsTable(dataToRender, gw)
     attachManagerButtons()
     attachStatsSortHandlers()
   }
 
-  async function loadManagerIdsFromSupabase() {
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      window.location.replace('/login')
-      return { authenticated: false, managerIds: [] }
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('user_manager_lists')
-        .select('manager_ids')
-        .eq('user_id', user.id)
-        .single()
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error loading manager IDs:', error)
-        return { authenticated: true, managerIds: [] }
-      }
-
-      return { authenticated: true, managerIds: data?.manager_ids || [] }
-    } catch (e) {
-      console.error('Error:', e)
-      return { authenticated: false, managerIds: [] }
-    }
-  }
-
   let latestGW = 1;
   let currentGWFinished = false;
   let managerIds: number[] = [];
+  let favouriteIds = new Set<number>();
+  let showFavouritesOnly = false;
   let allManagerData: ManagerData[] = [];
   let playerCache = new Map<number, { name: string; position: number; team: number }>();
   let teamCache = new Map<number, { name: string; shortName: string }>();
@@ -403,7 +448,10 @@ import Nav from "../components/Nav.astro";
   const out = document.getElementById("stats-output")!;
   const loadingStatus = document.getElementById("loading-status")!;
   const lastUpdatedEl = document.getElementById("last-updated")!;
-  const managerCountEl = document.getElementById("manager-count")!;
+  const managerCountEl = document.getElementById("manager-count");
+  if (!managerCountEl) {
+    console.error("Missing #manager-count element in stats page HTML");
+  }
   const refreshBtn = document.getElementById("refresh-btn")!;
   const gwFilterSelect = document.getElementById("gw-filter") as HTMLSelectElement;
   const managerFilter = document.getElementById("manager-filter") as HTMLSelectElement
@@ -416,6 +464,16 @@ import Nav from "../components/Nav.astro";
   const orHistoryModal = document.getElementById("or-history-modal")!;
   const orHistoryModalContent = document.getElementById("or-history-modal-content")!;
   const closeOrHistoryModal = document.getElementById("close-or-history-modal")!;
+  function updateManagerCountButton() {
+    if (!managerCountEl) return;
+
+    managerCountEl.textContent = `⭐ Toggle Favourites`;
+    if (showFavouritesOnly) {
+      managerCountEl.classList.add("badge-toggle--active");
+    } else {
+      managerCountEl.classList.remove("badge-toggle--active");
+    }
+  }
 
   closeStatsModal.addEventListener("click", () => {
     statsModal.classList.remove("is-open");
@@ -685,19 +743,24 @@ import Nav from "../components/Nav.astro";
   }
 
   function attachStatsSortHandlers() {
-    document.querySelectorAll(".stats-table th[data-sort]").forEach(th => {
-      th.addEventListener("click", () => {
-        const key = th.getAttribute("data-sort") as typeof statsSortKey | null;
-        if (!key) return;
+    const table = document.querySelector(".stats-table");
+    if (!table) return;
 
-        setStatsSort(key);
+    // Prevent duplicate attachment if renderStatsFromState is called repeatedly
+    if ((table as any).__sortHandlerAttached) return;
+    (table as any).__sortHandlerAttached = true;
 
-        // re-render instantly with current GW selection (no refetch)
-        const gw = parseInt(gwFilterSelect.value) || latestGW;
-        out.innerHTML = makeStatsTable(allManagerData, gw);
-        attachManagerButtons();
-        attachStatsSortHandlers();
-      });
+    table.addEventListener("click", (e) => {
+      const th = (e.target as HTMLElement)?.closest("th[data-sort]") as HTMLElement | null;
+      if (!th) return;
+
+      const key = th.getAttribute("data-sort") as typeof statsSortKey | null;
+      if (!key) return;
+
+      setStatsSort(key);
+
+      const gw = parseInt(gwFilterSelect.value) || latestGW;
+      renderStatsFromState(gw);
     });
   }
 
@@ -1183,12 +1246,19 @@ import Nav from "../components/Nav.astro";
   }
 
   function attachManagerButtons() {
-    document.querySelectorAll('.manager-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const button = e.target as HTMLElement;
-        const entryId = parseInt(button.dataset.entryId || '0');
-        if (entryId) showManagerModal(entryId);
-      });
+    const table = document.querySelector(".stats-table");
+    if (!table) return;
+
+    // prevent duplicate attachment for this table instance
+    if ((table as any).__managerHandlerAttached) return;
+    (table as any).__managerHandlerAttached = true;
+
+    table.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement)?.closest(".manager-btn") as HTMLElement | null;
+      if (!btn) return;
+
+      const entryId = parseInt(btn.dataset.entryId || "0", 10);
+      if (entryId) showManagerModal(entryId);
     });
   }
 
@@ -1253,7 +1323,7 @@ import Nav from "../components/Nav.astro";
   }
 
   async function updateDisplay() {
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    updateManagerCountButton();
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured.</p>";
       return;
@@ -1265,11 +1335,13 @@ import Nav from "../components/Nav.astro";
   (async function init() {
     await fetchBootstrapData();
 
-    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    const { authenticated, managerIds: ids, favouriteManagerIds: favIds } = await loadManagerIdsFromSupabase();
     if (authenticated === false) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    favouriteIds = new Set((favIds || []).map(Number));
+    updateManagerCountButton();
+    
 
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured.</p>";
@@ -1319,7 +1391,12 @@ import Nav from "../components/Nav.astro";
     await updateDisplay();
   })();
 
-
+  managerCountEl?.addEventListener("click", () => {
+    showFavouritesOnly = !showFavouritesOnly;
+    updateManagerCountButton();
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
+    renderStatsFromState(gw);
+  });
   gwFilterSelect.addEventListener("change", async () => {
     const gw = parseInt(gwFilterSelect.value);
     if (!gw) return;
@@ -1358,11 +1435,13 @@ import Nav from "../components/Nav.astro";
     managerStatsCache.clear();
     localStorage.removeItem(STATS_SNAPSHOT_KEY);
 
-    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    const { authenticated, managerIds: ids, favouriteManagerIds: favIds } = await loadManagerIdsFromSupabase();
     if (authenticated === false) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    favouriteIds = new Set((favIds || []).map(Number));
+    updateManagerCountButton();
+    
 
     const bust = Date.now().toString();
     await fetchBootstrapData(bust);
