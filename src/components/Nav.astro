@@ -22,7 +22,9 @@ const navLinks = [
         <a href="/" class="nav-brand">FPL Manager Watch</a>
         <div class="nav-menu-header-right">
           <span id="nav-auth-mobile"></span>
-          <button id="menu-close" class="menu-close" type="button" aria-label="Close menu">✕</button>
+          <button id="menu-close" class="menu-close badge badge--danger" type="button" aria-label="Close menu">
+            <span style="font-size: 2rem; font-weight: 700;">✕</span>
+          </button>
         </div>
       </div>
 
@@ -176,17 +178,22 @@ const navLinks = [
     display: flex;
     align-items: center;
     justify-content: center;
+    background: var(--color-danger, #e53935);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    font-size: 2rem;
+    font-weight: 700;
     width: 44px;
     height: 44px;
-    background: transparent;
-    border: none;
     cursor: pointer;
-    font-size: var(--text-xl);
-    color: var(--color-text);
+    margin-left: var(--space-3);
+    box-shadow: 0 0 4px rgb(0 0 0 / 12%);
+    transition: background .2s;
   }
 
   .menu-close:hover {
-    color: var(--color-primary);
+    background: var(--color-danger-hover, #d32f2f);
   }
 
   .nav-links {
