@@ -12,7 +12,7 @@ import Nav from "../components/Nav.astro";
     </header>
 
     <div class="meta-row-wide">
-      <span id="manager-count" class="badge badge-wide">Loading...</span>
+      <button id="manager-count" class="badge badge-wide badge-toggle" type="button">⭐ Toggle Favourites</button>
       <a href="/managers" class="badge badge-wide">⚙ Manage IDs</a>
     </div>
 
@@ -56,6 +56,24 @@ import Nav from "../components/Nav.astro";
     padding: var(--space-2) var(--space-3);
     text-align: center;
   }
+
+  .badge-toggle {
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    border: 1px solid var(--color-border);
+  }
+
+  .badge-toggle:hover {
+    background: var(--color-surface-alt);
+  }
+
+.badge-toggle--active {
+  background: rgb(245 158 11 / 0.15) !important;
+  border-color: rgb(245 158 11 / 0.4) !important;
+  color: var(--color-warning) !important;
+}
 
   .controls-inline {
     display: flex;
@@ -133,7 +151,7 @@ import Nav from "../components/Nav.astro";
     try {
       const { data, error } = await supabase
         .from('user_manager_lists')
-        .select('manager_ids')
+        .select('manager_ids, favourite_manager_ids')
         .eq('user_id', user.id)
         .single()
 
@@ -142,7 +160,11 @@ import Nav from "../components/Nav.astro";
         return { authenticated: true, managerIds: [] }
       }
 
-      return { authenticated: true, managerIds: data?.manager_ids || [] }
+      return {
+        authenticated: true,
+        managerIds: data?.manager_ids || [],
+        favouriteManagerIds: data?.favourite_manager_ids || []
+      }
     } catch (e) {
       console.error('Error:', e)
       return { authenticated: false, managerIds: [] }
@@ -158,8 +180,18 @@ import Nav from "../components/Nav.astro";
   const chipModal = document.getElementById("chip-modal");
   const chipModalContent = document.getElementById("chip-modal-content");
   const closeChipModal = document.getElementById("close-chip-modal");
+  function updateManagerCountButton() {
+    managerCountEl.textContent = `⭐ Toggle Favourites`;
+    if (showFavouritesOnly) {
+      managerCountEl.classList.add('badge-toggle--active');
+    } else {
+      managerCountEl.classList.remove('badge-toggle--active');
+    }
+  }
 
   let managerIds = [];
+  let favouriteIds = new Set();
+  let showFavouritesOnly = false;
   let playerCache = new Map();
   let teamCache = new Map();
   let allManagersData = [];
@@ -204,19 +236,33 @@ import Nav from "../components/Nav.astro";
   }
 
   function renderChipsTable() {
-    const filterId = managerFilterSelect?.value || "";
-    const filtered = filterId
-      ? allManagersData.filter((m) => String(m.entryId) === filterId)
-      : allManagersData;
+      const filterId = managerFilterSelect?.value || "";
 
-    if (filtered.length > 0) {
-      out.innerHTML = makeChipsTable(filtered);
+      let base = allManagersData;
+      if (showFavouritesOnly) {
+       base = base.filter((m) => favouriteIds.has(Number(m.entryId)));
+        if (base.length === 0) {
+          out.innerHTML = "<p class='status status--warning'>No favourites set yet. Tap a manager name → tap ⭐ to add.</p>";
+          return;
+        }
+      }
+  
+      let rows = base;
+      if (filterId) {
+        rows = base.filter((m) => String(m.entryId) === filterId);
+      }
+
+    if (rows.length > 0) {
+      out.innerHTML = makeChipsTable(rows);
       attachChipButtons();
     } else {
-      out.innerHTML = "<p class='status status--error'>No managers match this filter.</p>";
+      if (showFavouritesOnly && filterId) {
+        out.innerHTML = "<p class='status status--warning'>The selected manager is not in your favourites list. Set Manager to All or turn off ⭐ favourites.</p>";
+      } else {
+        out.innerHTML = "<p class='status status--error'>No managers match this filter.</p>";
+      }
     }
   }
-
   closeChipModal.addEventListener("click", () => {
     chipModal.classList.remove("is-open");
   });
@@ -672,11 +718,13 @@ import Nav from "../components/Nav.astro";
   }
 
   (async function init() {
-    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    const { authenticated, managerIds: ids, favouriteManagerIds: favIds } =
+      await loadManagerIdsFromSupabase();
     if (!authenticated) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    favouriteIds = new Set((favIds || []).map(Number));
+    updateManagerCountButton();
 
     const snap = loadChipsSnapshot();
     const canUseSnap =
@@ -689,7 +737,10 @@ import Nav from "../components/Nav.astro";
       playerCache = snap.playerCache;
       teamCache = snap.teamCache;
 
-      out.innerHTML = makeChipsTable(snap.allData);
+      // IMPORTANT: render from state so favourites + manager filter are applied consistently
+      allManagersData = snap.allData;
+      populateManagerFilter(allManagersData);
+      renderChipsTable();
       attachChipButtons();
 
       loadingStatus.textContent = "";
@@ -718,17 +769,26 @@ import Nav from "../components/Nav.astro";
     await loadChips(managerIds); // no cache-buster
   })();
 
-  refreshBtn.addEventListener('click', async () => {
-    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
-    if (!authenticated) return;
+  refreshBtn.addEventListener("click", async () => {
+    const { authenticated, managerIds: ids, favouriteManagerIds: favIds } =
+      await loadManagerIdsFromSupabase();
+   if (!authenticated) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    favouriteIds = new Set((favIds || []).map(Number));
+    updateManagerCountButton();
 
     loadingStatus.textContent = "Refreshing...";
     const bust = Date.now().toString();
 
     await fetchBootstrapData(bust);
     await loadChips(managerIds, bust);
+  });
+
+  // Toggle favourites (exactly like Live/Squads)
+  managerCountEl.addEventListener("click", () => {
+    showFavouritesOnly = !showFavouritesOnly;
+    updateManagerCountButton();
+    renderChipsTable();
   });
 </script>
