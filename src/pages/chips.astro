@@ -256,7 +256,11 @@ import Nav from "../components/Nav.astro";
       out.innerHTML = makeChipsTable(rows);
       attachChipButtons();
     } else {
-      out.innerHTML = "<p class='status status--error'>No managers match this filter.</p>";
+      if (showFavouritesOnly && filterId) {
+        out.innerHTML = "<p class='status status--warning'>The selected manager is not in your favourites list. Set Manager to All or turn off ⭐ favourites.</p>";
+      } else {
+        out.innerHTML = "<p class='status status--error'>No managers match this filter.</p>";
+      }
     }
   }
   closeChipModal.addEventListener("click", () => {
