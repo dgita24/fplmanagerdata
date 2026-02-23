@@ -743,19 +743,24 @@ import Nav from "../components/Nav.astro";
   }
 
   function attachStatsSortHandlers() {
-    document.querySelectorAll(".stats-table th[data-sort]").forEach(th => {
-      th.addEventListener("click", () => {
-        const key = th.getAttribute("data-sort") as typeof statsSortKey | null;
-        if (!key) return;
+    const table = document.querySelector(".stats-table");
+    if (!table) return;
 
-        setStatsSort(key);
+    // Prevent duplicate attachment if renderStatsFromState is called repeatedly
+    if ((table as any).__sortHandlerAttached) return;
+    (table as any).__sortHandlerAttached = true;
 
-        // re-render instantly with current GW selection (no refetch)
-        const gw = parseInt(gwFilterSelect.value) || latestGW;
-        renderStatsFromState(gw);
-        attachManagerButtons();
-        attachStatsSortHandlers();
-      });
+    table.addEventListener("click", (e) => {
+      const th = (e.target as HTMLElement)?.closest("th[data-sort]") as HTMLElement | null;
+      if (!th) return;
+
+      const key = th.getAttribute("data-sort") as typeof statsSortKey | null;
+      if (!key) return;
+
+      setStatsSort(key);
+
+      const gw = parseInt(gwFilterSelect.value) || latestGW;
+      renderStatsFromState(gw);
     });
   }
 
