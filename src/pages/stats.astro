@@ -193,9 +193,17 @@ import Nav from "../components/Nav.astro";
     transition: all 0.2s ease;
   }
 
+  :global(.stat-item--hl .stat-value) {
+    color: var(--color-primary);
+  }
+
   :global(.stat-item--hl:hover) {
     background: var(--color-border) !important;
     transform: translateY(-1px);
+  }
+
+  :global(.stat-item--hl:hover .stat-value) {
+    color: var(--color-text);
   }
 
   /* Use :global() for classes used in JavaScript-generated HTML */
@@ -917,7 +925,6 @@ import Nav from "../components/Nav.astro";
             <button type="button" class="manager-btn" data-entry-id="${m.entryId}">
               ${m.managerName}
             </button>
-            <div class="team-name">${m.teamName}</div>
           </td>
           <td class="pts-col">${m.gwPoints}</td>
           <td class="total-col"><button type="button" class="total-pts-btn" data-entry-id="${m.entryId}">${m.totalPoints.toLocaleString()}</button></td>
