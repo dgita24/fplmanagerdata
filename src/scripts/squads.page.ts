@@ -51,6 +51,8 @@
   const lastUpdatedEl = document.getElementById("last-updated");
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
+  // Ensure we never show "X managers" on initial paint
+  updateManagerCountButton();
 
   function updateManagerCountButton() {
     managerCountEl.textContent = `⭐ Toggle Favourites`;
