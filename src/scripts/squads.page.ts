@@ -23,7 +23,7 @@
     try {
       const { data, error } = await supabase
         .from('user_manager_lists')
-        .select('manager_ids')
+        .select('manager_ids, favourite_manager_ids')
         .eq('user_id', user.id)
         .single()
 
@@ -32,7 +32,11 @@
         return { authenticated: true, managerIds: [] }
       }
 
-      return { authenticated: true, managerIds: data?.manager_ids || [] }
+      return {
+        authenticated: true,
+        managerIds: data?.manager_ids || [],
+        favouriteManagerIds: data?.favourite_manager_ids || []
+      }
     } catch (e) {
       console.error('Error:', e)
       return { authenticated: false, managerIds: [] }
@@ -48,7 +52,15 @@
   const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
 
+  function updateManagerCountButton() {
+    managerCountEl.textContent = `⭐ Toggle Favourites`;
+    if (showFavouritesOnly) managerCountEl.classList.add('badge-toggle--active');
+    else managerCountEl.classList.remove('badge-toggle--active');
+}
+
   let managerIds = [];
+  let favouriteIds: Set<number> = new Set();
+  let showFavouritesOnly = false;
   let allSquadsData = [];
   let latestGW = 1;
   const DEFAULT_FETCH_CONCURRENCY = 4;
@@ -73,7 +85,7 @@
   }
 
 
-  // Load token for cancellation
+  // Load token for cancellation adding this part of comment to force redeploy
   let currentLoadToken = 0;
 
   let playerCache = new Map();
@@ -989,14 +1001,36 @@
     const viewType = viewFilter.value;
     const managerFilterValue = managerFilter.value;
 
-    if (viewType === "captain" || viewType === "vice") {
-      out.innerHTML = makeCaptainTable(allSquadsData, managerFilterValue, viewType);
-    } else {
-      out.innerHTML = makeSquadsDisplay(allSquadsData, managerFilterValue);
+    let baseData = allSquadsData;
+    if (showFavouritesOnly) {
+      baseData = baseData.filter(m => favouriteIds.has(Number(m.entryId)));
+      if (baseData.length === 0) {
+        out.innerHTML = "<p class='status status--warning'>No favourites set yet. Tap a manager name → tap ⭐ to add.</p>";
+        return;
+      }
     }
-    
+
+    // If favourites-only is enabled, but a specific manager is selected that isn't favourited,
+    // show a clearer message than "No squads to display."
+    if (showFavouritesOnly && managerFilterValue) {
+      const selectedId = Number(managerFilterValue);
+      const selectedIsFavourite =
+        Number.isFinite(selectedId) && favouriteIds.has(selectedId);
+
+      if (!selectedIsFavourite) {
+        out.innerHTML = "<p class='status status--warning'>The selected manager isn’t in your favourites list. Set Manager to All, or turn off ⭐ favourites.</p>";
+        return;
+      }
+    } 
+
+    if (viewType === "captain" || viewType === "vice") {
+      out.innerHTML = makeCaptainTable(baseData, managerFilterValue, viewType);
+    } else {
+      out.innerHTML = makeSquadsDisplay(baseData, managerFilterValue);
+    }
+
     attachPlayerButtons();
-    attachManagerLinkButtons(); // Bind the new clicks
+    attachManagerLinkButtons();
   }
 
   async function loadSquads(ids, gw, opts?: { force?: boolean }) {
@@ -1095,11 +1129,13 @@
   async function init() {
     loadingStatus.textContent = "Loading...";
 
-    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    const { authenticated, managerIds: ids, favouriteManagerIds: favIds } = await loadManagerIdsFromSupabase();
     if (authenticated === false) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    updateManagerCountButton();
+    favouriteIds = new Set((favIds || []).map(Number));
+    updateManagerCountButton();
 
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
@@ -1156,7 +1192,7 @@
 
   async function updateDisplay(opts?: { force?: boolean }) {
     const force = !!opts?.force;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    updateManagerCountButton();
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
       return;
@@ -1208,6 +1244,12 @@
     await loadSquads(managerIds, gw, { force: false });
   });
 
+  managerCountEl.addEventListener("click", () => {
+    showFavouritesOnly = !showFavouritesOnly;
+    updateManagerCountButton();
+    renderOutput();
+  });
+
   managerFilter.addEventListener("change", () => {
     renderOutput();
     const gw = parseInt(gwFilterSelect.value as any) || latestGW;
@@ -1248,11 +1290,14 @@
     managerPicksCache.clear();
     playerHistoryCache.clear();
 
-    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    const { authenticated, managerIds: ids, favouriteManagerIds: favIds } = await loadManagerIdsFromSupabase();
     if (authenticated === false) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    updateManagerCountButton();
+
+    favouriteIds = new Set((favIds || []).map(Number));
+    updateManagerCountButton();
 
     const bust = Date.now().toString();
     await fetchBootstrapData(bust);
