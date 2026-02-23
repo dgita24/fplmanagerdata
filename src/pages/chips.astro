@@ -251,18 +251,14 @@ import Nav from "../components/Nav.astro";
       if (filterId) {
         rows = base.filter((m) => String(m.entryId) === filterId);
       }
-    const filtered = filterId
-      ? allManagersData.filter((m) => String(m.entryId) === filterId)
-      : allManagersData;
 
-    if (filtered.length > 0) {
-      out.innerHTML = makeChipsTable(filtered);
+    if (rows.length > 0) {
+      out.innerHTML = makeChipsTable(rows);
       attachChipButtons();
     } else {
       out.innerHTML = "<p class='status status--error'>No managers match this filter.</p>";
     }
   }
-
   closeChipModal.addEventListener("click", () => {
     chipModal.classList.remove("is-open");
   });
