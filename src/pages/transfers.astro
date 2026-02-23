@@ -12,7 +12,7 @@ import Nav from "../components/Nav.astro";
     </header>
 
     <div class="meta-row-wide">
-      <span id="manager-count" class="badge badge-wide">Loading...</span>
+      <button id="manager-count" class="badge badge-wide badge-toggle" type="button">⭐ Toggle Favourites</button>
       <a href="/managers" class="badge badge-wide">⚙ Manage IDs</a>
     </div>
 
@@ -67,6 +67,24 @@ import Nav from "../components/Nav.astro";
     justify-content: center;
     padding: var(--space-2) var(--space-3);
     text-align: center;
+  }
+
+  .badge-toggle {
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    border: 1px solid var(--color-border);
+  }
+
+  .badge-toggle:hover {
+    background: var(--color-surface-alt);
+  }
+
+  .badge-toggle--active {
+    background: rgb(245 158 11 / 0.15) !important;
+    border-color: rgb(245 158 11 / 0.4) !important;
+    color: var(--color-warning) !important;
   }
 
   .controls-inline {
@@ -237,7 +255,9 @@ import Nav from "../components/Nav.astro";
 
   import { supabase } from '../lib/supabase.ts'
 
-  let managerIds = []
+  let managerIds = [];
+  let favouriteIds = new Set();
+  let showFavouritesOnly = false;
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -250,7 +270,7 @@ import Nav from "../components/Nav.astro";
     try {
       const { data, error } = await supabase
         .from('user_manager_lists')
-        .select('manager_ids')
+        .select('manager_ids, favourite_manager_ids')
         .eq('user_id', user.id)
         .single()
 
@@ -259,7 +279,11 @@ import Nav from "../components/Nav.astro";
         return { authenticated: true, managerIds: [] }
       }
 
-      return { authenticated: true, managerIds: data?.manager_ids || [] }
+      return {
+        authenticated: true,
+        managerIds: data?.manager_ids || [],
+        favouriteManagerIds: data?.favourite_manager_ids || []
+      }
     } catch (e) {
       console.error('Error:', e)
       return { authenticated: false, managerIds: [] }
@@ -272,7 +296,15 @@ import Nav from "../components/Nav.astro";
   const loadingStatus = document.getElementById("loading-status");
   const lastUpdatedEl = document.getElementById("last-updated");
   const managerCountEl = document.getElementById("manager-count");
+  if (!managerCountEl) console.error("Missing #manager-count element on transfers page");
   const refreshBtn = document.getElementById("refresh-btn");
+  function updateManagerCountButton() {
+    if (!managerCountEl) return;
+
+    managerCountEl.textContent = "⭐ Toggle Favourites";
+    if (showFavouritesOnly) managerCountEl.classList.add("badge-toggle--active");
+    else managerCountEl.classList.remove("badge-toggle--active");
+  }
 
   function populateManagerSelectorFromHistories() {
     if (!managerFilterSelect) return
@@ -965,6 +997,18 @@ import Nav from "../components/Nav.astro";
 
     let historiesToRender = allHistories
 
+    if (showFavouritesOnly) {
+      historiesToRender = historiesToRender.filter((history) => {
+        const entryId = Number(history?.[0]?.entryId ?? 0);
+        return favouriteIds.has(entryId);
+      });
+
+      if (historiesToRender.length === 0) {
+        out.innerHTML = "<p class='status status--warning'>No favourites set yet. Add favourites on the Live page (⭐) then come back here.</p>";
+        return;
+      }
+    }
+
     // IMPORTANT: filter allHistories (array of manager histories), not the flattened rows
     if (managerEntryId) {
       historiesToRender = allHistories.filter((history) => {
@@ -980,11 +1024,13 @@ import Nav from "../components/Nav.astro";
 
 
   (async function init() {
-    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    const { authenticated, managerIds: ids, favouriteManagerIds: favIds } = await loadManagerIdsFromSupabase();
     if (!authenticated) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    favouriteIds = new Set((favIds || []).map(Number));
+    updateManagerCountButton();
+    updateManagerCountButton();
 
     const snap = loadTransfersSnapshot();
     const canUseSnap =
@@ -1055,12 +1101,17 @@ import Nav from "../components/Nav.astro";
     saveTransfersSnapshot()
   })
 
+  managerCountEl?.addEventListener("click", () => {
+    showFavouritesOnly = !showFavouritesOnly;
+    updateManagerCountButton();
+    filterByGW();
+  });
   refreshBtn.addEventListener('click', async () => {
     const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
     if (!authenticated) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    updateManagerCountButton();
 
     const bust = Date.now().toString();
     await fetchPlayers(bust);
