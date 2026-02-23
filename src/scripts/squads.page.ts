@@ -1010,6 +1010,19 @@
       }
     }
 
+    // If favourites-only is enabled, but a specific manager is selected that isn't favourited,
+    // show a clearer message than "No squads to display."
+    if (showFavouritesOnly && managerFilterValue) {
+      const selectedId = Number(managerFilterValue);
+      const selectedIsFavourite =
+        Number.isFinite(selectedId) && favouriteIds.has(selectedId);
+
+      if (!selectedIsFavourite) {
+        out.innerHTML = "<p class='status status--warning'>The selected manager isn’t in your favourites list. Set Manager to All, or turn off ⭐ favourites.</p>";
+        return;
+      }
+    } 
+
     if (viewType === "captain" || viewType === "vice") {
       out.innerHTML = makeCaptainTable(baseData, managerFilterValue, viewType);
     } else {
