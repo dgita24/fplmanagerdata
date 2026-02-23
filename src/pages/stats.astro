@@ -337,6 +337,37 @@ import Nav from "../components/Nav.astro";
     }
   }
 
+  async function loadManagerIdsFromSupabase() {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      window.location.replace("/login");
+      return { authenticated: false, managerIds: [], favouriteManagerIds: [] };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("user_manager_lists")
+        .select("manager_ids, favourite_manager_ids")
+        .eq("user_id", user.id)
+        .single();
+
+      if (error && error.code !== "PGRST116") {
+        console.error("Error loading manager IDs:", error);
+        return { authenticated: true, managerIds: [], favouriteManagerIds: [] };
+      }
+
+      return {
+        authenticated: true,
+        managerIds: data?.manager_ids || [],
+        favouriteManagerIds: data?.favourite_manager_ids || [],
+      };
+    } catch (e) {
+      console.error("Error:", e);
+      return { authenticated: false, managerIds: [], favouriteManagerIds: [] };
+    }
+  }
+
   function renderStatsFromState(gw: number) {
     const managerValue = managerFilter?.value ?? "All"
 
@@ -721,7 +752,7 @@ import Nav from "../components/Nav.astro";
 
         // re-render instantly with current GW selection (no refetch)
         const gw = parseInt(gwFilterSelect.value) || latestGW;
-        out.innerHTML = makeStatsTable(allManagerData, gw);
+        renderStatsFromState(gw);
         attachManagerButtons();
         attachStatsSortHandlers();
       });
