@@ -56,11 +56,27 @@ import Nav from "../components/Nav.astro";
     </div>
   </div>
 
-  <!-- OR History Modal -->
+  <!-- OR History Modal (GW rank history - opened from table OR column) -->
   <div id="or-history-modal" class="modal modal--nested">
     <div class="modal-panel modal-panel--or-history">
       <button id="close-or-history-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
       <div id="or-history-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- Past Season History Modal (opened from OR badge in manager modal) -->
+  <div id="past-season-modal" class="modal modal--nested">
+    <div class="modal-panel modal-panel--or-history">
+      <button id="close-past-season-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="past-season-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- Total Points History Modal (opened from table Total column) -->
+  <div id="total-history-modal" class="modal modal--nested">
+    <div class="modal-panel modal-panel--or-history">
+      <button id="close-total-history-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="total-history-modal-content"></div>
     </div>
   </div>
 </Layout>
@@ -263,7 +279,69 @@ import Nav from "../components/Nav.astro";
     margin-bottom: var(--space-3);
     font-size: 12px;
   }
-</style>
+
+  /* Clickable OR rank button in stats table */
+  :global(.or-rank-btn) {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-weight: 600;
+    color: var(--color-primary);
+    cursor: pointer;
+  }
+
+  :global(.or-rank-btn:hover) {
+    color: var(--color-primary-hover);
+  }
+
+  /* Clickable Total points button in stats table */
+  :global(.total-pts-btn) {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-weight: 600;
+    color: var(--color-primary);
+    cursor: pointer;
+  }
+
+  :global(.total-pts-btn:hover) {
+    color: var(--color-primary-hover);
+  }
+
+  /* Past season history rows */
+  :global(.past-season-row) {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    background: var(--color-surface-alt);
+    border-top: 1px solid var(--color-border);
+    font-size: 14px;
+  }
+
+  :global(.past-season-row:hover) {
+    background: var(--color-surface);
+  }
+
+  :global(.past-season-col--season) {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-align: left;
+  }
+
+  :global(.past-season-col--rank) {
+    font-weight: 700;
+    color: var(--color-text);
+    text-align: right;
+  }
+
+  :global(.past-season-summary) {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-3);
+  }</style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
@@ -434,6 +512,7 @@ import Nav from "../components/Nav.astro";
     event: number;
     overall_rank: number;
     points?: number;
+    total_points?: number;
     rank?: number;
     event_transfers?: number;
     event_transfers_cost?: number;
@@ -476,6 +555,12 @@ import Nav from "../components/Nav.astro";
   const orHistoryModal = document.getElementById("or-history-modal")!;
   const orHistoryModalContent = document.getElementById("or-history-modal-content")!;
   const closeOrHistoryModal = document.getElementById("close-or-history-modal")!;
+  const pastSeasonModal = document.getElementById("past-season-modal")!;
+  const pastSeasonModalContent = document.getElementById("past-season-modal-content")!;
+  const closePastSeasonModal = document.getElementById("close-past-season-modal")!;
+  const totalHistoryModal = document.getElementById("total-history-modal")!;
+  const totalHistoryModalContent = document.getElementById("total-history-modal-content")!;
+  const closeTotalHistoryModal = document.getElementById("close-total-history-modal")!;
   function updateManagerCountButton() {
     if (!managerCountEl) return;
 
@@ -510,6 +595,14 @@ import Nav from "../components/Nav.astro";
 
   closeOrHistoryModal.addEventListener("click", () => {
     orHistoryModal.classList.remove("is-open");
+  });
+
+  closePastSeasonModal.addEventListener("click", () => {
+    pastSeasonModal.classList.remove("is-open");
+  });
+
+  closeTotalHistoryModal.addEventListener("click", () => {
+    totalHistoryModal.classList.remove("is-open");
   });
 
   function populateGWSelector(currentGW: number) {
@@ -816,8 +909,8 @@ import Nav from "../components/Nav.astro";
             <div class="team-name">${m.teamName}</div>
           </td>
           <td class="pts-col">${m.gwPoints}</td>
-          <td class="total-col">${m.totalPoints.toLocaleString()}</td>
-          <td class="or-col">${formatRank(m.overallRank)}</td>
+          <td class="total-col"><button type="button" class="total-pts-btn" data-entry-id="${m.entryId}">${m.totalPoints.toLocaleString()}</button></td>
+          <td class="or-col"><button type="button" class="or-rank-btn" data-entry-id="${m.entryId}">${formatRank(m.overallRank)}</button></td>
         </tr>
       `;
       rank++;
@@ -1194,10 +1287,10 @@ import Nav from "../components/Nav.astro";
         squadBtn.addEventListener('click', () => showSquadModal(manager.entryId, manager.managerName, manager.teamName));
     }
 
-    // Attach OR history click
+    // Attach OR history click (now shows past season finishing ranks)
     const orStatBtn = statsModalContent.querySelector('.stat-item--or');
     if(orStatBtn) {
-        orStatBtn.addEventListener('click', () => populateORHistoryModal(manager.entryId));
+        orStatBtn.addEventListener('click', () => populatePastSeasonModal(manager.entryId));
     }
   }
 
@@ -1257,6 +1350,142 @@ import Nav from "../components/Nav.astro";
     orHistoryModal.classList.add('is-open');
   }
 
+  async function populatePastSeasonModal(entryId: number) {
+    const manager = allManagerData.find(m => m.entryId === entryId);
+    const managerName = manager ? manager.managerName : `Manager ${entryId}`;
+
+    pastSeasonModalContent.innerHTML = `
+      <h2 class="modal-title or-modal-title">Past Season History</h2>
+      <p class="text-muted or-modal-subtitle">${managerName}</p>
+      <p class="text-muted">Loading...</p>
+    `;
+    pastSeasonModal.classList.add('is-open');
+
+    try {
+      const res = await fetch(`/api/fpl/entry/${entryId}/history`);
+      if (!res.ok) throw new Error('History fetch failed');
+      const data = await res.json();
+      const past = Array.isArray(data?.past) ? data.past : [];
+
+      if (past.length === 0) {
+        pastSeasonModalContent.innerHTML = `
+          <h2 class="modal-title or-modal-title">Past Season History</h2>
+          <p class="text-muted or-modal-subtitle">${managerName}</p>
+          <p class="status status--error">No past season history found.</p>
+        `;
+        return;
+      }
+
+      const sortedPast = [...past].sort((a: any, b: any) => {
+        const ay = Number(String(a?.season_name ?? '').slice(0, 4)) || 0;
+        const by = Number(String(b?.season_name ?? '').slice(0, 4)) || 0;
+        return by - ay;
+      });
+
+      function avgRankForLast(n: number): string {
+        const ranks = sortedPast.slice(0, n)
+          .map((row: any) => Number(row?.rank))
+          .filter((r: number) => Number.isFinite(r) && r > 0);
+        if (ranks.length === 0) return '—';
+        const avg = Math.round(ranks.reduce((sum: number, r: number) => sum + r, 0) / ranks.length);
+        return formatRank(avg);
+      }
+
+      const avg3 = avgRankForLast(3);
+      const avg5 = avgRankForLast(5);
+
+      let html = `
+        <h2 class="modal-title or-modal-title">Past Season History</h2>
+        <p class="text-muted or-modal-subtitle">${managerName}</p>
+        <div class="past-season-summary">
+          <div>Avg rank (last 3 seasons): <strong>${avg3}</strong></div>
+          <div>Avg rank (last 5 seasons): <strong>${avg5}</strong></div>
+        </div>
+        <div class="or-history-container">
+          <div class="or-history-header">
+            <span class="or-history-header-label">SEASON</span>
+            <span class="or-history-divider"></span>
+            <span class="or-history-header-label">FINAL RANK</span>
+          </div>
+          <div class="or-history-list">
+      `;
+
+      for (const row of sortedPast) {
+        const season = String(row?.season_name ?? 'Unknown');
+        const rank = row?.rank > 0 ? formatRank(Number(row.rank)) : '—';
+        html += `
+          <div class="or-history-row">
+            <span class="or-history-label">${season}</span>
+            <span class="or-history-divider"></span>
+            <span class="or-history-value">${rank}</span>
+          </div>
+        `;
+      }
+
+      html += '</div></div>';
+      pastSeasonModalContent.innerHTML = html;
+    } catch (e) {
+      pastSeasonModalContent.innerHTML = `
+        <h2 class="modal-title or-modal-title">Past Season History</h2>
+        <p class="status status--error">Failed to load history. Please try again.</p>
+      `;
+    }
+  }
+
+  function populateTotalHistoryModal(entryId: number) {
+    const manager = allManagerData.find(m => m.entryId === entryId);
+    if (!manager || !manager.historyData) {
+      totalHistoryModalContent.innerHTML = '<p class="status status--error">No history data available.</p>';
+      totalHistoryModal.classList.add('is-open');
+      return;
+    }
+
+    const current = manager.historyData.current ?? [];
+
+    if (current.length === 0) {
+      totalHistoryModalContent.innerHTML = '<p class="status status--error">No points history available.</p>';
+      totalHistoryModal.classList.add('is-open');
+      return;
+    }
+
+    const validHistory = current
+      .filter((row: HistoryRow) => typeof row.event === 'number' && (row.total_points ?? 0) > 0)
+      .sort((a: HistoryRow, b: HistoryRow) => b.event - a.event);
+
+    if (validHistory.length === 0) {
+      totalHistoryModalContent.innerHTML = '<p class="status status--error">No points history available.</p>';
+      totalHistoryModal.classList.add('is-open');
+      return;
+    }
+
+    let html = `
+      <h2 class="modal-title or-modal-title">Total Points History</h2>
+      <p class="text-muted or-modal-subtitle">${manager.managerName} - ${manager.teamName}</p>
+      <div class="or-history-container">
+        <div class="or-history-header">
+          <span class="or-history-header-label">GAMEWEEK</span>
+          <span class="or-history-divider"></span>
+          <span class="or-history-header-label">TOTAL POINTS</span>
+        </div>
+        <div class="or-history-list">
+    `;
+
+    for (const row of validHistory) {
+      html += `
+        <div class="or-history-row">
+          <span class="or-history-label">GW ${row.event}</span>
+          <span class="or-history-divider"></span>
+          <span class="or-history-value">${(row.total_points ?? 0).toLocaleString()}</span>
+        </div>
+      `;
+    }
+
+    html += '</div></div>';
+
+    totalHistoryModalContent.innerHTML = html;
+    totalHistoryModal.classList.add('is-open');
+  }
+
   function attachManagerButtons() {
     const table = document.querySelector(".stats-table");
     if (!table) return;
@@ -1266,6 +1495,20 @@ import Nav from "../components/Nav.astro";
     (table as any).__managerHandlerAttached = true;
 
     table.addEventListener("click", (e) => {
+      const orBtn = (e.target as HTMLElement)?.closest(".or-rank-btn") as HTMLElement | null;
+      if (orBtn) {
+        const entryId = parseInt(orBtn.dataset.entryId || "0", 10);
+        if (entryId) populateORHistoryModal(entryId);
+        return;
+      }
+
+      const totalBtn = (e.target as HTMLElement)?.closest(".total-pts-btn") as HTMLElement | null;
+      if (totalBtn) {
+        const entryId = parseInt(totalBtn.dataset.entryId || "0", 10);
+        if (entryId) populateTotalHistoryModal(entryId);
+        return;
+      }
+
       const btn = (e.target as HTMLElement)?.closest(".manager-btn") as HTMLElement | null;
       if (!btn) return;
 
