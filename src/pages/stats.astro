@@ -1246,12 +1246,19 @@ import Nav from "../components/Nav.astro";
   }
 
   function attachManagerButtons() {
-    document.querySelectorAll('.manager-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const button = e.target as HTMLElement;
-        const entryId = parseInt(button.dataset.entryId || '0');
-        if (entryId) showManagerModal(entryId);
-      });
+    const table = document.querySelector(".stats-table");
+    if (!table) return;
+
+    // prevent duplicate attachment for this table instance
+    if ((table as any).__managerHandlerAttached) return;
+    (table as any).__managerHandlerAttached = true;
+
+    table.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement)?.closest(".manager-btn") as HTMLElement | null;
+      if (!btn) return;
+
+      const entryId = parseInt(btn.dataset.entryId || "0", 10);
+      if (entryId) showManagerModal(entryId);
     });
   }
 
