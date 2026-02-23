@@ -306,6 +306,31 @@ import Nav from "../components/Nav.astro";
     else managerCountEl.classList.remove("badge-toggle--active");
   }
 
+  async function saveFavouritesToSupabase(ids) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { error } = await supabase
+        .from('user_manager_lists')
+        .update({ favourite_manager_ids: ids, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id);
+      if (error) console.error('Error saving favourites:', error);
+    } catch (e) {
+      console.error('Error saving favourites:', e);
+    }
+  }
+
+  async function toggleFavourite(entryId) {
+    if (favouriteIds.has(entryId)) {
+      favouriteIds.delete(entryId);
+    } else {
+      favouriteIds.add(entryId);
+    }
+    updateManagerCountButton();
+    filterByGW();
+    await saveFavouritesToSupabase([...favouriteIds]);
+  }
+
   function populateManagerSelectorFromHistories() {
     if (!managerFilterSelect) return
 
@@ -586,9 +611,17 @@ import Nav from "../components/Nav.astro";
         });
       }
 
+      const isFav = favouriteIds.has(Number(managerId));
       let html = `
         <button id="close-modal-btn" class="btn btn--danger btn--small modal-close" type="button">✕</button>
-        <h2 class="modal-title">${escapeHtml(managerName)}</h2>
+        <div style="display:flex;align-items:center;gap:var(--space-2);padding-right:40px;margin-bottom:var(--space-1);">
+          <h2 class="modal-title" style="flex:1;min-width:0;margin-bottom:0;">${escapeHtml(managerName)}</h2>
+          <button type="button" class="fav-toggle-btn ${isFav ? 'fav-toggle-btn--active' : ''}"
+            data-entry-id="${managerId}"
+            title="${isFav ? 'Remove from favourites' : 'Add to favourites'}">
+            ${isFav ? '⭐' : '☆'}
+          </button>
+        </div>
         <p class="text-muted" style="margin-bottom:var(--space-3); font-size:13px;">
           Total transfers: <strong>${transfers.length}</strong>
         </p>
@@ -666,6 +699,20 @@ import Nav from "../components/Nav.astro";
       html += `</div>`;
 
       modalContent.innerHTML = html;
+
+      // Wire up fav-toggle-btn
+      const favBtn = modalContent.querySelector('.fav-toggle-btn');
+      if (favBtn) {
+        favBtn.addEventListener('click', () => {
+          const id = Number(favBtn.dataset.entryId);
+          if (!id) return;
+          toggleFavourite(id);
+          const nowFav = favouriteIds.has(id);
+          favBtn.textContent = nowFav ? '⭐' : '☆';
+          favBtn.classList.toggle('fav-toggle-btn--active', nowFav);
+          favBtn.title = nowFav ? 'Remove from favourites' : 'Add to favourites';
+        });
+      }
 
       document.getElementById("close-modal-btn")?.addEventListener("click", () => {
         transferModal.classList.remove("is-open");

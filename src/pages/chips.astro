@@ -189,6 +189,31 @@ import Nav from "../components/Nav.astro";
     }
   }
 
+  async function saveFavouritesToSupabase(ids) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { error } = await supabase
+        .from('user_manager_lists')
+        .update({ favourite_manager_ids: ids, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id);
+      if (error) console.error('Error saving favourites:', error);
+    } catch (e) {
+      console.error('Error saving favourites:', e);
+    }
+  }
+
+  async function toggleFavourite(entryId) {
+    if (favouriteIds.has(entryId)) {
+      favouriteIds.delete(entryId);
+    } else {
+      favouriteIds.add(entryId);
+    }
+    updateManagerCountButton();
+    renderChipsTable();
+    await saveFavouritesToSupabase([...favouriteIds]);
+  }
+
   let managerIds = [];
   let favouriteIds = new Set();
   let showFavouritesOnly = false;
@@ -647,7 +672,12 @@ import Nav from "../components/Nav.astro";
         <tr>
           <td class="manager-cell">
             <span class="strong">${m.managerName}</span>
-            ${favouriteIds.has(Number(m.entryId)) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}
+            <button type="button" class="fav-toggle-btn ${favouriteIds.has(Number(m.entryId)) ? 'fav-toggle-btn--active' : ''}"
+              data-entry-id="${m.entryId}"
+              title="${favouriteIds.has(Number(m.entryId)) ? 'Remove from favourites' : 'Add to favourites'}"
+              style="font-size:14px;padding:2px 5px;margin-left:4px;">
+              ${favouriteIds.has(Number(m.entryId)) ? '⭐' : '☆'}
+            </button>
           </td>
           <td class="chips-cell">${usedHtml}</td>
           <td class="chips-cell">${remainingHtml}</td>
@@ -675,6 +705,14 @@ import Nav from "../components/Nav.astro";
         const gw = parseInt(button.dataset.gw);
         const points = parseInt(button.dataset.points);
         showChipSquad(managerId, managerName, chipName, gw, points);
+      });
+    });
+    document.querySelectorAll('#chips-output .fav-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = Number((btn as HTMLElement).dataset.entryId);
+        if (!id) return;
+        toggleFavourite(id);
       });
     });
   }
