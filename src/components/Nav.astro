@@ -11,18 +11,20 @@ const navLinks = [
 ---
 <header class="nav-header">
   <nav class="nav">
-    <a href="/" class="nav-brand">FPL Manager Watch</a>
-
     <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Toggle menu" aria-expanded="false">
       <span class="hamburger"></span>
     </button>
+
+    <a href="/" class="nav-brand">FPL Manager Watch</a>
 
     <div id="nav-menu" class="nav-menu">
       <div class="nav-menu-header">
         <a href="/" class="nav-brand">FPL Manager Watch</a>
         <div class="nav-menu-header-right">
           <span id="nav-auth-mobile"></span>
-          <button id="menu-close" class="menu-close" type="button" aria-label="Close menu">✕</button>
+         <button id="menu-close" class="menu-close badge badge--danger" type="button" aria-label="Close menu">
+           ✕
+         </button>
         </div>
       </div>
 
@@ -69,7 +71,8 @@ const navLinks = [
   .nav {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    position: relative;
     max-width: var(--container-max);
     margin: 0 auto;
     padding: var(--space-3) var(--space-4);
@@ -88,6 +91,9 @@ const navLinks = [
   }
 
   .menu-toggle {
+    position: absolute;
+    left: var(--space-4);
+
     display: flex;
     align-items: center;
     justify-content: center;
@@ -172,17 +178,22 @@ const navLinks = [
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
-    background: transparent;
+    background: var(--color-danger, #e53935);
+    color: #fff;
     border: none;
+    border-radius: 999px;
+    font-size: 1.25rem;
+    font-weight: 600;
+    width: 32px;
+    height: 32px;
     cursor: pointer;
-    font-size: var(--text-xl);
-    color: var(--color-text);
+    margin-left: var(--space-3);
+    box-shadow: 0 0 4px rgb(0 0 0 / 12%);
+    transition: background .2s;
   }
 
   .menu-close:hover {
-    color: var(--color-primary);
+    background: var(--color-danger-hover, #d32f2f);
   }
 
   .nav-links {
