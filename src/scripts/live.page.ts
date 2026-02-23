@@ -66,6 +66,24 @@ import { supabase } from '../lib/supabase.ts'
    populateCompareManager();
    populateManagerFilter();
 
+   // Disable non-favourites in the dropdown when favourites-only is on
+   if (showFavouritesOnly) {
+     Array.from(managerFilterSelect.options).forEach((opt) => {
+       if (!opt.value) return
+       const id = Number(opt.value)
+       opt.disabled = !Number.isNaN(id) && !favouriteIds.has(id)
+     })
+     const selected = managerFilterSelect.value
+     const selectedId = Number(selected)
+     const invalidSelected =
+       selected &&
+       !Number.isNaN(selectedId) &&
+       !favouriteIds.has(selectedId)
+     if (invalidSelected) managerFilterSelect.value = ""
+   } else {
+     Array.from(managerFilterSelect.options).forEach((opt) => (opt.disabled = false))
+   }
+
    const compareId = compareManagerSelect.value;
    const managerFilterId = managerFilterSelect.value;
    let dataToRender = showFavouritesOnly
@@ -77,7 +95,7 @@ import { supabase } from '../lib/supabase.ts'
   }
 
   if (showFavouritesOnly && dataToRender.length === 0) {
-    out.innerHTML = "<p class='status status--warning'>Not set as a favoutite. Tap manager name → tap ⭐ to add.</p>";
+    out.innerHTML = "<p class='status status--warning'>No favourites set yet. Tap a manager name → tap ⭐ to add.</p>";
     return;
   }
 
