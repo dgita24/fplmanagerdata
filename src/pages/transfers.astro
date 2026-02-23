@@ -999,27 +999,54 @@ import Nav from "../components/Nav.astro";
 
     if (showFavouritesOnly) {
       historiesToRender = historiesToRender.filter((history) => {
-        const entryId = Number(history?.[0]?.entryId ?? 0);
-        return favouriteIds.has(entryId);
-      });
+        const entryId = Number(history?.[0]?.entryId ?? 0)
+        return favouriteIds.has(entryId)
+      })
 
       if (historiesToRender.length === 0) {
-        out.innerHTML = "<p class='status status--warning'>No favourites set yet. Add favourites on the Live page (⭐) then come back here.</p>";
-        return;
+        out.innerHTML =
+          "<p class='status status--warning'>No favourites set yet. Add favourites on the Live page (⭐) then come back here.</p>"
+        return
+      }
+
+      // Disable non-favourites in the dropdown when favourites-only is on
+      if (managerFilterSelect) {
+        Array.from(managerFilterSelect.options).forEach((opt) => {
+          if (!opt.value) return
+          if (opt.value === "All") return
+          const id = Number(opt.value)
+          opt.disabled = !Number.isNaN(id) && !favouriteIds.has(id)
+        })
+
+        // If current selection is invalid under favourites-only, reset to All
+        const selected = managerFilterSelect.value
+        const selectedId = Number(selected)
+        const invalidSelected =
+          selected &&
+          selected !== "All" &&
+          !Number.isNaN(selectedId) &&
+          !favouriteIds.has(selectedId)
+
+        if (invalidSelected) managerFilterSelect.value = "All"
+      }
+    } else {
+      // When favourites-only is off, ensure all options are enabled
+      if (managerFilterSelect) {
+        Array.from(managerFilterSelect.options).forEach((opt) => (opt.disabled = false))
       }
     }
 
-    // IMPORTANT: filter allHistories (array of manager histories), not the flattened rows
-    if (managerEntryId) {
-      historiesToRender = allHistories.filter((history) => {
+    // IMPORTANT: filter the CURRENT dataset (historiesToRender), not allHistories
+    if (managerEntryId && managerEntryId !== "All") {
+      historiesToRender = historiesToRender.filter((history) => {
         const entryId = String(history?.[0]?.entryId ?? "")
-        return entryId === managerEntryId
+        return entryId === String(managerEntryId)
       })
     }
 
     out.innerHTML = makeTable(historiesToRender, filterGW)
     attachManagerLinks()
-   attachSortHandlers()
+    attachSortHandlers()
   }
 
 
