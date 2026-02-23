@@ -999,6 +999,25 @@
 
   function renderOutput() {
     const viewType = viewFilter.value;
+
+    // Disable non-favourites in the dropdown when favourites-only is on
+    if (showFavouritesOnly) {
+      Array.from((managerFilter as HTMLSelectElement).options).forEach((opt) => {
+        if (!opt.value) return
+        const id = Number(opt.value)
+        opt.disabled = !Number.isNaN(id) && !favouriteIds.has(id)
+      })
+      const selected = managerFilter.value
+      const selectedId = Number(selected)
+      const invalidSelected =
+        selected &&
+        !Number.isNaN(selectedId) &&
+        !favouriteIds.has(selectedId)
+      if (invalidSelected) managerFilter.value = ""
+    } else {
+      Array.from((managerFilter as HTMLSelectElement).options).forEach((opt) => (opt.disabled = false))
+    }
+
     const managerFilterValue = managerFilter.value;
 
     let baseData = allSquadsData;
@@ -1009,19 +1028,6 @@
         return;
       }
     }
-
-    // If favourites-only is enabled, but a specific manager is selected that isn't favourited,
-    // show a clearer message than "No squads to display."
-    if (showFavouritesOnly && managerFilterValue) {
-      const selectedId = Number(managerFilterValue);
-      const selectedIsFavourite =
-        Number.isFinite(selectedId) && favouriteIds.has(selectedId);
-
-      if (!selectedIsFavourite) {
-        out.innerHTML = "<p class='status status--warning'>The selected manager isn’t in your favourites list. Set Manager to All, or turn off ⭐ favourites.</p>";
-        return;
-      }
-    } 
 
     if (viewType === "captain" || viewType === "vice") {
       out.innerHTML = makeCaptainTable(baseData, managerFilterValue, viewType);

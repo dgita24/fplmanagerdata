@@ -369,6 +369,25 @@ import Nav from "../components/Nav.astro";
   }
 
   function renderStatsFromState(gw: number) {
+    // Disable non-favourites in the dropdown when favourites-only is on
+    if (showFavouritesOnly) {
+      Array.from(managerFilter.options).forEach((opt) => {
+        if (!opt.value || opt.value === "All") return
+        const id = Number(opt.value)
+        opt.disabled = !Number.isNaN(id) && !favouriteIds.has(id)
+      })
+      const selected = managerFilter.value
+      const selectedId = Number(selected)
+      const invalidSelected =
+        selected &&
+        selected !== "All" &&
+        !Number.isNaN(selectedId) &&
+        !favouriteIds.has(selectedId)
+      if (invalidSelected) managerFilter.value = "All"
+    } else {
+      Array.from(managerFilter.options).forEach((opt) => (opt.disabled = false))
+    }
+
     const managerValue = managerFilter?.value ?? "All"
 
     // Start from all data
@@ -380,13 +399,6 @@ import Nav from "../components/Nav.astro";
     // Apply favourites-only filter (after manager selection)
     if (showFavouritesOnly) {
       dataToRender = dataToRender.filter((m) => favouriteIds.has(Number(m.entryId)))
-
-      // If user picked a specific manager but it's not favourited, show a clear message
-      if (managerValue && managerValue !== "All" && dataToRender.length === 0) {
-        out.innerHTML =
-          "<p class='status status--warning'>The selected manager is not in your favourites list. Set Manager to All or turn off ⭐ favourites.</p>"
-        return
-      }
 
       // If no favourites at all (or none present in loaded data), show the usual favourites empty message
       if (dataToRender.length === 0) {

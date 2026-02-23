@@ -236,31 +236,45 @@ import Nav from "../components/Nav.astro";
   }
 
   function renderChipsTable() {
-      const filterId = managerFilterSelect?.value || "";
+    // Disable non-favourites in the dropdown when favourites-only is on
+    if (showFavouritesOnly) {
+      Array.from(managerFilterSelect.options).forEach((opt) => {
+        if (!opt.value) return
+        const id = Number(opt.value)
+        opt.disabled = !Number.isNaN(id) && !favouriteIds.has(id)
+      })
+      const selected = managerFilterSelect.value
+      const selectedId = Number(selected)
+      const invalidSelected =
+        selected &&
+        !Number.isNaN(selectedId) &&
+        !favouriteIds.has(selectedId)
+      if (invalidSelected) managerFilterSelect.value = ""
+    } else {
+      Array.from(managerFilterSelect.options).forEach((opt) => (opt.disabled = false))
+    }
 
-      let base = allManagersData;
-      if (showFavouritesOnly) {
-       base = base.filter((m) => favouriteIds.has(Number(m.entryId)));
-        if (base.length === 0) {
-          out.innerHTML = "<p class='status status--warning'>No favourites set yet. Tap a manager name → tap ⭐ to add.</p>";
-          return;
-        }
+    const filterId = managerFilterSelect?.value || "";
+
+    let base = allManagersData;
+    if (showFavouritesOnly) {
+      base = base.filter((m) => favouriteIds.has(Number(m.entryId)));
+      if (base.length === 0) {
+        out.innerHTML = "<p class='status status--warning'>No favourites set yet. Tap a manager name → tap ⭐ to add.</p>";
+        return;
       }
-  
-      let rows = base;
-      if (filterId) {
-        rows = base.filter((m) => String(m.entryId) === filterId);
-      }
+    }
+
+    let rows = base;
+    if (filterId) {
+      rows = base.filter((m) => String(m.entryId) === filterId);
+    }
 
     if (rows.length > 0) {
       out.innerHTML = makeChipsTable(rows);
       attachChipButtons();
     } else {
-      if (showFavouritesOnly && filterId) {
-        out.innerHTML = "<p class='status status--warning'>The selected manager is not in your favourites list. Set Manager to All or turn off ⭐ favourites.</p>";
-      } else {
-        out.innerHTML = "<p class='status status--error'>No managers match this filter.</p>";
-      }
+      out.innerHTML = "<p class='status status--error'>No managers match this filter.</p>";
     }
   }
   closeChipModal.addEventListener("click", () => {
