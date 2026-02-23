@@ -197,6 +197,14 @@ import Nav from "../components/Nav.astro";
     color: var(--color-primary);
   }
 
+  :global(.stat-item--hl-best) {
+    background: rgba(74, 222, 128, 0.08) !important;
+  }
+
+  :global(.stat-item--hl-worst) {
+    background: rgba(248, 113, 113, 0.08) !important;
+  }
+
   :global(.stat-item--hl:hover) {
     background: var(--color-border) !important;
     transform: translateY(-1px);
@@ -1245,19 +1253,19 @@ import Nav from "../components/Nav.astro";
       <div class="stats-section">
         <h3 class="stats-section-title">📈 Highs & Lows</h3>
         <div class="stats-grid stats-grid--compact">
-          <div class="stat-item stat-item--compact stat-item--hl" data-gw="${stats.bestGw.gw}">
+          <div class="stat-item stat-item--compact stat-item--hl stat-item--hl-best" data-gw="${stats.bestGw.gw}">
             <span class="stat-value">${stats.bestGw.points}</span>
             <span class="stat-label">Best (GW${stats.bestGw.gw})</span>
           </div>
-          <div class="stat-item stat-item--compact stat-item--hl" data-gw="${stats.worstGw.gw}">
+          <div class="stat-item stat-item--compact stat-item--hl stat-item--hl-worst" data-gw="${stats.worstGw.gw}">
             <span class="stat-value">${stats.worstGw.gw > 0 ? stats.worstGw.points : '—'}</span>
             <span class="stat-label">${stats.worstGw.gw > 0 ? `Worst (GW${stats.worstGw.gw})` : 'Worst'}</span>
           </div>
-          <div class="stat-item stat-item--compact stat-item--hl" data-gw="${stats.bestGwRank.gw}">
+          <div class="stat-item stat-item--compact stat-item--hl stat-item--hl-best" data-gw="${stats.bestGwRank.gw}">
             <span class="stat-value">${formatRank(stats.bestGwRank.rank)}</span>
             <span class="stat-label">Best Rank (GW${stats.bestGwRank.gw})</span>
           </div>
-          <div class="stat-item stat-item--compact stat-item--hl" data-gw="${stats.worstGwRank.gw}">
+          <div class="stat-item stat-item--compact stat-item--hl stat-item--hl-worst" data-gw="${stats.worstGwRank.gw}">
             <span class="stat-value">${stats.worstGwRank.gw > 0 ? formatRank(stats.worstGwRank.rank) : '—'}</span>
             <span class="stat-label">${stats.worstGwRank.gw > 0 ? `Worst Rank (GW${stats.worstGwRank.gw})` : 'Worst Rank'}</span>
           </div>
