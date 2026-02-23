@@ -58,6 +58,31 @@
     else managerCountEl.classList.remove('badge-toggle--active');
 }
 
+  async function saveFavouritesToSupabase(ids: number[]) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { error } = await supabase
+        .from('user_manager_lists')
+        .update({ favourite_manager_ids: ids, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id);
+      if (error) console.error('Error saving favourites:', error);
+    } catch (e) {
+      console.error('Error saving favourites:', e);
+    }
+  }
+
+  async function toggleFavourite(entryId: number) {
+    if (favouriteIds.has(entryId)) {
+      favouriteIds.delete(entryId);
+    } else {
+      favouriteIds.add(entryId);
+    }
+    updateManagerCountButton();
+    renderOutput();
+    await saveFavouritesToSupabase([...favouriteIds]);
+  }
+
   let managerIds = [];
   let favouriteIds: Set<number> = new Set();
   let showFavouritesOnly = false;
@@ -429,6 +454,7 @@
       const target = manager.squad.find(p => isCaptainView ? p.isCaptain : p.isViceCaptain);
       if (target) {
         rows.push({
+          entryId: manager.entryId,
           managerName: manager.managerName,
           chipPlayed: manager.chipPlayed,
           playerId: target.playerId,
@@ -465,7 +491,7 @@
 
       html += `
         <tr>
-          <td class="manager-cell">${row.managerName}${chipBadge}</td>
+          <td class="manager-cell">${row.managerName}${chipBadge}${favouriteIds.has(row.entryId) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}</td>
           <td class="player-cell">
             <button type="button" class="player-name-btn" data-player-id="${row.playerId}">${row.playerName}</button>
           </td>
@@ -502,6 +528,7 @@
           <!-- UPDATED HEADER: Centered with Dash -->
           <div class="squad-header">
             <button class="manager-link-btn" data-manager-id="${manager.entryId}">${manager.managerName}</button>
+            ${favouriteIds.has(manager.entryId) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}
             <span class="team-name-span">— ${manager.teamName}</span>
           </div>
           ${manager.chipPlayed ? `<div class="squad-chip-indicator">${getChipFullName(manager.chipPlayed)} played</div>` : ''}
@@ -737,8 +764,16 @@
         const totalPointsSum = rows.reduce((acc, r) => acc + r.points, 0);
         const totalHitsCost = (historyData?.current || []).reduce((acc, row) => acc + (Number(row.event_transfers_cost) || 0), 0);
 
+        const isFav = favouriteIds.has(Number(managerId));
         let html = `
-            <h2 class="modal-title">${managerName}</h2>
+            <div style="display:flex;align-items:center;gap:var(--space-2);padding-right:40px;margin-bottom:var(--space-1);">
+              <h2 class="modal-title" style="flex:1;min-width:0;margin-bottom:0;">${managerName}</h2>
+              <button type="button" class="fav-toggle-btn ${isFav ? 'fav-toggle-btn--active' : ''}"
+                data-entry-id="${managerId}"
+                title="${isFav ? 'Remove from favourites' : 'Add to favourites'}">
+                ${isFav ? '⭐' : '☆'}
+              </button>
+            </div>
             <p class="text-muted" style="margin-bottom:1rem;">
                 Contribution History (GW1 - GW${maxGw}) <br>
                 <span class="text-success">Total Contributed: ${totalPointsSum} pts</span>
@@ -784,6 +819,20 @@
         `;
         
         historyModalContent.innerHTML = html;
+
+        // Wire up fav-toggle-btn
+        const favBtn = historyModalContent.querySelector('.fav-toggle-btn');
+        if (favBtn) {
+          (favBtn as HTMLElement).addEventListener('click', () => {
+            const id = parseInt((favBtn as HTMLElement).dataset.entryId || '0');
+            if (!id) return;
+            toggleFavourite(id);
+            const nowFav = favouriteIds.has(id);
+            favBtn.textContent = nowFav ? '⭐' : '☆';
+            favBtn.classList.toggle('fav-toggle-btn--active', nowFav);
+            (favBtn as HTMLElement).title = nowFav ? 'Remove from favourites' : 'Add to favourites';
+          });
+        }
 
     } catch (e) {
         console.error(e);

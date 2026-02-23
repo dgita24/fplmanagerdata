@@ -599,6 +599,32 @@ import Nav from "../components/Nav.astro";
     }
   }
 
+  async function saveFavouritesToSupabase(ids: number[]) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { error } = await supabase
+        .from('user_manager_lists')
+        .update({ favourite_manager_ids: ids, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id);
+      if (error) console.error('Error saving favourites:', error);
+    } catch (e) {
+      console.error('Error saving favourites:', e);
+    }
+  }
+
+  async function toggleFavourite(entryId: number) {
+    if (favouriteIds.has(entryId)) {
+      favouriteIds.delete(entryId);
+    } else {
+      favouriteIds.add(entryId);
+    }
+    updateManagerCountButton();
+    const gw = parseInt(gwFilterSelect.value) || latestGW;
+    renderStatsFromState(gw);
+    await saveFavouritesToSupabase([...favouriteIds]);
+  }
+
   closeStatsModal.addEventListener("click", () => {
     statsModal.classList.remove("is-open");
   });
@@ -933,6 +959,7 @@ import Nav from "../components/Nav.astro";
             <button type="button" class="manager-btn" data-entry-id="${m.entryId}">
               ${m.managerName}
             </button>
+            ${favouriteIds.has(Number(m.entryId)) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}
           </td>
           <td class="pts-col">${m.gwPoints}</td>
           <td class="total-col"><button type="button" class="total-pts-btn" data-entry-id="${m.entryId}">${m.totalPoints.toLocaleString()}</button></td>
@@ -1206,9 +1233,16 @@ import Nav from "../components/Nav.astro";
     const captainHtml = formatCaptainList(captainCounts);
 
     let html = `
-      <h2 class="modal-title" style="margin-bottom: var(--space-1);">
-        <button type="button" class="manager-name-btn" data-entry-id="${manager.entryId}">${manager.managerName}</button>
-      </h2>
+      <div style="display:flex;align-items:center;gap:var(--space-2);padding-right:40px;margin-bottom:var(--space-1);">
+        <h2 class="modal-title" style="flex:1;min-width:0;margin-bottom:0;">
+          <button type="button" class="manager-name-btn" data-entry-id="${manager.entryId}">${manager.managerName}</button>
+        </h2>
+        <button type="button" class="fav-toggle-btn ${favouriteIds.has(manager.entryId) ? 'fav-toggle-btn--active' : ''}"
+          data-entry-id="${manager.entryId}"
+          title="${favouriteIds.has(manager.entryId) ? 'Remove from favourites' : 'Add to favourites'}">
+          ${favouriteIds.has(manager.entryId) ? '⭐' : '☆'}
+        </button>
+      </div>
       <p class="text-muted" style="margin-bottom: var(--space-3); font-size: 12px;">${manager.teamName}</p>
 
       <!-- Season Overview -->
@@ -1307,6 +1341,20 @@ import Nav from "../components/Nav.astro";
 
     statsModalContent.innerHTML = html;
     
+    // Wire up fav-toggle-btn
+    const favBtn = statsModalContent.querySelector('.fav-toggle-btn');
+    if (favBtn) {
+      favBtn.addEventListener('click', () => {
+        const id = parseInt((favBtn as HTMLElement).dataset.entryId || '0');
+        if (!id) return;
+        toggleFavourite(id);
+        const nowFav = favouriteIds.has(id);
+        favBtn.textContent = nowFav ? '⭐' : '☆';
+        favBtn.classList.toggle('fav-toggle-btn--active', nowFav);
+        (favBtn as HTMLElement).title = nowFav ? 'Remove from favourites' : 'Add to favourites';
+      });
+    }
+
     // Re-attach squad click inside modal
     const squadBtn = statsModalContent.querySelector('.manager-name-btn');
     if(squadBtn) {

@@ -2372,4 +2372,33 @@ const { title = "FPL Manager Data" } = Astro.props;
     border-radius: 3px;
     margin-left: 4px;
   }
+
+  /* Favourite star indicator shown next to manager names */
+  .fav-star {
+    font-size: 10px;
+    margin-left: 3px;
+    vertical-align: middle;
+  }
+
+  /* Favourite toggle button in modals */
+  .fav-toggle-btn {
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 4px 8px;
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+    flex-shrink: 0;
+  }
+
+  .fav-toggle-btn:hover {
+    background: var(--color-surface-alt);
+  }
+
+  .fav-toggle-btn--active {
+    background: rgb(245 158 11 / 0.15);
+    border-color: rgb(245 158 11 / 0.4);
+  }
 </style>
