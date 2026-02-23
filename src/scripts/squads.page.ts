@@ -1123,7 +1123,7 @@
     if (authenticated === false) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    updateManagerCountButton();
     favouriteIds = new Set((favIds || []).map(Number));
     updateManagerCountButton();
 
@@ -1182,7 +1182,7 @@
 
   async function updateDisplay(opts?: { force?: boolean }) {
     const force = !!opts?.force;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    updateManagerCountButton();
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
       return;
@@ -1284,7 +1284,7 @@
     if (authenticated === false) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
+    updateManagerCountButton();
 
     favouriteIds = new Set((favIds || []).map(Number));
     updateManagerCountButton();
