@@ -13,7 +13,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     </header>
 
     <div class="meta-row-wide">
-      <span id="manager-count" class="badge badge-wide">Loading...</span>
+      <button id="manager-count" class="badge badge-wide badge-toggle" type="button">⭐ Toggle Favourites</button>
       <a href="/managers" class="badge badge-wide">⚙ Manage IDs</a>
     </div>
 
@@ -82,6 +82,24 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     padding: var(--space-2) var(--space-3);
     text-align: center;
   }
+
+  .badge-toggle {
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    border: 1px solid var(--color-border);
+  }
+
+  .badge-toggle:hover {
+    background: var(--color-surface-alt);
+  }
+
+.badge-toggle--active {
+  background: rgb(245 158 11 / 0.15) !important;
+  border-color: rgb(245 158 11 / 0.4) !important;
+  color: var(--color-warning) !important;
+}
 
   .controls-inline {
     display: flex;
