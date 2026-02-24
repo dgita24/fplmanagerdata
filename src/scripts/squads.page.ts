@@ -401,11 +401,16 @@
       const squadWithIndicators = applyAutoSubsKeepAll(squadRaw, chipPlayed || "None");
       const squad = applyCaptaincyToSquadDisplay(squadWithIndicators, chipPlayed || "None");
 
+      const teamValue = Number(summaryData.last_deadline_value) || 0;
+      const bank = Number(summaryData.last_deadline_bank) || 0;
+
       return {
         entryId,
         managerName,
         teamName,
         chipPlayed,
+        teamValue,
+        bank,
         squad
       };
     } catch (e) {
@@ -437,6 +442,11 @@
       case "TC": return "Triple Captain";
       default: return chipCode;
     }
+  }
+
+  function formatFplValue(raw: number): string {
+    // FPL API stores values in tenths of millions (e.g. 1051 = £105.1m)
+    return `${(raw / 10).toFixed(1)}m`;
   }
 
   function makeCaptainTable(squadsData, managerFilterValue = "", viewType = "captain") {
@@ -523,13 +533,19 @@
     for (const manager of filteredManagers) {
       const squad = [...(manager.squad || [])].sort((a, b) => a.position - b.position);
 
+      const tv = manager.teamValue ? formatFplValue(manager.teamValue) : null;
+      const bk = manager.bank != null ? formatFplValue(manager.bank) : null;
+      const valueBankText = tv ? `${tv}${bk !== null ? ` (${bk})` : ""}` : "";
+
       html += `
         <div class="card squad-card">
-          <!-- UPDATED HEADER: Centered with Dash -->
           <div class="squad-header">
-            <button class="manager-link-btn" data-manager-id="${manager.entryId}">${manager.managerName}</button>
-            ${favouriteIds.has(manager.entryId) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}
-            <span class="team-name-span">— ${manager.teamName}</span>
+            <div class="squad-header-left">
+              <button class="manager-link-btn" data-manager-id="${manager.entryId}">${manager.managerName}</button>
+              ${favouriteIds.has(manager.entryId) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}
+              <span class="team-name-span">— ${manager.teamName}</span>
+            </div>
+            ${valueBankText ? `<div class="squad-header-right"><span class="squad-value-bank">${valueBankText}</span></div>` : ""}
           </div>
           ${manager.chipPlayed ? `<div class="squad-chip-indicator">${getChipFullName(manager.chipPlayed)} played</div>` : ''}
           <div class="table-scroll">

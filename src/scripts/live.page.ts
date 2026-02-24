@@ -17,7 +17,7 @@ import { supabase } from '../lib/supabase.ts'
     ts: number;
     gw: number;
     compareToId: string;
-    liveSortKey: "livePointsBeforeHits" | "transferCost" | "livePoints" | "totalPoints" | "diff";
+    liveSortKey: "livePointsBeforeHits" | "transferCost" | "ltp" | "totalPoints" | "diff";
     liveSortDir: "asc" | "desc";
     managerIds: number[];
     data: any[];
@@ -292,7 +292,7 @@ const managerDataCache = new Map<string, any>();
   // Live table sorting (client-side)
   // Default: GW desc (tie-break: Total desc)
   // ==============================
-  let liveSortKey: "livePointsBeforeHits" | "transferCost" | "livePoints" | "totalPoints" | "diff" = "livePointsBeforeHits";
+  let liveSortKey: "livePointsBeforeHits" | "transferCost" | "ltp" | "totalPoints" | "diff" = "livePointsBeforeHits";
   let liveSortDir: "asc" | "desc" = "desc";
 
   function normalizeNumber(v: any) {
@@ -543,6 +543,24 @@ const managerDataCache = new Map<string, any>();
       const liveNet = livePointsBeforeHits - transferCost;
 
       // =========================
+      // LEFT TO PLAY (LtP)
+      // Count effective players (multiplier > 0) whose team's GW fixture has not yet finished.
+      // This accounts for BB (bench players get multiplier=1), auto-subs (DNP starters get
+      // multiplier=0), and players from teams with no fixture this GW (excluded via fixturesCache).
+      // =========================
+      const teamsWithFixture = new Set<number>();
+      for (const f of fixturesCache) {
+        teamsWithFixture.add(f.team_h);
+        teamsWithFixture.add(f.team_a);
+      }
+      const ltp = finalTeam.filter(p => {
+        if ((p.multiplier ?? 0) === 0) return false;
+        if (!teamsWithFixture.has(p.teamId)) return false;
+        const { finished, finishedProvisional } = getTeamGwStatusLocal(p.teamId, gw);
+        return !(finished || finishedProvisional);
+      }).length;
+
+      // =========================
       // TOTAL POINTS (projected)
       // =========================
       let totalPoints = 0;
@@ -569,6 +587,7 @@ const managerDataCache = new Map<string, any>();
         transferCost,
         livePointsBeforeHits,
         livePoints: liveNet,
+        ltp,
         totalPoints
       };
     } catch (e) {
@@ -1308,7 +1327,7 @@ function buildBreakdownRows(
                 <th>Manager</th>
                 <th class="gw-col sortable-col ${liveSortKey === "livePointsBeforeHits" ? "is-sorted" : ""}" data-sort="livePointsBeforeHits">GW</th>
                 <th class="hit-col sortable-col ${liveSortKey === "transferCost" ? "is-sorted" : ""}" data-sort="transferCost">Hit</th>
-                <th class="nett-col sortable-col ${liveSortKey === "livePoints" ? "is-sorted" : ""}" data-sort="livePoints">Nett</th>
+                <th class="ltp-col sortable-col ${liveSortKey === "ltp" ? "is-sorted" : ""}" data-sort="ltp">LtP</th>
                 <th class="total-col sortable-col ${liveSortKey === "totalPoints" ? "is-sorted" : ""}" data-sort="totalPoints">Total</th>
                 <th class="diff-col sortable-col ${liveSortKey === "diff" ? "is-sorted" : ""}" data-sort="diff">Diff</th>
               </tr>
@@ -1341,7 +1360,7 @@ function buildBreakdownRows(
           </td>
           <td class="gw-col">${m.livePointsBeforeHits}</td>
           <td class="hit-col ${hitClass}">${m.transferCost}</td>
-          <td class="nett-col">${m.livePoints}</td>
+          <td class="ltp-col">${m.ltp ?? 0}</td>
           <td class="total-col">${m.totalPoints.toLocaleString()}</td>
           <td class="diff-col">${diffText}</td>
         </tr>
