@@ -31,7 +31,8 @@ export const DEFAULT_TTLS = {
 
   // Picks
   ENTRY_EVENT_CURRENT: 0,
-  ENTRY_EVENT_PAST: -1,
+  // 30 days: past GW picks are immutable but we bound storage growth on this public site
+  ENTRY_EVENT_PAST: 2592000,
 
   // Transfers
   ENTRY_TRANSFERS: 300, // 5 minutes
@@ -135,16 +136,38 @@ export function getTTLForPath(path: string, queryString: string, currentGW: numb
   return DEFAULT_TTLS.DEFAULT;
 }
 
+/**
+ * Cache-buster params that are stripped before computing the KV key.
+ *
+ * Why: clients append e.g. `?v=<timestamp>` to break the browser/CDN cache
+ * on current-GW pages.  If we include these in the KV key every unique
+ * timestamp creates a brand-new entry → perpetual MISS and unbounded storage
+ * growth.  Stripping them keeps keys stable while still letting meaningful
+ * params (e.g. `event=10` for fixtures) influence the key.
+ *
+ * Force-refresh without key pollution: current-GW endpoints already have
+ * TTL = 0, so they are never stored in KV regardless of the `v` param.
+ * Past-GW endpoints have immutable data; their canonical (v-stripped) key
+ * will produce a cache HIT, which is the desired behaviour.
+ */
+const CACHE_BUSTER_PARAMS = new Set(['v', '_', 't']);
+
 export function computeCacheKey(path: string, queryString: string): string {
   const normalizedPath = path.toLowerCase().trim();
-  let normalizedQuery = (queryString ?? '').trim();
-  
-  // NORMALIZE: Treat "?" (empty query) same as "" (empty string)
-  if (normalizedQuery === '?') {
-    normalizedQuery = '';
+  const qs = (queryString ?? '').trim();
+
+  // Strip cache-buster params, keep all others (e.g. event=10 for fixtures)
+  let canonicalQuery = '';
+  if (qs && qs !== '?') {
+    const params = new URLSearchParams(qs.startsWith('?') ? qs.slice(1) : qs);
+    for (const key of CACHE_BUSTER_PARAMS) {
+      params.delete(key);
+    }
+    const cleaned = params.toString();
+    canonicalQuery = cleaned ? `?${cleaned}` : '';
   }
 
-  return `fpl:${normalizedPath}${normalizedQuery}`;
+  return `fpl:${normalizedPath}${canonicalQuery}`;
 }
 
 /**

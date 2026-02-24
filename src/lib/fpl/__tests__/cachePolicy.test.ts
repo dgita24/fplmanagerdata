@@ -99,6 +99,78 @@ describe('cachePolicy - computeCacheKey', () => {
   });
 });
 
+// ─── New tests for requirements A, B, C, D ──────────────────────────────────
+
+describe('cachePolicy - computeCacheKey canonicalization', () => {
+  /**
+   * Requirement A: v param is stripped from cache key, event param is kept.
+   */
+  it('should strip v param and keep event param', () => {
+    const key = computeCacheKey('fixtures', '?event=10&v=1234567890');
+    expect(key).toBe('fpl:fixtures?event=10');
+  });
+
+  it('should strip _ and t cache-buster params', () => {
+    expect(computeCacheKey('fixtures', '?event=10&_=999')).toBe('fpl:fixtures?event=10');
+    expect(computeCacheKey('fixtures', '?event=10&t=999')).toBe('fpl:fixtures?event=10');
+  });
+
+  it('should produce the same cache key for different v timestamps (fixtures past GW)', () => {
+    const key1 = computeCacheKey('fixtures', '?event=10&v=1700000000');
+    const key2 = computeCacheKey('fixtures', '?event=10&v=1799999999');
+    expect(key1).toBe(key2);
+    expect(key1).toBe('fpl:fixtures?event=10');
+  });
+
+  it('should produce the same cache key for different v timestamps (event live past GW)', () => {
+    const key1 = computeCacheKey('event/10/live', '?v=1700000000');
+    const key2 = computeCacheKey('event/10/live', '?v=1799999999');
+    expect(key1).toBe(key2);
+    expect(key1).toBe('fpl:event/10/live');
+  });
+
+  it('should produce the same cache key for different v timestamps (past picks)', () => {
+    const key1 = computeCacheKey('entry/717348/event/8/picks', '?v=1700000000');
+    const key2 = computeCacheKey('entry/717348/event/8/picks', '?v=1799999999');
+    expect(key1).toBe(key2);
+    expect(key1).toBe('fpl:entry/717348/event/8/picks');
+  });
+
+  it('should return empty query when only cache-buster params are present', () => {
+    const key = computeCacheKey('event/10/live', '?v=123&_=456');
+    expect(key).toBe('fpl:event/10/live');
+  });
+
+  it('should keep non-buster params that appear alongside v', () => {
+    const key = computeCacheKey('fixtures', '?v=ts&event=5&extra=x');
+    expect(key).toBe('fpl:fixtures?event=5&extra=x');
+  });
+});
+
+describe('cachePolicy - TTL policy for past picks (Requirement B)', () => {
+  it('picks for a past GW should use TTL of 30 days (2592000 s)', () => {
+    const ttl = getTTLForPath('entry/123/event/5/picks', '', 10);
+    expect(ttl).toBe(2592000);
+    expect(DEFAULT_TTLS.ENTRY_EVENT_PAST).toBe(2592000);
+  });
+
+  it('picks for current GW should use TTL 0 (no-cache)', () => {
+    const ttl = getTTLForPath('entry/123/event/10/picks', '', 10);
+    expect(ttl).toBe(0);
+    expect(DEFAULT_TTLS.ENTRY_EVENT_CURRENT).toBe(0);
+  });
+});
+
+describe('cachePolicy - current GW endpoints stay fresh (Requirement C)', () => {
+  it('event/live for current GW should have TTL 0', () => {
+    expect(getTTLForPath('event/10/live', '', 10)).toBe(0);
+  });
+
+  it('fixtures for current GW should have TTL 0', () => {
+    expect(getTTLForPath('fixtures', '?event=10', 10)).toBe(0);
+  });
+});
+
 describe('cachePolicy - shouldCacheResponse', () => {
   /**
    * Test: Should cache successful responses
