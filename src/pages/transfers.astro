@@ -655,7 +655,7 @@ import Nav from "../components/Nav.astro";
                               chip === 'bboost' ? 'Bench Boost' :
                               chip === '3xc' ? 'Triple Captain' : chip;
 
-          const isClickableChip = chip === 'wildcard' || chip === 'freehit';
+          const isClickableChip = chip === 'wildcard' || chip === 'freehit' || chip === 'bboost' || chip === '3xc';
 
           if (isClickableChip) {
             html += `
@@ -793,6 +793,34 @@ import Nav from "../components/Nav.astro";
         } else {
           html += `<div class="chip-transfer-item text-muted">None</div>`;
         }
+        html += `</div></div>`;
+
+        html += `</div>`;
+      } else if (chipName === 'bboost' || chipName === '3xc') {
+        const squadPicks = picks.picks || [];
+        const starters = squadPicks.filter(p => p.position <= 11).sort((a, b) => a.position - b.position);
+        const bench = squadPicks.filter(p => p.position > 11).sort((a, b) => a.position - b.position);
+
+        html += `<div class="chip-transfers-grid">`;
+
+        html += `<div class="chip-transfer-section chip-transfer-section--out">`;
+        html += `<div class="chip-transfer-header">Starting XI</div>`;
+        html += `<div class="chip-transfer-list">`;
+        starters.forEach(p => {
+          const name = escapeHtml(allPlayersMap[p.element] || `Player ${p.element}`);
+          const badge = p.is_captain ? (chipName === '3xc' ? ' <strong>(C×3)</strong>' : ' (C)') :
+                        p.is_vice_captain ? ' (V)' : '';
+          html += `<div class="chip-transfer-item">${name}${badge}</div>`;
+        });
+        html += `</div></div>`;
+
+        html += `<div class="chip-transfer-section chip-transfer-section--in">`;
+        html += `<div class="chip-transfer-header">Bench${chipName === 'bboost' ? ' (Active)' : ''}</div>`;
+        html += `<div class="chip-transfer-list">`;
+        bench.forEach(p => {
+          const name = escapeHtml(allPlayersMap[p.element] || `Player ${p.element}`);
+          html += `<div class="chip-transfer-item">${name}</div>`;
+        });
         html += `</div></div>`;
 
         html += `</div>`;
