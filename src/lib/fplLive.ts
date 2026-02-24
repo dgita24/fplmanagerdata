@@ -434,8 +434,7 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
       const canComplete =
         availDef >= needDef &&
         availMid >= needMid &&
-        availFwd >= needFwd &&
-        usableBench.length >= spotsLeft;
+        availFwd >= needFwd;
 
       if (canComplete) {
         activeOutfield = testOutfield;
