@@ -234,18 +234,50 @@
         continue;
       }
 
-      const gkCount = active.filter(p => p.playerPosition === "GK").length;
-      const defCount = active.filter(p => p.playerPosition === "DEF").length;
-
       const pos = cand.playerPosition;
-      const validGK = (pos === "GK" && gkCount === 0);
-      const validDefSave = (pos === "DEF" && defCount < 3);
-      const validGeneral = (pos !== "GK" && gkCount > 0 && defCount >= 3);
+      const gkCount = active.filter(p => p.playerPosition === "GK").length;
 
-      if (validGK || validDefSave || validGeneral) {
-        active = [...active, cand];
+      if (pos === "GK") {
+        // GK bench player only comes on if the active XI has no GK yet
+        if (gkCount === 0) {
+          active = [...active, cand];
+        } else {
+          benchRemaining.push(cand);
+        }
+        continue;
+      }
+
+      // Outfield: use look-ahead to enforce formation rules (≥3 DEF, ≥2 MID, ≥1 FWD)
+      // respecting bench priority order — same logic as applyAutoSubsAndMultipliers.
+      const testActive = [...active, cand];
+      const testDefCount = testActive.filter(p => p.playerPosition === "DEF").length;
+      const testMidCount = testActive.filter(p => p.playerPosition === "MID").length;
+      const testFwdCount = testActive.filter(p => p.playerPosition === "FWD").length;
+      const spotsLeft = 11 - testActive.length;
+
+      if (spotsLeft === 0) {
+        // Last outfield spot: final formation must be fully valid
+        if (gkCount >= 1 && testDefCount >= 3 && testMidCount >= 2 && testFwdCount >= 1) {
+          active = testActive;
+        } else {
+          benchRemaining.push(cand);
+        }
       } else {
-        benchRemaining.push(cand);
+        // Spots remain: verify future bench can still satisfy the minimums
+        const candIdx = bench.indexOf(cand);
+        const futureBench = bench.slice(candIdx + 1).filter(p => !p.dnp);
+        const needDef = Math.max(0, 3 - testDefCount);
+        const needMid = Math.max(0, 2 - testMidCount);
+        const needFwd = Math.max(0, 1 - testFwdCount);
+        const futAvailDef = futureBench.filter(p => p.playerPosition === "DEF").length;
+        const futAvailMid = futureBench.filter(p => p.playerPosition === "MID").length;
+        const futAvailFwd = futureBench.filter(p => p.playerPosition === "FWD").length;
+
+        if (futAvailDef >= needDef && futAvailMid >= needMid && futAvailFwd >= needFwd) {
+          active = testActive;
+        } else {
+          benchRemaining.push(cand);
+        }
       }
     }
 

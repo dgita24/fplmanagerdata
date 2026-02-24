@@ -585,4 +585,52 @@ describe('applyAutoSubsAndMultipliers - formation rules', () => {
       expect(p.autoSubStatus).toBeNull();
     });
   });
+
+  /**
+   * 4-4-2 formation: one DEF starter DNPs. Bench order is [MID(b12), DEF(b13)].
+   * FPL rule: highest bench priority wins, subject to formation validity.
+   * MID(b12) results in 3-5-2 = valid, so MID comes on — NOT the DEF(b13).
+   * The DEF bench player must NOT take priority just because it matches the DNP's position.
+   */
+  it('in 4-4-2 with DNP DEF, the higher-priority MID bench replaces the DNP DEF (not the DEF bench)', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'DEF', minutes:  0, status: 'Fin' }), // DNP
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      // bench priority order: MID first, then DEF
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes: 90, status: 'Fin' }), // b1 — higher priority
+      makePick({ playerId: 13, position: 13, playingPosition: 'DEF', minutes: 90, status: 'Fin' }), // b2 — lower priority
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    // MID(b12) is the sub — 3-5-2 is valid
+    const p12 = result.find(p => p.playerId === 12)!;
+    expect(p12.multiplier).toBe(1);
+    expect(p12.autoSubStatus).toBe('IN');
+
+    // DEF(b13) does NOT come on — MID already filled the one vacant slot
+    const p13 = result.find(p => p.playerId === 13)!;
+    expect(p13.multiplier).toBe(0);
+    expect(p13.autoSubStatus).toBeNull();
+
+    // DNP DEF starter is out
+    const p5 = result.find(p => p.playerId === 5)!;
+    expect(p5.multiplier).toBe(0);
+    expect(p5.autoSubStatus).toBe('OUT');
+
+    // Final lineup = GK + 3DEF + 5MID + 2FWD (3-5-2) — valid formation
+    const activeCount = result.filter(p => p.multiplier > 0).length;
+    expect(activeCount).toBe(11);
+  });
 });
