@@ -864,12 +864,16 @@
 
     // Find which managers are also imported from other leagues
     const entryIds = imported.map((m) => m.entryId)
-    const { data: crossData, error: crossError } = await supabase
-      .from('user_league_imports')
-      .select('entry_id, league_id')
-      .eq('user_id', currentUser.id)
-      .in('entry_id', entryIds)
+    const [crossResult, playerNames] = await Promise.all([
+      supabase
+        .from('user_league_imports')
+        .select('entry_id, league_id')
+        .eq('user_id', currentUser.id)
+        .in('entry_id', entryIds),
+      Promise.all(imported.map((m) => fetchManagerName(m.entryId))),
+    ])
 
+    const { data: crossData, error: crossError } = crossResult
     const otherLeaguesSet = new Set<number>()
     if (!crossError && crossData) {
       for (const row of crossData as Array<{ entry_id: number; league_id: number }>) {
@@ -884,19 +888,21 @@
       `Managers only in this league are pre-selected for removal.`
 
     removeLeagueModalManagers.innerHTML = imported
-      .map((m) => {
+      .map((m, i) => {
         const isShared = otherLeaguesSet.has(m.entryId)
         const checked = isShared ? '' : 'checked'
-        const displayName = m.entryName ? escapeHtml(m.entryName) : `Entry ${m.entryId}`
-        const note = isShared
+        const managerName = escapeHtml(playerNames[i])
+        const teamNote = m.entryName ? `<span class="featured-item__note">— ${escapeHtml(m.entryName)}</span>` : ''
+        const sharedNote = isShared
           ? `<span class="remove-league-manager-note--shared">Also imported from another league — kept by default</span>`
           : ''
         return `
           <label class="featured-item">
             <input type="checkbox" class="remove-league-check" data-entry-id="${m.entryId}" ${checked} />
             <div style="flex:1;min-width:0;">
-              <span class="featured-item__name">${displayName}</span>
-              ${note}
+              <span class="featured-item__name">${managerName}</span>
+              ${teamNote}
+              ${sharedNote}
             </div>
             <span class="featured-item__id"><code>${m.entryId}</code></span>
           </label>`
