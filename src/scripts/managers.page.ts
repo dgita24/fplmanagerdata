@@ -895,16 +895,17 @@
 
     removeLeagueModalStatus.textContent =
       `${imported.length} manager(s) from this league. ` +
-      `Managers only in this league are pre-selected for removal.`
+      `Tick managers you want to keep. Managers only in this league are un-ticked by default.`
 
     removeLeagueModalManagers.innerHTML = imported
       .map((m, i) => {
         const isShared = otherLeaguesSet.has(m.entryId)
-        const checked = isShared ? '' : 'checked'
+        // checked = keep this manager; unchecked = remove this manager
+        const checked = isShared ? 'checked' : ''
         const managerName = escapeHtml(playerNames[i])
         const teamNote = m.entryName ? `<span class="featured-item__note">— ${escapeHtml(m.entryName)}</span>` : ''
         const sharedNote = isShared
-          ? `<span class="remove-league-manager-note--shared">Also imported from another league — kept by default</span>`
+          ? `<span class="remove-league-manager-note--shared">Also in another league — ticked to keep by default</span>`
           : ''
         return `
           <label class="featured-item">
@@ -919,27 +920,26 @@
       })
       .join('')
 
-    function syncRemoveBtnState() {
-      const anyChecked =
-        removeLeagueModalManagers.querySelectorAll<HTMLInputElement>('input.remove-league-check:checked').length > 0
-      removeLeagueModalRemoveBtn.disabled = !anyChecked
-    }
-
-    removeLeagueModalManagers
-      .querySelectorAll<HTMLInputElement>('input.remove-league-check')
-      .forEach((cb) => cb.addEventListener('change', syncRemoveBtnState))
-
-    syncRemoveBtnState()
+    removeLeagueModalRemoveBtn.disabled = false
   }
 
-  async function doRemoveLeague(removeManagers: boolean) {
+  async function doRemoveLeague(removeAll: boolean) {
     const leagueId = removeLeagueModalActiveLeagueId
     if (!leagueId) return
 
     const managerIdsToRemove: number[] = []
-    if (removeManagers) {
+    if (removeAll) {
+      // Remove ALL managers imported from this league
       removeLeagueModalManagers
-        .querySelectorAll<HTMLInputElement>('input.remove-league-check:checked')
+        .querySelectorAll<HTMLInputElement>('input.remove-league-check')
+        .forEach((cb) => {
+          const entryId = Number(cb.dataset.entryId)
+          if (Number.isFinite(entryId)) managerIdsToRemove.push(entryId)
+        })
+    } else {
+      // Remove the managers the user un-ticked (ticked = keep)
+      removeLeagueModalManagers
+        .querySelectorAll<HTMLInputElement>('input.remove-league-check:not(:checked)')
         .forEach((cb) => {
           const entryId = Number(cb.dataset.entryId)
           if (Number.isFinite(entryId)) managerIdsToRemove.push(entryId)
