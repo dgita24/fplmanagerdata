@@ -275,6 +275,25 @@ import "../styles/pages/managers.css";
           </div>
         </div>
       </section>
+
+      <!-- Remove-league confirmation modal -->
+      <div id="remove-league-modal" class="remove-league-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="remove-league-modal-title">
+        <div class="remove-league-modal__box">
+          <div class="remove-league-modal__header">
+            <div id="remove-league-modal-title" class="remove-league-modal__title">Remove league</div>
+            <div id="remove-league-modal-subtitle" class="remove-league-modal__subtitle"></div>
+          </div>
+          <div class="remove-league-modal__body">
+            <div id="remove-league-modal-status" class="remove-league-modal__status" aria-live="polite"></div>
+            <div id="remove-league-modal-managers" class="featured-list"></div>
+          </div>
+          <div class="remove-league-modal__footer">
+            <button type="button" id="remove-league-modal-cancel" class="btn btn--neutral">Cancel</button>
+            <button type="button" id="remove-league-modal-keep" class="btn btn--neutral">Remove league, keep managers</button>
+            <button type="button" id="remove-league-modal-remove" class="btn btn--danger" disabled>Remove league &amp; remove selected</button>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
 </Layout>

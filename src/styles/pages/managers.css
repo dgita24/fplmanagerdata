@@ -948,6 +948,83 @@
   }
 
   /* =========================
+     Remove-league confirmation modal
+     ========================= */
+  .remove-league-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-3);
+  }
+
+  .remove-league-modal[aria-hidden="true"] {
+    display: none;
+  }
+
+  .remove-league-modal__box {
+    background: var(--color-surface, #111827);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-lg);
+    width: min(480px, 100%);
+    max-height: 80dvh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  }
+
+  .remove-league-modal__header {
+    padding: var(--space-3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .remove-league-modal__title {
+    font-weight: 700;
+    font-size: 1.05rem;
+  }
+
+  .remove-league-modal__subtitle {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+  }
+
+  .remove-league-modal__body {
+    overflow-y: auto;
+    padding: var(--space-3);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .remove-league-modal__status {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-2);
+    min-height: 1.2em;
+  }
+
+  .remove-league-modal__footer {
+    padding: var(--space-2) var(--space-3);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    background: rgba(0, 0, 0, 0.15);
+  }
+
+  .remove-league-manager-note--shared {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  /* =========================
      VERY SMALL PHONES (<= 360px)
      ========================= */
   @media (max-width: 360px) {
