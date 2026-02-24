@@ -862,22 +862,32 @@
       return
     }
 
-    // Find which managers are also imported from other leagues
+    // Find which managers are also imported from other currently-saved leagues.
+    // We fetch saved league IDs in parallel so orphaned import records from
+    // previously-removed leagues don't cause false "shared manager" warnings.
     const entryIds = imported.map((m) => m.entryId)
-    const [crossResult, playerNames] = await Promise.all([
+    const [crossResult, savedLeaguesResult, playerNames] = await Promise.all([
       supabase
         .from('user_league_imports')
         .select('entry_id, league_id')
         .eq('user_id', currentUser.id)
         .in('entry_id', entryIds),
+      supabase
+        .from('user_saved_leagues')
+        .select('league_id')
+        .eq('user_id', currentUser.id),
       Promise.all(imported.map((m) => fetchManagerName(m.entryId))),
     ])
 
     const { data: crossData, error: crossError } = crossResult
+    const savedLeagueIds = new Set<number>(
+      ((savedLeaguesResult.data || []) as Array<{ league_id: number }>).map((r) => Number(r.league_id))
+    )
     const otherLeaguesSet = new Set<number>()
     if (!crossError && crossData) {
       for (const row of crossData as Array<{ entry_id: number; league_id: number }>) {
-        if (Number(row.league_id) !== leagueId) {
+        const rowLeagueId = Number(row.league_id)
+        if (rowLeagueId !== leagueId && savedLeagueIds.has(rowLeagueId)) {
           otherLeaguesSet.add(Number(row.entry_id))
         }
       }
@@ -950,14 +960,20 @@
       return
     }
 
-    const { error: importsDeleteError } = await supabase
-      .from('user_league_imports')
-      .delete()
-      .eq('user_id', currentUser.id)
-      .eq('league_id', leagueId)
+    // Only delete import records for managers that are actually being removed.
+    // Kept managers retain their records so that removing + re-adding a league
+    // and then opening the remove modal again still shows the correct manager list.
+    if (managerIdsToRemove.length > 0) {
+      const { error: importsDeleteError } = await supabase
+        .from('user_league_imports')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('league_id', leagueId)
+        .in('entry_id', managerIdsToRemove)
 
-    if (importsDeleteError) {
-      console.error(importsDeleteError)
+      if (importsDeleteError) {
+        console.error(importsDeleteError)
+      }
     }
 
     if (managerIdsToRemove.length > 0) {
