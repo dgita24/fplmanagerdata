@@ -670,6 +670,16 @@
   const leagueStatusEl = document.getElementById('league-status') as HTMLElement
   const leagueListEl = document.getElementById('league-list') as HTMLElement
 
+  // Remove-league modal refs
+  const removeLeagueModal = document.getElementById('remove-league-modal') as HTMLElement
+  const removeLeagueModalSubtitle = document.getElementById('remove-league-modal-subtitle') as HTMLElement
+  const removeLeagueModalStatus = document.getElementById('remove-league-modal-status') as HTMLElement
+  const removeLeagueModalManagers = document.getElementById('remove-league-modal-managers') as HTMLElement
+  const removeLeagueModalCancelBtn = document.getElementById('remove-league-modal-cancel') as HTMLButtonElement
+  const removeLeagueModalKeepBtn = document.getElementById('remove-league-modal-keep') as HTMLButtonElement
+  const removeLeagueModalRemoveBtn = document.getElementById('remove-league-modal-remove') as HTMLButtonElement
+  let removeLeagueModalActiveLeagueId: number | null = null
+
   const standingsSheet = document.getElementById('league-standings-sheet') as HTMLElement
   const standingsCloseBtn = document.getElementById('league-standings-close') as HTMLButtonElement
   const standingsTitleEl = document.getElementById('league-standings-title') as HTMLElement
@@ -801,28 +811,188 @@
     leagueListEl.querySelectorAll<HTMLButtonElement>('button[data-action="remove"]').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const leagueId = Number(btn.dataset.leagueId)
-        const ok = confirm(`Remove league ${leagueId}? (This does not change your manager list yet.)`)
-        if (!ok) return
-        const { error } = await supabase
-          .from('user_saved_leagues')
-          .delete()
-          .eq('user_id', currentUser.id)
-          .eq('league_id', leagueId)
-        if (error) {
-          console.error(error)
-          leagueStatusEl.textContent = 'Failed to remove league.'
-          return
-        }
-        await supabase
-          .from('user_league_imports')
-          .delete()
-          .eq('user_id', currentUser.id)
-          .eq('league_id', leagueId)
-
-        await loadSavedLeagues()
+        const leagueName =
+          btn.closest('.saved-league-card')?.querySelector('.featured-item__name')?.textContent?.trim() ||
+          `League ${leagueId}`
+        await promptRemoveLeague(leagueId, leagueName)
       })
     })
   }
+
+  function openRemoveLeagueModal() {
+    removeLeagueModal.setAttribute('aria-hidden', 'false')
+  }
+
+  function closeRemoveLeagueModal() {
+    removeLeagueModal.setAttribute('aria-hidden', 'true')
+    removeLeagueModalActiveLeagueId = null
+  }
+
+  async function promptRemoveLeague(leagueId: number, leagueName: string) {
+    removeLeagueModalActiveLeagueId = leagueId
+    removeLeagueModalSubtitle.textContent = leagueName
+    removeLeagueModalStatus.textContent = 'Loading managers from this league…'
+    removeLeagueModalManagers.innerHTML = ''
+    removeLeagueModalRemoveBtn.disabled = true
+    removeLeagueModalKeepBtn.textContent = 'Remove league, keep managers'
+    openRemoveLeagueModal()
+
+    const { data: importsData, error: importsError } = await supabase
+      .from('user_league_imports')
+      .select('entry_id, entry_name')
+      .eq('user_id', currentUser.id)
+      .eq('league_id', leagueId)
+
+    if (importsError) {
+      console.error(importsError)
+      removeLeagueModalStatus.textContent = 'Error loading managers from this league.'
+      return
+    }
+
+    const imported: Array<{ entryId: number; entryName: string | null }> = (importsData || []).map(
+      (r: { entry_id: number; entry_name: string | null }) => ({
+        entryId: Number(r.entry_id),
+        entryName: r.entry_name ? String(r.entry_name) : null,
+      }),
+    )
+
+    if (imported.length === 0) {
+      removeLeagueModalStatus.textContent = 'No managers were imported from this league.'
+      removeLeagueModalKeepBtn.textContent = 'Remove league'
+      return
+    }
+
+    // Find which managers are also imported from other currently-saved leagues.
+    // We fetch saved league IDs in parallel so orphaned import records from
+    // previously-removed leagues don't cause false "shared manager" warnings.
+    const entryIds = imported.map((m) => m.entryId)
+    const [crossResult, savedLeaguesResult, playerNames] = await Promise.all([
+      supabase
+        .from('user_league_imports')
+        .select('entry_id, league_id')
+        .eq('user_id', currentUser.id)
+        .in('entry_id', entryIds),
+      supabase
+        .from('user_saved_leagues')
+        .select('league_id')
+        .eq('user_id', currentUser.id),
+      Promise.all(imported.map((m) => fetchManagerName(m.entryId))),
+    ])
+
+    const { data: crossData, error: crossError } = crossResult
+    const savedLeagueIds = new Set<number>(
+      ((savedLeaguesResult.data || []) as Array<{ league_id: number }>).map((r) => Number(r.league_id))
+    )
+    const otherLeaguesSet = new Set<number>()
+    if (!crossError && crossData) {
+      for (const row of crossData as Array<{ entry_id: number; league_id: number }>) {
+        const rowLeagueId = Number(row.league_id)
+        if (rowLeagueId !== leagueId && savedLeagueIds.has(rowLeagueId)) {
+          otherLeaguesSet.add(Number(row.entry_id))
+        }
+      }
+    }
+
+    removeLeagueModalStatus.textContent =
+      `${imported.length} manager(s) from this league. ` +
+      `Tick managers you want to keep. Managers only in this league are un-ticked by default.`
+
+    removeLeagueModalManagers.innerHTML = imported
+      .map((m, i) => {
+        const isShared = otherLeaguesSet.has(m.entryId)
+        // checked = keep this manager; unchecked = remove this manager
+        const checked = isShared ? 'checked' : ''
+        const managerName = escapeHtml(playerNames[i])
+        const teamNote = m.entryName ? `<span class="featured-item__note">— ${escapeHtml(m.entryName)}</span>` : ''
+        const sharedNote = isShared
+          ? `<span class="remove-league-manager-note--shared">Also in another league — ticked to keep by default</span>`
+          : ''
+        return `
+          <label class="featured-item">
+            <input type="checkbox" class="remove-league-check" data-entry-id="${m.entryId}" ${checked} />
+            <div style="flex:1;min-width:0;">
+              <span class="featured-item__name">${managerName}</span>
+              ${teamNote}
+              ${sharedNote}
+            </div>
+            <span class="featured-item__id"><code>${m.entryId}</code></span>
+          </label>`
+      })
+      .join('')
+
+    removeLeagueModalRemoveBtn.disabled = false
+  }
+
+  async function doRemoveLeague(removeAll: boolean) {
+    const leagueId = removeLeagueModalActiveLeagueId
+    if (!leagueId) return
+
+    const managerIdsToRemove: number[] = []
+    if (removeAll) {
+      // Remove ALL managers imported from this league
+      removeLeagueModalManagers
+        .querySelectorAll<HTMLInputElement>('input.remove-league-check')
+        .forEach((cb) => {
+          const entryId = Number(cb.dataset.entryId)
+          if (Number.isFinite(entryId)) managerIdsToRemove.push(entryId)
+        })
+    } else {
+      // Remove the managers the user un-ticked (ticked = keep)
+      removeLeagueModalManagers
+        .querySelectorAll<HTMLInputElement>('input.remove-league-check:not(:checked)')
+        .forEach((cb) => {
+          const entryId = Number(cb.dataset.entryId)
+          if (Number.isFinite(entryId)) managerIdsToRemove.push(entryId)
+        })
+    }
+
+    closeRemoveLeagueModal()
+
+    const { error: leagueDeleteError } = await supabase
+      .from('user_saved_leagues')
+      .delete()
+      .eq('user_id', currentUser.id)
+      .eq('league_id', leagueId)
+
+    if (leagueDeleteError) {
+      console.error(leagueDeleteError)
+      leagueStatusEl.textContent = 'Failed to remove league.'
+      return
+    }
+
+    // Only delete import records for managers that are actually being removed.
+    // Kept managers retain their records so that removing + re-adding a league
+    // and then opening the remove modal again still shows the correct manager list.
+    if (managerIdsToRemove.length > 0) {
+      const { error: importsDeleteError } = await supabase
+        .from('user_league_imports')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('league_id', leagueId)
+        .in('entry_id', managerIdsToRemove)
+
+      if (importsDeleteError) {
+        console.error(importsDeleteError)
+      }
+    }
+
+    if (managerIdsToRemove.length > 0) {
+      const currentIds = parseTextareaIds()
+      const updatedIds = currentIds.filter((id) => !managerIdsToRemove.includes(id))
+      textarea.value = updatedIds.join('\n')
+      updateCount()
+      const saved = await saveManagerIds(updatedIds)
+      if (!saved) {
+        leagueStatusEl.textContent = 'League removed but failed to update manager list.'
+      }
+    }
+
+    await loadSavedLeagues()
+  }
+
+  removeLeagueModalCancelBtn?.addEventListener('click', () => closeRemoveLeagueModal())
+  removeLeagueModalKeepBtn?.addEventListener('click', () => doRemoveLeague(false))
+  removeLeagueModalRemoveBtn?.addEventListener('click', () => doRemoveLeague(true))
 
   function parseLeagueIdFromInput(raw: string): number | null {
     const s = (raw ?? "").trim();
