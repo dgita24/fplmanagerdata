@@ -296,6 +296,28 @@ import Nav from "../components/Nav.astro";
     font-weight: 700;
     color: var(--color-text);
     text-align: right;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-1);
+  }
+
+  :global(.or-rank-arrow) {
+    font-size: 1em;
+    line-height: 1;
+  }
+
+  :global(.or-rank-arrow--up) {
+    color: var(--color-success);
+  }
+
+  :global(.or-rank-arrow--down) {
+    color: var(--color-danger);
+  }
+
+  :global(.or-rank-arrow--neutral) {
+    color: var(--color-text-muted);
+    opacity: 0.5;
   }
 
   :global(.or-modal-title) {
@@ -1416,12 +1438,24 @@ import Nav from "../components/Nav.astro";
         <div class="or-history-list">
     `;
 
-    for (const row of validHistory) {
+    for (let i = 0; i < validHistory.length; i++) {
+      const row = validHistory[i];
+      const prevRow = validHistory[i + 1];
+      let arrowHtml = '';
+      if (prevRow !== undefined && row.event > 1) {
+        if (row.overall_rank < prevRow.overall_rank) {
+          arrowHtml = '<span class="or-rank-arrow or-rank-arrow--up" aria-label="Rank improved">▲</span>';
+        } else if (row.overall_rank > prevRow.overall_rank) {
+          arrowHtml = '<span class="or-rank-arrow or-rank-arrow--down" aria-label="Rank worsened">▼</span>';
+        } else {
+          arrowHtml = '<span class="or-rank-arrow or-rank-arrow--neutral" aria-hidden="true">—</span>';
+        }
+      }
       html += `
         <div class="or-history-row">
           <span class="or-history-label">GW ${row.event}</span>
           <span class="or-history-divider"></span>
-          <span class="or-history-value">${formatRank(row.overall_rank)}</span>
+          <span class="or-history-value">${arrowHtml}${formatRank(row.overall_rank)}</span>
         </div>
       `;
     }
