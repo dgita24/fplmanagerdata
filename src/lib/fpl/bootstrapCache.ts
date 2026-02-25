@@ -62,6 +62,9 @@ export interface BootstrapElement {
   clearances_blocks_interceptions: number;
   recoveries: number;
   tackles: number;
+  expected_goals: string;          // xG — decimal string e.g. "3.45"
+  expected_assists: string;        // xA — decimal string e.g. "2.10"
+  expected_goals_conceded: string; // xGC — decimal string e.g. "8.72"
   status: string; // 'a'=available, 'd'=doubtful, 'i'=injured, 's'=suspended, 'u'=unavailable, 'n'=not in squad
   news: string;
   chance_of_playing_next_round: number | null;

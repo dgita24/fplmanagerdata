@@ -320,7 +320,7 @@
 
   const DEFAULT_SORT: Record<string, string> = {
     overview: "total_points",
-    attacking: "goals_scored",
+    attacking: "xg",
     defensive: "defcon",
     ownership: "selected_by_percent_num",
     discipline: "yellow_cards",
@@ -339,17 +339,19 @@
     attacking: [
       { key: "total_points", label: "Pts",  numeric: true },
       { key: "goals_scored", label: "GS",   title: "Goals Scored", numeric: true },
+      { key: "xg",          label: "xG",   title: "Expected Goals",
+        fn: el => parseFloat((el as any).expected_goals ?? "0").toFixed(2), numeric: true },
       { key: "assists",      label: "A",    title: "Assists", numeric: true },
+      { key: "xa",          label: "xA",   title: "Expected Assists",
+        fn: el => parseFloat((el as any).expected_assists ?? "0").toFixed(2), numeric: true },
       { key: "bonus",        label: "Bonus",title: "Bonus Points", numeric: true },
-      { key: "bps",          label: "BPS",  title: "Bonus Points System score", numeric: true },
-      { key: "saves",        label: "Svs",  title: "Saves (GK)", numeric: true },
     ],
     defensive: [
       { key: "total_points",   label: "Pts",   numeric: true },
       { key: "clean_sheets",   label: "CS",    title: "Clean Sheets", numeric: true },
       { key: "goals_conceded", label: "GC",    title: "Goals Conceded", numeric: true },
-      { key: "clearances_blocks_interceptions", label: "CBI", title: "Clearances, Blocks & Interceptions", numeric: true },
-      { key: "recoveries",     label: "Rec",   title: "Recoveries", numeric: true },
+      { key: "xgc",           label: "xGC",  title: "Expected Goals Conceded",
+        fn: el => parseFloat((el as any).expected_goals_conceded ?? "0").toFixed(2), numeric: true },
       { key: "defcon",         label: "DC★",
         title: `DEFCON points ${DEFCON_NOTE}`,
         fn: el => defconLoaded ? (defconMap.get(el.id) ?? 0) : computeProxyDEFCON(el),
@@ -376,15 +378,12 @@
 
   /**
    * Return the column list for the given view, filtered by active position.
-   * - Svs (saves) only relevant for GK — hide for DEF/MID/FWD
-   * - BPS not useful for FWD — hide for FWD
+   * - Svs (saves) only relevant for GK — hide for DEF/MID/FWD (attacking view)
    */
   function getEffectiveCols(view: string, pos: string): ColDef[] {
     let cols = [...(COLS[view] ?? COLS.overview)];
-    const isOutfield = pos === "2" || pos === "3" || pos === "4"; // DEF, MID, FWD
-    const isFwd = pos === "4";
+    const isOutfield = pos === "2" || pos === "3" || pos === "4";
     if (isOutfield) cols = cols.filter(c => c.key !== "saves");
-    if (isFwd)      cols = cols.filter(c => c.key !== "bps");
     return cols;
   }
 
