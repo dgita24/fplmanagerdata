@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
+import PlayerExplorer from "../components/PlayerExplorer.astro";
 ---
 <Layout title="Chip Usage Tracker - FPL Manager Data">
   <Nav />
@@ -13,7 +14,7 @@ import Nav from "../components/Nav.astro";
 
     <div class="meta-row-wide">
       <button id="manager-count" class="badge badge-wide badge-toggle" type="button">⭐ Toggle Favourites</button>
-      <a href="/managers" class="badge badge-wide">⚙ Manage IDs</a>
+      <button type="button" id="open-player-explorer" class="badge badge-wide" onclick="openPlayerExplorer?.()">📋 Players</button>
     </div>
 
     <div class="controls-inline chips-controls">
@@ -42,6 +43,7 @@ import Nav from "../components/Nav.astro";
       <div id="chip-modal-content"></div>
     </div>
   </div>
+  <PlayerExplorer />
 </Layout>
 
 <style>
