@@ -259,13 +259,31 @@
     render();
   });
 
-  // Strips diacritics so "odegaard" matches "Ødegaard", "gyokeres" matches "Gyökeres", etc.
-  function normStr(s: string): string {
-    return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  /**
+   * Fold a string for accent-insensitive search.
+   * Two-pass approach (from dgita24/FPLPlanner):
+   *   1. Explicit char map for characters that DON'T decompose under NFD
+   *      (Ø, å, Æ, ð, þ, ß …)
+   *   2. NFD + strip combining marks for the rest (é→e, ü→u, ç→c …)
+   */
+  function foldForSearch(s: string): string {
+    const charMap: Record<string, string> = {
+      'ø': 'o', 'Ø': 'o',
+      'å': 'a', 'Å': 'a',
+      'æ': 'ae', 'Æ': 'ae',
+      'ð': 'd', 'Ð': 'd',
+      'þ': 'th', 'Þ': 'th',
+      'ß': 'ss',
+    };
+    let str = (s ?? '').toString();
+    for (const [from, to] of Object.entries(charMap)) {
+      str = str.split(from).join(to);
+    }
+    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   }
 
   searchInput.addEventListener("input", () => {
-    filterSearch = normStr(searchInput.value.trim());
+    filterSearch = foldForSearch(searchInput.value);
     render();
   });
 
@@ -420,7 +438,7 @@
       if (filterTeam && String(el.team) !== filterTeam) return false;
       if (filterMaxPrice > 0 && el.now_cost / 10 > filterMaxPrice) return false;
       if (filterSearch) {
-        const name = normStr(`${el.first_name} ${el.second_name} ${el.web_name}`);
+        const name = foldForSearch(`${el.first_name} ${el.second_name} ${el.web_name}`);
         if (!name.includes(filterSearch)) return false;
       }
       return true;
