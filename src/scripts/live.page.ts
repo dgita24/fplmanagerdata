@@ -317,8 +317,8 @@ const managerDataCache = new Map<string, any>();
       const primaryResult = liveSortDir === "asc" ? primaryDelta : -primaryDelta;
       if (primaryResult !== 0) return primaryResult;
 
-      // Tie-breaker: when sorting by GW, sort by Total desc
-      if (liveSortKey === "livePointsBeforeHits") {
+      // Tie-breaker: when sorting by GW or LtP, sort by Total desc
+      if (liveSortKey === "livePointsBeforeHits" || liveSortKey === "ltp") {
         const at = normalizeNumber(a?.totalPoints);
         const bt = normalizeNumber(b?.totalPoints);
         const totalDelta = at - bt; // asc
