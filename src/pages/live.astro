@@ -4,6 +4,7 @@ import Nav from "../components/Nav.astro";
 import SquadModal from "../components/modals/SquadModal.astro";
 import PlayerModal from "../components/modals/PlayerModal.astro";
 import GWPointsModal from "../components/modals/GWPointsModal.astro";
+import PlayerExplorer from "../components/PlayerExplorer.astro";
 import "../styles/pages/live.css";
 ---
 <Layout title="Live League Standings - FPL Manager Data">
@@ -17,7 +18,7 @@ import "../styles/pages/live.css";
 
     <div class="meta-row-wide">
       <button id="manager-count" class="badge badge-wide badge-toggle" type="button">Loading...</button>
-      <a href="/managers" class="badge badge-wide">⚙ Manage IDs</a>
+      <button type="button" id="open-player-explorer" class="badge badge-wide" onclick="openPlayerExplorer?.()">📋 Players</button>
     </div>
 
     <div class="controls-inline">
@@ -54,6 +55,7 @@ import "../styles/pages/live.css";
   <SquadModal /> 
   <PlayerModal />
   <GWPointsModal />
+  <PlayerExplorer />
 
 </Layout>
 

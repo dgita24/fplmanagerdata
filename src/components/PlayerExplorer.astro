@@ -1,0 +1,510 @@
+---
+/**
+ * PlayerExplorer — global top-sheet player browser.
+ *
+ * Include once in any page that needs the explorer.
+ * Open it by dispatching: document.dispatchEvent(new Event('open-player-explorer'))
+ * Or call window.openPlayerExplorer?.()
+ */
+---
+
+<!-- Backdrop -->
+<div id="player-explorer-backdrop" aria-hidden="true"></div>
+
+<!-- Top-sheet -->
+<section
+  id="player-explorer-sheet"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Player Explorer"
+  aria-hidden="true"
+>
+  <!-- Header -->
+  <div class="pe-header">
+    <div>
+      <div class="pe-header__title">📋 Player Explorer</div>
+      <div class="pe-header__subtitle" id="pe-subtitle">Loading players…</div>
+    </div>
+    <div class="pe-header__right">
+      <button type="button" id="pe-refresh-btn" class="pe-refresh" title="Refresh player data">🔄 Refresh</button>
+      <button type="button" id="pe-close-btn" class="pe-close" aria-label="Close Player Explorer">✕</button>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="pe-filters" role="group" aria-label="Player filters">
+    <input
+      type="search"
+      id="pe-search"
+      class="pe-search"
+      placeholder="Search player…"
+      autocomplete="off"
+      aria-label="Search player by name"
+    />
+
+    <div class="pe-pos-group" role="group" aria-label="Filter by position">
+      <button type="button" class="pe-pos-btn is-active" data-pos="">All</button>
+      <button type="button" class="pe-pos-btn" data-pos="1">GK</button>
+      <button type="button" class="pe-pos-btn" data-pos="2">DEF</button>
+      <button type="button" class="pe-pos-btn" data-pos="3">MID</button>
+      <button type="button" class="pe-pos-btn" data-pos="4">FWD</button>
+    </div>
+
+    <div class="pe-selects-row">
+      <select id="pe-team-filter" class="pe-team-select" aria-label="Filter by team">
+        <option value="">All Teams</option>
+      </select>
+
+      <select id="pe-price-filter" class="pe-price-select" aria-label="Max price filter">
+        <option value="">Max £</option>
+        <option value="4.5">£4.5m</option>
+        <option value="5.0">£5.0m</option>
+        <option value="5.5">£5.5m</option>
+        <option value="6.0">£6.0m</option>
+        <option value="6.5">£6.5m</option>
+        <option value="7.0">£7.0m</option>
+        <option value="7.5">£7.5m</option>
+        <option value="8.0">£8.0m</option>
+        <option value="8.5">£8.5m</option>
+        <option value="9.0">£9.0m</option>
+        <option value="9.5">£9.5m</option>
+        <option value="10.0">£10.0m</option>
+        <option value="11.0">£11.0m</option>
+        <option value="12.0">£12.0m</option>
+        <option value="13.0">£13.0m</option>
+      </select>
+
+      <select id="pe-stat-view" class="pe-stat-select" aria-label="Choose stat view">
+        <option value="overview">Overview</option>
+        <option value="attacking">Attacking</option>
+        <option value="defensive">Defensive</option>
+        <option value="ownership">Ownership / Transfers</option>
+        <option value="discipline">Discipline</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="pe-body" id="pe-body">
+    <div class="pe-status" id="pe-status">Loading…</div>
+  </div>
+</section>
+
+<script>
+  import "../styles/player-explorer.css";
+  import { getBootstrapData, clearBootstrapCache, computeProxyDEFCON, DEFCON_NOTE } from "../lib/fpl/bootstrapCache";
+  import type { BootstrapElement, BootstrapTeam, BootstrapStatic } from "../lib/fpl/bootstrapCache";
+
+  // ----------------------------------------------------------------
+  // State
+  // ----------------------------------------------------------------
+  let bootstrapData: BootstrapStatic | null = null;
+  let teamMap: Map<number, BootstrapTeam> = new Map();
+  let filterPos = "";
+  let filterTeam = "";
+  let filterSearch = "";
+  let filterMaxPrice = 0; // 0 = no limit; otherwise max price in £m
+  let statView = "overview";
+  let sortCol = "total_points";
+  let sortDir: "asc" | "desc" = "desc";
+
+  // DEFCON: map of player_id -> season DC points (accurate, from live GW data)
+  let defconMap: Map<number, number> = new Map();
+  let defconLoaded = false;
+
+  const DEFCON_LS_KEY = 'fpl_defcon_cache_v1';
+  const DEFCON_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+  function loadDefconFromStorage(): Map<number, number> | null {
+    try {
+      const raw = localStorage.getItem(DEFCON_LS_KEY);
+      if (!raw) return null;
+      const p = JSON.parse(raw) as { data: [number, number][]; fetchedAt: number };
+      if (!Array.isArray(p?.data) || typeof p.fetchedAt !== 'number') return null;
+      if (Date.now() - p.fetchedAt > DEFCON_TTL_MS) return null;
+      return new Map(p.data);
+    } catch { return null; }
+  }
+
+  function saveDefconToStorage(map: Map<number, number>): void {
+    try {
+      localStorage.setItem(DEFCON_LS_KEY, JSON.stringify({
+        data: Array.from(map.entries()),
+        fetchedAt: Date.now(),
+      }));
+    } catch { /* ignore */ }
+  }
+
+  async function fetchAndCacheDefcon(elements: BootstrapElement[], events: BootstrapStatic['events']): Promise<void> {
+    // 1. Try localStorage cache first
+    const cached = loadDefconFromStorage();
+    if (cached) {
+      defconMap = cached;
+      defconLoaded = true;
+      render();
+      return;
+    }
+
+    // 2. Determine all completed GWs
+    const completedGWs = events.filter(e => e.finished).map(e => e.id);
+    if (!completedGWs.length) { defconLoaded = true; return; }
+
+    // 3. Build eligible-player position map (exclude GK)
+    const eligible = new Map<number, number>(); // id -> element_type
+    elements.forEach(el => {
+      if (el.element_type >= 2) eligible.set(el.id, el.element_type);
+    });
+
+    // 4. Fetch all completed GW live data in parallel
+    const results = await Promise.all(
+      completedGWs.map(gw =>
+        fetch(`/api/fpl/event/${gw}/live`)
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+      )
+    );
+
+    // 5. Aggregate per-fixture DC points from explain.stats
+    const newMap = new Map<number, number>();
+    results.forEach((data: any) => {
+      if (!data?.elements) return;
+      (data.elements as any[]).forEach(p => {
+        if (!eligible.has(p.id)) return;
+        const posType = eligible.get(p.id)!;
+        const threshold = posType === 2 ? 10 : 12; // DEF:10, MID/FWD:12
+        let pts = 0;
+        ((p.explain ?? []) as any[]).forEach(fixture => {
+          const stats: any[] = fixture.stats ?? [];
+          const dc = stats.find((s: any) => s.identifier === 'defensive_contribution');
+          if (dc && typeof dc.value === 'number' && dc.value >= threshold) {
+            pts += 2;
+          }
+        });
+        if (pts > 0) newMap.set(p.id, (newMap.get(p.id) ?? 0) + pts);
+      });
+    });
+
+    defconMap = newMap;
+    defconLoaded = true;
+    saveDefconToStorage(newMap);
+    render(); // re-render with accurate values
+  }
+
+  // ----------------------------------------------------------------
+  // DOM refs (populated on first open)
+  // ----------------------------------------------------------------
+  const sheet    = document.getElementById("player-explorer-sheet")!;
+  const backdrop = document.getElementById("player-explorer-backdrop")!;
+  const closeBtn = document.getElementById("pe-close-btn")!;
+  const refreshBtn = document.getElementById("pe-refresh-btn")!;
+  const searchInput = document.getElementById("pe-search") as HTMLInputElement;
+  const teamFilter   = document.getElementById("pe-team-filter") as HTMLSelectElement;
+  const priceFilter  = document.getElementById("pe-price-filter") as HTMLSelectElement;
+  const statSelect   = document.getElementById("pe-stat-view") as HTMLSelectElement;
+  const body        = document.getElementById("pe-body")!;
+  const subtitle    = document.getElementById("pe-subtitle")!;
+  const statusEl    = document.getElementById("pe-status")!;
+  const posBtns     = document.querySelectorAll<HTMLButtonElement>(".pe-pos-btn");
+
+  // ----------------------------------------------------------------
+  // Open / close
+  // ----------------------------------------------------------------
+  function openExplorer() {
+    sheet.classList.add("is-open");
+    backdrop.classList.add("is-open");
+    sheet.setAttribute("aria-hidden", "false");
+    backdrop.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+    closeBtn.focus();
+    loadBootstrap();
+  }
+
+  function closeExplorer() {
+    sheet.classList.remove("is-open");
+    backdrop.classList.remove("is-open");
+    sheet.setAttribute("aria-hidden", "true");
+    backdrop.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+  }
+
+  closeBtn.addEventListener("click", closeExplorer);
+  backdrop.addEventListener("click", closeExplorer);
+  document.addEventListener("keydown", (e: KeyboardEvent) => {
+    if (e.key === "Escape" && sheet.classList.contains("is-open")) closeExplorer();
+  });
+
+  // Global API — pages open explorer via this
+  (window as any).openPlayerExplorer = openExplorer;
+  document.addEventListener("open-player-explorer", openExplorer);
+
+  // ----------------------------------------------------------------
+  // Filters
+  // ----------------------------------------------------------------
+  posBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      posBtns.forEach(b => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      filterPos = btn.dataset.pos ?? "";
+      render();
+    });
+  });
+
+  teamFilter.addEventListener("change", () => {
+    filterTeam = teamFilter.value;
+    render();
+  });
+
+  priceFilter.addEventListener("change", () => {
+    filterMaxPrice = priceFilter.value ? parseFloat(priceFilter.value) : 0;
+    render();
+  });
+
+  /**
+   * Fold a string for accent-insensitive search.
+   * Two-pass approach (from dgita24/FPLPlanner):
+   *   1. Explicit char map for characters that DON'T decompose under NFD
+   *      (Ø, å, Æ, ð, þ, ß …)
+   *   2. NFD + strip combining marks for the rest (é→e, ü→u, ç→c …)
+   */
+  function foldForSearch(s: string): string {
+    const charMap: Record<string, string> = {
+      'ø': 'o', 'Ø': 'o',
+      'å': 'a', 'Å': 'a',
+      'æ': 'ae', 'Æ': 'ae',
+      'ð': 'd', 'Ð': 'd',
+      'þ': 'th', 'Þ': 'th',
+      'ß': 'ss',
+    };
+    let str = (s ?? '').toString();
+    for (const [from, to] of Object.entries(charMap)) {
+      str = str.split(from).join(to);
+    }
+    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  }
+
+  searchInput.addEventListener("input", () => {
+    filterSearch = foldForSearch(searchInput.value);
+    render();
+  });
+
+  statSelect.addEventListener("change", () => {
+    statView = statSelect.value;
+    sortCol = DEFAULT_SORT[statView] ?? "total_points";
+    sortDir = "desc";
+    render();
+  });
+
+  // ----------------------------------------------------------------
+  // Bootstrap loading
+  // ----------------------------------------------------------------
+  async function loadBootstrap(force = false) {
+    statusEl.textContent = "Loading players…";
+    body.innerHTML = '<div class="pe-status" id="pe-status">Loading…</div>';
+    try {
+      bootstrapData = await getBootstrapData(6 * 60 * 60 * 1000, force);
+      teamMap = new Map(bootstrapData.teams.map(t => [t.id, t]));
+      populateTeamFilter();
+      render();
+      // Fetch accurate DEFCON in background; render() will be called again when ready
+      fetchAndCacheDefcon(bootstrapData.elements, bootstrapData.events).catch(() => {
+        defconLoaded = true;
+      });
+    } catch (err) {
+      body.innerHTML = `<div class="pe-status">❌ Failed to load players. <button id="pe-retry" style="margin-left:8px;cursor:pointer;text-decoration:underline;background:none;border:none;color:var(--color-primary);">Retry</button></div>`;
+      document.getElementById("pe-retry")?.addEventListener("click", () => loadBootstrap(true));
+    }
+  }
+
+  refreshBtn.addEventListener("click", () => {
+    clearBootstrapCache();
+    defconMap = new Map();
+    defconLoaded = false;
+    try { localStorage.removeItem(DEFCON_LS_KEY); } catch { /* ignore */ }
+    loadBootstrap(true);
+  });
+
+  function populateTeamFilter() {
+    if (!bootstrapData) return;
+    const sorted = [...bootstrapData.teams].sort((a, b) => a.name.localeCompare(b.name));
+    teamFilter.innerHTML = '<option value="">All Teams</option>' +
+      sorted.map(t => `<option value="${t.id}">${t.short_name} – ${t.name}</option>`).join("");
+  }
+
+  // ----------------------------------------------------------------
+  // Stat columns configuration
+  // ----------------------------------------------------------------
+  interface ColDef {
+    key: string;
+    label: string;
+    title?: string;
+    fn?: (el: BootstrapElement) => number | string;
+    numeric?: boolean;
+  }
+
+  const DEFAULT_SORT: Record<string, string> = {
+    overview:   "total_points",
+    attacking:  "total_points",
+    defensive:  "total_points",
+    ownership:  "total_points",
+    discipline: "total_points",
+  };
+
+  const COLS: Record<string, ColDef[]> = {
+    overview: [
+      { key: "price",   label: "£",    title: "Price (£m)", fn: el => (el.now_cost / 10).toFixed(1), numeric: true },
+      { key: "total_points", label: "Pts", title: "Total Points", numeric: true },
+      { key: "form",    label: "Form", title: "Form (rolling avg)", numeric: true },
+      { key: "ppg",     label: "PPG",  title: "Points Per Game", fn: el => el.points_per_game, numeric: true },
+      { key: "selected_by_percent_num", label: "Sel%", title: "Selected by % of FPL managers",
+        fn: el => el.selected_by_percent, numeric: true },
+      { key: "minutes", label: "Min",  title: "Total minutes played", numeric: true },
+    ],
+    attacking: [
+      { key: "total_points", label: "Pts",  numeric: true },
+      { key: "goals_scored", label: "GS",   title: "Goals Scored", numeric: true },
+      { key: "xg",          label: "xG",   title: "Expected Goals",
+        fn: el => parseFloat((el as any).expected_goals ?? "0").toFixed(2), numeric: true },
+      { key: "assists",      label: "A",    title: "Assists", numeric: true },
+      { key: "xa",          label: "xA",   title: "Expected Assists",
+        fn: el => parseFloat((el as any).expected_assists ?? "0").toFixed(2), numeric: true },
+      { key: "bonus",        label: "Bonus",title: "Bonus Points", numeric: true },
+    ],
+    defensive: [
+      { key: "total_points",   label: "Pts",   numeric: true },
+      { key: "clean_sheets",   label: "CS",    title: "Clean Sheets", numeric: true },
+      { key: "goals_conceded", label: "GC",    title: "Goals Conceded", numeric: true },
+      { key: "xgc",           label: "xGC",  title: "Expected Goals Conceded",
+        fn: el => parseFloat((el as any).expected_goals_conceded ?? "0").toFixed(2), numeric: true },
+      { key: "defcon",         label: "DC★",
+        title: `DEFCON points ${DEFCON_NOTE}`,
+        fn: el => defconLoaded ? (defconMap.get(el.id) ?? 0) : computeProxyDEFCON(el),
+        numeric: true },
+    ],
+    ownership: [
+      { key: "selected_by_percent_num", label: "Sel%", title: "Selected by % of FPL managers",
+        fn: el => el.selected_by_percent, numeric: true },
+      { key: "transfers_in",       label: "T In",  title: "Total transfers in", numeric: true },
+      { key: "transfers_out",      label: "T Out", title: "Total transfers out", numeric: true },
+      { key: "transfers_in_event", label: "GW↑",   title: "Transfers in this GW", numeric: true },
+      { key: "transfers_out_event",label: "GW↓",   title: "Transfers out this GW", numeric: true },
+      { key: "total_points",       label: "Pts",   numeric: true },
+    ],
+    discipline: [
+      { key: "total_points",   label: "Pts",   numeric: true },
+      { key: "yellow_cards",   label: "YC",    title: "Yellow Cards", numeric: true },
+      { key: "red_cards",      label: "RC",    title: "Red Cards", numeric: true },
+      { key: "penalties_missed",label: "PM",   title: "Penalties Missed", numeric: true },
+      { key: "own_goals",      label: "OG",    title: "Own Goals", numeric: true },
+      { key: "penalties_saved",label: "PS",    title: "Penalties Saved (GK)", numeric: true },
+    ],
+  };
+
+  /**
+   * Return the column list for the given view, filtered by active position.
+   * - Svs (saves) only relevant for GK — hide for DEF/MID/FWD (attacking view)
+   */
+  function getEffectiveCols(view: string, pos: string): ColDef[] {
+    let cols = [...(COLS[view] ?? COLS.overview)];
+    const isOutfield = pos === "2" || pos === "3" || pos === "4";
+    if (isOutfield) cols = cols.filter(c => c.key !== "saves");
+    return cols;
+  }
+
+  // ----------------------------------------------------------------
+  // Rendering
+  // ----------------------------------------------------------------
+  const POS_LABEL: Record<number, string> = { 1:"GK", 2:"DEF", 3:"MID", 4:"FWD" };
+
+  function getColValue(el: BootstrapElement, col: ColDef): number | string {
+    if (col.fn) return col.fn(el);
+    const v = (el as any)[col.key];
+    return v ?? 0;
+  }
+
+  function getNumericValue(el: BootstrapElement, col: ColDef): number {
+    const v = getColValue(el, col);
+    return typeof v === "number" ? v : parseFloat(String(v)) || 0;
+  }
+
+  function render() {
+    if (!bootstrapData) return;
+
+    const cols = getEffectiveCols(statView, filterPos);
+    const activeSortCol = cols.find(c => c.key === sortCol) ?? cols[0];
+
+    // Filter
+    let players = bootstrapData.elements.filter(el => {
+      if (filterPos && String(el.element_type) !== filterPos) return false;
+      if (filterTeam && String(el.team) !== filterTeam) return false;
+      if (filterMaxPrice > 0 && el.now_cost / 10 > filterMaxPrice) return false;
+      if (filterSearch) {
+        const name = foldForSearch(`${el.first_name} ${el.second_name} ${el.web_name}`);
+        if (!name.includes(filterSearch)) return false;
+      }
+      return true;
+    });
+
+    // Sort
+    players.sort((a, b) => {
+      const va = getNumericValue(a, activeSortCol);
+      const vb = getNumericValue(b, activeSortCol);
+      return sortDir === "desc" ? vb - va : va - vb;
+    });
+
+    subtitle.textContent = `${players.length} player${players.length !== 1 ? "s" : ""}`;
+
+    // Build table HTML
+    const showDefconNote = statView === "defensive";
+
+    const thead = `<thead><tr>
+      <th data-col="name" title="Player">Player</th>
+      ${cols.map(c => `<th data-col="${c.key}" title="${c.title ?? c.label}" class="${sortCol === c.key ? (sortDir === "desc" ? "sort-desc" : "sort-asc") : ""}">${c.label}</th>`).join("")}
+    </tr></thead>`;
+
+    const rows = players.map(el => {
+      const team = teamMap.get(el.team);
+      const pos = POS_LABEL[el.element_type] ?? "?";
+      const dot = `<span class="pe-status-dot pe-status-dot--${el.status ?? "a"}" title="${el.news || "Available"}"></span>`;
+      return `<tr data-id="${el.id}">
+        <td class="pe-player-name">${dot}${el.web_name}<br><span class="pe-player-meta">${team?.short_name ?? ""}  ${pos}</span></td>
+        ${cols.map(c => `<td>${getColValue(el, c)}</td>`).join("")}
+      </tr>`;
+    }).join("");
+
+    const note = showDefconNote
+      ? `<span class="pe-defcon-note">DC★ ${defconLoaded ? DEFCON_NOTE : '⏳ Loading DC data from GW live stats…'}</span>`
+      : "";
+
+    body.innerHTML = `<div class="pe-table-wrapper"><table class="pe-table">${thead}<tbody>${rows}</tbody></table></div>${note}`;
+
+    // Sort header click
+    body.querySelectorAll<HTMLElement>(".pe-table th[data-col]").forEach(th => {
+      th.addEventListener("click", () => {
+        const col = th.dataset.col ?? "";
+        if (col === "name") return;
+        if (sortCol === col) {
+          sortDir = sortDir === "desc" ? "asc" : "desc";
+        } else {
+          sortCol = col;
+          sortDir = "desc";
+        }
+        render();
+      });
+    });
+
+    // Row click → open player modal if available
+    body.querySelectorAll<HTMLElement>(".pe-table tbody tr[data-id]").forEach(row => {
+      row.addEventListener("click", () => {
+        const id = parseInt(row.dataset.id ?? "0", 10);
+        if (!id) return;
+        // Try to reuse existing page-level showPlayerModal if available
+        if (typeof (window as any).showPlayerModal === "function") {
+          (window as any).showPlayerModal(id);
+        } else {
+          // Dispatch custom event; pages can listen to open their own modal
+          document.dispatchEvent(new CustomEvent("pe:player-click", { detail: { playerId: id } }));
+        }
+      });
+    });
+  }
+</script>
