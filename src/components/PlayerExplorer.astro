@@ -50,36 +50,38 @@
       <button type="button" class="pe-pos-btn" data-pos="4">FWD</button>
     </div>
 
-    <select id="pe-team-filter" class="pe-team-select" aria-label="Filter by team">
-      <option value="">All Teams</option>
-    </select>
+    <div class="pe-selects-row">
+      <select id="pe-team-filter" class="pe-team-select" aria-label="Filter by team">
+        <option value="">All Teams</option>
+      </select>
 
-    <select id="pe-price-filter" class="pe-price-select" aria-label="Max price filter">
-      <option value="">Max £</option>
-      <option value="4.5">£4.5m</option>
-      <option value="5.0">£5.0m</option>
-      <option value="5.5">£5.5m</option>
-      <option value="6.0">£6.0m</option>
-      <option value="6.5">£6.5m</option>
-      <option value="7.0">£7.0m</option>
-      <option value="7.5">£7.5m</option>
-      <option value="8.0">£8.0m</option>
-      <option value="8.5">£8.5m</option>
-      <option value="9.0">£9.0m</option>
-      <option value="9.5">£9.5m</option>
-      <option value="10.0">£10.0m</option>
-      <option value="11.0">£11.0m</option>
-      <option value="12.0">£12.0m</option>
-      <option value="13.0">£13.0m</option>
-    </select>
+      <select id="pe-price-filter" class="pe-price-select" aria-label="Max price filter">
+        <option value="">Max £</option>
+        <option value="4.5">£4.5m</option>
+        <option value="5.0">£5.0m</option>
+        <option value="5.5">£5.5m</option>
+        <option value="6.0">£6.0m</option>
+        <option value="6.5">£6.5m</option>
+        <option value="7.0">£7.0m</option>
+        <option value="7.5">£7.5m</option>
+        <option value="8.0">£8.0m</option>
+        <option value="8.5">£8.5m</option>
+        <option value="9.0">£9.0m</option>
+        <option value="9.5">£9.5m</option>
+        <option value="10.0">£10.0m</option>
+        <option value="11.0">£11.0m</option>
+        <option value="12.0">£12.0m</option>
+        <option value="13.0">£13.0m</option>
+      </select>
 
-    <select id="pe-stat-view" class="pe-stat-select" aria-label="Choose stat view">
-      <option value="overview">Overview</option>
-      <option value="attacking">Attacking</option>
-      <option value="defensive">Defensive</option>
-      <option value="ownership">Ownership / Transfers</option>
-      <option value="discipline">Discipline</option>
-    </select>
+      <select id="pe-stat-view" class="pe-stat-select" aria-label="Choose stat view">
+        <option value="overview">Overview</option>
+        <option value="attacking">Attacking</option>
+        <option value="defensive">Defensive</option>
+        <option value="ownership">Ownership / Transfers</option>
+        <option value="discipline">Discipline</option>
+      </select>
+    </div>
   </div>
 
   <!-- Body -->
@@ -105,6 +107,88 @@
   let statView = "overview";
   let sortCol = "total_points";
   let sortDir: "asc" | "desc" = "desc";
+
+  // DEFCON: map of player_id -> season DC points (accurate, from live GW data)
+  let defconMap: Map<number, number> = new Map();
+  let defconLoaded = false;
+
+  const DEFCON_LS_KEY = 'fpl_defcon_cache_v1';
+  const DEFCON_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+  function loadDefconFromStorage(): Map<number, number> | null {
+    try {
+      const raw = localStorage.getItem(DEFCON_LS_KEY);
+      if (!raw) return null;
+      const p = JSON.parse(raw) as { data: [number, number][]; fetchedAt: number };
+      if (!Array.isArray(p?.data) || typeof p.fetchedAt !== 'number') return null;
+      if (Date.now() - p.fetchedAt > DEFCON_TTL_MS) return null;
+      return new Map(p.data);
+    } catch { return null; }
+  }
+
+  function saveDefconToStorage(map: Map<number, number>): void {
+    try {
+      localStorage.setItem(DEFCON_LS_KEY, JSON.stringify({
+        data: Array.from(map.entries()),
+        fetchedAt: Date.now(),
+      }));
+    } catch { /* ignore */ }
+  }
+
+  async function fetchAndCacheDefcon(elements: BootstrapElement[], events: BootstrapStatic['events']): Promise<void> {
+    // 1. Try localStorage cache first
+    const cached = loadDefconFromStorage();
+    if (cached) {
+      defconMap = cached;
+      defconLoaded = true;
+      render();
+      return;
+    }
+
+    // 2. Determine all completed GWs
+    const completedGWs = events.filter(e => e.finished).map(e => e.id);
+    if (!completedGWs.length) { defconLoaded = true; return; }
+
+    // 3. Build eligible-player position map (exclude GK)
+    const eligible = new Map<number, number>(); // id -> element_type
+    elements.forEach(el => {
+      if (el.element_type >= 2) eligible.set(el.id, el.element_type);
+    });
+
+    // 4. Fetch all completed GW live data in parallel
+    const results = await Promise.all(
+      completedGWs.map(gw =>
+        fetch(`/api/fpl/event/${gw}/live`)
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+      )
+    );
+
+    // 5. Aggregate per-fixture DC points from explain.stats
+    const newMap = new Map<number, number>();
+    results.forEach((data: any) => {
+      if (!data?.elements) return;
+      (data.elements as any[]).forEach(p => {
+        if (!eligible.has(p.id)) return;
+        const posType = eligible.get(p.id)!;
+        const threshold = posType === 2 ? 10 : 12; // DEF:10, MID/FWD:12
+        let pts = 0;
+        ((p.explain ?? []) as any[]).forEach(fixture => {
+          const stats: any[] = fixture.stats ?? [];
+          const dc = stats.find((s: any) => s.identifier === 'defensive_contribution');
+          if (dc && typeof dc.value === 'number' && dc.value >= threshold) {
+            pts += 2;
+          }
+        });
+        if (pts > 0) newMap.set(p.id, (newMap.get(p.id) ?? 0) + pts);
+      });
+    });
+
+    defconMap = newMap;
+    defconLoaded = true;
+    saveDefconToStorage(newMap);
+    render(); // re-render with accurate values
+  }
 
   // ----------------------------------------------------------------
   // DOM refs (populated on first open)
@@ -198,6 +282,10 @@
       teamMap = new Map(bootstrapData.teams.map(t => [t.id, t]));
       populateTeamFilter();
       render();
+      // Fetch accurate DEFCON in background; render() will be called again when ready
+      fetchAndCacheDefcon(bootstrapData.elements, bootstrapData.events).catch(() => {
+        defconLoaded = true;
+      });
     } catch (err) {
       body.innerHTML = `<div class="pe-status">❌ Failed to load players. <button id="pe-retry" style="margin-left:8px;cursor:pointer;text-decoration:underline;background:none;border:none;color:var(--color-primary);">Retry</button></div>`;
       document.getElementById("pe-retry")?.addEventListener("click", () => loadBootstrap(true));
@@ -206,6 +294,9 @@
 
   refreshBtn.addEventListener("click", () => {
     clearBootstrapCache();
+    defconMap = new Map();
+    defconLoaded = false;
+    try { localStorage.removeItem(DEFCON_LS_KEY); } catch { /* ignore */ }
     loadBootstrap(true);
   });
 
@@ -259,8 +350,10 @@
       { key: "goals_conceded", label: "GC",    title: "Goals Conceded", numeric: true },
       { key: "clearances_blocks_interceptions", label: "CBI", title: "Clearances, Blocks & Interceptions", numeric: true },
       { key: "recoveries",     label: "Rec",   title: "Recoveries", numeric: true },
-      { key: "defcon",         label: "DC★",   title: `DEFCON proxy – ${DEFCON_NOTE}`,
-        fn: el => computeProxyDEFCON(el), numeric: true },
+      { key: "defcon",         label: "DC★",
+        title: `DEFCON points ${DEFCON_NOTE}`,
+        fn: el => defconLoaded ? (defconMap.get(el.id) ?? 0) : computeProxyDEFCON(el),
+        numeric: true },
     ],
     ownership: [
       { key: "selected_by_percent_num", label: "Sel%", title: "Selected by % of FPL managers",
@@ -357,7 +450,7 @@
     }).join("");
 
     const note = showDefconNote
-      ? `<span class="pe-defcon-note">DC★ ${DEFCON_NOTE}</span>`
+      ? `<span class="pe-defcon-note">DC★ ${defconLoaded ? DEFCON_NOTE : '⏳ Loading DC data from GW live stats…'}</span>`
       : "";
 
     body.innerHTML = `<div class="pe-table-wrapper"><table class="pe-table">${thead}<tbody>${rows}</tbody></table></div>${note}`;

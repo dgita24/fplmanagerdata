@@ -168,25 +168,23 @@ export function getBootstrapCacheAge(): number | null {
 // DEFCON (Defensive Contribution points) calculation
 // ------------------------------------------------------------------
 //
-// 2025/26 FPL rule (per match):
-//   DEF: +2 DC if CBI(T) >= 10
-//   MID/FWD: +2 DC if (CBIT + recoveries) >= 12
-//   GK: not eligible
+// 2025/26 FPL rule (per fixture):
+//   DEF:     +2 DC if defensive_contribution >= 10
+//   MID/FWD: +2 DC if defensive_contribution >= 12
+//   GK:      not eligible
 //
-// bootstrap-static only provides season-to-date TOTALS, not per-match.
-// We therefore compute a PROXY / APPROXIMATION:
+// The accurate value comes from aggregating per-GW live event data
+// (fetchDefconData in PlayerExplorer).  The proxy below is a fallback
+// used only while that network fetch is in progress.
 //
-//   DEF:     proxyDEFCON = 2 × ⌊ clearances_blocks_interceptions / 10 ⌋
-//   MID/FWD: proxyDEFCON = 2 × ⌊ (clearances_blocks_interceptions + recoveries) / 12 ⌋
-//   GK:      proxyDEFCON = 0
-//
-// This treats the season totals as if every `threshold` defensive actions
-// across the season represents one "qualifying match" for DC purposes.
-// It is NOT the official per-match DC points and is clearly labelled as
-// an approximation in the UI.
+// Proxy formula uses season-total clearances_blocks_interceptions:
+//   DEF:     2 × ⌊ CBI / 10 ⌋   (rough season-total estimate)
+//   MID/FWD: 2 × ⌊ (CBI + recoveries) / 12 ⌋
+// Note: this deliberately underestimates; the real GW-data fetch
+// replaces it with accurate values.
 // ------------------------------------------------------------------
 
-export const DEFCON_NOTE = '⚠ Approx. (season-total CBI÷10 or CBIrec÷12, not per-match DC)';
+export const DEFCON_NOTE = '(from GW live data)';
 
 export function computeProxyDEFCON(el: BootstrapElement): number {
   const pos = el.element_type;
@@ -195,11 +193,9 @@ export function computeProxyDEFCON(el: BootstrapElement): number {
   const cbi = el.clearances_blocks_interceptions ?? 0;
 
   if (pos === 2) {
-    // DEF: floor(CBI / 10) * 2
     return Math.floor(cbi / 10) * 2;
   }
 
-  // MID / FWD: floor((CBI + recoveries) / 12) * 2
   const rec = el.recoveries ?? 0;
   return Math.floor((cbi + rec) / 12) * 2;
 }

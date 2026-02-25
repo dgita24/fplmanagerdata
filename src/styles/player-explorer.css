@@ -138,6 +138,13 @@
   flex-shrink: 0;
 }
 
+/* All three dropdowns in one non-wrapping row */
+.pe-selects-row {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
 .pe-pos-btn {
   height: 34px;
   padding: 0 var(--space-2);
