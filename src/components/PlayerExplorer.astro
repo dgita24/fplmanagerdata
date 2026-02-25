@@ -317,7 +317,6 @@
 
     const thead = `<thead><tr>
       <th data-col="name" title="Player">Player</th>
-      <th data-col="pos" title="Position">Pos</th>
       ${cols.map(c => `<th data-col="${c.key}" title="${c.title ?? c.label}" class="${sortCol === c.key ? (sortDir === "desc" ? "sort-desc" : "sort-asc") : ""}">${c.label}</th>`).join("")}
     </tr></thead>`;
 
@@ -326,8 +325,7 @@
       const pos = POS_LABEL[el.element_type] ?? "?";
       const dot = `<span class="pe-status-dot pe-status-dot--${el.status ?? "a"}" title="${el.news || "Available"}"></span>`;
       return `<tr data-id="${el.id}">
-        <td class="pe-player-name">${dot}${el.web_name}<br><span class="pe-player-team">${team?.short_name ?? ""}</span></td>
-        <td>${pos}</td>
+        <td class="pe-player-name">${dot}${el.web_name}<br><span class="pe-player-meta">${team?.short_name ?? ""}  ${pos}</span></td>
         ${cols.map(c => `<td>${getColValue(el, c)}</td>`).join("")}
       </tr>`;
     }).join("");
@@ -342,7 +340,7 @@
     body.querySelectorAll<HTMLElement>(".pe-table th[data-col]").forEach(th => {
       th.addEventListener("click", () => {
         const col = th.dataset.col ?? "";
-        if (col === "name" || col === "pos") return;
+        if (col === "name") return;
         if (sortCol === col) {
           sortDir = sortDir === "desc" ? "asc" : "desc";
         } else {

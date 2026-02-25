@@ -217,9 +217,14 @@
   font-weight: 600;
   color: var(--color-text-secondary);
   border-bottom: 2px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
+}
+
+.pe-table th:last-child {
+  border-right: none;
 }
 
 .pe-table th:hover {
@@ -232,7 +237,12 @@
 .pe-table td {
   padding: var(--space-2) var(--space-1);
   border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
   vertical-align: middle;
+}
+
+.pe-table td:last-child {
+  border-right: none;
 }
 
 .pe-table tbody tr {
@@ -250,9 +260,11 @@
   min-width: 80px;
 }
 
-.pe-player-team {
-  font-size: var(--text-xs);
+.pe-player-meta {
+  font-size: 11px;
   color: var(--color-text-muted);
+  line-height: 1.2;
+  margin-top: 1px;
 }
 
 /* Status dot */
