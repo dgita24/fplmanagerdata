@@ -259,8 +259,13 @@
     render();
   });
 
+  // Strips diacritics so "odegaard" matches "Ødegaard", "gyokeres" matches "Gyökeres", etc.
+  function normStr(s: string): string {
+    return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  }
+
   searchInput.addEventListener("input", () => {
-    filterSearch = searchInput.value.toLowerCase().trim();
+    filterSearch = normStr(searchInput.value.trim());
     render();
   });
 
@@ -415,7 +420,7 @@
       if (filterTeam && String(el.team) !== filterTeam) return false;
       if (filterMaxPrice > 0 && el.now_cost / 10 > filterMaxPrice) return false;
       if (filterSearch) {
-        const name = `${el.first_name} ${el.second_name} ${el.web_name}`.toLowerCase();
+        const name = normStr(`${el.first_name} ${el.second_name} ${el.web_name}`);
         if (!name.includes(filterSearch)) return false;
       }
       return true;
