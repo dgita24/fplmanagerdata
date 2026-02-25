@@ -54,13 +54,31 @@
       <option value="">All Teams</option>
     </select>
 
+    <select id="pe-price-filter" class="pe-price-select" aria-label="Max price filter">
+      <option value="">Max £</option>
+      <option value="4.5">£4.5m</option>
+      <option value="5.0">£5.0m</option>
+      <option value="5.5">£5.5m</option>
+      <option value="6.0">£6.0m</option>
+      <option value="6.5">£6.5m</option>
+      <option value="7.0">£7.0m</option>
+      <option value="7.5">£7.5m</option>
+      <option value="8.0">£8.0m</option>
+      <option value="8.5">£8.5m</option>
+      <option value="9.0">£9.0m</option>
+      <option value="9.5">£9.5m</option>
+      <option value="10.0">£10.0m</option>
+      <option value="11.0">£11.0m</option>
+      <option value="12.0">£12.0m</option>
+      <option value="13.0">£13.0m</option>
+    </select>
+
     <select id="pe-stat-view" class="pe-stat-select" aria-label="Choose stat view">
       <option value="overview">Overview</option>
       <option value="attacking">Attacking</option>
       <option value="defensive">Defensive</option>
       <option value="ownership">Ownership / Transfers</option>
       <option value="discipline">Discipline</option>
-      <option value="advanced">Advanced</option>
     </select>
   </div>
 
@@ -83,6 +101,7 @@
   let filterPos = "";
   let filterTeam = "";
   let filterSearch = "";
+  let filterMaxPrice = 0; // 0 = no limit; otherwise max price in £m
   let statView = "overview";
   let sortCol = "total_points";
   let sortDir: "asc" | "desc" = "desc";
@@ -95,8 +114,9 @@
   const closeBtn = document.getElementById("pe-close-btn")!;
   const refreshBtn = document.getElementById("pe-refresh-btn")!;
   const searchInput = document.getElementById("pe-search") as HTMLInputElement;
-  const teamFilter  = document.getElementById("pe-team-filter") as HTMLSelectElement;
-  const statSelect  = document.getElementById("pe-stat-view") as HTMLSelectElement;
+  const teamFilter   = document.getElementById("pe-team-filter") as HTMLSelectElement;
+  const priceFilter  = document.getElementById("pe-price-filter") as HTMLSelectElement;
+  const statSelect   = document.getElementById("pe-stat-view") as HTMLSelectElement;
   const body        = document.getElementById("pe-body")!;
   const subtitle    = document.getElementById("pe-subtitle")!;
   const statusEl    = document.getElementById("pe-status")!;
@@ -147,6 +167,11 @@
 
   teamFilter.addEventListener("change", () => {
     filterTeam = teamFilter.value;
+    render();
+  });
+
+  priceFilter.addEventListener("change", () => {
+    filterMaxPrice = priceFilter.value ? parseFloat(priceFilter.value) : 0;
     render();
   });
 
@@ -208,7 +233,6 @@
     defensive: "defcon",
     ownership: "selected_by_percent_num",
     discipline: "yellow_cards",
-    advanced: "ict_index_num",
   };
 
   const COLS: Record<string, ColDef[]> = {
@@ -255,20 +279,21 @@
       { key: "own_goals",      label: "OG",    title: "Own Goals", numeric: true },
       { key: "penalties_saved",label: "PS",    title: "Penalties Saved (GK)", numeric: true },
     ],
-    advanced: [
-      { key: "total_points",   label: "Pts",   numeric: true },
-      { key: "ict_index_num",  label: "ICT",   title: "ICT Index",
-        fn: el => parseFloat(el.ict_index), numeric: true },
-      { key: "influence_num",  label: "Inf",   title: "Influence",
-        fn: el => parseFloat(el.influence), numeric: true },
-      { key: "creativity_num", label: "Cre",   title: "Creativity",
-        fn: el => parseFloat(el.creativity), numeric: true },
-      { key: "threat_num",     label: "Thr",   title: "Threat",
-        fn: el => parseFloat(el.threat), numeric: true },
-      { key: "value_season",   label: "Val",   title: "Value Season (pts/cost)",
-        fn: el => el.value_season, numeric: true },
-    ],
   };
+
+  /**
+   * Return the column list for the given view, filtered by active position.
+   * - Svs (saves) only relevant for GK — hide for DEF/MID/FWD
+   * - BPS not useful for FWD — hide for FWD
+   */
+  function getEffectiveCols(view: string, pos: string): ColDef[] {
+    let cols = [...(COLS[view] ?? COLS.overview)];
+    const isOutfield = pos === "2" || pos === "3" || pos === "4"; // DEF, MID, FWD
+    const isFwd = pos === "4";
+    if (isOutfield) cols = cols.filter(c => c.key !== "saves");
+    if (isFwd)      cols = cols.filter(c => c.key !== "bps");
+    return cols;
+  }
 
   // ----------------------------------------------------------------
   // Rendering
@@ -289,13 +314,14 @@
   function render() {
     if (!bootstrapData) return;
 
-    const cols = COLS[statView] ?? COLS.overview;
+    const cols = getEffectiveCols(statView, filterPos);
     const activeSortCol = cols.find(c => c.key === sortCol) ?? cols[0];
 
     // Filter
     let players = bootstrapData.elements.filter(el => {
       if (filterPos && String(el.element_type) !== filterPos) return false;
       if (filterTeam && String(el.team) !== filterTeam) return false;
+      if (filterMaxPrice > 0 && el.now_cost / 10 > filterMaxPrice) return false;
       if (filterSearch) {
         const name = `${el.first_name} ${el.second_name} ${el.web_name}`.toLowerCase();
         if (!name.includes(filterSearch)) return false;

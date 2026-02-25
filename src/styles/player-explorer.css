@@ -161,8 +161,11 @@
 }
 
 .pe-team-select,
-.pe-stat-select {
+.pe-stat-select,
+.pe-price-select {
   height: 34px;
+  width: 110px;
+  flex: 0 0 110px;
   padding: 0 var(--space-2);
   font-family: inherit;
   font-size: var(--text-sm);
@@ -171,11 +174,11 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   cursor: pointer;
-  max-width: 130px;
 }
 
 .pe-team-select:focus,
-.pe-stat-select:focus {
+.pe-stat-select:focus,
+.pe-price-select:focus {
   outline: none;
   border-color: var(--color-primary);
 }
@@ -213,7 +216,7 @@
 
 .pe-table th {
   padding: var(--space-2) var(--space-1);
-  text-align: left;
+  text-align: center;
   font-weight: 600;
   color: var(--color-text-secondary);
   border-bottom: 2px solid var(--color-border);
@@ -221,6 +224,10 @@
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
+}
+
+.pe-table th:first-child {
+  text-align: left;
 }
 
 .pe-table th:last-child {
@@ -239,6 +246,11 @@
   border-bottom: 1px solid var(--color-border);
   border-right: 1px solid var(--color-border);
   vertical-align: middle;
+  text-align: center;
+}
+
+.pe-table td:first-child {
+  text-align: left;
 }
 
 .pe-table td:last-child {
