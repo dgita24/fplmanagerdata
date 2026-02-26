@@ -188,7 +188,7 @@
 
     // Build column headers based on position
     const extraHeaders = isGK()
-      ? "<th>Svs</th><th>PenSv</th><th title=\"Assists\">A</th><th title=\"Goals\">G</th>"
+      ? "<th title=\"Saves\">Svs</th><th title=\"Penalties Saved\">PenSv</th><th title=\"Assists\">A</th><th title=\"Goals\">G</th>"
       : "<th title=\"Goals Scored\">G</th><th title=\"Assists\">A</th>" +
         (rows[0]?.expected_goals !== undefined ? "<th>xG</th><th>xA</th>" : "");
 
