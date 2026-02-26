@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeMatchDC,
+  filterHistoryRows,
   formatMatchDate,
   formatOpponentVenue,
   formatScore,
@@ -132,8 +133,41 @@ describe('formatOpponentVenue', () => {
 });
 
 // ----------------------------------------------------------------
-// formatMatchDate
+// filterHistoryRows
 // ----------------------------------------------------------------
+describe('filterHistoryRows', () => {
+  const home1 = makeRow({ fixture: 1, was_home: true });
+  const home2 = makeRow({ fixture: 2, was_home: true });
+  const away1 = makeRow({ fixture: 3, was_home: false });
+  const rows = [home1, home2, away1];
+
+  it('returns all rows when filter is "all"', () => {
+    expect(filterHistoryRows(rows, 'all')).toHaveLength(3);
+  });
+
+  it('returns only home rows when filter is "home"', () => {
+    const result = filterHistoryRows(rows, 'home');
+    expect(result).toHaveLength(2);
+    expect(result.every((r) => r.was_home === true)).toBe(true);
+  });
+
+  it('returns only away rows when filter is "away"', () => {
+    const result = filterHistoryRows(rows, 'away');
+    expect(result).toHaveLength(1);
+    expect(result[0].was_home).toBe(false);
+  });
+
+  it('returns empty array when no rows match filter', () => {
+    const awayOnly = [away1];
+    expect(filterHistoryRows(awayOnly, 'home')).toHaveLength(0);
+  });
+
+  it('handles empty input array', () => {
+    expect(filterHistoryRows([], 'home')).toHaveLength(0);
+    expect(filterHistoryRows([], 'away')).toHaveLength(0);
+    expect(filterHistoryRows([], 'all')).toHaveLength(0);
+  });
+});
 describe('formatMatchDate', () => {
   it('returns — for null input', () => {
     expect(formatMatchDate(null)).toBe('—');
