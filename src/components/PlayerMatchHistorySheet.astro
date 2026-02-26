@@ -253,11 +253,11 @@
           <th title="Total Points">Pts</th>
           <th title="Goals Scored">G</th>
           <th title="Assists">A</th>
+          <th title="DC Points">DC</th>
+          <th title="Bonus Points">Bon</th>
           ${hasXG ? "<th>xG</th><th>xA</th>" : ""}
           <th title="Goals Conceded">GC</th>
           <th title="Expected Goals Conceded">xGC</th>
-          <th title="DC Points">DC</th>
-          <th title="Bonus Points">Bon</th>
           <th title="Yellow Cards">YC</th>
           <th title="Red Cards">RC</th>
           <th title="Own Goals">OG</th>
@@ -297,11 +297,11 @@
            <td class="pmh-pts ${ptsCls}">${r.total_points}</td>
            <td>${gBadge}</td>
            <td>${aBadge}</td>
+           <td>${dc > 0 ? `<span class="pmh-dc">${dc}</span>` : "0"}</td>
+           <td>${r.bonus}</td>
            ${hasXG ? `<td>${parseFloat(String(r.expected_goals ?? "0")).toFixed(2)}</td><td>${parseFloat(String(r.expected_assists ?? "0")).toFixed(2)}</td>` : ""}
            <td>${gcVal}</td>
            <td>${xgcVal}</td>
-           <td>${dc > 0 ? `<span class="pmh-dc">${dc}</span>` : "0"}</td>
-           <td>${r.bonus}</td>
            <td>${r.yellow_cards ?? 0}</td>
            <td>${r.red_cards ?? 0}</td>
            <td>${r.own_goals ?? 0}</td>`;
