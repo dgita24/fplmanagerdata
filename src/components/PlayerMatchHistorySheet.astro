@@ -1,0 +1,258 @@
+---
+/**
+ * PlayerMatchHistorySheet — per-player fixture-by-fixture history top sheet.
+ *
+ * Opens when the user clicks a player's name in PlayerExplorer.
+ * Dispatch: document.dispatchEvent(new CustomEvent('pe:open-history', { detail: { playerId } }))
+ */
+---
+
+<!-- Backdrop -->
+<div id="pmh-backdrop" aria-hidden="true"></div>
+
+<!-- Top-sheet -->
+<section
+  id="pmh-sheet"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Player Match History"
+  aria-hidden="true"
+>
+  <div class="pmh-header">
+    <div>
+      <div class="pmh-header__title" id="pmh-title">Match History</div>
+      <div class="pmh-header__subtitle" id="pmh-subtitle"></div>
+    </div>
+    <button type="button" id="pmh-close-btn" class="pmh-close" aria-label="Close Match History">✕</button>
+  </div>
+
+  <div class="pmh-body" id="pmh-body">
+    <div class="pmh-status" id="pmh-status">Loading…</div>
+  </div>
+</section>
+
+<script>
+  import "../styles/player-match-history.css";
+  import { getBootstrapData } from "../lib/fpl/bootstrapCache";
+  import type { BootstrapTeam } from "../lib/fpl/bootstrapCache";
+  import {
+    computeMatchDC,
+    formatMatchDate,
+    formatOpponentVenue,
+    formatScore,
+  } from "../lib/playerMatchHistory";
+  import type { MatchHistoryRow } from "../lib/playerMatchHistory";
+
+  // ----------------------------------------------------------------
+  // State
+  // ----------------------------------------------------------------
+  let currentPlayerId = 0;
+  let currentElementType = 0;
+  let teamMap: Map<number, BootstrapTeam> = new Map();
+
+  // In-memory cache: playerId → history rows
+  const historyCache = new Map<number, MatchHistoryRow[]>();
+
+  // localStorage cache
+  const PMH_LS_KEY = "fpl_pmh_cache_v1";
+  const PMH_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+  interface PMHCacheEntry {
+    rows: MatchHistoryRow[];
+    fetchedAt: number;
+  }
+
+  function loadHistoryFromStorage(playerId: number): MatchHistoryRow[] | null {
+    try {
+      const raw = localStorage.getItem(`${PMH_LS_KEY}_${playerId}`);
+      if (!raw) return null;
+      const p: PMHCacheEntry = JSON.parse(raw);
+      if (!Array.isArray(p?.rows) || typeof p.fetchedAt !== "number") return null;
+      if (Date.now() - p.fetchedAt > PMH_TTL_MS) return null;
+      return p.rows;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveHistoryToStorage(playerId: number, rows: MatchHistoryRow[]): void {
+    try {
+      localStorage.setItem(
+        `${PMH_LS_KEY}_${playerId}`,
+        JSON.stringify({ rows, fetchedAt: Date.now() }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // DOM refs
+  // ----------------------------------------------------------------
+  const sheet     = document.getElementById("pmh-sheet")!;
+  const backdrop  = document.getElementById("pmh-backdrop")!;
+  const closeBtn  = document.getElementById("pmh-close-btn")!;
+  const titleEl   = document.getElementById("pmh-title")!;
+  const subtitleEl = document.getElementById("pmh-subtitle")!;
+  const body      = document.getElementById("pmh-body")!;
+
+  // ----------------------------------------------------------------
+  // Open / close
+  // ----------------------------------------------------------------
+  function openSheet() {
+    sheet.classList.add("is-open");
+    backdrop.classList.add("is-open");
+    sheet.setAttribute("aria-hidden", "false");
+    backdrop.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+    closeBtn.focus();
+  }
+
+  function closeSheet() {
+    sheet.classList.remove("is-open");
+    backdrop.classList.remove("is-open");
+    sheet.setAttribute("aria-hidden", "true");
+    backdrop.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+  }
+
+  closeBtn.addEventListener("click", closeSheet);
+  backdrop.addEventListener("click", closeSheet);
+  document.addEventListener("keydown", (e: KeyboardEvent) => {
+    if (e.key === "Escape" && sheet.classList.contains("is-open")) closeSheet();
+  });
+
+  // ----------------------------------------------------------------
+  // Load history for a player
+  // ----------------------------------------------------------------
+  async function loadHistory(playerId: number): Promise<void> {
+    body.innerHTML = '<div class="pmh-status">Loading match history…</div>';
+
+    try {
+      // Ensure team map is populated
+      if (teamMap.size === 0) {
+        const bootstrap = await getBootstrapData();
+        teamMap = new Map(bootstrap.teams.map((t) => [t.id, t]));
+
+        // Also grab element type for the current player
+        const el = bootstrap.elements.find((e) => e.id === playerId);
+        if (el) currentElementType = el.element_type;
+      }
+
+      // Check in-memory cache
+      let rows = historyCache.get(playerId);
+
+      if (!rows) {
+        // Check localStorage cache
+        const stored = loadHistoryFromStorage(playerId);
+        if (stored) {
+          rows = stored;
+          historyCache.set(playerId, rows);
+        } else {
+          // Fetch from API
+          const res = await fetch(`/api/fpl/element-summary/${playerId}/`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const json = await res.json();
+          rows = (json.history ?? []) as MatchHistoryRow[];
+          historyCache.set(playerId, rows);
+          saveHistoryToStorage(playerId, rows);
+        }
+      }
+
+      renderHistory(rows);
+    } catch (err) {
+      body.innerHTML = `<div class="pmh-status">❌ Failed to load match history. <button id="pmh-retry" style="margin-left:8px;cursor:pointer;text-decoration:underline;background:none;border:none;color:var(--color-primary);">Retry</button></div>`;
+      document.getElementById("pmh-retry")?.addEventListener("click", () => {
+        historyCache.delete(playerId);
+        loadHistory(playerId);
+      });
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // Render history table
+  // ----------------------------------------------------------------
+  const isGK  = () => currentElementType === 1;
+  const isDEF = () => currentElementType === 2;
+
+  function renderHistory(rows: MatchHistoryRow[]): void {
+    if (!rows.length) {
+      body.innerHTML = '<div class="pmh-status">No match history available yet.</div>';
+      return;
+    }
+
+    subtitleEl.textContent = `${rows.length} fixture${rows.length !== 1 ? "s" : ""}`;
+
+    // Newest first
+    const sorted = [...rows].sort((a, b) => b.round - a.round);
+
+    // Build column headers based on position
+    const extraHeaders = isGK()
+      ? "<th>Svs</th><th>PenSv</th><th title=\"Assists\">A</th><th title=\"Goals\">G</th>"
+      : "<th title=\"Goals Scored\">G</th><th title=\"Assists\">A</th>" +
+        (rows[0]?.expected_goals !== undefined ? "<th>xG</th><th>xA</th>" : "");
+
+    const thead = `<thead><tr>
+      <th>Date</th>
+      <th>Opponent</th>
+      <th>Score</th>
+      <th title="Total Points">Pts</th>
+      <th title="Minutes">Min</th>
+      <th title="Bonus Points">Bon</th>
+      <th title="DC Points">DC</th>
+      ${extraHeaders}
+    </tr></thead>`;
+
+    const hasXG = !isGK() && rows[0]?.expected_goals !== undefined;
+
+    const tableRows = sorted.map((r) => {
+      const team  = teamMap.get(r.opponent_team);
+      const opp   = formatOpponentVenue(team?.short_name ?? String(r.opponent_team), r.was_home);
+      const score = formatScore(r.was_home, r.team_h_score, r.team_a_score);
+      const date  = formatMatchDate(r.kickoff_time);
+      const dc    = computeMatchDC(r, currentElementType);
+
+      const extraCells = isGK()
+        ? `<td>${r.saves ?? 0}</td><td>${r.penalties_saved ?? 0}</td><td>${r.assists ?? 0}</td><td>${r.goals_scored ?? 0}</td>`
+        : `<td>${r.goals_scored ?? 0}</td><td>${r.assists ?? 0}</td>` +
+          (hasXG
+            ? `<td>${parseFloat(String(r.expected_goals ?? "0")).toFixed(2)}</td><td>${parseFloat(String(r.expected_assists ?? "0")).toFixed(2)}</td>`
+            : "");
+
+      const ptsCls = r.total_points >= 9 ? "pmh-pts--high" : r.total_points <= 1 ? "pmh-pts--low" : "";
+
+      return `<tr>
+        <td class="pmh-date">${date}</td>
+        <td class="pmh-opp">${opp}</td>
+        <td class="pmh-score">${score}</td>
+        <td class="pmh-pts ${ptsCls}">${r.total_points}</td>
+        <td>${r.minutes}</td>
+        <td>${r.bonus}</td>
+        <td>${dc > 0 ? `<span class="pmh-dc">${dc}</span>` : "0"}</td>
+        ${extraCells}
+      </tr>`;
+    }).join("");
+
+    body.innerHTML = `<div class="pmh-table-wrapper"><table class="pmh-table">${thead}<tbody>${tableRows}</tbody></table></div>`;
+  }
+
+  // ----------------------------------------------------------------
+  // Event: open history for a player
+  // ----------------------------------------------------------------
+  document.addEventListener("pe:open-history", async (e: Event) => {
+    const { playerId, playerName, elementType } = (e as CustomEvent).detail as {
+      playerId: number;
+      playerName: string;
+      elementType: number;
+    };
+
+    currentPlayerId   = playerId;
+    currentElementType = elementType;
+
+    titleEl.textContent   = `📊 ${playerName}`;
+    subtitleEl.textContent = "";
+
+    openSheet();
+    await loadHistory(playerId);
+  });
+</script>
