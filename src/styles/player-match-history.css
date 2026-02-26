@@ -128,7 +128,7 @@
 }
 
 .pmh-table th:first-child {
-  text-align: left;
+  text-align: center;
 }
 
 .pmh-table th:last-child {
@@ -145,7 +145,7 @@
 }
 
 .pmh-table td:first-child {
-  text-align: left;
+  text-align: center;
 }
 
 .pmh-table td:last-child {
@@ -210,7 +210,7 @@
 /* Cell-specific */
 .pmh-gw {
   font-weight: 600;
-  text-align: left;
+  text-align: center;
 }
 
 .pmh-opp {

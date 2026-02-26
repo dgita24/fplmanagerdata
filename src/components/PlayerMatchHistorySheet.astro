@@ -187,24 +187,43 @@
     const sorted = [...rows].sort((a, b) => b.round - a.round);
 
     // Build column headers based on position
-    const extraHeaders = isGK()
-      ? "<th title=\"Saves\">Svs</th><th title=\"Penalties Saved\">PenSv</th><th title=\"Assists\">A</th><th title=\"Goals\">G</th>"
-      : "<th title=\"Goals Scored\">G</th><th title=\"Assists\">A</th>" +
-        (rows[0]?.expected_goals !== undefined ? "<th>xG</th><th>xA</th>" : "") +
-        "<th title=\"Yellow Cards\">YC</th><th title=\"Red Cards\">RC</th><th title=\"Penalties Missed\">PenM</th><th title=\"Own Goals\">OG</th>";
-
-    const thead = `<thead><tr>
-      <th title="Gameweek">GW</th>
-      <th title="Opponent">Opp</th>
-      <th title="Result">Res</th>
-      <th title="Total Points">Pts</th>
-      <th title="Minutes">Min</th>
-      <th title="Bonus Points">Bon</th>
-      <th title="DC Points">DC</th>
-      ${extraHeaders}
-    </tr></thead>`;
-
     const hasXG = !isGK() && rows[0]?.expected_goals !== undefined;
+
+    const thead = isGK()
+      ? `<thead><tr>
+          <th title="Gameweek">GW</th>
+          <th title="Opponent">Opp</th>
+          <th title="Result">Res</th>
+          <th title="Minutes">Mins</th>
+          <th title="Total Points">Pts</th>
+          <th title="Goals Conceded">GC</th>
+          <th title="Expected Goals Conceded">xGC</th>
+          <th title="Saves">Svs</th>
+          <th title="Penalties Saved">PenSv</th>
+          <th title="Bonus Points">Bon</th>
+          <th title="Yellow Cards">YC</th>
+          <th title="Red Cards">RC</th>
+          <th title="Goals">G</th>
+          <th title="Assists">A</th>
+          <th title="Own Goals">OG</th>
+        </tr></thead>`
+      : `<thead><tr>
+          <th title="Gameweek">GW</th>
+          <th title="Opponent">Opp</th>
+          <th title="Result">Res</th>
+          <th title="Minutes">Mins</th>
+          <th title="Total Points">Pts</th>
+          <th title="Goals Scored">G</th>
+          <th title="Assists">A</th>
+          ${hasXG ? "<th>xG</th><th>xA</th>" : ""}
+          <th title="Goals Conceded">GC</th>
+          <th title="Expected Goals Conceded">xGC</th>
+          <th title="DC Points">DC</th>
+          <th title="Bonus Points">Bon</th>
+          <th title="Yellow Cards">YC</th>
+          <th title="Red Cards">RC</th>
+          <th title="Own Goals">OG</th>
+        </tr></thead>`;
 
     const tableRows = sorted.map((r) => {
       const team  = teamMap.get(r.opponent_team);
@@ -213,25 +232,42 @@
       const date  = formatMatchDate(r.kickoff_time);
       const dc    = computeMatchDC(r, currentElementType);
 
-      const extraCells = isGK()
-        ? `<td>${r.saves ?? 0}</td><td>${r.penalties_saved ?? 0}</td><td>${r.assists ?? 0}</td><td>${r.goals_scored ?? 0}</td>`
-        : `<td>${r.goals_scored ?? 0}</td><td>${r.assists ?? 0}</td>` +
-          (hasXG
-            ? `<td>${parseFloat(String(r.expected_goals ?? "0")).toFixed(2)}</td><td>${parseFloat(String(r.expected_assists ?? "0")).toFixed(2)}</td>`
-            : "") +
-          `<td>${r.yellow_cards ?? 0}</td><td>${r.red_cards ?? 0}</td><td>${r.penalties_missed ?? 0}</td><td>${r.own_goals ?? 0}</td>`;
+      const gcVal  = r.goals_conceded ?? 0;
+      const xgcVal = parseFloat(String(r.expected_goals_conceded ?? "0")).toFixed(2);
 
       const ptsCls = r.total_points >= 9 ? "pmh-pts--high" : r.total_points <= 1 ? "pmh-pts--low" : "";
+
+      const posCells = isGK()
+        ? `<td>${r.minutes}</td>
+           <td class="pmh-pts ${ptsCls}">${r.total_points}</td>
+           <td>${gcVal}</td>
+           <td>${xgcVal}</td>
+           <td>${r.saves ?? 0}</td>
+           <td>${r.penalties_saved ?? 0}</td>
+           <td>${r.bonus}</td>
+           <td>${r.yellow_cards ?? 0}</td>
+           <td>${r.red_cards ?? 0}</td>
+           <td>${r.goals_scored ?? 0}</td>
+           <td>${r.assists ?? 0}</td>
+           <td>${r.own_goals ?? 0}</td>`
+        : `<td>${r.minutes}</td>
+           <td class="pmh-pts ${ptsCls}">${r.total_points}</td>
+           <td>${r.goals_scored ?? 0}</td>
+           <td>${r.assists ?? 0}</td>
+           ${hasXG ? `<td>${parseFloat(String(r.expected_goals ?? "0")).toFixed(2)}</td><td>${parseFloat(String(r.expected_assists ?? "0")).toFixed(2)}</td>` : ""}
+           <td>${gcVal}</td>
+           <td>${xgcVal}</td>
+           <td>${dc > 0 ? `<span class="pmh-dc">${dc}</span>` : "0"}</td>
+           <td>${r.bonus}</td>
+           <td>${r.yellow_cards ?? 0}</td>
+           <td>${r.red_cards ?? 0}</td>
+           <td>${r.own_goals ?? 0}</td>`;
 
       return `<tr>
         <td class="pmh-gw">${r.round}</td>
         <td class="pmh-opp"><span class="pmh-opp__name">${opp}</span></td>
         <td class="pmh-score">${score}</td>
-        <td class="pmh-pts ${ptsCls}">${r.total_points}</td>
-        <td>${r.minutes}</td>
-        <td>${r.bonus}</td>
-        <td>${dc > 0 ? `<span class="pmh-dc">${dc}</span>` : "0"}</td>
-        ${extraCells}
+        ${posCells}
       </tr>`;
     }).join("");
 
