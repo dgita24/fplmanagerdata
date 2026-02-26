@@ -78,6 +78,23 @@ export function formatOpponentVenue(opponentShortName: string, wasHome: boolean)
 }
 
 /**
+ * Filter match history rows by venue.
+ *   'all'  → all rows unchanged
+ *   'home' → rows where was_home === true
+ *   'away' → rows where was_home === false
+ */
+export type VenueFilter = 'all' | 'home' | 'away';
+
+export function filterHistoryRows(
+  rows: MatchHistoryRow[],
+  filter: VenueFilter,
+): MatchHistoryRow[] {
+  if (filter === 'home') return rows.filter((r) => r.was_home === true);
+  if (filter === 'away') return rows.filter((r) => r.was_home === false);
+  return rows;
+}
+
+/**
  * Format score from the player's perspective.
  *   was_home=true  → team_h_score – team_a_score
  *   was_home=false → team_a_score – team_h_score

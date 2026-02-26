@@ -23,6 +23,11 @@
       <div class="pmh-header__title" id="pmh-title">Match History</div>
       <div class="pmh-header__subtitle" id="pmh-subtitle"></div>
     </div>
+    <div class="pmh-filter" role="group" aria-label="Match venue filter" id="pmh-filter">
+      <button type="button" class="pmh-filter__btn is-active" data-filter="all" aria-pressed="true">All</button>
+      <button type="button" class="pmh-filter__btn" data-filter="home" aria-pressed="false">Home</button>
+      <button type="button" class="pmh-filter__btn" data-filter="away" aria-pressed="false">Away</button>
+    </div>
     <button type="button" id="pmh-close-btn" class="pmh-close" aria-label="Close Match History">✕</button>
   </div>
 
@@ -37,17 +42,20 @@
   import type { BootstrapTeam } from "../lib/fpl/bootstrapCache";
   import {
     computeMatchDC,
+    filterHistoryRows,
     formatMatchDate,
     formatOpponentVenue,
     formatScore,
   } from "../lib/playerMatchHistory";
-  import type { MatchHistoryRow } from "../lib/playerMatchHistory";
+  import type { MatchHistoryRow, VenueFilter } from "../lib/playerMatchHistory";
 
   // ----------------------------------------------------------------
   // State
   // ----------------------------------------------------------------
   let currentPlayerId = 0;
   let currentElementType = 0;
+  let currentFilter: VenueFilter = "all";
+  let allRows: MatchHistoryRow[] = [];
   let teamMap: Map<number, BootstrapTeam> = new Map();
 
   // In-memory cache: playerId → history rows
@@ -95,6 +103,27 @@
   const titleEl   = document.getElementById("pmh-title")!;
   const subtitleEl = document.getElementById("pmh-subtitle")!;
   const body      = document.getElementById("pmh-body")!;
+  const filterGroup = document.getElementById("pmh-filter")!;
+
+  // ----------------------------------------------------------------
+  // Filter control
+  // ----------------------------------------------------------------
+  function setFilter(filter: VenueFilter) {
+    currentFilter = filter;
+    filterGroup.querySelectorAll<HTMLButtonElement>(".pmh-filter__btn").forEach((btn) => {
+      const active = btn.dataset.filter === filter;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-pressed", String(active));
+    });
+    if (allRows.length > 0) {
+      renderHistory(allRows);
+    }
+  }
+
+  filterGroup.addEventListener("click", (e: Event) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".pmh-filter__btn");
+    if (btn?.dataset.filter) setFilter(btn.dataset.filter as VenueFilter);
+  });
 
   // ----------------------------------------------------------------
   // Open / close
@@ -159,6 +188,7 @@
         }
       }
 
+      allRows = rows;
       renderHistory(rows);
     } catch (err) {
       body.innerHTML = `<div class="pmh-status">❌ Failed to load match history. <button id="pmh-retry" style="margin-left:8px;cursor:pointer;text-decoration:underline;background:none;border:none;color:var(--color-primary);">Retry</button></div>`;
@@ -181,13 +211,21 @@
       return;
     }
 
-    subtitleEl.textContent = `${rows.length} fixture${rows.length !== 1 ? "s" : ""}`;
+    const filtered = filterHistoryRows(rows, currentFilter);
+
+    if (!filtered.length) {
+      subtitleEl.textContent = `0 fixtures`;
+      body.innerHTML = '<div class="pmh-status">No matches for the selected filter.</div>';
+      return;
+    }
+
+    subtitleEl.textContent = `${filtered.length} fixture${filtered.length !== 1 ? "s" : ""}`;
 
     // Newest first
-    const sorted = [...rows].sort((a, b) => b.round - a.round);
+    const sorted = [...filtered].sort((a, b) => b.round - a.round);
 
     // Build column headers based on position
-    const hasXG = !isGK() && rows[0]?.expected_goals !== undefined;
+    const hasXG = !isGK() && filtered[0]?.expected_goals !== undefined;
 
     const thead = isGK()
       ? `<thead><tr>
@@ -291,10 +329,12 @@
 
     currentPlayerId   = playerId;
     currentElementType = elementType;
+    allRows = [];
 
     titleEl.textContent   = `📊 ${playerName}`;
     subtitleEl.textContent = "";
 
+    setFilter("all");
     openSheet();
     await loadHistory(playerId);
   });
