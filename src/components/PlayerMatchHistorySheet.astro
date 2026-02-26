@@ -190,7 +190,8 @@
     const extraHeaders = isGK()
       ? "<th title=\"Saves\">Svs</th><th title=\"Penalties Saved\">PenSv</th><th title=\"Assists\">A</th><th title=\"Goals\">G</th>"
       : "<th title=\"Goals Scored\">G</th><th title=\"Assists\">A</th>" +
-        (rows[0]?.expected_goals !== undefined ? "<th>xG</th><th>xA</th>" : "");
+        (rows[0]?.expected_goals !== undefined ? "<th>xG</th><th>xA</th>" : "") +
+        "<th title=\"Yellow Cards\">YC</th><th title=\"Red Cards\">RC</th><th title=\"Penalties Missed\">PenM</th><th title=\"Own Goals\">OG</th>";
 
     const thead = `<thead><tr>
       <th title="Gameweek">GW</th>
@@ -217,7 +218,8 @@
         : `<td>${r.goals_scored ?? 0}</td><td>${r.assists ?? 0}</td>` +
           (hasXG
             ? `<td>${parseFloat(String(r.expected_goals ?? "0")).toFixed(2)}</td><td>${parseFloat(String(r.expected_assists ?? "0")).toFixed(2)}</td>`
-            : "");
+            : "") +
+          `<td>${r.yellow_cards ?? 0}</td><td>${r.red_cards ?? 0}</td><td>${r.penalties_missed ?? 0}</td><td>${r.own_goals ?? 0}</td>`;
 
       const ptsCls = r.total_points >= 9 ? "pmh-pts--high" : r.total_points <= 1 ? "pmh-pts--low" : "";
 
