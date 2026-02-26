@@ -193,9 +193,9 @@
         (rows[0]?.expected_goals !== undefined ? "<th>xG</th><th>xA</th>" : "");
 
     const thead = `<thead><tr>
-      <th>Date</th>
-      <th>Opponent</th>
-      <th>Score</th>
+      <th title="Gameweek">GW</th>
+      <th title="Opponent">Opp</th>
+      <th title="Result">Res</th>
       <th title="Total Points">Pts</th>
       <th title="Minutes">Min</th>
       <th title="Bonus Points">Bon</th>
@@ -222,8 +222,8 @@
       const ptsCls = r.total_points >= 9 ? "pmh-pts--high" : r.total_points <= 1 ? "pmh-pts--low" : "";
 
       return `<tr>
-        <td class="pmh-date">${date}</td>
-        <td class="pmh-opp">${opp}</td>
+        <td class="pmh-gw">${r.round}</td>
+        <td class="pmh-opp"><span class="pmh-opp__name">${opp}</span></td>
         <td class="pmh-score">${score}</td>
         <td class="pmh-pts ${ptsCls}">${r.total_points}</td>
         <td>${r.minutes}</td>

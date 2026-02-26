@@ -107,7 +107,7 @@
 .pmh-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .pmh-table thead {
@@ -141,6 +141,7 @@
   border-right: 1px solid var(--color-border);
   vertical-align: middle;
   text-align: center;
+  font-size: 11px;
 }
 
 .pmh-table td:first-child {
@@ -155,21 +156,76 @@
   background: var(--color-surface-alt);
 }
 
+/* ---- Frozen columns: GW (1), Opp (2), Res (3) ---- */
+/* Column width constants:
+   GW:  32px
+   Opp: 68px
+   Res: 44px  */
+
+.pmh-table th:nth-child(1),
+.pmh-table td:nth-child(1) {
+  position: sticky;
+  left: 0;
+  min-width: 32px;
+  width: 32px;
+  background: var(--color-surface, #111827);
+  z-index: 3;
+}
+
+.pmh-table th:nth-child(2),
+.pmh-table td:nth-child(2) {
+  position: sticky;
+  left: 32px;
+  min-width: 68px;
+  width: 68px;
+  background: var(--color-surface, #111827);
+  z-index: 3;
+}
+
+.pmh-table th:nth-child(3),
+.pmh-table td:nth-child(3) {
+  position: sticky;
+  left: 100px; /* 32 + 68 */
+  min-width: 44px;
+  width: 44px;
+  background: var(--color-surface, #111827);
+  z-index: 3;
+}
+
+/* Thead frozen cells sit above body frozen cells when scrolling vertically */
+.pmh-table thead th:nth-child(1),
+.pmh-table thead th:nth-child(2),
+.pmh-table thead th:nth-child(3) {
+  z-index: 4;
+  background: var(--color-surface-alt, #1f2937);
+}
+
+/* Keep frozen cells' background in sync with row hover */
+.pmh-table tbody tr:hover td:nth-child(1),
+.pmh-table tbody tr:hover td:nth-child(2),
+.pmh-table tbody tr:hover td:nth-child(3) {
+  background: var(--color-surface-alt);
+}
+
 /* Cell-specific */
-.pmh-date {
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--color-text-secondary);
+.pmh-gw {
+  font-weight: 600;
+  text-align: left;
 }
 
 .pmh-opp {
   white-space: nowrap;
+}
+
+.pmh-opp__name {
+  font-size: 10px;
   font-weight: 600;
 }
 
 .pmh-score {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .pmh-pts {
@@ -189,10 +245,10 @@
   background: var(--color-primary, #3b82f6);
   color: #fff;
   border-radius: 4px;
-  padding: 0 5px;
-  font-size: 11px;
+  padding: 0 4px;
+  font-size: 10px;
   font-weight: 700;
-  line-height: 18px;
+  line-height: 17px;
 }
 
 /* ---- Desktop expansion (≥640 px) ---- */
@@ -217,11 +273,30 @@
   }
 
   .pmh-table {
-    font-size: 14px;
+    font-size: 12px;
+  }
+
+  .pmh-table td {
+    font-size: 12px;
+  }
+
+  .pmh-opp__name {
+    font-size: 11px;
   }
 
   .pmh-table th,
   .pmh-table td {
     padding: var(--space-2) var(--space-2);
+  }
+
+  .pmh-table th:nth-child(2),
+  .pmh-table td:nth-child(2) {
+    min-width: 74px;
+    width: 74px;
+  }
+
+  .pmh-table th:nth-child(3),
+  .pmh-table td:nth-child(3) {
+    left: 106px; /* 32 + 74 */
   }
 }
