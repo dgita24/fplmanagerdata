@@ -6,6 +6,7 @@
  * Open it by dispatching: document.dispatchEvent(new Event('open-player-explorer'))
  * Or call window.openPlayerExplorer?.()
  */
+import PlayerMatchHistorySheet from "./PlayerMatchHistorySheet.astro";
 ---
 
 <!-- Backdrop -->
@@ -89,6 +90,9 @@
     <div class="pe-status" id="pe-status">Loading…</div>
   </div>
 </section>
+
+<!-- Match history sheet — nested here so it's included on every page using PlayerExplorer -->
+<PlayerMatchHistorySheet />
 
 <script>
   import "../styles/player-explorer.css";
@@ -466,7 +470,7 @@
       const pos = POS_LABEL[el.element_type] ?? "?";
       const dot = `<span class="pe-status-dot pe-status-dot--${el.status ?? "a"}" title="${el.news || "Available"}"></span>`;
       return `<tr data-id="${el.id}">
-        <td class="pe-player-name">${dot}${el.web_name}<br><span class="pe-player-meta">${team?.short_name ?? ""}  ${pos}</span></td>
+        <td class="pe-player-name">${dot}<button class="pe-player-link" data-id="${el.id}" data-name="${el.web_name}" data-etype="${el.element_type}">${el.web_name}</button><br><span class="pe-player-meta">${team?.short_name ?? ""}  ${pos}</span></td>
         ${cols.map(c => `<td>${getColValue(el, c)}</td>`).join("")}
       </tr>`;
     }).join("");
@@ -489,6 +493,20 @@
           sortDir = "desc";
         }
         render();
+      });
+    });
+
+    // Player name button → open match history sheet
+    body.querySelectorAll<HTMLButtonElement>(".pe-player-link").forEach(btn => {
+      btn.addEventListener("click", (e: MouseEvent) => {
+        e.stopPropagation(); // don't trigger row click
+        const id    = parseInt(btn.dataset.id   ?? "0",  10);
+        const etype = parseInt(btn.dataset.etype ?? "0",  10);
+        const name  = btn.dataset.name ?? "";
+        if (!id) return;
+        document.dispatchEvent(new CustomEvent("pe:open-history", {
+          detail: { playerId: id, playerName: name, elementType: etype },
+        }));
       });
     });
 

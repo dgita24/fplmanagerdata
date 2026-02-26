@@ -1,0 +1,302 @@
+/* ==============================================
+   Player Match History Sheet — top-sheet styles
+   Mobile-first: 100dvh full screen → centred
+   modal on ≥640 px screens.
+   ============================================== */
+
+/* ---- Backdrop ---- */
+#pmh-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+#pmh-backdrop.is-open {
+  display: block;
+}
+
+/* ---- Top-sheet container (mobile: full screen) ---- */
+#pmh-sheet {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+
+  background: var(--color-surface, #111827);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  z-index: 2001;
+
+  transform: translateY(-105%);
+  transition: transform 220ms ease;
+  display: grid;
+  grid-template-rows: auto 1fr;
+
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+}
+
+#pmh-sheet.is-open {
+  transform: translateY(0);
+}
+
+/* ---- Header ---- */
+.pmh-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  padding-top: calc(var(--space-3) + env(safe-area-inset-top));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pmh-header__title {
+  font-weight: 700;
+  font-size: var(--text-base);
+}
+
+.pmh-header__subtitle {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.pmh-close {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: inherit;
+  border-radius: var(--radius-md);
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.pmh-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ---- Body (scrollable content) ---- */
+.pmh-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pmh-status {
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* ---- Match history table ---- */
+.pmh-table-wrapper {
+  overflow-x: auto;
+}
+
+.pmh-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.pmh-table thead {
+  background: var(--color-surface-alt);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.pmh-table th {
+  padding: var(--space-2) var(--space-1);
+  text-align: center;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  border-bottom: 2px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.pmh-table th:first-child {
+  text-align: center;
+}
+
+.pmh-table th:last-child {
+  border-right: none;
+}
+
+.pmh-table td {
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  vertical-align: middle;
+  text-align: center;
+  font-size: 11px;
+}
+
+.pmh-table td:first-child {
+  text-align: center;
+}
+
+.pmh-table td:last-child {
+  border-right: none;
+}
+
+.pmh-table tbody tr:hover {
+  background: var(--color-surface-alt);
+}
+
+/* ---- Frozen columns: GW (1), Opp (2), Res (3) ---- */
+/* Column width constants:
+   GW:  32px
+   Opp: 58px  (fits "ARS (H)" at 10px with no wrap)
+   Res: 44px  */
+
+.pmh-table th:nth-child(1),
+.pmh-table td:nth-child(1) {
+  position: sticky;
+  left: 0;
+  min-width: 32px;
+  width: 32px;
+  background: var(--color-surface, #111827);
+  z-index: 3;
+}
+
+.pmh-table th:nth-child(2),
+.pmh-table td:nth-child(2) {
+  position: sticky;
+  left: 32px;
+  min-width: 58px;
+  width: 58px;
+  background: var(--color-surface, #111827);
+  z-index: 3;
+}
+
+.pmh-table th:nth-child(3),
+.pmh-table td:nth-child(3) {
+  position: sticky;
+  left: 90px; /* 32 + 58 */
+  min-width: 44px;
+  width: 44px;
+  background: var(--color-surface, #111827);
+  z-index: 3;
+}
+
+/* Thead frozen cells sit above body frozen cells when scrolling vertically */
+.pmh-table thead th:nth-child(1),
+.pmh-table thead th:nth-child(2),
+.pmh-table thead th:nth-child(3) {
+  z-index: 4;
+  background: var(--color-surface-alt, #1f2937);
+}
+
+/* Keep frozen cells' background in sync with row hover */
+.pmh-table tbody tr:hover td:nth-child(1),
+.pmh-table tbody tr:hover td:nth-child(2),
+.pmh-table tbody tr:hover td:nth-child(3) {
+  background: var(--color-surface-alt);
+}
+
+/* Cell-specific */
+.pmh-gw {
+  font-weight: 600;
+  text-align: center;
+}
+
+.pmh-opp {
+  white-space: nowrap;
+}
+
+.pmh-opp__name {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.pmh-score {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pmh-pts {
+  font-weight: 700;
+}
+
+.pmh-pts--high {
+  color: var(--color-success, #22c55e);
+}
+
+.pmh-pts--low {
+  color: var(--color-danger, #ef4444);
+}
+
+.pmh-dc {
+  display: inline-block;
+  background: var(--color-primary, #3b82f6);
+  color: #fff;
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+}
+
+/* ---- Desktop expansion (≥640 px) ---- */
+@media (min-width: 640px) {
+  #pmh-sheet {
+    top: 0;
+    bottom: auto;
+    height: 88vh;
+    max-height: 88vh;
+    left: 50%;
+    right: auto;
+    width: min(860px, 96vw);
+    transform: translate(-50%, -105%);
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+  }
+
+  #pmh-sheet.is-open {
+    transform: translate(-50%, 0);
+  }
+
+  .pmh-table {
+    font-size: 12px;
+  }
+
+  .pmh-table td {
+    font-size: 12px;
+  }
+
+  .pmh-opp__name {
+    font-size: 11px;
+  }
+
+  .pmh-table th,
+  .pmh-table td {
+    padding: var(--space-2) var(--space-2);
+  }
+
+  .pmh-table th:nth-child(2),
+  .pmh-table td:nth-child(2) {
+    min-width: 64px;
+    width: 64px;
+  }
+
+  .pmh-table th:nth-child(3),
+  .pmh-table td:nth-child(3) {
+    left: 96px; /* 32 + 64 */
+  }
+}
