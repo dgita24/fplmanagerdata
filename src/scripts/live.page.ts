@@ -544,21 +544,26 @@ const managerDataCache = new Map<string, any>();
 
       // =========================
       // LEFT TO PLAY (LtP)
-      // Count effective players (multiplier > 0) whose team's GW fixture has not yet finished.
-      // This accounts for BB (bench players get multiplier=1), auto-subs (DNP starters get
-      // multiplier=0), and players from teams with no fixture this GW (excluded via fixturesCache).
+      // Sum multipliers for players who haven't yet registered minutes AND whose team's GW fixture
+      // has not yet finished. Captain (multiplier=2) and TC (multiplier=3) contribute their full
+      // multiplier. Players with minutes > 0 are excluded (already on the pitch). BB bench players
+      // (multiplier=1), auto-subs (DNP starters get multiplier=0), and players from teams with no
+      // fixture this GW (excluded via fixturesCache) are all handled correctly.
       // =========================
       const teamsWithFixture = new Set<number>();
       for (const f of fixturesCache) {
         teamsWithFixture.add(f.team_h);
         teamsWithFixture.add(f.team_a);
       }
-      const ltp = finalTeam.filter(p => {
-        if ((p.multiplier ?? 0) === 0) return false;
-        if (!teamsWithFixture.has(p.teamId)) return false;
+      const ltp = finalTeam.reduce((sum, p) => {
+        const mult = p.multiplier ?? 0;
+        if (mult === 0) return sum;                              // not in active team
+        if (!teamsWithFixture.has(p.teamId)) return sum;        // no fixture this GW
         const { finished, finishedProvisional } = getTeamGwStatusLocal(p.teamId, gw);
-        return !(finished || finishedProvisional);
-      }).length;
+        if (finished || finishedProvisional) return sum;         // fixture done
+        if (p.minutes > 0) return sum;                          // already on the pitch
+        return sum + mult;                                       // contribute multiplier (2 for C, 3 for TC)
+      }, 0);
 
       // =========================
       // TOTAL POINTS (projected)
