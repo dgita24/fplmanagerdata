@@ -333,8 +333,6 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   const starterCap = starterCapId !== null ? starters.find(p => p.playerId === starterCapId) : null;
   const starterVc = starterVcId !== null ? starters.find(p => p.playerId === starterVcId) : null;
 
-  // Treat "played" as >0 minutes.
-  const starterCapPlayed = !!starterCap && starterCap.minutes > 0;
   const starterVcPlayed = !!starterVc && starterVc.minutes > 0;
 
   // CRITICAL RULE FIX:
@@ -343,16 +341,16 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   // - captain's team is finished (or provisionally finished, depending on includeFinishedProvisional used upstream)
   // - AND captain has 0 minutes
   //
-  // IMPORTANT: If captain is "NS" (not started) we must NOT switch to VC yet.
+  // IMPORTANT: If captain is "NS" (not started) or Live with 0 minutes, we must NOT switch to VC yet.
   // This prevents the bug where VC is doubled while captain hasn't played *yet*.
+  // The captain retains their capFactor multiplier until confirmed DNP.
   const captainResolvedDidNotPlay = !!starterCap && starterCap.status === "Fin" && starterCap.minutes === 0;
 
-  const eligibleCaptainId =
-    starterCapPlayed
-      ? starterCapId
-      : (captainResolvedDidNotPlay && starterVcPlayed)
-        ? starterVcId
-        : null;
+  // Captain is eligible for capFactor unless they are confirmed DNP.
+  // This ensures NS/Live-with-0-min captains still contribute capFactor to LtP and live points.
+  const eligibleCaptainId = captainResolvedDidNotPlay
+    ? (starterVcPlayed ? starterVcId : null)
+    : starterCapId;
 
   if (isBB) {
     // Bench Boost: all 15 score; no autosubs. Captaincy still restricted to XI.
