@@ -370,3 +370,33 @@
     padding: var(--space-2) var(--space-2);
   }
 }
+
+/* ---- Mobile responsive fixes (< 640px) ---- */
+@media (max-width: 639px) {
+  /* Prevent content from overflowing the sheet horizontally */
+  #player-explorer-sheet {
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  /* Shrink dropdowns to fit narrow viewports */
+  .pe-team-select,
+  .pe-stat-select,
+  .pe-price-select {
+    width: clamp(72px, 22vw, 110px);
+    flex: 0 0 clamp(72px, 22vw, 110px);
+  }
+}
+
+/* Wider mobile (≥ 400px): give the sheet side borders and rounded corners
+   so it has visible definition rather than bleeding edge-to-edge */
+@media (min-width: 400px) and (max-width: 639px) {
+  #player-explorer-sheet {
+    left: 8px;
+    right: 8px;
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+  }
+}

@@ -197,7 +197,8 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
     gap: 4px;
     flex: 1;
     min-width: 0;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow: hidden;
   }
 
   :global(.squad-header-right) {
@@ -214,6 +215,9 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
   :global(.team-name-span) {
     color: var(--color-text-secondary);
     font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   :global(.bench-row) {
@@ -285,6 +289,11 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
     transition: color 0.2s;
     color: var(--color-warning);
     font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+    min-width: 0;
   }
   
   :global(.manager-link-btn:hover) {
