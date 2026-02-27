@@ -373,30 +373,30 @@
 
 /* ---- Mobile responsive fixes (< 640px) ---- */
 @media (max-width: 639px) {
-  /* Prevent content from overflowing the sheet horizontally */
-  #player-explorer-sheet {
-    overflow-x: hidden;
-    box-sizing: border-box;
-  }
-
-  /* Shrink dropdowns to fit narrow viewports */
-  .pe-team-select,
-  .pe-stat-select,
-  .pe-price-select {
-    width: clamp(72px, 22vw, 110px);
-    flex: 0 0 clamp(72px, 22vw, 110px);
-  }
-}
-
-/* Wider mobile (≥ 400px): give the sheet side borders and rounded corners
-   so it has visible definition rather than bleeding edge-to-edge */
-@media (min-width: 400px) and (max-width: 639px) {
+  /* Inset the sheet with side margins, borders and rounded corners
+     so it is visually distinct rather than bleeding full-screen width */
   #player-explorer-sheet {
     left: 8px;
     right: 8px;
+    overflow-x: hidden;
+    box-sizing: border-box;
     border-left: 1px solid rgba(255, 255, 255, 0.12);
     border-right: 1px solid rgba(255, 255, 255, 0.12);
     border-bottom-left-radius: var(--radius-lg);
     border-bottom-right-radius: var(--radius-lg);
+  }
+
+  /* Make the selects row fill the full container width */
+  .pe-selects-row {
+    width: 100%;
+  }
+
+  /* Each dropdown gets an equal share of the row width */
+  .pe-team-select,
+  .pe-stat-select,
+  .pe-price-select {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
   }
 }
