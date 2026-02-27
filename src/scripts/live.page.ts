@@ -544,21 +544,30 @@ const managerDataCache = new Map<string, any>();
 
       // =========================
       // LEFT TO PLAY (LtP)
-      // Count effective players (multiplier > 0) whose team's GW fixture has not yet finished.
+      // Sum multipliers for effective players (multiplier > 0) who still have points left to score.
+      // A player is removed from LtP once they register any minutes played (minutes > 0), even if
+      // their fixture is still live. Players are also removed once their fixture is fully finished.
       // This accounts for BB (bench players get multiplier=1), auto-subs (DNP starters get
-      // multiplier=0), and players from teams with no fixture this GW (excluded via fixturesCache).
+      // multiplier=0), captain (multiplier=2) and TC (multiplier=3), and players from teams with
+      // no fixture this GW (excluded via fixturesCache).
       // =========================
       const teamsWithFixture = new Set<number>();
       for (const f of fixturesCache) {
         teamsWithFixture.add(f.team_h);
         teamsWithFixture.add(f.team_a);
       }
-      const ltp = finalTeam.filter(p => {
-        if ((p.multiplier ?? 0) === 0) return false;
-        if (!teamsWithFixture.has(p.teamId)) return false;
+      const ltp = finalTeam.reduce((sum, p) => {
+        const mult = p.multiplier ?? 0;
+        if (mult === 0) return sum;
+        if (!teamsWithFixture.has(p.teamId)) return sum;
+        // Remove from LtP once the player has registered any minutes
+        if (p.minutes > 0) return sum;
+        // Also remove if their team's fixture is fully finished (catches 0-min bench players in finished games)
         const { finished, finishedProvisional } = getTeamGwStatusLocal(p.teamId, gw);
-        return !(finished || finishedProvisional);
-      }).length;
+        if (finished || finishedProvisional) return sum;
+        // Player is still "left to play" — contribute their full multiplier
+        return sum + mult;
+      }, 0);
 
       // =========================
       // TOTAL POINTS (projected)
