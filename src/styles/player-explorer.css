@@ -113,6 +113,7 @@
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.1);
+  overflow: hidden;
 }
 
 .pe-search {
@@ -368,5 +369,37 @@
   .pe-table th,
   .pe-table td {
     padding: var(--space-2) var(--space-2);
+  }
+}
+
+/* ---- Mobile-only fixes (< 640px) ---- */
+@media (max-width: 639px) {
+  #player-explorer-sheet {
+    left: 6px;
+    right: 6px;
+    width: auto;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .pe-selects-row {
+    flex-shrink: 1;
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .pe-team-select,
+  .pe-stat-select,
+  .pe-price-select {
+    flex: 1 1 0%;
+    min-width: 0;
+    width: auto;
+  }
+
+  .pe-pos-group {
+    flex-shrink: 1;
   }
 }
