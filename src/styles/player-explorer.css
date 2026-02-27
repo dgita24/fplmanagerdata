@@ -195,6 +195,7 @@
 .pe-body {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  min-width: 0; /* let the grid cell shrink; keeps table scroll inside pe-table-wrapper */
 }
 
 .pe-status {
@@ -378,7 +379,6 @@
   #player-explorer-sheet {
     left: 8px;
     right: 8px;
-    overflow-x: hidden;
     box-sizing: border-box;
     border-left: 1px solid rgba(255, 255, 255, 0.12);
     border-right: 1px solid rgba(255, 255, 255, 0.12);
