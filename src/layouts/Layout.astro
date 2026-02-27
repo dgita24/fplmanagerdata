@@ -1032,29 +1032,52 @@ const { title = "FPL Manager Data" } = Astro.props;
 
   /* ========================================
    TRANSFERS TABLE - FT-based row colors
+   Color applies only to Manager (col 1) and FTs (col 5).
+   Hit, GWPts, Made columns use white font; hit-highlight overrides for hits.
    ======================================== */
-  .transfers-table .ft-high-row td {
+  .transfers-table .ft-high-row td:nth-child(1),
+  .transfers-table .ft-high-row td:nth-child(5) {
     color: var(--color-success) !important;  /* Yellow - FTs 3, 4, 5 */
   }
 
-  .transfers-table .ft-high-row a {
+  .transfers-table .ft-high-row td:nth-child(1) a {
     color: var(--color-success) !important;
   }
 
-  .transfers-table .ft-medium-row td {
+  .transfers-table .ft-high-row td:nth-child(2):not(.hit-highlight),
+  .transfers-table .ft-high-row td:nth-child(3),
+  .transfers-table .ft-high-row td:nth-child(4) {
+    color: white !important;
+  }
+
+  .transfers-table .ft-medium-row td:nth-child(1),
+  .transfers-table .ft-medium-row td:nth-child(5) {
     color: var(--color-primary) !important;  /* Blue - FTs 2 */
   }
 
-  .transfers-table .ft-medium-row a {
+  .transfers-table .ft-medium-row td:nth-child(1) a {
     color: var(--color-primary) !important;
   }
 
-  .transfers-table .ft-low-row td {
+  .transfers-table .ft-medium-row td:nth-child(2):not(.hit-highlight),
+  .transfers-table .ft-medium-row td:nth-child(3),
+  .transfers-table .ft-medium-row td:nth-child(4) {
+    color: white !important;
+  }
+
+  .transfers-table .ft-low-row td:nth-child(1),
+  .transfers-table .ft-low-row td:nth-child(5) {
     color: var(--color-danger) !important;  /* Red - FTs 1 */
   }
 
-  .transfers-table .ft-low-row a {
+  .transfers-table .ft-low-row td:nth-child(1) a {
     color: var(--color-danger) !important;
+  }
+
+  .transfers-table .ft-low-row td:nth-child(2):not(.hit-highlight),
+  .transfers-table .ft-low-row td:nth-child(3),
+  .transfers-table .ft-low-row td:nth-child(4) {
+    color: white !important;
   }
 
   /* ========================================
