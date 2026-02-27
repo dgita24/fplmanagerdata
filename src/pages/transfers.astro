@@ -940,14 +940,14 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
 
       html += `
         <tr class="${rowClass}">
-          <td class="strong nowrap">
+          <td class="strong nowrap ft-styled">
             <a href="#" class="manager-link" data-id="${r.entryId}" data-name="${r.managerName}">${r.managerName}</a>
             ${favouriteIds.has(r.entryId) ? `<span class="fav-star" title="Favourite">⭐</span>` : ""}
           </td>
           <td class="num ${hitClass}">${r.transferCost || 0}</td>
           <td class="num">${r.gwPoints ?? ""}</td>
           <td class="num">${(r.chipPlayed === "WC" || r.chipPlayed === "FH") ? r.chipPlayed : (r.transfers ?? "")}</td>
-          <td class="num strong">${r.FTsForNextGW ?? ""}</td>
+          <td class="num strong ft-styled">${r.FTsForNextGW ?? ""}</td>
         </tr>
       `;
     }
