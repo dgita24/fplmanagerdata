@@ -512,9 +512,9 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
 
   // ==============================
   // Table sorting (client-side)
-  // Default: Total desc
+  // Default: GWPts desc
   // ==============================
-  let sortKey = "totalPoints"; // "transferCost" | "gwPoints" | "totalPoints" | "FTsForNextGW"
+  let sortKey = "gwPoints"; // "transferCost" | "gwPoints" | "transfers" | "FTsForNextGW"
   let sortDir = "desc";        // "asc" | "desc"
   let lastRenderedRows = [];
 
@@ -542,7 +542,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
   function setSort(nextKey) {
     if (nextKey === "transferCost") {
       if (!hasAnyHits(lastRenderedRows)) {
-        sortKey = "totalPoints";
+        sortKey = "gwPoints";
         sortDir = "desc";
         return;
       }
@@ -918,7 +918,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
                 <th>Manager</th>
                 <th class="hit-col sortable-col ${sortKey === "transferCost" ? "is-sorted" : ""}" data-sort="transferCost">Hit</th>
                 <th class="gwpts-col sortable-col ${sortKey === "gwPoints" ? "is-sorted" : ""}" data-sort="gwPoints">GWPts</th>
-                <th class="total-col sortable-col ${sortKey === "totalPoints" ? "is-sorted" : ""}" data-sort="totalPoints">Total</th>
+                <th class="total-col sortable-col ${sortKey === "transfers" ? "is-sorted" : ""}" data-sort="transfers">Made</th>
                 <th class="fts-col sortable-col ${sortKey === "FTsForNextGW" ? "is-sorted" : ""}" data-sort="FTsForNextGW">FTs</th>
               </tr>
             </thead>
@@ -946,7 +946,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
           </td>
           <td class="num ${hitClass}">${r.transferCost || 0}</td>
           <td class="num">${r.gwPoints ?? ""}</td>
-          <td class="num">${r.totalPoints ?? ""}</td>
+          <td class="num">${(r.chipPlayed === "WC" || r.chipPlayed === "FH") ? r.chipPlayed : (r.transfers ?? "")}</td>
           <td class="num strong">${r.FTsForNextGW ?? ""}</td>
         </tr>
       `;
