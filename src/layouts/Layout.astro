@@ -1032,8 +1032,9 @@ const { title = "FPL Manager Data" } = Astro.props;
 
   /* ========================================
    TRANSFERS TABLE - FT-based row colors
+   Only Manager and FTs columns (td.strong) are colored; other columns stay white.
    ======================================== */
-  .transfers-table .ft-high-row td {
+  .transfers-table .ft-high-row td.strong {
     color: var(--color-success) !important;  /* Yellow - FTs 3, 4, 5 */
   }
 
@@ -1041,7 +1042,7 @@ const { title = "FPL Manager Data" } = Astro.props;
     color: var(--color-success) !important;
   }
 
-  .transfers-table .ft-medium-row td {
+  .transfers-table .ft-medium-row td.strong {
     color: var(--color-primary) !important;  /* Blue - FTs 2 */
   }
 
@@ -1049,12 +1050,26 @@ const { title = "FPL Manager Data" } = Astro.props;
     color: var(--color-primary) !important;
   }
 
-  .transfers-table .ft-low-row td {
+  .transfers-table .ft-low-row td.strong {
     color: var(--color-danger) !important;  /* Red - FTs 1 */
   }
 
   .transfers-table .ft-low-row a {
     color: var(--color-danger) !important;
+  }
+
+  /* Hit, GWPts, Made cells always use default text color regardless of ft-row class.
+     Exclude hit-highlight so hit penalty cells keep their red color. */
+  .transfers-table .ft-high-row td.num:not(.strong):not(.hit-highlight),
+  .transfers-table .ft-medium-row td.num:not(.strong):not(.hit-highlight),
+  .transfers-table .ft-low-row td.num:not(.strong):not(.hit-highlight) {
+    color: var(--color-text) !important;
+  }
+
+  /* Transfer hit cells stay red with matching font weight */
+  .transfers-table .hit-highlight {
+    color: var(--color-danger) !important;
+    font-weight: 700 !important;
   }
 
   /* ========================================
