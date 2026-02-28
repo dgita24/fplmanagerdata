@@ -177,9 +177,9 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
   let latestGW = null;
   let playerCache = new Map();
   let teamCache = new Map();
-  let allManagerNames = [];
-  // Names of managers who played Free Hit in the currently selected GW.
-  // (Uses the same 🎯 FH indicator you already use on the Chips page.)
+  // Each entry is { id: number, name: string } so duplicate names are handled correctly.
+  let allManagers = [];
+  // IDs of managers who played Free Hit in the currently selected GW.
   let freeHitManagers = new Set();
   
   // Load token for cancellation
@@ -201,7 +201,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
   // ==============================
   // Persistent page cache (Ownership) - cached until Refresh
   // ==============================
-  const OWNERSHIP_SNAPSHOT_KEY = "fpl_ownership_snapshot_v1";
+  const OWNERSHIP_SNAPSHOT_KEY = "fpl_ownership_snapshot_v2";
 
   function safeJsonParse(value) {
     if (!value) return null;
@@ -233,7 +233,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
       gw,
       latestGW,
       ownershipData,
-      allManagerNames,
+      allManagers,
       freeHitManagers: Array.from(freeHitManagers),
       ui: {
         gwFilter: gwFilterSelect.value || "",
@@ -406,7 +406,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
         }
 
         const entry = ownership.get(playerId);
-        entry.ownedBy.push(manager.managerName);
+        entry.ownedBy.push(Number(manager.entryId));
         entry.count++;
       }
     }
@@ -415,9 +415,9 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
   }
 
   function showOwnershipModal(playerName, position, teamName, ownedByList) {
-    const totalManagers = allManagerNames.length;
-    const notOwnedBy = allManagerNames.filter(n => !ownedByList.includes(n)).sort();
-    const ownedBySorted = [...ownedByList].sort();
+    const totalManagers = allManagers.length;
+    const notOwnedBy = allManagers.filter(m => !ownedByList.includes(m.id)).sort((a, b) => a.name.localeCompare(b.name));
+    const ownedBySorted = allManagers.filter(m => ownedByList.includes(m.id)).sort((a, b) => a.name.localeCompare(b.name));
     const ownershipPct = ((ownedByList.length / totalManagers) * 100).toFixed(0);
 
     const allOwn = ownedByList.length === totalManagers;
@@ -425,10 +425,10 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
     const fhCount = freeHitManagers.size;
 
 
-    const nameWithFH = (name) => {
-      return freeHitManagers.has(name)
-        ? `${name} <span class="text-muted" title="Played Free Hit in this GW">🎯 FH</span>`
-        : name;
+    const nameWithFH = (manager) => {
+      return freeHitManagers.has(manager.id)
+        ? `${manager.name} <span class="text-muted" title="Played Free Hit in this GW">🎯 FH</span>`
+        : manager.name;
     };
 
 
@@ -476,7 +476,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
             <span class="ownership-section-count">${ownedBySorted.length}/${totalManagers}</span>
           </div>
           <ul class="ownership-list">
-            ${ownedBySorted.map(name => `<li class="ownership-list-item ownership-list-item--owned">${nameWithFH(name)}</li>`).join('')}
+            ${ownedBySorted.map(m => `<li class="ownership-list-item ownership-list-item--owned">${nameWithFH(m)}</li>`).join('')}
           </ul>
         </div>
 
@@ -486,7 +486,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
             <span class="ownership-section-count">${notOwnedBy.length}/${totalManagers}</span>
           </div>
           <ul class="ownership-list">
-            ${notOwnedBy.map(name => `<li class="ownership-list-item ownership-list-item--not-owned">${nameWithFH(name)}</li>`).join('')}
+            ${notOwnedBy.map(m => `<li class="ownership-list-item ownership-list-item--not-owned">${nameWithFH(m)}</li>`).join('')}
           </ul>
         </div>
       `;
@@ -508,7 +508,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
       return a.playerName.localeCompare(b.playerName);
     });
 
-    const totalManagers = allManagerNames.length;
+    const totalManagers = allManagers.length;
 
     let html = `
       <div class="meta-row" style="margin-bottom:8px;">
@@ -593,7 +593,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
     // Generate load token for cancellation
     const loadToken = ++currentLoadToken;
 
-    allManagerNames = [];
+    allManagers = [];
     freeHitManagers = new Set();
     out.innerHTML = "";
     loadingStatus.textContent = `Fetching latest data...`;
@@ -626,8 +626,8 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
 
     // Filter out nulls and update data
     const managerSquads = squadResults.filter((data) => data !== null);
-    allManagerNames = managerSquads.map((data) => data.managerName);
-    freeHitManagers = new Set(managerSquads.filter((data) => data.isFreeHit).map((data) => data.managerName));
+    allManagers = managerSquads.map((data) => ({ id: Number(data.entryId), name: data.managerName }));
+    freeHitManagers = new Set(managerSquads.filter((data) => data.isFreeHit).map((data) => Number(data.entryId)));
 
     // Calculate ownership and render table once at the end
     ownershipData = calculateOwnership(managerSquads);
@@ -668,7 +668,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
       snap.ownershipData.length > 0
     ) {
       ownershipData = snap.ownershipData || [];
-      allManagerNames = snap.allManagerNames || [];
+      allManagers = snap.allManagers || [];
       freeHitManagers = new Set(snap.freeHitManagers || []);
       latestGW = snap.latestGW || latestGW;
 
@@ -711,7 +711,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
       snap.ownershipData.length > 0
     ) {
       ownershipData = snap.ownershipData || [];
-      allManagerNames = snap.allManagerNames || [];
+      allManagers = snap.allManagers || [];
       freeHitManagers = new Set(snap.freeHitManagers || []);
       renderOwnershipFromState();
       loadingStatus.textContent = "";
