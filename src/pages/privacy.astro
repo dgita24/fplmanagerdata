@@ -20,7 +20,7 @@ import Nav from "../components/Nav.astro";
 
         <h2>1. Information Collected</h2>
         <ul>
-          <li><strong>Account information:</strong> Your email address and secure password when you sign up or log in.</li>
+          <li><strong>Account information:</strong> Your email address/login credentials which are managed by my authentication provider (Supabase) when you sign up or log in.</li>
           <li><strong>FPL Data:</strong> Basic usage data needed to operate the service, which consists of your publicly available Fantasy Premier League (FPL) data.</li>
         </ul>
 
@@ -33,7 +33,7 @@ import Nav from "../components/Nav.astro";
         <h2>3. How Data is Stored and Processed</h2>
         <p>To run this site securely and efficiently, I use trusted third-party services:</p>
         <ul>
-          <li><strong>Supabase:</strong> Used as the database and authentication provider. Your account details and saved FPL preferences are stored securely on their servers.</li>
+          <li><strong>Supabase:</strong> Used as the database and authentication provider. Your account email and saved preferences (e.g., manager entry IDs) are stored in Supabase.</li>
           <li><strong>Cloudflare:</strong> Used for website hosting, routing, and security.</li>
         </ul>
 
