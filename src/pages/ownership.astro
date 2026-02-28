@@ -13,7 +13,9 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
     </header>
 
     <div class="meta-row-wide">
-      <span id="manager-count" class="badge badge-wide">Loading...</span>
+      <select id="club-filter" class="badge badge-wide club-filter-select">
+        <option value="">⚽ All Clubs</option>
+      </select>
       <button type="button" id="open-player-explorer" class="badge badge-wide" onclick="openPlayerExplorer?.()">📋 All FPL Players</button>
     </div>
 
@@ -66,6 +68,13 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
     justify-content: center;
     padding: var(--space-2) var(--space-3);
     text-align: center;
+  }
+
+  .club-filter-select {
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    font-family: inherit;
   }
 
   .controls-inline {
@@ -166,11 +175,11 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
   const positionFilter = document.getElementById("position-filter");
   const loadingStatus = document.getElementById("loading-status");
   const lastUpdatedEl = document.getElementById("last-updated");
-  const managerCountEl = document.getElementById("manager-count");
   const refreshBtn = document.getElementById("refresh-btn");
   const ownershipModal = document.getElementById("ownership-modal");
   const ownershipModalContent = document.getElementById("ownership-modal-content");
   const closeOwnershipModal = document.getElementById("close-ownership-modal");
+  const clubFilter = document.getElementById("club-filter") as HTMLSelectElement;
 
   let managerIds = [];
   let ownershipData = [];
@@ -238,6 +247,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
       ui: {
         gwFilter: gwFilterSelect.value || "",
         positionFilter: positionFilter.value || "",
+        clubFilter: clubFilter.value || "",
       },
     };
 
@@ -250,8 +260,22 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
 
   function renderOwnershipFromState() {
     const posFilter = positionFilter.value;
-    out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
+    const teamFilter = clubFilter.value;
+    out.innerHTML = makeOwnershipTable(ownershipData, posFilter, teamFilter);
     attachPlayerButtons();
+  }
+
+  function populateClubFilter() {
+    const current = clubFilter.value;
+    const teams = [...new Set(ownershipData.map(p => p.teamName).filter(Boolean))].sort();
+    clubFilter.innerHTML = '<option value="">⚽ All Clubs</option>';
+    teams.forEach(team => {
+      const opt = document.createElement('option');
+      opt.value = team;
+      opt.textContent = team;
+      clubFilter.appendChild(opt);
+    });
+    if (current && teams.includes(current)) clubFilter.value = current;
   }
 
 
@@ -496,11 +520,15 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
     ownershipModal.classList.add("is-open");
   }
 
-  function makeOwnershipTable(ownership, positionFilterValue = "") {
+  function makeOwnershipTable(ownership, positionFilterValue = "", teamFilterValue = "") {
     let filtered = ownership;
 
     if (positionFilterValue) {
-      filtered = ownership.filter(p => p.position === positionFilterValue);
+      filtered = filtered.filter(p => p.position === positionFilterValue);
+    }
+
+    if (teamFilterValue) {
+      filtered = filtered.filter(p => p.teamName === teamFilterValue);
     }
 
     filtered.sort((a, b) => {
@@ -632,8 +660,10 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
     // Calculate ownership and render table once at the end
     ownershipData = calculateOwnership(managerSquads);
     if (ownershipData.length > 0) {
+      populateClubFilter();
       const posFilter = positionFilter.value;
-      out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
+      const teamFilter = clubFilter.value;
+      out.innerHTML = makeOwnershipTable(ownershipData, posFilter, teamFilter);
       attachPlayerButtons();
     }
 
@@ -652,7 +682,6 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
     if (!authenticated) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
 
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
@@ -684,6 +713,11 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
         positionFilter.value = snap.ui.positionFilter;
       }
 
+      populateClubFilter();
+      if (typeof snap.ui?.clubFilter === "string") {
+        clubFilter.value = snap.ui.clubFilter;
+      }
+
       renderOwnershipFromState();
       loadingStatus.textContent = "";
       if (lastUpdatedEl) {
@@ -713,6 +747,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
       ownershipData = snap.ownershipData || [];
       allManagers = snap.allManagers || [];
       freeHitManagers = new Set(snap.freeHitManagers || []);
+      populateClubFilter();
       renderOwnershipFromState();
       loadingStatus.textContent = "";
       if (lastUpdatedEl) {
@@ -725,9 +760,12 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
   });
 
   positionFilter.addEventListener('change', () => {
-    const posFilter = positionFilter.value;
-    out.innerHTML = makeOwnershipTable(ownershipData, posFilter);
-    attachPlayerButtons();
+    renderOwnershipFromState();
+    saveOwnershipSnapshot(parseInt(gwFilterSelect.value) || latestGW);
+  });
+
+  clubFilter.addEventListener('change', () => {
+    renderOwnershipFromState();
     saveOwnershipSnapshot(parseInt(gwFilterSelect.value) || latestGW);
   });
   
@@ -737,7 +775,6 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
     if (!authenticated) return;
 
     managerIds = ids;
-    managerCountEl.textContent = `${managerIds.length} managers`;
 
     // Force fresh bootstrap + ownership reload
     const bust = Date.now().toString();
