@@ -272,6 +272,7 @@ import Layout from "../layouts/Layout.astro";
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
+        shouldCreateUser: true, // This allows new users to sign up via magic link
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       }
     })
