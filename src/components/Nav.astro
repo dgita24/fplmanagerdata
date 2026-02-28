@@ -38,6 +38,12 @@ const navLinks = [
             </a>
           </li>
         ))}
+        <li id="nav-account-item" style="display: none;">
+          <a href="/account" class="nav-link">
+            <span class="nav-link-emoji">👤</span>
+            Account
+          </a>
+        </li>
       </ul>
 
       <div class="theme-toggle-row">
@@ -344,6 +350,10 @@ const navLinks = [
       padding: 0;
     }
 
+    #nav-account-item {
+      display: none;
+    }
+
     .nav-auth-desktop {
       display: flex;
       align-items: center;
@@ -402,12 +412,16 @@ const navLinks = [
 
   const navAuthMobile = document.getElementById('nav-auth-mobile');
   const navAuthDesktop = document.getElementById('nav-auth-desktop');
+  const navAccountItem = document.getElementById('nav-account-item');
 
   async function updateAuthUI() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-      // Mobile: logout button in header (next to X)
+      // Show account link in the nav list (mobile hamburger + desktop list)
+      if (navAccountItem) navAccountItem.style.display = '';
+
+      // Mobile: logout button only in header (Account is now in the nav list)
       if (navAuthMobile) {
         navAuthMobile.innerHTML = `
           <button id="logout-btn-mobile" class="btn btn--danger btn--small" type="button">Logout</button>
@@ -418,10 +432,11 @@ const navLinks = [
         });
       }
 
-      // Desktop: user + logout
+      // Desktop: user + account + logout
       if (navAuthDesktop) {
         navAuthDesktop.innerHTML = `
           <span class="nav-user">${user.email?.split('@')[0] || 'User'}</span>
+          <a href="/account" class="btn btn--neutral btn--small">Account</a>
           <button id="logout-btn-desktop" class="btn btn--neutral btn--small" type="button">Logout</button>
         `;
         document.getElementById('logout-btn-desktop')?.addEventListener('click', async () => {
@@ -430,7 +445,9 @@ const navLinks = [
         });
       }
     } else {
-      // Not logged in
+      // Not logged in: hide account link in nav list
+      if (navAccountItem) navAccountItem.style.display = 'none';
+
       if (navAuthMobile) {
         navAuthMobile.innerHTML = '';
       }
