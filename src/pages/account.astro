@@ -1,0 +1,277 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+<Layout title="Account Settings - FPL Manager Watch">
+  <main class="auth-page">
+    <!-- Not logged in state -->
+    <div id="not-logged-in" class="auth-card" style="display: none;">
+      <h1 class="auth-title">Account Settings</h1>
+      <p class="auth-notice">You need to be logged in to view account settings.</p>
+      <a href="/login" class="btn btn--primary btn--full">Go to Login</a>
+      <div class="auth-links">
+        <a href="/" class="text-muted">← Back to Home</a>
+      </div>
+    </div>
+
+    <!-- Logged in state -->
+    <div id="logged-in" class="auth-card" style="display: none;">
+      <h1 class="auth-title">⚙️ Account Settings</h1>
+
+      <div class="account-email-row">
+        <span class="label">Logged in as</span>
+        <span id="current-email" class="account-email-value"></span>
+      </div>
+
+      <hr class="auth-divider-line" />
+
+      <!-- Update Email -->
+      <section>
+        <h2 class="section-title">Update Email</h2>
+        <form id="email-form" class="auth-form">
+          <div class="control">
+            <label class="label" for="new-email">New Email Address</label>
+            <input type="email" id="new-email" class="input" required autocomplete="email" />
+          </div>
+          <button type="submit" class="btn btn--primary btn--full">Update Email</button>
+          <div id="email-error" class="status status--error" style="display: none;"></div>
+          <div id="email-success" class="status status--success" style="display: none;"></div>
+          <p class="auth-hint">A confirmation email may be sent to both your old and new address.</p>
+        </form>
+      </section>
+
+      <hr class="auth-divider-line" />
+
+      <!-- Update Password -->
+      <section>
+        <h2 class="section-title">Update Password</h2>
+        <form id="password-form" class="auth-form">
+          <div class="control">
+            <label class="label" for="new-password">New Password</label>
+            <div class="password-field">
+              <input type="password" id="new-password" class="input" required minlength="6" autocomplete="new-password" />
+              <button type="button" id="toggle-new-password" class="password-toggle" aria-label="Show password">👁</button>
+            </div>
+            <small class="auth-hint">Minimum 6 characters</small>
+          </div>
+          <div class="control">
+            <label class="label" for="confirm-new-password">Confirm New Password</label>
+            <div class="password-field">
+              <input type="password" id="confirm-new-password" class="input" required minlength="6" autocomplete="new-password" />
+              <button type="button" id="toggle-confirm-password" class="password-toggle" aria-label="Show password">👁</button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn--primary btn--full">Update Password</button>
+          <div id="password-error" class="status status--error" style="display: none;"></div>
+          <div id="password-success" class="status status--success" style="display: none;"></div>
+        </form>
+      </section>
+
+      <div class="auth-links">
+        <a href="/" class="text-muted">← Back to Home</a>
+      </div>
+    </div>
+  </main>
+</Layout>
+
+<style>
+  .auth-page {
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+  }
+
+  .auth-card {
+    width: 100%;
+    max-width: 440px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+  }
+
+  .auth-title {
+    text-align: center;
+    font-size: var(--text-2xl);
+    margin-bottom: var(--space-4);
+    color: var(--color-text);
+  }
+
+  .auth-notice {
+    text-align: center;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-4);
+    font-size: var(--text-sm);
+  }
+
+  .account-email-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+    font-size: var(--text-sm);
+  }
+
+  .account-email-value {
+    font-weight: 600;
+    color: var(--color-primary);
+    word-break: break-all;
+  }
+
+  .auth-divider-line {
+    border: none;
+    border-top: 1px solid var(--color-border);
+    margin: var(--space-5) 0;
+  }
+
+  .section-title {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: var(--space-4);
+  }
+
+  .auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .btn--full { width: 100%; }
+
+  .auth-hint {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  .auth-links {
+    margin-top: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+  }
+
+  .password-field { position: relative; }
+
+  .password-toggle {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0;
+  }
+</style>
+
+<script>
+  import { supabase } from '../lib/supabase.ts'
+
+  const notLoggedIn = document.getElementById('not-logged-in') as HTMLElement
+  const loggedIn = document.getElementById('logged-in') as HTMLElement
+  const currentEmailEl = document.getElementById('current-email') as HTMLElement
+
+  async function init() {
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      notLoggedIn.style.display = 'block'
+      return
+    }
+
+    if (currentEmailEl) currentEmailEl.textContent = user.email ?? ''
+    loggedIn.style.display = 'block'
+  }
+
+  init()
+
+  // --- Update Email ---
+  const emailForm = document.getElementById('email-form') as HTMLFormElement
+  const emailError = document.getElementById('email-error') as HTMLElement
+  const emailSuccess = document.getElementById('email-success') as HTMLElement
+
+  emailForm?.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    emailError.style.display = 'none'
+    emailSuccess.style.display = 'none'
+
+    const newEmail = (document.getElementById('new-email') as HTMLInputElement).value.trim()
+
+    if (!newEmail) {
+      emailError.textContent = 'Please enter a valid email address.'
+      emailError.style.display = 'block'
+      return
+    }
+
+    const { error } = await supabase.auth.updateUser({ email: newEmail })
+
+    if (error) {
+      emailError.textContent = error.message
+      emailError.style.display = 'block'
+    } else {
+      emailSuccess.textContent = 'Email update requested. Check your inbox — a confirmation email may be required.'
+      emailSuccess.style.display = 'block'
+    }
+  })
+
+  // --- Update Password ---
+  const passwordForm = document.getElementById('password-form') as HTMLFormElement
+  const passwordError = document.getElementById('password-error') as HTMLElement
+  const passwordSuccess = document.getElementById('password-success') as HTMLElement
+
+  const newPasswordInput = document.getElementById('new-password') as HTMLInputElement
+  const confirmPasswordInput = document.getElementById('confirm-new-password') as HTMLInputElement
+  const toggleNewPasswordBtn = document.getElementById('toggle-new-password') as HTMLButtonElement
+  const toggleConfirmPasswordBtn = document.getElementById('toggle-confirm-password') as HTMLButtonElement
+
+  toggleNewPasswordBtn?.addEventListener('click', () => {
+    const isPassword = newPasswordInput.type === 'password'
+    newPasswordInput.type = isPassword ? 'text' : 'password'
+    toggleNewPasswordBtn.textContent = isPassword ? '🙈' : '👁'
+  })
+
+  toggleConfirmPasswordBtn?.addEventListener('click', () => {
+    const isPassword = confirmPasswordInput.type === 'password'
+    confirmPasswordInput.type = isPassword ? 'text' : 'password'
+    toggleConfirmPasswordBtn.textContent = isPassword ? '🙈' : '👁'
+  })
+
+  passwordForm?.addEventListener('submit', async (e) => {
+    e.preventDefault()
+    passwordError.style.display = 'none'
+    passwordSuccess.style.display = 'none'
+
+    const newPassword = newPasswordInput.value
+    const confirmPassword = confirmPasswordInput.value
+
+    if (newPassword.length < 6) {
+      passwordError.textContent = 'Password must be at least 6 characters.'
+      passwordError.style.display = 'block'
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      passwordError.textContent = 'Passwords do not match.'
+      passwordError.style.display = 'block'
+      return
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+
+    if (error) {
+      passwordError.textContent = error.message
+      passwordError.style.display = 'block'
+    } else {
+      passwordSuccess.textContent = 'Password updated successfully!'
+      passwordSuccess.style.display = 'block'
+      passwordForm.reset()
+    }
+  })
+</script>
