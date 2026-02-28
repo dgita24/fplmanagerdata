@@ -75,6 +75,10 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
     -webkit-appearance: none;
     cursor: pointer;
     font-family: inherit;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .controls-inline {
@@ -186,6 +190,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
   let latestGW = null;
   let playerCache = new Map();
   let teamCache = new Map();
+  const UNKNOWN_TEAM = { short: "???", full: "???" };
   // Each entry is { id: number, name: string } so duplicate names are handled correctly.
   let allManagers = [];
   // IDs of managers who played Free Hit in the currently selected GW.
@@ -272,7 +277,8 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
     teams.forEach(team => {
       const opt = document.createElement('option');
       opt.value = team;
-      opt.textContent = team;
+      const entry = ownershipData.find(p => p.teamName === team);
+      opt.textContent = (entry?.teamFullName || team);
       clubFilter.appendChild(opt);
     });
     if (current && teams.includes(current)) clubFilter.value = current;
@@ -354,7 +360,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
       });
 
       data.teams.forEach(team => {
-        teamCache.set(team.id, team.short_name);
+        teamCache.set(team.id, { short: team.short_name, full: team.name });
       });
 
       const currentEvent = data.events.find(e => e.is_current);
@@ -417,13 +423,14 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
       for (const playerId of manager.picks) {
         if (!ownership.has(playerId)) {
           const playerInfo = playerCache.get(playerId) || { name: "Unknown", position: "?", team: 0 };
-          const teamName = teamCache.get(playerInfo.team) || "???";
+          const teamInfo = teamCache.get(playerInfo.team) || UNKNOWN_TEAM;
 
           ownership.set(playerId, {
             playerId,
             playerName: playerInfo.name,
             position: playerInfo.position,
-            teamName: teamName,
+            teamName: typeof teamInfo === "string" ? teamInfo : teamInfo.short,
+            teamFullName: typeof teamInfo === "string" ? teamInfo : teamInfo.full,
             ownedBy: [],
             count: 0
           });
