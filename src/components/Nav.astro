@@ -38,6 +38,12 @@ const navLinks = [
             </a>
           </li>
         ))}
+        <li id="nav-account-item" style="display: none;">
+          <a href="/account" class="nav-link">
+            <span class="nav-link-emoji">👤</span>
+            Account
+          </a>
+        </li>
       </ul>
 
       <div class="theme-toggle-row">
@@ -402,15 +408,18 @@ const navLinks = [
 
   const navAuthMobile = document.getElementById('nav-auth-mobile');
   const navAuthDesktop = document.getElementById('nav-auth-desktop');
+  const navAccountItem = document.getElementById('nav-account-item');
 
   async function updateAuthUI() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-      // Mobile: account + logout button in header (next to X)
+      // Show account link in the nav list (mobile hamburger + desktop list)
+      if (navAccountItem) navAccountItem.style.display = '';
+
+      // Mobile: logout button only in header (Account is now in the nav list)
       if (navAuthMobile) {
         navAuthMobile.innerHTML = `
-          <a href="/account" class="btn btn--neutral btn--small">Account</a>
           <button id="logout-btn-mobile" class="btn btn--danger btn--small" type="button">Logout</button>
         `;
         document.getElementById('logout-btn-mobile')?.addEventListener('click', async () => {
@@ -432,7 +441,9 @@ const navLinks = [
         });
       }
     } else {
-      // Not logged in
+      // Not logged in: hide account link in nav list
+      if (navAccountItem) navAccountItem.style.display = 'none';
+
       if (navAuthMobile) {
         navAuthMobile.innerHTML = '';
       }
