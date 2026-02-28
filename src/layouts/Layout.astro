@@ -2028,8 +2028,19 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .cap-badge.cap-dnp {
-    opacity: 0.4;
-    text-decoration: line-through;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cap-badge.cap-dnp::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 150%;
+    height: 1.5px;
+    background: rgba(255, 255, 255, 0.85);
+    transform: translate(-50%, -50%) rotate(-45deg);
   }
 
   /* ========================================

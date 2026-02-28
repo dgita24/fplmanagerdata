@@ -1194,8 +1194,12 @@ function buildBreakdownRows(
           ? '<span class="cap-badge cap-c cap-dnp">C</span>'
           : p.is_captain
           ? '<span class="cap-badge cap-c">C</span>'
+          : isActingCaptain && p.autoSubStatus === 'OUT'
+          ? '<span class="cap-badge cap-c cap-dnp">C</span>'
           : isActingCaptain
           ? '<span class="cap-badge cap-c">C</span>'
+          : p.is_vice_captain && p.autoSubStatus === 'OUT'
+          ? '<span class="cap-badge cap-v cap-dnp">V</span>'
           : p.is_vice_captain
           ? '<span class="cap-badge cap-v">V</span>'
           : '';
