@@ -13,7 +13,7 @@ import Nav from "../components/Nav.astro";
     </header>
 
     <section class="card">
-      <div class="card-body">
+      <div class="card-body legal-content">
         <p>
           This Privacy Policy explains how FPL Manager Watch collects, uses, and protects your information. Transparency is important to me, so I want to be clear about exactly how your data is handled.
         </p>
@@ -53,3 +53,22 @@ import Nav from "../components/Nav.astro";
     </section>
   </main>
 </Layout>
+
+<style>
+  /* Scoped styles specifically for legal pages to fix list indents */
+  .legal-content ul {
+    list-style-position: outside;
+    padding-left: 1.5rem; /* Pushes the bullets in */
+    margin-bottom: 1.5rem;
+  }
+  
+  .legal-content li {
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+  }
+
+  .legal-content h2 {
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+  }
+</style>
