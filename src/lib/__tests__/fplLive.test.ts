@@ -422,6 +422,135 @@ function makePick(opts: {
   };
 }
 
+describe('applyAutoSubsAndMultipliers - captain eligibility', () => {
+  /**
+   * Bug 1 fix: when captain is confirmed DNP (Fin, 0 min) and VC hasn't played yet (NS),
+   * the VC should immediately inherit the captain multiplier.
+   * Previously, the code required starterVcPlayed before assigning eligibleCaptainId to VC,
+   * so VC got multiplier=1 (not 2) and LtP was wrong.
+   */
+  it('VC inherits captain multiplier immediately when captain is confirmed DNP (even if VC is NS)', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'Fin', is_captain: true }), // DNP
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes:  0, status: 'NS',  is_vice_captain: true }), // NS — hasn't played yet
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'NS' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    // Captain (p6) is confirmed DNP — multiplier=0
+    const p6 = result.find(p => p.playerId === 6)!;
+    expect(p6.multiplier).toBe(0);
+    expect(p6.autoSubStatus).toBe('OUT');
+
+    // VC (p7) is NS but should inherit captain multiplier (×2)
+    const p7 = result.find(p => p.playerId === 7)!;
+    expect(p7.multiplier).toBe(2);
+  });
+
+  /**
+   * VC that has already played should also get the captain multiplier (existing behaviour preserved).
+   */
+  it('VC who has played gets captain multiplier when captain is confirmed DNP', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'Fin', is_captain: true }), // DNP
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 75, status: 'Fin', is_vice_captain: true }), // played
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    const p7 = result.find(p => p.playerId === 7)!;
+    expect(p7.multiplier).toBe(2);
+  });
+
+  /**
+   * Captain NS (hasn't played yet): must NOT switch to VC.
+   * Captain keeps multiplier=2 until confirmed DNP.
+   */
+  it('captain NS keeps multiplier; VC does NOT inherit yet', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'NS',  is_captain: true }), // NS — not DNP
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }), // played
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    // Captain (NS) still gets ×2
+    const p6 = result.find(p => p.playerId === 6)!;
+    expect(p6.multiplier).toBe(2);
+
+    // VC does NOT inherit — keeps multiplier=1
+    const p7 = result.find(p => p.playerId === 7)!;
+    expect(p7.multiplier).toBe(1);
+  });
+
+  /**
+   * TC chip: VC inherits ×3 when captain is confirmed DNP and VC hasn't played yet.
+   */
+  it('VC inherits ×3 (TC) when captain is confirmed DNP', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'Fin', is_captain: true }), // DNP
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes:  0, status: 'NS',  is_vice_captain: true }), // NS
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'NS' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'TC');
+
+    const p7 = result.find(p => p.playerId === 7)!;
+    expect(p7.multiplier).toBe(3);
+  });
+});
+
 describe('applyAutoSubsAndMultipliers - formation rules', () => {
   /**
    * Regression test: a DNP bench player sitting between two valid replacements must
