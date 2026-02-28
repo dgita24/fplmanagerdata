@@ -9,7 +9,7 @@ import Nav from "../components/Nav.astro";
     <header class="page-header">
       <h1 class="page-title">Welcome to FPL Manager Watch</h1>
       <p class="page-subtitle">
-        Track the live standings, player ownership numbers, available FTs and more, of custom picked FPL managers. 
+        Track the live standings, player ownership numbers, available FTs and more, of custom picked FPL managers.
       </p>
     </header>
 
@@ -60,6 +60,13 @@ import Nav from "../components/Nav.astro";
         </ul>
       </div>
     </section>
+
+    <!-- Legal links (kept at the very bottom to avoid affecting layout) -->
+    <nav class="legal-links" aria-label="Legal">
+      <a href="/privacy" rel="nofollow">Privacy Policy</a>
+      <span class="legal-sep" aria-hidden="true">•</span>
+      <a href="/terms" rel="nofollow">Terms of Service</a>
+    </nav>
   </main>
 </Layout>
 
@@ -87,14 +94,41 @@ import Nav from "../components/Nav.astro";
   }
 
   .auth-buttons .btn {
-    flex: 1;  /* Equal width for both buttons */
-    text-align: center;  /* Center the text */
+    flex: 1; /* Equal width for both buttons */
+    text-align: center; /* Center the text */
   }
 
   /* Full-width button for logged-in users */
   .btn--full-width {
     width: 100%;
     text-align: center;
+  }
+
+  /* Minimal, non-invasive legal links */
+  .legal-links {
+    margin-top: var(--space-6);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+  }
+
+  .legal-links a {
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .legal-links a:hover {
+    text-decoration: underline;
+  }
+
+  .legal-sep {
+    opacity: 0.6;
   }
 </style>
 
@@ -128,18 +162,15 @@ import Nav from "../components/Nav.astro";
     }
   }
 
-
   initAuthUI()
 
   const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-  render(session)
+    render(session)
   })
   const subscription = data?.subscription
-
 
   // optional cleanup
   window.addEventListener('beforeunload', () => {
     subscription?.unsubscribe()
   })
-
 </script>
