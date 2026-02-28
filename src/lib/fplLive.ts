@@ -329,11 +329,8 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   const starterCapId = starters.find(p => p.is_captain)?.playerId ?? null;
   const starterVcId = starters.find(p => p.is_vice_captain)?.playerId ?? null;
 
-  // Find the actual starter objects (contain minutes + status)
+  // Find the actual starter object (contains minutes + status)
   const starterCap = starterCapId !== null ? starters.find(p => p.playerId === starterCapId) : null;
-  const starterVc = starterVcId !== null ? starters.find(p => p.playerId === starterVcId) : null;
-
-  const starterVcPlayed = !!starterVc && starterVc.minutes > 0;
 
   // CRITICAL RULE FIX:
   // Vice-captain takes over ONLY when the captain is confirmed "did not play" for the gameweek.
@@ -347,9 +344,11 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   const captainResolvedDidNotPlay = !!starterCap && starterCap.status === "Fin" && starterCap.minutes === 0;
 
   // Captain is eligible for capFactor unless they are confirmed DNP.
-  // This ensures NS/Live-with-0-min captains still contribute capFactor to LtP and live points.
+  // When captain is confirmed DNP, VC immediately inherits captaincy regardless of whether
+  // the VC has played yet — this ensures the ×2 multiplier is assigned for LtP and points
+  // once the captain is confirmed out, even if the VC's match hasn't started.
   const eligibleCaptainId = captainResolvedDidNotPlay
-    ? (starterVcPlayed ? starterVcId : null)
+    ? starterVcId
     : starterCapId;
 
   if (isBB) {

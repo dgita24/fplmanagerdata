@@ -550,13 +550,15 @@ const managerDataCache = new Map<string, any>();
       // This accounts for BB (bench players get multiplier=1), auto-subs (DNP starters get
       // multiplier=0), captain (multiplier=2) and TC (multiplier=3), and players from teams with
       // no fixture this GW (excluded via fixturesCache).
+      // Speculative subs: for each confirmed-DNP starter without a confirmed sub, the next eligible
+      // bench player (whose team has a fixture not yet finished) is counted speculatively (+1 to LtP).
       // =========================
       const teamsWithFixture = new Set<number>();
       for (const f of fixturesCache) {
         teamsWithFixture.add(f.team_h);
         teamsWithFixture.add(f.team_a);
       }
-      const ltp = finalTeam.reduce((sum, p) => {
+      let ltp = finalTeam.reduce((sum, p) => {
         const mult = p.multiplier ?? 0;
         if (mult === 0) return sum;
         if (!teamsWithFixture.has(p.teamId)) return sum;
@@ -568,6 +570,72 @@ const managerDataCache = new Map<string, any>();
         // Player is still "left to play" — contribute their full multiplier
         return sum + mult;
       }, 0);
+
+      // Speculative sub pass (only for non-BB, since BB has no auto-subs)
+      if (chipCode !== "BB") {
+        const ltpSorted = [...finalTeam].sort((a, b) => a.position - b.position);
+        const ltpBench = ltpSorted.slice(11);
+
+        // Active outfield (confirmed starters + confirmed subs, non-GK, multiplier > 0)
+        let activeOutfield = ltpSorted.filter(p => (p.multiplier ?? 0) > 0 && p.playingPosition !== 'GK');
+
+        const outfieldBench = ltpBench.filter(p => p.playingPosition !== 'GK' && p.autoSubStatus !== 'IN');
+        const gkBench = ltpBench.filter(p => p.playingPosition === 'GK');
+
+        // Speculative GK sub: GK starter DNP with no confirmed sub
+        const gkActive = ltpSorted.find(p => (p.multiplier ?? 0) > 0 && p.playingPosition === 'GK');
+        const gkStarterDnp = ltpSorted.find(p => p.position <= 11 && p.playingPosition === 'GK' && p.autoSubStatus === 'OUT');
+        if (gkStarterDnp && !gkActive) {
+          for (const gk of gkBench) {
+            if (gk.autoSubStatus === 'IN') continue;
+            if (gk.minutes > 0) continue;
+            const { finished, finishedProvisional } = getTeamGwStatusLocal(gk.teamId, gw);
+            if (finished || finishedProvisional) continue;
+            if (!teamsWithFixture.has(gk.teamId)) continue;
+            ltp += 1;
+            break;
+          }
+        }
+
+        // Speculative outfield subs: for each empty outfield slot, find next eligible bench player
+        for (const cand of outfieldBench) {
+          if (activeOutfield.length >= 10) break;
+          if (cand.minutes > 0) continue;
+          const { finished, finishedProvisional } = getTeamGwStatusLocal(cand.teamId, gw);
+          if (finished || finishedProvisional) continue;
+          if (!teamsWithFixture.has(cand.teamId)) continue;
+
+          const testOutfield = [...activeOutfield, cand];
+          const defCount = testOutfield.filter(p => p.playingPosition === 'DEF').length;
+          const midCount = testOutfield.filter(p => p.playingPosition === 'MID').length;
+          const fwdCount = testOutfield.filter(p => p.playingPosition === 'FWD').length;
+          const spotsLeft = 10 - testOutfield.length;
+
+          let canSub = false;
+          if (spotsLeft === 0) {
+            canSub = defCount >= 3 && midCount >= 2 && fwdCount >= 1;
+          } else {
+            const needDef = Math.max(0, 3 - defCount);
+            const needMid = Math.max(0, 2 - midCount);
+            const needFwd = Math.max(0, 1 - fwdCount);
+            const candidateIndex = outfieldBench.indexOf(cand);
+            const remainingCandidates = outfieldBench.slice(candidateIndex + 1).filter(b => {
+              if (b.minutes > 0) return false;
+              const { finished: f, finishedProvisional: fp } = getTeamGwStatusLocal(b.teamId, gw);
+              return !f && !fp && teamsWithFixture.has(b.teamId);
+            });
+            canSub =
+              remainingCandidates.filter(p => p.playingPosition === 'DEF').length >= needDef &&
+              remainingCandidates.filter(p => p.playingPosition === 'MID').length >= needMid &&
+              remainingCandidates.filter(p => p.playingPosition === 'FWD').length >= needFwd;
+          }
+
+          if (canSub) {
+            activeOutfield = testOutfield;
+            ltp += 1;
+          }
+        }
+      }
 
       // =========================
       // TOTAL POINTS (projected)
@@ -1120,8 +1188,21 @@ function buildBreakdownRows(
       `;
 
       for (const p of originalStarters) {
-        const capLabel = p.is_captain ? '<span class="cap-badge cap-c">C</span>' :
-                         p.is_vice_captain ? '<span class="cap-badge cap-v">V</span>' : '';
+        const captainDnp = originalStarters.some(s => s.is_captain && s.autoSubStatus === 'OUT');
+        const isActingCaptain = p.is_vice_captain && captainDnp;
+        const capLabel = p.is_captain && p.autoSubStatus === 'OUT'
+          ? '<span class="cap-badge cap-c cap-dnp">C</span>'
+          : p.is_captain
+          ? '<span class="cap-badge cap-c">C</span>'
+          : isActingCaptain && p.autoSubStatus === 'OUT'
+          ? '<span class="cap-badge cap-c cap-dnp">C</span>'
+          : isActingCaptain
+          ? '<span class="cap-badge cap-c">C</span>'
+          : p.is_vice_captain && p.autoSubStatus === 'OUT'
+          ? '<span class="cap-badge cap-v cap-dnp">V</span>'
+          : p.is_vice_captain
+          ? '<span class="cap-badge cap-v">V</span>'
+          : '';
 
         const isSubbedOut = p.autoSubStatus === 'OUT';
         const isNotStarted = p.status === "NS";
