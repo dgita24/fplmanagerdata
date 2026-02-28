@@ -149,16 +149,22 @@
           console.log('Waiting for session...')
           
           // Set up a one-time listener for auth state change
+          // Replace the existing onAuthStateChange listener with this:
           const { data: { subscription: authStateSubscription } } = supabase.auth.onAuthStateChange((event, session) => {
             console.log('Auth state changed:', event)
-            
-            if (event === 'SIGNED_IN' && session && !hasRedirected) {
+
+            if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session && !hasRedirected) {
               showSuccess()
               setTimeout(redirect, 1500)
+            } else if (event === 'PASSWORD_RECOVERY' && !hasRedirected) {
+              // Redirect to update-password page for password resets
+              hasRedirected = true
+              window.location.href = '/update-password'
             } else if (event === 'SIGNED_OUT' && !hasRedirected) {
               showError('Authentication failed. Please try signing up or logging in again.')
             }
           })
+
           
           // Store subscription for cleanup
           authSubscription = authStateSubscription
