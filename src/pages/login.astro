@@ -42,6 +42,14 @@ import Layout from "../layouts/Layout.astro";
           <label class="label" for="magic-email">Email</label>
           <input type="email" id="magic-email" class="input" required />
         </div>
+
+        <div class="remember-row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="magic-remember-me" checked />
+            <span>Remember me</span>
+          </label>
+        </div>
+
         <button type="submit" class="btn btn--primary btn--full">Send Magic Link</button>
         <div id="magic-error" class="status status--error" style="display: none;"></div>
         <div id="magic-success" class="status status--success" style="display: none;"></div>
@@ -206,6 +214,15 @@ import Layout from "../layouts/Layout.astro";
 <script>
   import { supabase } from '../lib/supabase.ts'
 
+  // --- Pre-fill emails on load ---
+  const savedEmail = localStorage.getItem('rememberedEmail')
+  if (savedEmail) {
+    const emailInput = document.getElementById('email') as HTMLInputElement;
+    const magicEmailInput = document.getElementById('magic-email') as HTMLInputElement;
+    if (emailInput) emailInput.value = savedEmail;
+    if (magicEmailInput) magicEmailInput.value = savedEmail;
+  }
+
   // --- Tab switching ---
   const tabPassword = document.getElementById('tab-password') as HTMLButtonElement
   const tabMagic = document.getElementById('tab-magic') as HTMLButtonElement
@@ -245,6 +262,14 @@ import Layout from "../layouts/Layout.astro";
 
     const email = (document.getElementById('email') as HTMLInputElement).value
     const password = passwordInput.value
+    const rememberMe = (document.getElementById('remember-me') as HTMLInputElement).checked
+
+    // Handle remember me
+    if (rememberMe) {
+      localStorage.setItem('rememberedEmail', email)
+    } else {
+      localStorage.removeItem('rememberedEmail')
+    }
 
     const { error } = await supabase.auth.signInWithPassword({ email, password })
 
@@ -268,6 +293,14 @@ import Layout from "../layouts/Layout.astro";
     magicSuccess.style.display = 'none'
 
     const email = (document.getElementById('magic-email') as HTMLInputElement).value
+    const rememberMe = (document.getElementById('magic-remember-me') as HTMLInputElement).checked
+
+    // Handle remember me
+    if (rememberMe) {
+      localStorage.setItem('rememberedEmail', email)
+    } else {
+      localStorage.removeItem('rememberedEmail')
+    }
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
