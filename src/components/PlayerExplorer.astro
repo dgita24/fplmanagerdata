@@ -365,7 +365,7 @@ const { inline = false } = Astro.props;
     overview:   "total_points",
     attacking:  "total_points",
     defensive:  "total_points",
-    ownership:  "selected_by_percent_num",
+    ownership:  "transfers_in_event",
     discipline: "yellow_cards",
   };
 
@@ -404,8 +404,6 @@ const { inline = false } = Astro.props;
     ownership: [
       { key: "selected_by_percent_num", label: "Sel%", title: "Selected by % of FPL managers",
         fn: el => el.selected_by_percent, numeric: true },
-      { key: "transfers_in",       label: "T In",  title: "Total transfers in", numeric: true },
-      { key: "transfers_out",      label: "T Out", title: "Total transfers out", numeric: true },
       { key: "transfers_in_event", label: "GW In",   title: "Transfers in this GW", numeric: true },
       { key: "transfers_out_event",label: "GW Out",   title: "Transfers out this GW", numeric: true },
     ],
