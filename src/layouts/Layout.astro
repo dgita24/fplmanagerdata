@@ -224,6 +224,29 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ========================================
+     PAGE TITLE EMOJI NAV LINKS
+     ======================================== */
+  .page-title-emoji {
+    text-decoration: none;
+    color: inherit;
+    margin: 0 0.15em;
+    font-size: 1em;
+    display: inline-block;
+    transition: transform var(--transition-fast);
+  }
+
+  .page-title-emoji:hover {
+    color: inherit;
+    text-decoration: none;
+    transform: scale(1.2);
+  }
+
+  .page-title-emoji:focus-visible {
+    outline: 2px solid var(--color-primary);
+    border-radius: 3px;
+  }
+
+  /* ========================================
      CARDS / PANELS
      ======================================== */
   .card {
