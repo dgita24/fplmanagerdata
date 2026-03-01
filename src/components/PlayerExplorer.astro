@@ -365,8 +365,8 @@ const { inline = false } = Astro.props;
     overview:   "total_points",
     attacking:  "total_points",
     defensive:  "total_points",
-    ownership:  "total_points",
-    discipline: "total_points",
+    ownership:  "selected_by_percent_num",
+    discipline: "yellow_cards",
   };
 
   const COLS: Record<string, ColDef[]> = {
@@ -407,10 +407,8 @@ const { inline = false } = Astro.props;
       { key: "transfers_out",      label: "T Out", title: "Total transfers out", numeric: true },
       { key: "transfers_in_event", label: "GW↑",   title: "Transfers in this GW", numeric: true },
       { key: "transfers_out_event",label: "GW↓",   title: "Transfers out this GW", numeric: true },
-      { key: "total_points",       label: "Pts",   numeric: true },
     ],
     discipline: [
-      { key: "total_points",   label: "Pts",   numeric: true },
       { key: "yellow_cards",   label: "YC",    title: "Yellow Cards", numeric: true },
       { key: "red_cards",      label: "RC",    title: "Red Cards", numeric: true },
       { key: "penalties_missed",label: "PM",   title: "Penalties Missed", numeric: true },
@@ -492,7 +490,7 @@ const { inline = false } = Astro.props;
     }).join("");
 
     const note = showDefconNote
-      ? `<span class="pe-defcon-note">DC★ ${defconLoaded ? DEFCON_NOTE : '⏳ Loading DC data from GW live stats…'}</span>`
+      ? `<span class="pe-defcon-note">DC ${defconLoaded ? DEFCON_NOTE : '⏳ Loading DC data from GW live stats…'}</span>`
       : "";
 
     body.innerHTML = `<div class="pe-table-wrapper"><table class="pe-table">${thead}<tbody>${rows}</tbody></table></div>${note}`;
