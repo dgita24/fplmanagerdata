@@ -1,24 +1,26 @@
 ---
 /**
- * PlayerExplorer — global top-sheet player browser.
+ * PlayerExplorer — player browser.
  *
- * Include once in any page that needs the explorer.
- * Open it by dispatching: document.dispatchEvent(new Event('open-player-explorer'))
- * Or call window.openPlayerExplorer?.()
+ * Default (inline=false): global top-sheet modal.
+ *   Open by dispatching: document.dispatchEvent(new Event('open-player-explorer'))
+ *   Or call window.openPlayerExplorer?.()
+ *
+ * inline=true: renders as an in-page table (no backdrop, no modal behaviour).
+ *   Loads automatically on mount. Used by /players page.
  */
 import PlayerMatchHistorySheet from "./PlayerMatchHistorySheet.astro";
+const { inline = false } = Astro.props;
 ---
 
-<!-- Backdrop -->
-<div id="player-explorer-backdrop" aria-hidden="true"></div>
+{!inline && <div id="player-explorer-backdrop" aria-hidden="true"></div>}
 
-<!-- Top-sheet -->
+<!-- Top-sheet / inline section -->
 <section
   id="player-explorer-sheet"
-  role="dialog"
-  aria-modal="true"
-  aria-label="Player Explorer"
-  aria-hidden="true"
+  {...!inline && { role: "dialog", "aria-modal": "true", "aria-label": "Player Explorer", "aria-hidden": "true" }}
+  class:list={[{ "pe-inline": inline }]}
+  {...inline && { "data-inline": "true" }}
 >
   <!-- Header -->
   <div class="pe-header">
@@ -28,7 +30,7 @@ import PlayerMatchHistorySheet from "./PlayerMatchHistorySheet.astro";
     </div>
     <div class="pe-header__right">
       <button type="button" id="pe-refresh-btn" class="pe-refresh" title="Refresh player data">🔄 Refresh</button>
-      <button type="button" id="pe-close-btn" class="pe-close" aria-label="Close Player Explorer">✕</button>
+      {!inline && <button type="button" id="pe-close-btn" class="pe-close" aria-label="Close Player Explorer">✕</button>}
     </div>
   </div>
 
@@ -198,8 +200,8 @@ import PlayerMatchHistorySheet from "./PlayerMatchHistorySheet.astro";
   // DOM refs (populated on first open)
   // ----------------------------------------------------------------
   const sheet    = document.getElementById("player-explorer-sheet")!;
-  const backdrop = document.getElementById("player-explorer-backdrop")!;
-  const closeBtn = document.getElementById("pe-close-btn")!;
+  const backdrop = document.getElementById("player-explorer-backdrop");
+  const closeBtn = document.getElementById("pe-close-btn");
   const refreshBtn = document.getElementById("pe-refresh-btn")!;
   const searchInput = document.getElementById("pe-search") as HTMLInputElement;
   const teamFilter   = document.getElementById("pe-team-filter") as HTMLSelectElement;
@@ -211,15 +213,16 @@ import PlayerMatchHistorySheet from "./PlayerMatchHistorySheet.astro";
   const posBtns     = document.querySelectorAll<HTMLButtonElement>(".pe-pos-btn");
 
   // ----------------------------------------------------------------
-  // Open / close
+  // Open / close (modal mode only)
   // ----------------------------------------------------------------
   function openExplorer() {
+    if (sheet.dataset.inline === "true") return;
     sheet.classList.add("is-open");
-    backdrop.classList.add("is-open");
+    backdrop!.classList.add("is-open");
     sheet.setAttribute("aria-hidden", "false");
-    backdrop.setAttribute("aria-hidden", "false");
+    backdrop!.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
-    closeBtn.focus();
+    closeBtn!.focus();
     loadBootstrap();
   }
 
@@ -227,9 +230,9 @@ import PlayerMatchHistorySheet from "./PlayerMatchHistorySheet.astro";
 
   function closeExplorer() {
     sheet.classList.remove("is-open");
-    backdrop.classList.remove("is-open");
+    backdrop!.classList.remove("is-open");
     sheet.setAttribute("aria-hidden", "true");
-    backdrop.setAttribute("aria-hidden", "true");
+    backdrop!.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
     const fromPage = new URLSearchParams(window.location.search).get("from");
     if (fromPage && ALLOWED_FROM_PAGES.has(fromPage)) {
@@ -237,15 +240,22 @@ import PlayerMatchHistorySheet from "./PlayerMatchHistorySheet.astro";
     }
   }
 
-  closeBtn.addEventListener("click", closeExplorer);
-  backdrop.addEventListener("click", closeExplorer);
-  document.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Escape" && sheet.classList.contains("is-open")) closeExplorer();
-  });
+  const isInline = sheet.dataset.inline === "true";
 
-  // Global API — pages open explorer via this
-  (window as any).openPlayerExplorer = openExplorer;
-  document.addEventListener("open-player-explorer", openExplorer);
+  if (isInline) {
+    // Inline mode: load immediately, no modal open/close behaviour
+    loadBootstrap();
+  } else {
+    // Modal mode: wire up open/close
+    closeBtn?.addEventListener("click", closeExplorer);
+    backdrop?.addEventListener("click", closeExplorer);
+    document.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Escape" && sheet.classList.contains("is-open")) closeExplorer();
+    });
+    // Global API — pages open explorer via this
+    (window as any).openPlayerExplorer = openExplorer;
+    document.addEventListener("open-player-explorer", openExplorer);
+  }
 
   // ----------------------------------------------------------------
   // Filters

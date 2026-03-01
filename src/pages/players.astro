@@ -12,18 +12,6 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
       <p class="page-subtitle">Browse, search and filter every FPL player.</p>
     </header>
 
-    <!-- Button to re-open the explorer after it has been closed -->
-    <div class="meta-row-wide">
-      <button type="button" class="badge badge-wide" onclick="openPlayerExplorer?.()">📋 Open Player Explorer</button>
-    </div>
+    <PlayerExplorer inline={true} />
   </main>
-
-  <PlayerExplorer />
 </Layout>
-
-<script>
-  // Auto-open the Player Explorer when this page loads.
-  setTimeout(() => {
-    document.dispatchEvent(new Event("open-player-explorer"));
-  }, 0);
-</script>
