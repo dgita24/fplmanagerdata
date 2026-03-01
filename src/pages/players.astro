@@ -1,0 +1,29 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import PlayerExplorer from "../components/PlayerExplorer.astro";
+---
+<Layout title="All FPL Players - FPL Manager Data">
+  <Nav />
+
+  <main class="page">
+    <header class="page-header">
+      <h1 class="page-title">📋  All FPL Players  📋</h1>
+      <p class="page-subtitle">Browse, search and filter every FPL player.</p>
+    </header>
+
+    <!-- Button to re-open the explorer after it has been closed -->
+    <div class="meta-row-wide">
+      <button type="button" class="badge badge-wide" onclick="openPlayerExplorer?.()">📋 Open Player Explorer</button>
+    </div>
+  </main>
+
+  <PlayerExplorer />
+</Layout>
+
+<script>
+  // Auto-open the Player Explorer when this page loads.
+  setTimeout(() => {
+    document.dispatchEvent(new Event("open-player-explorer"));
+  }, 0);
+</script>

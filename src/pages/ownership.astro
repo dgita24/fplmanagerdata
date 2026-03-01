@@ -1,7 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
-import PlayerExplorer from "../components/PlayerExplorer.astro";
 ---
 <Layout title="Player Ownership - FPL Manager Data">
   <Nav />
@@ -16,7 +15,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
       <select id="club-filter" class="badge badge-wide club-filter-select">
         <option value="">⚽ All Clubs</option>
       </select>
-      <button type="button" id="open-player-explorer" class="badge badge-wide" onclick="openPlayerExplorer?.()">📋 All FPL Players</button>
+      <a href="/players?from=ownership" class="badge badge-wide">📋 All FPL Players</a>
     </div>
 
     <div class="controls-inline">
@@ -54,7 +53,6 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
       <div id="ownership-modal-content"></div>
     </div>
   </div>
-  <PlayerExplorer />
 </Layout>
 
 <style>

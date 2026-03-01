@@ -2,7 +2,6 @@
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 import GWPointsModal from "../components/modals/GWPointsModal.astro";
-import PlayerExplorer from "../components/PlayerExplorer.astro";
 ---
 <Layout title="Manager Squads - FPL Manager Data">
   <Nav />
@@ -15,7 +14,7 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
 
     <div class="meta-row-wide">
       <button id="manager-count" class="badge badge-wide badge-toggle" type="button">⭐ Toggle Favourites</button>
-      <button type="button" id="open-player-explorer" class="badge badge-wide" onclick="openPlayerExplorer?.()">📋 All FPL Players</button>
+      <a href="/players?from=squads" class="badge badge-wide">📋 All FPL Players</a>
     </div>
 
     <div class="controls-inline">
@@ -59,7 +58,6 @@ import PlayerExplorer from "../components/PlayerExplorer.astro";
       <div id="player-modal-content"></div>
     </div>
   </div>
-  <PlayerExplorer />
   
  <GWPointsModal />
 
