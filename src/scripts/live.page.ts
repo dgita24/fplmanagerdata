@@ -22,6 +22,9 @@ import { supabase } from '../lib/supabase.ts'
     managerIds: number[];
     data: any[];
     latestGW: number;
+    // true when every fixture for this GW was finished at save time — data is immutable,
+    // no background refresh needed on next load.
+    allFixturesFinished?: boolean;
   };
 
   let lastBackgroundRefreshAt = 0;
@@ -1578,6 +1581,10 @@ function buildBreakdownRows(
     }
 
     // Save snapshot after a successful load
+    const allFixturesFinished =
+      fixturesCache.length > 0 &&
+      fixturesCache.every(f => f.finished || f.finished_provisional);
+
     saveLiveSnapshot({
       ts: Date.now(),
       gw,
@@ -1586,7 +1593,8 @@ function buildBreakdownRows(
       liveSortDir: "desc",
       managerIds: [...ids],
       data: liveData,
-      latestGW
+      latestGW,
+      allFixturesFinished
     });
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers</span>`;
@@ -1632,11 +1640,10 @@ function buildBreakdownRows(
 
       loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers (cached)</span>`;
 
-      // For the current/live GW, always background-refresh so captain/VC multipliers
-      // and live points reflect the latest fixture results (e.g. captain confirmed DNP
-      // after snapshot was saved — vice-captain doubling must be re-evaluated).
-      // Past-GW snapshots are immutable so no refresh is needed.
-      if (Number(gw) === Number(latestGW)) {
+      // For the current/live GW, background-refresh only if fixtures were still in
+      // progress when the snapshot was saved (e.g. captain DNP confirmation pending).
+      // Once allFixturesFinished is true the data is immutable — no refresh needed.
+      if (Number(gw) === Number(latestGW) && !snap!.allFixturesFinished) {
         loadLive(managerIds, gw, { force: false, background: true });
       }
       return;
@@ -1672,10 +1679,10 @@ function buildBreakdownRows(
 
         loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers (cached)</span>`;
 
-        // For the current/live GW, always background-refresh so captain/VC multipliers
-        // reflect the latest fixture results (e.g. captain confirmed DNP after snapshot
-        // was saved — vice-captain doubling must be re-evaluated).
-        if (Number(gw) === Number(latestGW)) {
+        // For the current/live GW, background-refresh only if fixtures were still in
+        // progress when the snapshot was saved (e.g. captain DNP confirmation pending).
+        // Once allFixturesFinished is true the data is immutable — no refresh needed.
+        if (Number(gw) === Number(latestGW) && !snap!.allFixturesFinished) {
           loadLive(managerIds, gw, { force: false, background: true });
         }
         return;
