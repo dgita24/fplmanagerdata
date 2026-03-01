@@ -387,7 +387,7 @@ const { inline = false } = Astro.props;
       { key: "assists",      label: "A",    title: "Assists", numeric: true },
       { key: "xa",          label: "xA",   title: "Expected Assists",
         fn: el => parseFloat((el as any).expected_assists ?? "0").toFixed(2), numeric: true },
-      { key: "bonus",        label: "Bonus",title: "Bonus Points", numeric: true },
+      { key: "bonus",        label: "Bon",title: "Bonus Points", numeric: true },
     ],
     defensive: [
       { key: "total_points",   label: "Pts",   numeric: true },
@@ -399,14 +399,15 @@ const { inline = false } = Astro.props;
         title: `DEFCON points ${DEFCON_NOTE}`,
         fn: el => defconLoaded ? (defconMap.get(el.id) ?? 0) : computeProxyDEFCON(el),
         numeric: true },
+      { key: "bonus",        label: "Bon",title: "Bonus Points", numeric: true },
     ],
     ownership: [
       { key: "selected_by_percent_num", label: "Sel%", title: "Selected by % of FPL managers",
         fn: el => el.selected_by_percent, numeric: true },
       { key: "transfers_in",       label: "T In",  title: "Total transfers in", numeric: true },
       { key: "transfers_out",      label: "T Out", title: "Total transfers out", numeric: true },
-      { key: "transfers_in_event", label: "GW↑",   title: "Transfers in this GW", numeric: true },
-      { key: "transfers_out_event",label: "GW↓",   title: "Transfers out this GW", numeric: true },
+      { key: "transfers_in_event", label: "GW In",   title: "Transfers in this GW", numeric: true },
+      { key: "transfers_out_event",label: "GW Out",   title: "Transfers out this GW", numeric: true },
     ],
     discipline: [
       { key: "yellow_cards",   label: "YC",    title: "Yellow Cards", numeric: true },
