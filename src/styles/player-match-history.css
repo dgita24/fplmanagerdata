@@ -35,7 +35,7 @@
   transform: translateY(-105%);
   transition: transform 220ms ease;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
 
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
 }
@@ -47,12 +47,18 @@
 /* ---- Header ---- */
 .pmh-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
+  flex-direction: column;
+  gap: var(--space-2);
   padding: var(--space-3);
   padding-top: calc(var(--space-3) + env(safe-area-inset-top));
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pmh-header__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
 }
 
 .pmh-header__title {
@@ -95,7 +101,7 @@
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-md);
   padding: 3px;
-  flex-shrink: 0;
+  align-self: flex-start;
 }
 
 .pmh-filter__btn {
@@ -126,6 +132,99 @@
 .pmh-filter__btn:focus-visible {
   outline: 2px solid var(--color-primary, #3b82f6);
   outline-offset: 1px;
+}
+
+/* ---- Fixtures strip (next 5 GWs) ---- */
+#pmh-fixtures {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+#pmh-fixtures:empty {
+  padding: 0;
+  border-bottom: none;
+}
+
+#pmh-fixtures::-webkit-scrollbar {
+  display: none;
+}
+
+.pmh-fix-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.pmh-fix-gw-sep {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 0 2px;
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  margin-left: 2px;
+  padding-left: 6px;
+}
+
+.pmh-fix-gw-sep:first-of-type {
+  border-left: none;
+  margin-left: 0;
+  padding-left: 2px;
+}
+
+.pmh-fix-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  padding: 4px 6px;
+  min-width: 44px;
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.pmh-fix-chip__badge {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+.pmh-fix-chip__opp {
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+
+.pmh-fix-chip__venue {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  line-height: 14px;
+}
+
+.pmh-fix-chip__venue--h {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--color-success, #22c55e);
+}
+
+.pmh-fix-chip__venue--a {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--color-danger, #ef4444);
 }
 
 /* ---- Body (scrollable content) ---- */

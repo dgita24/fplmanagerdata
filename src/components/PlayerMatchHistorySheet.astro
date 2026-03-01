@@ -19,17 +19,21 @@
   aria-hidden="true"
 >
   <div class="pmh-header">
-    <div>
-      <div class="pmh-header__title" id="pmh-title">Match History</div>
-      <div class="pmh-header__subtitle" id="pmh-subtitle"></div>
+    <div class="pmh-header__row">
+      <div>
+        <div class="pmh-header__title" id="pmh-title">Match History</div>
+        <div class="pmh-header__subtitle" id="pmh-subtitle"></div>
+      </div>
+      <button type="button" id="pmh-close-btn" class="pmh-close" aria-label="Close Match History">✕</button>
     </div>
     <div class="pmh-filter" role="group" aria-label="Match venue filter" id="pmh-filter">
       <button type="button" class="pmh-filter__btn is-active" data-filter="all" aria-pressed="true">All</button>
       <button type="button" class="pmh-filter__btn" data-filter="home" aria-pressed="false">Home</button>
       <button type="button" class="pmh-filter__btn" data-filter="away" aria-pressed="false">Away</button>
     </div>
-    <button type="button" id="pmh-close-btn" class="pmh-close" aria-label="Close Match History">✕</button>
   </div>
+
+  <div id="pmh-fixtures" aria-label="Next 5 gameweeks fixtures"></div>
 
   <div class="pmh-body" id="pmh-body">
     <div class="pmh-status" id="pmh-status">Loading…</div>
@@ -49,6 +53,16 @@
   } from "../lib/playerMatchHistory";
   import type { MatchHistoryRow, VenueFilter } from "../lib/playerMatchHistory";
 
+  interface ElementFixture {
+    id: number;
+    team_h: number;
+    team_a: number;
+    is_home: boolean;
+    event: number | null;
+    difficulty?: number;
+    kickoff_time?: string | null;
+  }
+
   // ----------------------------------------------------------------
   // State
   // ----------------------------------------------------------------
@@ -58,8 +72,9 @@
   let allRows: MatchHistoryRow[] = [];
   let teamMap: Map<number, BootstrapTeam> = new Map();
 
-  // In-memory cache: playerId → history rows
+  // In-memory caches: playerId → data
   const historyCache = new Map<number, MatchHistoryRow[]>();
+  const fixturesCache = new Map<number, ElementFixture[]>();
 
   // localStorage cache
   const PMH_LS_KEY = "fpl_pmh_cache_v1";
@@ -67,6 +82,7 @@
 
   interface PMHCacheEntry {
     rows: MatchHistoryRow[];
+    fixtures?: ElementFixture[];
     fetchedAt: number;
   }
 
@@ -83,11 +99,22 @@
     }
   }
 
-  function saveHistoryToStorage(playerId: number, rows: MatchHistoryRow[]): void {
+  function loadFixturesFromStorage(playerId: number): ElementFixture[] {
+    try {
+      const raw = localStorage.getItem(`${PMH_LS_KEY}_${playerId}`);
+      if (!raw) return [];
+      const p: PMHCacheEntry = JSON.parse(raw);
+      return Array.isArray(p?.fixtures) ? p.fixtures : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveHistoryToStorage(playerId: number, rows: MatchHistoryRow[], fixtures: ElementFixture[]): void {
     try {
       localStorage.setItem(
         `${PMH_LS_KEY}_${playerId}`,
-        JSON.stringify({ rows, fetchedAt: Date.now() }),
+        JSON.stringify({ rows, fixtures, fetchedAt: Date.now() }),
       );
     } catch {
       /* ignore */
@@ -104,6 +131,7 @@
   const subtitleEl = document.getElementById("pmh-subtitle")!;
   const body      = document.getElementById("pmh-body")!;
   const filterGroup = document.getElementById("pmh-filter")!;
+  const fixturesEl  = document.getElementById("pmh-fixtures")!;
 
   // ----------------------------------------------------------------
   // Filter control
@@ -170,6 +198,7 @@
 
       // Check in-memory cache
       let rows = historyCache.get(playerId);
+      let fixtures = fixturesCache.get(playerId);
 
       if (!rows) {
         // Check localStorage cache
@@ -177,26 +206,94 @@
         if (stored) {
           rows = stored;
           historyCache.set(playerId, rows);
+          if (!fixtures) {
+            const storedFx = loadFixturesFromStorage(playerId);
+            fixturesCache.set(playerId, storedFx);
+            fixtures = storedFx;
+          }
         } else {
           // Fetch from API
           const res = await fetch(`/api/fpl/element-summary/${playerId}/`);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const json = await res.json();
           rows = (json.history ?? []) as MatchHistoryRow[];
+          fixtures = (json.fixtures ?? []) as ElementFixture[];
           historyCache.set(playerId, rows);
-          saveHistoryToStorage(playerId, rows);
+          fixturesCache.set(playerId, fixtures);
+          saveHistoryToStorage(playerId, rows, fixtures);
         }
       }
 
       allRows = rows;
+      renderFixtures(fixtures ?? []);
       renderHistory(rows);
     } catch (err) {
       body.innerHTML = `<div class="pmh-status">❌ Failed to load match history. <button id="pmh-retry" style="margin-left:8px;cursor:pointer;text-decoration:underline;background:none;border:none;color:var(--color-primary);">Retry</button></div>`;
       document.getElementById("pmh-retry")?.addEventListener("click", () => {
         historyCache.delete(playerId);
+        fixturesCache.delete(playerId);
         loadHistory(playerId);
       });
     }
+  }
+
+  // ----------------------------------------------------------------
+  // Render next-5-GW fixtures strip
+  // ----------------------------------------------------------------
+  function renderFixtures(fixtures: ElementFixture[]): void {
+    if (!fixtures.length) {
+      fixturesEl.innerHTML = "";
+      return;
+    }
+
+    // Collect the first 5 unique GW event numbers (ascending)
+    const seenGWs = new Set<number>();
+    for (const fx of fixtures) {
+      if (fx.event != null && !seenGWs.has(fx.event)) {
+        seenGWs.add(fx.event);
+        if (seenGWs.size === 5) break;
+      }
+    }
+
+    if (!seenGWs.size) {
+      fixturesEl.innerHTML = "";
+      return;
+    }
+
+    // Keep all fixtures that belong to those GWs (handles double GWs)
+    const shown = fixtures.filter((fx) => fx.event != null && seenGWs.has(fx.event));
+
+    // Build chips, inserting a GW-divider whenever the GW changes
+    let lastGW: number | null = null;
+    const parts: string[] = [];
+
+    parts.push('<span class="pmh-fix-label">Next 5 GWs</span>');
+
+    for (const fx of shown) {
+      const gw = fx.event!;
+      if (gw !== lastGW) {
+        parts.push(`<span class="pmh-fix-gw-sep">GW${gw}</span>`);
+        lastGW = gw;
+      }
+
+      const oppTeamId = fx.is_home ? fx.team_a : fx.team_h;
+      const team = teamMap.get(oppTeamId);
+      const abbr = team?.short_name ?? String(oppTeamId);
+      const venue = fx.is_home ? "H" : "A";
+      const badgeHtml = team?.code
+        ? `<img class="pmh-fix-chip__badge" src="https://resources.premierleague.com/premierleague/badges/t${team.code}.png" alt="${abbr}" width="20" height="20" loading="lazy" />`
+        : "";
+
+      parts.push(
+        `<div class="pmh-fix-chip" title="GW${gw}: ${abbr} (${venue})">
+          ${badgeHtml}
+          <span class="pmh-fix-chip__opp">${abbr}</span>
+          <span class="pmh-fix-chip__venue pmh-fix-chip__venue--${venue.toLowerCase()}">${venue}</span>
+        </div>`,
+      );
+    }
+
+    fixturesEl.innerHTML = parts.join("");
   }
 
   // ----------------------------------------------------------------
@@ -331,8 +428,9 @@
     currentElementType = elementType;
     allRows = [];
 
-    titleEl.textContent   = `📊 ${playerName}`;
+    titleEl.textContent   = playerName;
     subtitleEl.textContent = "";
+    fixturesEl.innerHTML   = "";
 
     setFilter("all");
     openSheet();

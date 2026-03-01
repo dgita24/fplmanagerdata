@@ -21,6 +21,7 @@ export interface BootstrapTeam {
   id: number;
   name: string;
   short_name: string;
+  code?: number;
 }
 
 export interface BootstrapElement {
