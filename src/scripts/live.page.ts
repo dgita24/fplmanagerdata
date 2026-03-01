@@ -1245,9 +1245,13 @@ function buildBreakdownRows(
         const mult = p.multiplier || 1;
         const displayPts = Math.round(p.liveTotal * mult);
         const ptsText = mult > 1 ? `${p.liveTotal}×${mult}` : String(displayPts);
+        const subOnStatusClass =
+          p.status === "Live" ? " match-live-row" :
+          p.status === "Fin"  ? " match-finished-row" :
+          p.status === "NS"   ? " not-started-row" : "";
 
         html += `
-          <tr class="sub-on-row">
+          <tr class="sub-on-row${subOnStatusClass}">
             <td class="player-cell">
               <span class="player-pos">${p.playingPosition}</span>
               <button type="button" class="player-name-btn" data-player-id="${p.playerId}">${p.web_name}</button>
