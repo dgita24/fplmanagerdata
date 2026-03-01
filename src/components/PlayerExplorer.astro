@@ -223,12 +223,18 @@ import PlayerMatchHistorySheet from "./PlayerMatchHistorySheet.astro";
     loadBootstrap();
   }
 
+  const ALLOWED_FROM_PAGES = new Set(["chips", "live", "transfers", "ownership", "squads", "stats"]);
+
   function closeExplorer() {
     sheet.classList.remove("is-open");
     backdrop.classList.remove("is-open");
     sheet.setAttribute("aria-hidden", "true");
     backdrop.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
+    const fromPage = new URLSearchParams(window.location.search).get("from");
+    if (fromPage && ALLOWED_FROM_PAGES.has(fromPage)) {
+      window.location.href = "/" + fromPage;
+    }
   }
 
   closeBtn.addEventListener("click", closeExplorer);
