@@ -137,7 +137,7 @@
 /* ---- Fixtures strip (next 5 GWs) ---- */
 #pmh-fixtures {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 4px;
   overflow-x: auto;
   padding: var(--space-2) var(--space-3);
@@ -155,66 +155,74 @@
   display: none;
 }
 
-.pmh-fix-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  flex-shrink: 0;
-  margin-right: 2px;
-}
-
-.pmh-fix-gw-sep {
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  flex-shrink: 0;
-  padding: 0 2px;
-  border-left: 1px solid rgba(255, 255, 255, 0.15);
-  margin-left: 2px;
-  padding-left: 6px;
-}
-
-.pmh-fix-gw-sep:first-of-type {
-  border-left: none;
-  margin-left: 0;
-  padding-left: 2px;
-}
-
 .pmh-fix-chip {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-md);
-  padding: 4px 6px;
-  min-width: 44px;
+  padding: 4px 5px;
+  width: 54px;
   flex-shrink: 0;
-  cursor: default;
+}
+
+.pmh-fix-chip--blank {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.pmh-fix-chip__top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.pmh-fix-chip__bot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
 }
 
 .pmh-fix-chip__badge {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   object-fit: contain;
+  flex-shrink: 0;
 }
 
 .pmh-fix-chip__opp {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 9px;
+  font-weight: 700;
   white-space: nowrap;
   color: var(--color-text);
 }
 
+.pmh-fix-chip__gw {
+  font-size: 8px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* GW number shown in the top row of a blank card */
+.pmh-fix-chip__gw-top {
+  font-size: 8px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 .pmh-fix-chip__venue {
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
-  padding: 0 4px;
-  border-radius: 3px;
-  line-height: 14px;
+  padding: 0 3px;
+  border-radius: 2px;
+  line-height: 12px;
 }
 
 .pmh-fix-chip__venue--h {
@@ -225,6 +233,13 @@
 .pmh-fix-chip__venue--a {
   background: rgba(239, 68, 68, 0.15);
   color: var(--color-danger, #ef4444);
+}
+
+.pmh-fix-chip__blank-label {
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
 /* ---- Body (scrollable content) ---- */

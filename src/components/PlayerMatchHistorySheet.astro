@@ -76,6 +76,9 @@
   const historyCache = new Map<number, MatchHistoryRow[]>();
   const fixturesCache = new Map<number, ElementFixture[]>();
 
+  // Next 5 upcoming GW ids (set once per session from bootstrap events)
+  let upcomingGWs: number[] = [];
+
   // localStorage cache
   const PMH_LS_KEY = "fpl_pmh_cache_v1";
   const PMH_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -191,6 +194,13 @@
         const bootstrap = await getBootstrapData();
         teamMap = new Map(bootstrap.teams.map((t) => [t.id, t]));
 
+        // Upcoming 5 GW ids for the fixture strip (includes BGW slots)
+        upcomingGWs = bootstrap.events
+          .filter((ev) => !ev.finished)
+          .sort((a, b) => a.id - b.id)
+          .slice(0, 5)
+          .map((ev) => ev.id);
+
         // Also grab element type for the current player
         const el = bootstrap.elements.find((e) => e.id === playerId);
         if (el) currentElementType = el.element_type;
@@ -240,57 +250,60 @@
   // ----------------------------------------------------------------
   // Render next-5-GW fixtures strip
   // ----------------------------------------------------------------
+  function makeChipHtml(topContent: string, botContent: string, extraClass: string, titleAttr: string): string {
+    return `<div class="pmh-fix-chip${extraClass ? ` ${extraClass}` : ""}" title="${titleAttr}">
+      <div class="pmh-fix-chip__top">${topContent}</div>
+      <div class="pmh-fix-chip__bot">${botContent}</div>
+    </div>`;
+  }
+
   function renderFixtures(fixtures: ElementFixture[]): void {
-    if (!fixtures.length) {
+    if (!upcomingGWs.length) {
       fixturesEl.innerHTML = "";
       return;
     }
 
-    // Collect the first 5 unique GW event numbers (ascending)
-    const seenGWs = new Set<number>();
+    // Index fixtures by GW for O(1) lookup
+    const gwFixtures = new Map<number, ElementFixture[]>();
     for (const fx of fixtures) {
-      if (fx.event != null && !seenGWs.has(fx.event)) {
-        seenGWs.add(fx.event);
-        if (seenGWs.size === 5) break;
+      if (fx.event != null) {
+        const arr = gwFixtures.get(fx.event) ?? [];
+        arr.push(fx);
+        gwFixtures.set(fx.event, arr);
       }
     }
 
-    if (!seenGWs.size) {
-      fixturesEl.innerHTML = "";
-      return;
-    }
-
-    // Keep all fixtures that belong to those GWs (handles double GWs)
-    const shown = fixtures.filter((fx) => fx.event != null && seenGWs.has(fx.event));
-
-    // Build chips, inserting a GW-divider whenever the GW changes
-    let lastGW: number | null = null;
     const parts: string[] = [];
 
-    parts.push('<span class="pmh-fix-label">Next 5 GWs</span>');
+    for (const gw of upcomingGWs) {
+      const gwFxs = gwFixtures.get(gw);
 
-    for (const fx of shown) {
-      const gw = fx.event!;
-      if (gw !== lastGW) {
-        parts.push(`<span class="pmh-fix-gw-sep">GW${gw}</span>`);
-        lastGW = gw;
+      if (!gwFxs || !gwFxs.length) {
+        // Blank GW — same-sized card, shows GW number + "Blank"
+        parts.push(makeChipHtml(
+          `<span class="pmh-fix-chip__gw-top">GW${gw}</span>`,
+          `<span class="pmh-fix-chip__blank-label">Blank</span>`,
+          "pmh-fix-chip--blank",
+          `GW${gw}: Blank gameweek`,
+        ));
+      } else {
+        for (const fx of gwFxs) {
+          const oppTeamId = fx.is_home ? fx.team_a : fx.team_h;
+          const team = teamMap.get(oppTeamId);
+          const abbr = team?.short_name ?? String(oppTeamId);
+          const venue = fx.is_home ? "H" : "A";
+          const badgeHtml = team?.code
+            ? `<img class="pmh-fix-chip__badge" src="https://resources.premierleague.com/premierleague/badges/t${team.code}.png" alt="${abbr}" width="16" height="16" loading="lazy" />`
+            : "";
+
+          parts.push(makeChipHtml(
+            `${badgeHtml}<span class="pmh-fix-chip__opp">${abbr}</span>`,
+            `<span class="pmh-fix-chip__gw">GW${gw}</span><span class="pmh-fix-chip__venue pmh-fix-chip__venue--${venue.toLowerCase()}">${venue}</span>`,
+            "",
+            `GW${gw}: ${abbr} (${venue})`,
+          ));
+        }
       }
-
-      const oppTeamId = fx.is_home ? fx.team_a : fx.team_h;
-      const team = teamMap.get(oppTeamId);
-      const abbr = team?.short_name ?? String(oppTeamId);
-      const venue = fx.is_home ? "H" : "A";
-      const badgeHtml = team?.code
-        ? `<img class="pmh-fix-chip__badge" src="https://resources.premierleague.com/premierleague/badges/t${team.code}.png" alt="${abbr}" width="20" height="20" loading="lazy" />`
-        : "";
-
-      parts.push(
-        `<div class="pmh-fix-chip" title="GW${gw}: ${abbr} (${venue})">
-          ${badgeHtml}
-          <span class="pmh-fix-chip__opp">${abbr}</span>
-          <span class="pmh-fix-chip__venue pmh-fix-chip__venue--${venue.toLowerCase()}">${venue}</span>
-        </div>`,
-      );
     }
 
     fixturesEl.innerHTML = parts.join("");
