@@ -549,6 +549,49 @@ describe('applyAutoSubsAndMultipliers - captain eligibility', () => {
     const p7 = result.find(p => p.playerId === 7)!;
     expect(p7.multiplier).toBe(3);
   });
+
+  /**
+   * Regression test for the Haaland/Bruno repro scenario:
+   * Haaland (captain, FWD, position 9) is confirmed DNP (0 min, Fin).
+   * Bruno Fernandes (vice-captain, MID, position 8) played 90 min and earned 13 points.
+   * Verifies the correct behavior: Bruno gets ×2 multiplier → 13×2 = 26 pts.
+   */
+  it('vice-captain (Bruno) gets ×2 when captain (Haaland) is confirmed DNP — repro case', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      // Bruno Fernandes — vice-captain, played 90 min, 13 pts
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }),
+      // Haaland — captain, did not play (0 min, finished game)
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes:  0, status: 'Fin', is_captain: true }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'DEF', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    // Haaland (captain, DNP) — should be OUT with multiplier 0
+    const haaland = result.find(p => p.playerId === 9)!;
+    expect(haaland.multiplier).toBe(0);
+    expect(haaland.autoSubStatus).toBe('OUT');
+
+    // Bruno (vice-captain, played) — should get ×2 multiplier
+    const bruno = result.find(p => p.playerId === 8)!;
+    expect(bruno.multiplier).toBe(2);
+
+    // Points should effectively be doubled: 13 × 2 = 26
+    const brunoLiveTotal = 13;
+    expect(brunoLiveTotal * bruno.multiplier).toBe(26);
+  });
 });
 
 describe('applyAutoSubsAndMultipliers - formation rules', () => {

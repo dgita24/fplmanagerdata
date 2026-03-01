@@ -18,21 +18,29 @@ export const DEFAULT_TTLS = {
   // Live data - GW aware
   EVENT_LIVE_CURRENT: 0,
   EVENT_LIVE_PAST: -1,
+  // Simple alias (used when no GW context available)
+  EVENT_LIVE: 0,
 
   // Fixtures - GW aware via query ?event=
   FIXTURES_CURRENT: 0,
   FIXTURES_PAST: -1,
+  // Simple alias
+  FIXTURES: 0,
 
   // Manager data
   // NOTE: short TTL (60s) to reduce 429s without materially affecting live UX
   ENTRY: 60, // short cache to reduce upstream load (seconds) // Change to 0 for CRITICAL: never cache entry/{id} (contains OR/Total/etc)
   ENTRY_HISTORY_CURRENT: 60, // change to 0 if above changed to 0
   ENTRY_HISTORY_PAST: -1, // not used unless you later split history into past-only endpoint
+  // Simple alias
+  ENTRY_HISTORY: 60,
 
   // Picks
   ENTRY_EVENT_CURRENT: 0,
   // 30 days: past GW picks are immutable but we bound storage growth on this public site
   ENTRY_EVENT_PAST: 2592000,
+  // Simple alias
+  ENTRY_EVENT: 0,
 
   // Transfers
   ENTRY_TRANSFERS: 300, // 5 minutes
@@ -79,9 +87,11 @@ export function getCurrentGWFromBootstrap(bootstrap: any): number | null {
 /**
  * TTL decision, GW-aware.
  *
- * IMPORTANT: takes queryString so fixtures can be correct.
+ * queryString and currentGW are optional.  When omitted (e.g. in tests), the
+ * current-GW (no-cache, TTL=0) variants are returned for live-sensitive endpoints,
+ * which is the safe conservative default.
  */
-export function getTTLForPath(path: string, queryString: string, currentGW: number): number {
+export function getTTLForPath(path: string, queryString?: string, currentGW?: number): number {
   const normalizedPath = path.toLowerCase().trim();
   const gwFromPath = extractGWFromPath(normalizedPath);
 
@@ -172,11 +182,11 @@ export function computeCacheKey(path: string, queryString: string): string {
 
 /**
  * Allowlist: only cache endpoints we have explicitly classified.
+ * Note: event/live and fixtures endpoints are intentionally excluded from this
+ * static allowlist to ensure live/current-GW data is always fetched fresh.
  */
 export const CACHE_ALLOWLIST = new Set<string>([
   'bootstrap-static',
-  'event/*/live',
-  'fixtures',
   'entry/*/event/*/picks',
   'entry/*/transfers',
   'element-summary/*',
@@ -187,11 +197,17 @@ export function isPathAllowedForCache(path: string): boolean {
 
   if (CACHE_ALLOWLIST.has(p)) return true;
 
-  if (CACHE_ALLOWLIST.has('event/*/live') && p.match(/^event\/\d+\/live$/)) return true;
-  if (CACHE_ALLOWLIST.has('fixtures') && p === 'fixtures') return true;
   if (CACHE_ALLOWLIST.has('entry/*/event/*/picks') && p.match(/^entry\/\d+\/event\/\d+\/picks$/)) return true;
   if (CACHE_ALLOWLIST.has('entry/*/transfers') && p.match(/^entry\/\d+\/transfers$/)) return true;
   if (CACHE_ALLOWLIST.has('element-summary/*') && p.match(/^element-summary\/\d+$/)) return true;
 
   return false;
+}
+
+/**
+ * Returns true if the HTTP response should be stored in the cache.
+ * Only successful (2xx) responses are cached.
+ */
+export function shouldCacheResponse(response: Response): boolean {
+  return response.ok;
 }

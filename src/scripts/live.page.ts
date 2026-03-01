@@ -1630,8 +1630,15 @@ function buildBreakdownRows(
 
       lastUpdatedEl.textContent = `Updated: ${new Date(snap!.ts).toLocaleTimeString()}`;
 
-      // Cached-until-refresh: never auto-refresh
       loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers (cached)</span>`;
+
+      // For the current/live GW, always background-refresh so captain/VC multipliers
+      // and live points reflect the latest fixture results (e.g. captain confirmed DNP
+      // after snapshot was saved — vice-captain doubling must be re-evaluated).
+      // Past-GW snapshots are immutable so no refresh is needed.
+      if (Number(gw) === Number(latestGW)) {
+        loadLive(managerIds, gw, { force: false, background: true });
+      }
       return;
 
     }
@@ -1663,8 +1670,14 @@ function buildBreakdownRows(
         renderLiveFromState();
         lastUpdatedEl.textContent = `Updated: ${new Date(snap!.ts).toLocaleTimeString()}`;
 
-        // Cached-until-refresh: never auto-refresh
         loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers (cached)</span>`;
+
+        // For the current/live GW, always background-refresh so captain/VC multipliers
+        // reflect the latest fixture results (e.g. captain confirmed DNP after snapshot
+        // was saved — vice-captain doubling must be re-evaluated).
+        if (Number(gw) === Number(latestGW)) {
+          loadLive(managerIds, gw, { force: false, background: true });
+        }
         return;
 
       }

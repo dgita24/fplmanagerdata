@@ -58,6 +58,7 @@ export async function getOrSet(
 
   const kv = getKV(env);
   if (!kv) {
+    console.warn('Caching enabled but Cloudflare cache API not available. Using passthrough.');
     const res = await fetcher();
     return withHeaders(res, { ...baseHeaders, "X-Cache-Status": "NO_KV" });
   }
@@ -100,5 +101,24 @@ export async function getOrSet(
     console.error("[CACHE] KV error:", err);
     const res = await fetcher();
     return withHeaders(res, { ...baseHeaders, "X-Cache-Status": "ERROR" });
+  }
+}
+
+/**
+ * Attempts to delete a key from the KV cache.
+ * Returns true if the key was successfully deleted, false if cache is disabled or unavailable.
+ */
+export async function clearCache(key: string, env?: AnyEnv): Promise<boolean> {
+  if (!isCacheEnabled(env)) return false;
+
+  const kv = getKV(env);
+  if (!kv) return false;
+
+  try {
+    await kv.delete(key);
+    return true;
+  } catch (err) {
+    console.error("[CACHE] clearCache error:", err);
+    return false;
   }
 }
