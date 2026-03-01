@@ -87,11 +87,11 @@
 }
 
 .pe-refresh {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: inherit;
+  background: var(--color-primary);
+  border: none;
+  color: white;
   border-radius: var(--radius-md);
-  height: 36px;
+  height: 30px;
   padding: 0 var(--space-2);
   cursor: pointer;
   display: inline-flex;
@@ -102,7 +102,7 @@
 }
 
 .pe-refresh:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--color-primary-hover);
 }
 
 /* ---- Filters bar ---- */
@@ -400,7 +400,11 @@
   }
 
   .pe-pos-group {
-    flex-shrink: 1;
+    width: 100%;
+  }
+
+  .pe-pos-btn {
+    flex: 1;
   }
 }
 
@@ -413,12 +417,40 @@
   max-height: none;
   box-shadow: none;
   z-index: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  width: 100%;               /* override desktop width: min(860px, 96vw) to fix centering */
+  background: transparent;   /* each section styled as its own card */
+  border: none;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
 }
 
+/* Filter controls card: header row + filter bar merged */
+#player-explorer-sheet.pe-inline .pe-header {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+#player-explorer-sheet.pe-inline .pe-filters {
+  border: 1px solid var(--color-border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background: var(--color-surface);
+}
+
+/* Player data table: separate card */
 #player-explorer-sheet.pe-inline .pe-body {
-  overflow-y: visible;
+  margin-top: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+/* Desktop: constrain table card height so it scrolls vertically */
+@media (min-width: 640px) {
+  #player-explorer-sheet.pe-inline .pe-body {
+    overflow-y: auto;
+    max-height: 70vh;
+  }
 }
