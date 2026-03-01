@@ -395,7 +395,7 @@ const { inline = false } = Astro.props;
       { key: "goals_conceded", label: "GC",    title: "Goals Conceded", numeric: true },
       { key: "xgc",           label: "xGC",  title: "Expected Goals Conceded",
         fn: el => parseFloat((el as any).expected_goals_conceded ?? "0").toFixed(2), numeric: true },
-      { key: "defcon",         label: "DC★",
+      { key: "defcon",         label: "DC",
         title: `DEFCON points ${DEFCON_NOTE}`,
         fn: el => defconLoaded ? (defconMap.get(el.id) ?? 0) : computeProxyDEFCON(el),
         numeric: true },
