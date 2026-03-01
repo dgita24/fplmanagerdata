@@ -347,7 +347,7 @@ const { inline = false } = Astro.props;
     if (!bootstrapData) return;
     const sorted = [...bootstrapData.teams].sort((a, b) => a.name.localeCompare(b.name));
     teamFilter.innerHTML = '<option value="">All Teams</option>' +
-      sorted.map(t => `<option value="${t.id}">${t.short_name} – ${t.name}</option>`).join("");
+      sorted.map(t => `<option value="${t.id}">${t.name}</option>`).join("");
   }
 
   // ----------------------------------------------------------------
