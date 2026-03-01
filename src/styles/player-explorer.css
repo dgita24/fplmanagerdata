@@ -403,3 +403,22 @@
     flex-shrink: 1;
   }
 }
+
+/* ---- Inline mode (in-page table, not a modal overlay) ---- */
+#player-explorer-sheet.pe-inline {
+  position: static;
+  transform: none;
+  transition: none;
+  height: auto;
+  max-height: none;
+  box-shadow: none;
+  z-index: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+#player-explorer-sheet.pe-inline .pe-body {
+  overflow-y: visible;
+}
