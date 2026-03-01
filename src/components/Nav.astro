@@ -47,21 +47,23 @@ const navLinks = [
         </li>
       </ul>
 
-      <div class="theme-toggle-row">
-        <span class="nav-link nav-link--no-hover">
-          <span class="nav-link-emoji">🎨</span>
-          Theme
-        </span>
-        <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="Toggle theme">
-          <span class="theme-icon theme-icon--light">☀️</span>
-          <span class="theme-icon theme-icon--dark">🌙</span>
-          <span class="theme-toggle-slider"></span>
-        </button>
-      </div>
+      <div class="nav-secondary">
+        <div class="theme-toggle-row">
+          <span class="nav-link nav-link--no-hover">
+            <span class="nav-link-emoji">🎨</span>
+            Theme
+          </span>
+          <button id="theme-toggle" class="theme-toggle-btn" type="button" aria-label="Toggle theme">
+            <span class="theme-icon theme-icon--light">☀️</span>
+            <span class="theme-icon theme-icon--dark">🌙</span>
+            <span class="theme-toggle-slider"></span>
+          </button>
+        </div>
 
-      <!-- Desktop only auth -->
-      <div class="nav-auth-desktop" id="nav-auth-desktop">
-        <a href="/login" class="btn btn--neutral btn--small">Login</a>
+        <!-- Desktop only auth -->
+        <div class="nav-auth-desktop" id="nav-auth-desktop">
+          <a href="/login" class="btn btn--neutral btn--small">Login</a>
+        </div>
       </div>
     </div>
   </nav>
@@ -312,6 +314,10 @@ const navLinks = [
   }
 
   @media (min-width: 768px) {
+    .nav-brand {
+      display: none;
+    }
+
     .menu-toggle {
       display: none;
     }
@@ -319,14 +325,14 @@ const navLinks = [
     .nav-menu {
       display: flex;
       position: static;
-      flex-direction: row;
+      flex-direction: column;
       align-items: center;
-      gap: var(--space-4);
+      gap: var(--space-3);
       background: transparent;
       padding: 0;
       overflow: visible;
       min-width: 0;
-      flex-wrap: wrap;
+      width: 100%;
     }
 
     .nav-menu-header {
@@ -336,6 +342,7 @@ const navLinks = [
     .nav-links {
       flex-direction: row;
       flex-wrap: wrap;
+      justify-content: center;
       gap: var(--space-1);
     }
 
@@ -362,6 +369,14 @@ const navLinks = [
       display: flex;
       align-items: center;
       gap: var(--space-3);
+    }
+
+    .nav-secondary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-4);
+      flex-wrap: wrap;
     }
   }
 </style>
