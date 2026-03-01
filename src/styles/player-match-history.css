@@ -46,9 +46,6 @@
 
 /* ---- Header ---- */
 .pmh-header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
   padding: var(--space-3);
   padding-top: calc(var(--space-3) + env(safe-area-inset-top));
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -56,9 +53,13 @@
 
 .pmh-header__row {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  align-items: center;
   gap: var(--space-2);
+}
+
+.pmh-header__titles {
+  flex: 1;
+  min-width: 0;
 }
 
 .pmh-header__title {
@@ -101,7 +102,7 @@
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-md);
   padding: 3px;
-  align-self: flex-start;
+  flex-shrink: 0;
 }
 
 .pmh-filter__btn {

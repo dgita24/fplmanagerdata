@@ -20,16 +20,16 @@
 >
   <div class="pmh-header">
     <div class="pmh-header__row">
-      <div>
+      <div class="pmh-header__titles">
         <div class="pmh-header__title" id="pmh-title">Match History</div>
         <div class="pmh-header__subtitle" id="pmh-subtitle"></div>
       </div>
+      <div class="pmh-filter" role="group" aria-label="Match venue filter" id="pmh-filter">
+        <button type="button" class="pmh-filter__btn is-active" data-filter="all" aria-pressed="true">All</button>
+        <button type="button" class="pmh-filter__btn" data-filter="home" aria-pressed="false">Home</button>
+        <button type="button" class="pmh-filter__btn" data-filter="away" aria-pressed="false">Away</button>
+      </div>
       <button type="button" id="pmh-close-btn" class="pmh-close" aria-label="Close Match History">✕</button>
-    </div>
-    <div class="pmh-filter" role="group" aria-label="Match venue filter" id="pmh-filter">
-      <button type="button" class="pmh-filter__btn is-active" data-filter="all" aria-pressed="true">All</button>
-      <button type="button" class="pmh-filter__btn" data-filter="home" aria-pressed="false">Home</button>
-      <button type="button" class="pmh-filter__btn" data-filter="away" aria-pressed="false">Away</button>
     </div>
   </div>
 
@@ -194,11 +194,10 @@
         const bootstrap = await getBootstrapData();
         teamMap = new Map(bootstrap.teams.map((t) => [t.id, t]));
 
-        // Upcoming 5 GW ids for the fixture strip (includes BGW slots)
+        // All remaining GW ids for the fixture strip (excludes finished & current)
         upcomingGWs = bootstrap.events
-          .filter((ev) => !ev.finished)
+          .filter((ev) => !ev.finished && !ev.is_current)
           .sort((a, b) => a.id - b.id)
-          .slice(0, 5)
           .map((ev) => ev.id);
 
         // Also grab element type for the current player
