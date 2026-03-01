@@ -763,3 +763,239 @@ describe('applyAutoSubsAndMultipliers - formation rules', () => {
     expect(activeCount).toBe(11);
   });
 });
+
+describe('applyAutoSubsAndMultipliers - live-match bench autosub (ON badge timing)', () => {
+  /**
+   * Core fix: bench player in a LIVE match who has already played (minutes > 0) should
+   * receive autoSubStatus='IN' and multiplier=1 when the starter is confirmed DNP.
+   * Previously the code broke on any non-Fin bench player, preventing the ON badge.
+   */
+  it('awards ON badge to a bench player who is Live with minutes > 0 when starter is DNP', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      // Haaland (FWD, starter): confirmed DNP — status Fin, minutes 0
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      // Anderson (MID, bench 12): in a live match, already playing (minutes 45)
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes: 45, status: 'Live' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'NS' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'NS' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    // Haaland (p11): confirmed DNP — must be OUT
+    const p11 = result.find(p => p.playerId === 11)!;
+    expect(p11.autoSubStatus).toBe('OUT');
+    expect(p11.multiplier).toBe(0);
+
+    // Anderson (p12): live match, 45 min — should be IN with multiplier 1
+    const p12 = result.find(p => p.playerId === 12)!;
+    expect(p12.autoSubStatus).toBe('IN');
+    expect(p12.multiplier).toBe(1);
+
+    // Exactly 11 active players
+    const activeCount = result.filter(p => p.multiplier > 0).length;
+    expect(activeCount).toBe(11);
+  });
+
+  /**
+   * A bench player in a Live match with 0 minutes must NOT be auto-subbed in — we
+   * cannot yet confirm they are DNP, so the slot stays vacant and no subsequent bench
+   * player should leapfrog them.
+   */
+  it('does not award ON badge when bench player is Live with 0 minutes (DNP not confirmed)', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      // Starter DNP
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      // Bench 12: live match but hasn't played yet (0 min) — can't confirm DNP
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Live' }),
+      // Bench 13: live with 45 min — would be valid if 12 were skipped (but 12 blocks it)
+      makePick({ playerId: 13, position: 13, playingPosition: 'FWD', minutes: 45, status: 'Live' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'NS' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    // Bench 12 blocks any autosub — no one should have IN status
+    const p12 = result.find(p => p.playerId === 12)!;
+    expect(p12.autoSubStatus).toBeNull();
+    expect(p12.multiplier).toBe(0);
+
+    const p13 = result.find(p => p.playerId === 13)!;
+    expect(p13.autoSubStatus).toBeNull();
+    expect(p13.multiplier).toBe(0);
+
+    // Only 10 active outfield players (GK + 9 starters)
+    const activeCount = result.filter(p => p.multiplier > 0).length;
+    expect(activeCount).toBe(10);
+  });
+
+  /**
+   * A bench player with status NS (not started) must NOT be awarded ON and must also
+   * prevent any subsequent bench player from being considered, same as the Live-0-min case.
+   */
+  it('does not award ON badge when bench player is NS and blocks subsequent bench players', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      // Starter DNP
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      // Bench 12: NS — blocks the autosub chain
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'NS' }),
+      // Bench 13: finished and played — would be valid, but is blocked by bench 12
+      makePick({ playerId: 13, position: 13, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    // Bench 12 (NS) blocks — no one gets IN
+    const p12 = result.find(p => p.playerId === 12)!;
+    expect(p12.autoSubStatus).toBeNull();
+    expect(p12.multiplier).toBe(0);
+
+    const p13 = result.find(p => p.playerId === 13)!;
+    expect(p13.autoSubStatus).toBeNull();
+    expect(p13.multiplier).toBe(0);
+
+    // 10 active players: GK + 9 starters
+    const activeCount = result.filter(p => p.multiplier > 0).length;
+    expect(activeCount).toBe(10);
+  });
+
+  /**
+   * Confirmed DNP bench player (Fin, 0 min) should be skipped and the NEXT bench player
+   * who is Live with minutes > 0 should be autosubbed in instead.
+   */
+  it('skips a DNP bench player and subs in the next Live bench player with minutes > 0', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      // Starter DNP (Haaland / FWD)
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      // Bench 12: DNP (finished, 0 min) — skip
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      // Bench 13: live match, Muñoz / playing (45 min) — should come on
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes: 45, status: 'Live' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'NS' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    const p12 = result.find(p => p.playerId === 12)!;
+    expect(p12.autoSubStatus).toBeNull(); // confirmed DNP bench player
+    expect(p12.multiplier).toBe(0);
+
+    // Muñoz (p13): Live, 45 min — should be the sub
+    const p13 = result.find(p => p.playerId === 13)!;
+    expect(p13.autoSubStatus).toBe('IN');
+    expect(p13.multiplier).toBe(1);
+
+    // 11 active players
+    const activeCount = result.filter(p => p.multiplier > 0).length;
+    expect(activeCount).toBe(11);
+  });
+
+  /**
+   * LtP consistency: when the autosub bench player is Live with minutes > 0,
+   * they should NOT contribute to LtP (they're already playing).
+   *
+   * Setup mirrors the reported "Cameron: LtP expected 3 (Gabriel/Timber/Rice)" scenario.
+   * Formation 3-5-2:
+   *   - GK + 3 DEF played, 2 MID played (cap/vc), 3 MID not started (LtP candidates),
+   *     1 FWD played, 1 FWD = Haaland (DNP)
+   *   - Bench 12: Anderson (MID, Live, 45 min) — effective autosub
+   *
+   * After the fix the effective XI is 11 players. The 3 NS MID starters are the only
+   * players still "left to play" (multiplier > 0, minutes = 0, status ≠ 'Fin').
+   * Anderson (multiplier=1, min=45) is excluded from LtP by the min > 0 check.
+   */
+  it('LtP scenario: autosub playing Live counts as active, not left-to-play', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      // Captain / vice-captain played
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_captain: true }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }),
+      // 3 NS MID starters — Gabriel / Timber / Rice proxies (these are the expected LtP)
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes:  0, status: 'NS' }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes:  0, status: 'NS' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'MID', minutes:  0, status: 'NS' }),
+      // Second FWD played
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      // Haaland (FWD): confirmed DNP — the only vacant starter slot
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      // Anderson (MID, bench 12): live match, already playing — valid 3-6-1 formation
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes: 45, status: 'Live' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'NS' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'NS' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    // Anderson (p12): autosub confirmed — IN, multiplier=1, already playing (minutes=45)
+    const p12 = result.find(p => p.playerId === 12)!;
+    expect(p12.autoSubStatus).toBe('IN');
+    expect(p12.multiplier).toBe(1);
+
+    // Haaland (p11): confirmed OUT
+    const p11 = result.find(p => p.playerId === 11)!;
+    expect(p11.autoSubStatus).toBe('OUT');
+    expect(p11.multiplier).toBe(0);
+
+    // Effective XI = 11 players active
+    const activeCount = result.filter(p => p.multiplier > 0).length;
+    expect(activeCount).toBe(11);
+
+    // Players "left to play" (multiplier>0 AND minutes===0 AND status!='Fin'):
+    //   p7, p8, p9 (NS MID starters) → 3 players (Gabriel/Timber/Rice proxies)
+    // Anderson (p12) has minutes=45 → NOT left to play
+    const leftToPlay = result.filter(
+      p => (p.multiplier ?? 0) > 0 && p.minutes === 0 && p.status !== 'Fin'
+    );
+    expect(leftToPlay).toHaveLength(3);
+    expect(leftToPlay.every(p => [7, 8, 9].includes(p.playerId))).toBe(true);
+  });
+});

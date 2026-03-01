@@ -393,10 +393,14 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   for (const cand of outfieldBench) {
     if (activeOutfield.length >= 10) break;
 
-    const matchFinished = cand.status === "Fin";
-    if (!matchFinished) break;
-
-    if (cand.minutes === 0) continue;
+    // Break if the bench player's match hasn't started (can't confirm participation order yet).
+    // Also break if the match is live but the player has 0 min: we can't confirm DNP yet,
+    // so we must not skip this player to use the next bench player.
+    if (cand.status === "NS") break;
+    if (cand.minutes === 0) {
+      if (cand.status !== "Fin") break; // live game, 0 min — can't confirm DNP yet
+      continue; // finished, 0 min — confirmed DNP, try next bench player
+    }
 
     const testOutfield = [...activeOutfield, cand];
     const defCount = testOutfield.filter(p => p.playingPosition === "DEF").length;
@@ -420,8 +424,10 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
       let usableBench: any[] = [];
       for (let j = remainingIdx + 1; j < outfieldBench.length; j++) {
         const p = outfieldBench[j];
-        if (p.status !== "Fin") break;
+        if (p.status === "NS") break;
+        if (p.minutes === 0 && p.status !== "Fin") break; // live, 0 min — can't confirm DNP
         if (p.minutes > 0) usableBench.push(p);
+        // Fin + 0 min = confirmed DNP: continue without adding to usable
       }
 
       const availDef = usableBench.filter(p => p.playingPosition === "DEF").length;
