@@ -286,6 +286,7 @@
           `GW${gw}: Blank gameweek`,
         ));
       } else {
+        const isDGW = gwFxs.length > 1;
         for (const fx of gwFxs) {
           const oppTeamId = fx.is_home ? fx.team_a : fx.team_h;
           const team = teamMap.get(oppTeamId);
@@ -298,8 +299,8 @@
           parts.push(makeChipHtml(
             `${badgeHtml}<span class="pmh-fix-chip__opp">${abbr}</span>`,
             `<span class="pmh-fix-chip__gw">GW${gw}</span><span class="pmh-fix-chip__venue pmh-fix-chip__venue--${venue.toLowerCase()}">${venue}</span>`,
-            "",
-            `GW${gw}: ${abbr} (${venue})`,
+            isDGW ? "pmh-fix-chip--dgw" : "",
+            `GW${gw}: ${abbr} (${venue})${isDGW ? " — DGW" : ""}`,
           ));
         }
       }
