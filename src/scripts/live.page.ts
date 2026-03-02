@@ -508,6 +508,14 @@ const managerDataCache = new Map<string, any>();
 
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
 
+      const rawAutoSubs = Array.isArray((picksData as any).automatic_subs)
+        ? (picksData as any).automatic_subs
+        : [];
+
+      const subInIds = new Set<number>(rawAutoSubs.map((s: any) => Number(s.element_in)).filter(Boolean));
+      const subOutIds = new Set<number>(rawAutoSubs.map((s: any) => Number(s.element_out)).filter(Boolean));
+
+
       const picks = rawPicks.map((p: any) => {
         const player = playerCache.get(p.element) || { name: "", position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
@@ -532,7 +540,13 @@ const managerDataCache = new Map<string, any>();
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+      const computedTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+
+      const finalTeam = computedTeam.map(p => ({
+        ...p,
+        autoSubStatus: subOutIds.has(p.playerId) ? "OUT" : subInIds.has(p.playerId) ? "IN" : null
+      }));
+
 
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
 
