@@ -508,6 +508,14 @@ const managerDataCache = new Map<string, any>();
 
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
 
+      // gwComplete: true when every fixture this GW is fully (or provisionally) finished.
+      // Passed to applyAutoSubsAndMultipliers so that captain/VC DNP detection falls back to
+      // checking minutes === 0 alone, without requiring status === "Fin" (which depends on the
+      // teamStatusCache being fully populated — a condition that may not hold for past GWs).
+      const gwComplete =
+        fixturesCache.length > 0 &&
+        fixturesCache.every(fx => fx.finished || fx.finished_provisional);
+
       const picks = rawPicks.map((p: any) => {
         const player = playerCache.get(p.element) || { name: "", position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
@@ -532,7 +540,7 @@ const managerDataCache = new Map<string, any>();
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, gwComplete);
 
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
 
@@ -1125,6 +1133,14 @@ function buildBreakdownRows(
 
       const chipCode = chipPlayed || "None";
 
+      // gwComplete: true when every fixture this GW is fully (or provisionally) finished.
+      // Passed to applyAutoSubsAndMultipliers so that captain/VC DNP detection falls back to
+      // checking minutes === 0 alone, without requiring status === "Fin" (which depends on the
+      // teamStatusCache being fully populated — a condition that may not hold for past GWs).
+      const gwComplete =
+        fixturesCache.length > 0 &&
+        fixturesCache.every(fx => fx.finished || fx.finished_provisional);
+
       const picks = rawPicks.map((p: any) => {
         const player = playerCache.get(p.element) || { name: "Unknown", position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
@@ -1146,7 +1162,7 @@ function buildBreakdownRows(
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, gwComplete);
 
       const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
       const originalStarters = sorted.slice(0, 11);

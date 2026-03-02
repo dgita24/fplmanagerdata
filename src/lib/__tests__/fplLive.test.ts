@@ -551,6 +551,159 @@ describe('applyAutoSubsAndMultipliers - captain eligibility', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// gwComplete flag: completed-gameweek captain/VC multiplier robustness
+// ---------------------------------------------------------------------------
+describe('applyAutoSubsAndMultipliers - gwComplete flag', () => {
+  /**
+   * Root-cause regression: after all GW fixtures finish, teamStatusCache may not reflect
+   * "Fin" for every player (e.g. blank-GW team, stale cache, or data edge case).
+   *
+   * With gwComplete=true, captain DNP detection must use minutes===0 alone — no status check —
+   * so the VC always receives the ×2 multiplier for a completed GW.
+   */
+  it('VC gets ×2 when captain has 0 min and status "NS" but gwComplete=true', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      // Captain: 0 minutes, status "NS" (blank-GW team or stale teamStatusCache)
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'NS',  is_captain: true }),
+      // VC: played
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 75, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None', /* gwComplete= */ true);
+
+    // Captain (status="NS", 0 min) treated as DNP when gwComplete
+    const p6 = result.find(p => p.playerId === 6)!;
+    expect(p6.multiplier).toBe(0);
+    expect(p6.autoSubStatus).toBe('OUT');
+
+    // VC gets ×2
+    const p7 = result.find(p => p.playerId === 7)!;
+    expect(p7.multiplier).toBe(2);
+  });
+
+  /**
+   * Confirm the existing "Fin + 0 min" path still works with gwComplete=true
+   * (regression guard: no double-count or other side effects).
+   */
+  it('VC gets ×2 when captain has 0 min and status "Fin" with gwComplete=true (no regression)', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'Fin', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 75, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None', /* gwComplete= */ true);
+
+    const p6 = result.find(p => p.playerId === 6)!;
+    expect(p6.multiplier).toBe(0);
+    expect(p6.autoSubStatus).toBe('OUT');
+
+    const p7 = result.find(p => p.playerId === 7)!;
+    expect(p7.multiplier).toBe(2);
+  });
+
+  /**
+   * With gwComplete=false (default / active GW), captain "NS" with 0 min must NOT trigger
+   * VC promotion — captain retains ×2 until confirmed DNP.
+   */
+  it('captain NS with 0 min keeps ×2 and VC stays ×1 when gwComplete=false (active GW guard)', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'NS',  is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 75, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    // gwComplete defaults to false
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    // Captain (NS) keeps ×2 — not yet confirmed DNP
+    const p6 = result.find(p => p.playerId === 6)!;
+    expect(p6.multiplier).toBe(2);
+    expect(p6.autoSubStatus).toBeNull();
+
+    // VC stays ×1
+    const p7 = result.find(p => p.playerId === 7)!;
+    expect(p7.multiplier).toBe(1);
+  });
+
+  /**
+   * gwComplete=true: bench player with "NS" status and 0 min is treated as DNP (skipped),
+   * allowing the NEXT valid bench player to sub in.
+   */
+  it('gwComplete=true: bench player with status "NS" and 0 min is skipped (DNP), next played bench player subs in', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      // DNP starter — needs a sub
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      // Bench: position-12 has "NS" status and 0 min (no fixture / stale data) → DNP when gwComplete
+      makePick({ playerId: 12, position: 12, playingPosition: 'FWD', minutes:  0, status: 'NS'  }),
+      // position-13 played → should sub in
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None', /* gwComplete= */ true);
+
+    // p12 is DNP (NS + 0 min with gwComplete) — should NOT be subbed in
+    const p12 = result.find(p => p.playerId === 12)!;
+    expect(p12.autoSubStatus).toBeNull();
+    expect(p12.multiplier).toBe(0);
+
+    // p13 played and should have been subbed in as replacement
+    const p13 = result.find(p => p.playerId === 13)!;
+    expect(p13.autoSubStatus).toBe('IN');
+    expect(p13.multiplier).toBe(1);
+  });
+});
+
 describe('applyAutoSubsAndMultipliers - formation rules', () => {
   /**
    * Regression test: a DNP bench player sitting between two valid replacements must
