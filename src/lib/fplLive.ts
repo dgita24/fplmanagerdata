@@ -332,26 +332,28 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   const starterVcId = starters.find(p => p.is_vice_captain)?.playerId ?? null;
 
   // Find the actual starter object (contains minutes + status)
-  const starterCap = starterCapId !== null ? starters.find(p => p.playerId === starterCapId) : null;
+  const starterCap =
+    starterCapId !== null ? starters.find(p => p.playerId === starterCapId) : null;
 
-  // CRITICAL RULE FIX:
-  // Vice-captain takes over ONLY when the captain is confirmed "did not play" for the gameweek.
-  // In this app, that means:
-  // - captain's team is finished (or provisionally finished, depending on includeFinishedProvisional used upstream)
-  // - AND captain has 0 minutes
-  //
-  // IMPORTANT: If captain is "NS" (not started) or Live with 0 minutes, we must NOT switch to VC yet.
-  // This prevents the bug where VC is doubled while captain hasn't played *yet*.
-  // The captain retains their capFactor multiplier until confirmed DNP.
-  const captainResolvedDidNotPlay = !!starterCap && starterCap.status === "Fin" && starterCap.minutes === 0;
+  // Vice-captain takes over ONLY when captain is confirmed DNP
+  const captainResolvedDidNotPlay =
+    !!starterCap && starterCap.status === "Fin" && starterCap.minutes === 0;
 
-  // Captain is eligible for capFactor unless they are confirmed DNP.
-  // When captain is confirmed DNP, VC immediately inherits captaincy regardless of whether
-  // the VC has played yet — this ensures the ×2 multiplier is assigned for LtP and points
-  // once the captain is confirmed out, even if the VC's match hasn't started.
-  const eligibleCaptainId = captainResolvedDidNotPlay
-    ? starterVcId
-    : starterCapId;
+  const eligibleCaptainId = captainResolvedDidNotPlay ? starterVcId : starterCapId;
+
+  // TEMP DEBUG (remove once confirmed)
+  // This will print once per manager load, so expect a lot of lines.
+  // Filter console by "CAP DEBUG" to find them.
+  console.log("CAP DEBUG", {
+    chipCode,
+    starterCapId,
+    starterVcId,
+    cap: starterCap
+      ? { playerId: starterCap.playerId, minutes: starterCap.minutes, status: starterCap.status }
+      : null,
+    captainResolvedDidNotPlay,
+    eligibleCaptainId
+  });
 
   if (isBB) {
     // Bench Boost: all 15 score; no autosubs. Captaincy still restricted to XI.
@@ -395,13 +397,10 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   for (const cand of outfieldBench) {
     if (activeOutfield.length >= 10) break;
 
-    // Break if the bench player's match hasn't started (can't confirm participation order yet).
-    // Also break if the match is live but the player has 0 min: we can't confirm DNP yet,
-    // so we must not skip this player to use the next bench player.
     if (cand.status === "NS") break;
     if (cand.minutes === 0) {
-      if (cand.status !== "Fin") break; // live game, 0 min — can't confirm DNP yet
-      continue; // finished, 0 min — confirmed DNP, try next bench player
+      if (cand.status !== "Fin") break;
+      continue;
     }
 
     const testOutfield = [...activeOutfield, cand];
@@ -427,19 +426,15 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
       for (let j = remainingIdx + 1; j < outfieldBench.length; j++) {
         const p = outfieldBench[j];
         if (p.status === "NS") break;
-        if (p.minutes === 0 && p.status !== "Fin") break; // live, 0 min — can't confirm DNP
+        if (p.minutes === 0 && p.status !== "Fin") break;
         if (p.minutes > 0) usableBench.push(p);
-        // Fin + 0 min = confirmed DNP: continue without adding to usable
       }
 
       const availDef = usableBench.filter(p => p.playingPosition === "DEF").length;
       const availMid = usableBench.filter(p => p.playingPosition === "MID").length;
       const availFwd = usableBench.filter(p => p.playingPosition === "FWD").length;
 
-      const canComplete =
-        availDef >= needDef &&
-        availMid >= needMid &&
-        availFwd >= needFwd;
+      const canComplete = availDef >= needDef && availMid >= needMid && availFwd >= needFwd;
 
       if (canComplete) {
         activeOutfield = testOutfield;
