@@ -12,6 +12,35 @@ import { supabase } from '../lib/supabase.ts'
   const LIVE_SNAPSHOT_KEY_PREFIX = 'fpl_live_snapshot_v1:'; // per-GW key: `${prefix}${gw}`
   const LIVE_TTL_MS = Number.POSITIVE_INFINITY; // cache until manual refresh
   const LIVE_REFRESH_THROTTLE_MS = 8 * 1000; // avoid hammering refreshes
+  const SNAPSHOT_BACKGROUND_REFRESH_DELAY_MS = 200; // delay before background refresh after snapshot restore
+
+  // ==============================
+  // Sticky captain-confirmed-DNP tracking (per manager per GW)
+  // Once a captain is confirmed DNP for a GW, this flag persists across recompute cycles
+  // so stale cache data cannot flip the VC captaincy back to the captain.
+  // ==============================
+  const CAP_DNP_KEY_PREFIX = 'fpl_cap_dnp_v1:'; // key: `${prefix}${entryId}:${gw}`
+
+  function getCapDnpSticky(entryId: number, gw: number): boolean {
+    try {
+      return localStorage.getItem(`${CAP_DNP_KEY_PREFIX}${entryId}:${gw}`) === '1';
+    } catch { return false; }
+  }
+
+  function setCapDnpSticky(entryId: number, gw: number) {
+    try {
+      localStorage.setItem(`${CAP_DNP_KEY_PREFIX}${entryId}:${gw}`, '1');
+    } catch { /* ignore quota errors */ }
+  }
+
+  function clearAllCapDnpSticky() {
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(CAP_DNP_KEY_PREFIX)) localStorage.removeItem(k);
+      }
+    } catch { /* ignore */ }
+  }
 
   type LiveSnapshot = {
     ts: number;
@@ -532,7 +561,15 @@ const managerDataCache = new Map<string, any>();
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, {
+        captainConfirmedDNP: getCapDnpSticky(entryId, gw)
+      });
+
+      // Update sticky captain-confirmed-DNP flag: once set for a GW, never flip back
+      const captainInTeam = picks.find((p: any) => p.is_captain && p.position <= 11);
+      if (captainInTeam && captainInTeam.status === "Fin" && captainInTeam.minutes === 0) {
+        setCapDnpSticky(entryId, gw);
+      }
 
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
 
@@ -1146,7 +1183,9 @@ function buildBreakdownRows(
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, {
+        captainConfirmedDNP: getCapDnpSticky(entryId, gw)
+      });
 
       const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
       const originalStarters = sorted.slice(0, 11);
@@ -1630,8 +1669,10 @@ function buildBreakdownRows(
 
       lastUpdatedEl.textContent = `Updated: ${new Date(snap!.ts).toLocaleTimeString()}`;
 
-      // Cached-until-refresh: never auto-refresh
+      // Cached-until-refresh: schedule a background refresh to correct any stale captain/VC state
+      // (e.g., if captain became confirmed DNP after snapshot was saved)
       loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers (cached)</span>`;
+      setTimeout(() => loadLive(managerIds, gw, { force: false, background: true }), SNAPSHOT_BACKGROUND_REFRESH_DELAY_MS);
       return;
 
     }
@@ -1663,8 +1704,9 @@ function buildBreakdownRows(
         renderLiveFromState();
         lastUpdatedEl.textContent = `Updated: ${new Date(snap!.ts).toLocaleTimeString()}`;
 
-        // Cached-until-refresh: never auto-refresh
+        // Cached-until-refresh: schedule a background refresh to correct stale captain/VC state
         loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${liveData.length} managers (cached)</span>`;
+        setTimeout(() => loadLive(managerIds, gw, { force: false, background: true }), SNAPSHOT_BACKGROUND_REFRESH_DELAY_MS);
         return;
 
       }
@@ -1693,13 +1735,14 @@ function buildBreakdownRows(
 
     managerDataCache.clear();
     squadPicksCache.clear();
-    // Clear ALL per-GW snapshots
+    // Clear ALL per-GW snapshots and sticky captain DNP flags
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
       if (k && k.startsWith(LIVE_SNAPSHOT_KEY_PREFIX)) {
         localStorage.removeItem(k);
       }
     }
+    clearAllCapDnpSticky();
 
     const { managerIds: ids, favouriteManagerIds: favIds } = await loadManagerIdsFromSupabase();
     managerIds = ids;

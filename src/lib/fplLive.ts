@@ -78,6 +78,32 @@ export function getTeamGwStatus(
   );
 }
 
+/**
+ * TeamFinishedForDNP: a team's fixture counts as "finished" for DNP confirmation purposes
+ * when finished === true OR finished_provisional === true.
+ */
+export function teamFinishedForDNP(
+  teamStatusCache: Map<string, TeamStatus>,
+  teamId: number,
+  gw: number
+): boolean {
+  const { finished, finishedProvisional } = getTeamGwStatus(teamStatusCache, teamId, gw);
+  return finished || finishedProvisional;
+}
+
+/**
+ * PlayerConfirmedDNP: a player is confirmed did-not-play when they have 0 minutes AND
+ * their team's fixture is finished (including finished_provisional).
+ */
+export function playerConfirmedDNP(
+  minutes: number,
+  teamId: number,
+  gw: number,
+  teamStatusCache: Map<string, TeamStatus>
+): boolean {
+  return minutes === 0 && teamFinishedForDNP(teamStatusCache, teamId, gw);
+}
+
 export function bonusFromBpsRows(bpsRows: any[]): Map<number, number> {
   const rows = (bpsRows || [])
     .filter(r => r && Number.isFinite(r.value) && Number.isFinite(r.element))
@@ -315,7 +341,11 @@ export function getPlayerLiveComputed({
   return { locked: liveTotal - projBonus, projBonus, liveTotal, status, minutes, confirmedBonus };
 }
 
-export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) {
+export function applyAutoSubsAndMultipliers(
+  teamPicks: any[],
+  chipCode: string,
+  opts?: { captainConfirmedDNP?: boolean }
+) {
   const isBB = chipCode === "BB";
   const isTC = chipCode === "TC";
   const capFactor = isTC ? 3 : 2;
@@ -332,6 +362,14 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   // Find the actual starter object (contains minutes + status)
   const starterCap = starterCapId !== null ? starters.find(p => p.playerId === starterCapId) : null;
 
+  // isStarterConfirmedDNP: identifies a confirmed DNP starter. Includes the sticky
+  // captainConfirmedDNP override for the captain, so stale data showing captain as 'NS'
+  // cannot revert the VC captaincy once the captain was confirmed absent for the GW.
+  const isStarterConfirmedDNP = (p: any) => {
+    if (opts?.captainConfirmedDNP && p.playerId === starterCapId) return true;
+    return p.minutes === 0 && p.status === "Fin";
+  };
+
   // CRITICAL RULE FIX:
   // Vice-captain takes over ONLY when the captain is confirmed "did not play" for the gameweek.
   // In this app, that means:
@@ -341,7 +379,7 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   // IMPORTANT: If captain is "NS" (not started) or Live with 0 minutes, we must NOT switch to VC yet.
   // This prevents the bug where VC is doubled while captain hasn't played *yet*.
   // The captain retains their capFactor multiplier until confirmed DNP.
-  const captainResolvedDidNotPlay = !!starterCap && starterCap.status === "Fin" && starterCap.minutes === 0;
+  const captainResolvedDidNotPlay = !!starterCap && isStarterConfirmedDNP(starterCap);
 
   // Captain is eligible for capFactor unless they are confirmed DNP.
   // When captain is confirmed DNP, VC immediately inherits captaincy regardless of whether
@@ -370,7 +408,7 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   const outfieldBench = bench.filter(p => p.playingPosition !== "GK");
 
   let activeGK = gkStarter;
-  const gkDnp = gkStarter && gkStarter.minutes === 0 && gkStarter.status === "Fin";
+  const gkDnp = gkStarter && isStarterConfirmedDNP(gkStarter);
 
   if (gkDnp && gkStarter) {
     dnpStarters.push(gkStarter.playerId);
@@ -383,8 +421,8 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
     }
   }
 
-  let activeOutfield = outfieldStarters.filter(p => !(p.minutes === 0 && p.status === "Fin"));
-  const outfieldDnp = outfieldStarters.filter(p => p.minutes === 0 && p.status === "Fin");
+  let activeOutfield = outfieldStarters.filter(p => !isStarterConfirmedDNP(p));
+  const outfieldDnp = outfieldStarters.filter(p => isStarterConfirmedDNP(p));
 
   for (const dnp of outfieldDnp) {
     dnpStarters.push(dnp.playerId);

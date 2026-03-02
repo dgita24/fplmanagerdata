@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyAutoSubsAndMultipliers, bonusFromBpsRows, getPlayerLiveComputed, getTeamGwStatus } from '../fplLive';
+import { applyAutoSubsAndMultipliers, bonusFromBpsRows, getPlayerLiveComputed, getTeamGwStatus, teamFinishedForDNP, playerConfirmedDNP } from '../fplLive';
 import type { LiveStatLine, TeamStatus } from '../fplLive';
 
 /**
@@ -997,5 +997,367 @@ describe('applyAutoSubsAndMultipliers - live-match bench autosub (ON badge timin
     );
     expect(leftToPlay).toHaveLength(3);
     expect(leftToPlay.every(p => [7, 8, 9].includes(p.playerId))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// New tests: teamFinishedForDNP and playerConfirmedDNP helpers
+// ---------------------------------------------------------------------------
+describe('fplLive - teamFinishedForDNP', () => {
+  it('returns true when finished=true', () => {
+    const cache = new Map<string, TeamStatus>([
+      ['10:1', { started: true, finished: true, finishedProvisional: false }],
+    ]);
+    expect(teamFinishedForDNP(cache, 1, 10)).toBe(true);
+  });
+
+  it('returns true when finished_provisional=true and finished=false', () => {
+    const cache = new Map<string, TeamStatus>([
+      ['10:1', { started: true, finished: false, finishedProvisional: true }],
+    ]);
+    expect(teamFinishedForDNP(cache, 1, 10)).toBe(true);
+  });
+
+  it('returns true when both finished and finished_provisional are true', () => {
+    const cache = new Map<string, TeamStatus>([
+      ['10:1', { started: true, finished: true, finishedProvisional: true }],
+    ]);
+    expect(teamFinishedForDNP(cache, 1, 10)).toBe(true);
+  });
+
+  it('returns false when fixture is still live (started but not finished)', () => {
+    const cache = new Map<string, TeamStatus>([
+      ['10:1', { started: true, finished: false, finishedProvisional: false }],
+    ]);
+    expect(teamFinishedForDNP(cache, 1, 10)).toBe(false);
+  });
+
+  it('returns false when fixture has not started (NS)', () => {
+    const cache = new Map<string, TeamStatus>([
+      ['10:1', { started: false, finished: false, finishedProvisional: false }],
+    ]);
+    expect(teamFinishedForDNP(cache, 1, 10)).toBe(false);
+  });
+
+  it('returns false for a missing team (default status)', () => {
+    const cache = new Map<string, TeamStatus>();
+    expect(teamFinishedForDNP(cache, 99, 10)).toBe(false);
+  });
+});
+
+describe('fplLive - playerConfirmedDNP', () => {
+  it('returns true when minutes=0 and team is finished', () => {
+    const cache = new Map<string, TeamStatus>([
+      ['10:1', { started: true, finished: true, finishedProvisional: false }],
+    ]);
+    expect(playerConfirmedDNP(0, 1, 10, cache)).toBe(true);
+  });
+
+  it('returns true when minutes=0 and team is finished_provisional', () => {
+    const cache = new Map<string, TeamStatus>([
+      ['10:1', { started: true, finished: false, finishedProvisional: true }],
+    ]);
+    expect(playerConfirmedDNP(0, 1, 10, cache)).toBe(true);
+  });
+
+  it('returns false when minutes=0 but team is still live', () => {
+    const cache = new Map<string, TeamStatus>([
+      ['10:1', { started: true, finished: false, finishedProvisional: false }],
+    ]);
+    expect(playerConfirmedDNP(0, 1, 10, cache)).toBe(false);
+  });
+
+  it('returns false when minutes=0 but team not started (NS)', () => {
+    const cache = new Map<string, TeamStatus>([
+      ['10:1', { started: false, finished: false, finishedProvisional: false }],
+    ]);
+    expect(playerConfirmedDNP(0, 1, 10, cache)).toBe(false);
+  });
+
+  it('returns false when player has minutes>0 even if team finished', () => {
+    const cache = new Map<string, TeamStatus>([
+      ['10:1', { started: true, finished: true, finishedProvisional: false }],
+    ]);
+    expect(playerConfirmedDNP(45, 1, 10, cache)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// New tests: finished_provisional DNP confirmation end-to-end
+// ---------------------------------------------------------------------------
+describe('fplLive - finished_provisional counts as Fin for DNP confirmation', () => {
+  /**
+   * Requirement A: TeamFinishedForDNP := finished OR finished_provisional
+   * A player in a finished_provisional fixture with 0 minutes must get status='Fin'
+   * (confirmed DNP) via getPlayerLiveComputed.
+   */
+  it('getPlayerLiveComputed returns status=Fin when finishedProvisional=true', () => {
+    const livePointsCache = new Map<number, LiveStatLine>([
+      [100, { points: 0, bonus: 0, minutes: 0 }],
+    ]);
+    const teamStatusCache = new Map<string, TeamStatus>([
+      ['10:1', { started: true, finished: false, finishedProvisional: true }],
+    ]);
+
+    const result = getPlayerLiveComputed({
+      playerId: 100,
+      teamId: 1,
+      gw: 10,
+      livePointsCache,
+      projectedBonusCache: new Map(),
+      teamStatusCache,
+    });
+
+    expect(result.status).toBe('Fin');
+    expect(result.minutes).toBe(0);
+  });
+
+  /**
+   * End-to-end: captain has 0 minutes and team is finished_provisional.
+   * getPlayerLiveComputed returns status='Fin', which applyAutoSubsAndMultipliers
+   * treats as confirmed DNP → VC inherits captain factor.
+   */
+  it('VC inherits captain factor when captain team is finished_provisional (0 minutes)', () => {
+    const livePointsCache = new Map<number, LiveStatLine>([
+      [6, { points: 0, bonus: 0, minutes: 0 }], // captain: 0 min
+      [7, { points: 5, bonus: 0, minutes: 90 }], // VC: played
+    ]);
+    const teamStatusCache = new Map<string, TeamStatus>([
+      // Captain's team: finished_provisional but not fully finished
+      ['10:10', { started: true, finished: false, finishedProvisional: true }],
+      // VC's team: fully finished
+      ['10:11', { started: true, finished: true, finishedProvisional: true }],
+    ]);
+    const projectedBonusCache = new Map<string, number>();
+
+    // Build picks using getPlayerLiveComputed to derive status (as production code does)
+    const basePick = (playerId: number, teamId: number, opts: any) => {
+      const computed = getPlayerLiveComputed({
+        playerId, teamId, gw: 10,
+        livePointsCache, projectedBonusCache, teamStatusCache,
+      });
+      return { ...opts, playerId, minutes: computed.minutes, status: computed.status, liveTotal: computed.liveTotal };
+    };
+
+    const picks = [
+      basePick(1,  1, { position: 1,  playingPosition: 'GK',  is_captain: false, is_vice_captain: false }),
+      basePick(2,  2, { position: 2,  playingPosition: 'DEF', is_captain: false, is_vice_captain: false }),
+      basePick(3,  3, { position: 3,  playingPosition: 'DEF', is_captain: false, is_vice_captain: false }),
+      basePick(4,  4, { position: 4,  playingPosition: 'DEF', is_captain: false, is_vice_captain: false }),
+      basePick(5,  5, { position: 5,  playingPosition: 'MID', is_captain: false, is_vice_captain: false }),
+      basePick(6, 10, { position: 6,  playingPosition: 'MID', is_captain: true,  is_vice_captain: false }),
+      basePick(7, 11, { position: 7,  playingPosition: 'MID', is_captain: false, is_vice_captain: true  }),
+      basePick(8,  8, { position: 8,  playingPosition: 'MID', is_captain: false, is_vice_captain: false }),
+      basePick(9,  9, { position: 9,  playingPosition: 'FWD', is_captain: false, is_vice_captain: false }),
+      basePick(10,10, { position: 10, playingPosition: 'FWD', is_captain: false, is_vice_captain: false }),
+      basePick(11,11, { position: 11, playingPosition: 'FWD', is_captain: false, is_vice_captain: false }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes: 0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes: 0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes: 0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes: 0, status: 'Fin' }),
+    ];
+
+    // Fill in missing fields for basePick players (livePointsCache defaults to 0 for missing)
+    for (const p of picks) {
+      if (!('liveTotal' in p)) (p as any).liveTotal = 0;
+    }
+
+    // Captain's status should be 'Fin' (from finished_provisional)
+    const captainPick = picks.find(p => p.playerId === 6)!;
+    expect(captainPick.status).toBe('Fin');
+    expect(captainPick.minutes).toBe(0);
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    // Captain confirmed DNP → multiplier=0
+    const cap = result.find(p => p.playerId === 6)!;
+    expect(cap.multiplier).toBe(0);
+    expect(cap.autoSubStatus).toBe('OUT');
+
+    // VC inherits captain factor ×2
+    const vc = result.find(p => p.playerId === 7)!;
+    expect(vc.multiplier).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// New tests: VC captain-factor monotonic / sticky across recompute cycles
+// ---------------------------------------------------------------------------
+describe('applyAutoSubsAndMultipliers - VC factor monotonic across recompute', () => {
+  /**
+   * Regression: once captain is confirmed DNP, calling applyAutoSubsAndMultipliers again
+   * with the same confirmed-DNP state must still give VC the captain factor.
+   * This demonstrates the function is deterministic and does not flip state.
+   */
+  it('VC retains captain factor across multiple recompute calls with same confirmed-DNP state', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'Fin', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 75, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    // First recompute
+    const result1 = applyAutoSubsAndMultipliers(picks, 'None');
+    expect(result1.find(p => p.playerId === 7)!.multiplier).toBe(2);
+    expect(result1.find(p => p.playerId === 6)!.multiplier).toBe(0);
+
+    // Second recompute (same picks, simulates background refresh with same data)
+    const result2 = applyAutoSubsAndMultipliers(picks, 'None');
+    expect(result2.find(p => p.playerId === 7)!.multiplier).toBe(2);
+    expect(result2.find(p => p.playerId === 6)!.multiplier).toBe(0);
+  });
+
+  /**
+   * Sticky override: if captainConfirmedDNP=true is passed (stored flag from previous computation),
+   * VC inherits captain factor even if the current pick state shows captain as NS
+   * (simulating stale/inconsistent cache data that might otherwise flip VC back).
+   */
+  it('captainConfirmedDNP override keeps VC captain factor even when captain pick now shows NS', () => {
+    const picksWithCaptainNS = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      // Captain appears as NS (stale/wrong data from cache)
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'NS', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 75, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    // Without override: captain is NS → captain keeps ×2, VC gets ×1 (wrong if DNP was confirmed)
+    const withoutOverride = applyAutoSubsAndMultipliers(picksWithCaptainNS, 'None');
+    expect(withoutOverride.find(p => p.playerId === 6)!.multiplier).toBe(2); // captain keeps it (NS = not confirmed DNP)
+    expect(withoutOverride.find(p => p.playerId === 7)!.multiplier).toBe(1); // VC doesn't inherit
+
+    // With sticky override (captainConfirmedDNP=true from prior correct computation):
+    // VC keeps captain factor, captain does NOT get it
+    const withOverride = applyAutoSubsAndMultipliers(picksWithCaptainNS, 'None', { captainConfirmedDNP: true });
+    expect(withOverride.find(p => p.playerId === 7)!.multiplier).toBe(2); // VC correctly has ×2
+    expect(withOverride.find(p => p.playerId === 6)!.multiplier).toBe(0); // captain is 0 (subbed out per autosub via sticky)
+  });
+
+  /**
+   * TC chip + sticky override: VC inherits ×3 via captainConfirmedDNP override.
+   */
+  it('TC chip + captainConfirmedDNP override gives VC multiplier=3', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'NS', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes:  0, status: 'NS', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'TC', { captainConfirmedDNP: true });
+
+    // VC inherits TC factor ×3
+    const vc = result.find(p => p.playerId === 7)!;
+    expect(vc.multiplier).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// New tests: BB chip with DNP captain
+// ---------------------------------------------------------------------------
+describe('applyAutoSubsAndMultipliers - BB chip with DNP captain', () => {
+  /**
+   * Under Bench Boost, no autosubs occur. Captain DNP still triggers VC takeover
+   * (for the captain factor), but all 15 players remain active with multiplier >= 1.
+   */
+  it('BB: VC gets captain factor when captain is confirmed DNP, all 15 players stay active', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'Fin', is_captain: true }), // DNP
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'GK',  minutes: 45, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'BB');
+
+    // All 15 players should have multiplier >= 1 (BB: no autosubs)
+    result.forEach(p => {
+      expect(p.multiplier).toBeGreaterThanOrEqual(1);
+      expect(p.autoSubStatus).toBeNull();
+    });
+
+    // VC gets captain factor ×2 (captain confirmed DNP)
+    const vc = result.find(p => p.playerId === 7)!;
+    expect(vc.multiplier).toBe(2);
+
+    // Captain (DNP) still gets multiplier=1 under BB (all 15 score)
+    const cap = result.find(p => p.playerId === 6)!;
+    expect(cap.multiplier).toBe(1);
+  });
+
+  /**
+   * BB: captain plays (not DNP) → captain keeps captain factor, VC gets 1.
+   */
+  it('BB: captain played gets captain factor, VC gets multiplier 1', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin', is_captain: true }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'GK',  minutes: 45, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'BB');
+
+    const cap = result.find(p => p.playerId === 1)!;
+    expect(cap.multiplier).toBe(2);
+
+    const vc = result.find(p => p.playerId === 7)!;
+    expect(vc.multiplier).toBe(1);
   });
 });
