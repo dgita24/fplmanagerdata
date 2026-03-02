@@ -1149,8 +1149,26 @@ function buildBreakdownRows(
       const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
 
       const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
-      const originalStarters = sorted.slice(0, 11);
-      const originalBench = sorted.slice(11);
+
+      let originalStarters: any[] = [];
+      let originalBench: any[] = [];
+
+      if (chipCode === "BB") {
+        // BB: everyone scores, but display still as XI + bench by original pick positions.
+        originalStarters = sorted.slice(0, 11);
+        originalBench = sorted.slice(11);
+      } else {
+        // Non-BB: effective XI are exactly the players with multiplier > 0 after autosubs.
+        originalStarters = sorted.filter(p => (p.multiplier ?? 0) > 0);
+        originalBench = sorted.filter(p => (p.multiplier ?? 0) === 0);
+
+        // Safety fallback (shouldn't happen): keep UI stable if upstream logic ever miscounts.
+        if (originalStarters.length !== 11) {
+          originalStarters = sorted.slice(0, 11);
+          originalBench = sorted.slice(11);
+        }
+      }
+
 
       const chipEmoji = chipPlayed === "WC" ? "🃏" :
                         chipPlayed === "BB" ? "🪑" :
@@ -1218,6 +1236,9 @@ function buildBreakdownRows(
         if (isSubbedOut) {
           rowClass = "sub-off-row";
           statusBadge = `<span class="status-badge status-dnp">DNP</span>`;
+        } else if (p.autoSubStatus === "IN") {
+          // Player was promoted from bench via autosub: show ON in the XI row.
+          statusBadge = `<span class="status-badge status-on">ON</span>`;
         } else if (isNotStarted) {
           rowClass = "not-started-row";
         } else if (isLive) {
@@ -1225,6 +1246,7 @@ function buildBreakdownRows(
         } else if (isFinished) {
           rowClass = "match-finished-row";
         }
+
 
         html += `
           <tr class="${rowClass}">
@@ -1236,29 +1258,6 @@ function buildBreakdownRows(
             </td>
             <td class="col-team">${p.teamShort}</td>
             <td class="col-pts ${isSubbedOut ? 'text-muted' : ''}">${ptsText}</td>
-          </tr>
-        `;
-      }
-
-      const subbedInPlayers = originalBench.filter(p => p.autoSubStatus === 'IN');
-      for (const p of subbedInPlayers) {
-        const mult = p.multiplier || 1;
-        const displayPts = Math.round(p.liveTotal * mult);
-        const ptsText = mult > 1 ? `${p.liveTotal}×${mult}` : String(displayPts);
-        const subOnStatusClass =
-          p.status === "Live" ? " match-live-row" :
-          p.status === "Fin"  ? " match-finished-row" :
-          p.status === "NS"   ? " not-started-row" : "";
-
-        html += `
-          <tr class="sub-on-row${subOnStatusClass}">
-            <td class="player-cell">
-              <span class="player-pos">${p.playingPosition}</span>
-              <button type="button" class="player-name-btn" data-player-id="${p.playerId}">${p.web_name}</button>
-              <span class="status-badge status-on">ON</span>
-            </td>
-            <td class="col-team">${p.teamShort}</td>
-            <td class="col-pts">${ptsText}</td>
           </tr>
         `;
       }
