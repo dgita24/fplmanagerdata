@@ -322,52 +322,48 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   const isTC = chipCode === "TC";
   const capFactor = isTC ? 3 : 2;
 
-  // TEMP: inspect incoming pick shape (remove after)
-  const sample = teamPicks?.[0];
-  const capCandidates = (teamPicks ?? []).filter((p: any) =>
-    p?.iscaptain || p?.isvicecaptain || p?.is_captain || p?.is_vice_captain
-  );
+  const sorted = [...(teamPicks ?? [])].sort((a, b) => a.position - b.position);
+  const starters = sorted.slice(0, 11);
+  const bench = sorted.slice(11);
 
-  console.log("CAP SHAPE", {
-    teamPicksLen: teamPicks?.length,
-    sampleKeys: sample ? Object.keys(sample).sort() : null,
-    capCandidates: capCandidates.map((p: any) => ({
+  // --- Captain / Vice Captain detection (supports both shapes) ---
+  const isCap = (p: any) => !!(p?.iscaptain ?? p?.is_captain);
+  const isVC = (p: any) => !!(p?.isvicecaptain ?? p?.is_vice_captain);
+
+  const starterCapId = starters.find(isCap)?.playerId ?? null;
+  const starterVcId = starters.find(isVC)?.playerId ?? null;
+
+  const starterCap =
+    starterCapId !== null ? starters.find(p => p.playerId === starterCapId) : null;
+
+  // VC takeover ONLY when captain is confirmed DNP (finished + 0 minutes)
+  const captainResolvedDidNotPlay =
+    !!starterCap && starterCap.status === "Fin" && starterCap.minutes === 0;
+
+  const eligibleCaptainId = captainResolvedDidNotPlay ? starterVcId : starterCapId;
+
+  // --- TEMP DEBUG (remove after fixed) ---
+  // 1) What shape are we receiving?
+  const sample = starters[0] ?? null;
+  const flaggedStarters = starters
+    .filter(p => isCap(p) || isVC(p))
+    .map(p => ({
       playerId: p.playerId,
       position: p.position,
       iscaptain: p.iscaptain,
       isvicecaptain: p.isvicecaptain,
       is_captain: p.is_captain,
       is_vice_captain: p.is_vice_captain
-    }))
+    }));
+
+  console.log("CAP SHAPE", {
+    chipCode,
+    startersLen: starters.length,
+    sampleKeys: sample ? Object.keys(sample).sort() : null,
+    flaggedStarters
   });
 
-
-  const sorted = [...teamPicks].sort((a, b) => a.position - b.position);
-  const starters = sorted.slice(0, 11);
-  const bench = sorted.slice(11);
-
-  // SAFETY/FPL RULE ENFORCEMENT:
-  // Captain/vice-captain must be from original starting XI.
-  const isCap = (p: any) => !!(p.iscaptain ?? p.is_captain);
-  const isVC  = (p: any) => !!(p.isvicecaptain ?? p.is_vice_captain);
-
-  const starterCapId = starters.find(isCap)?.playerId ?? null;
-  const starterVcId  = starters.find(isVC)?.playerId ?? null;
-
-
-  // Find the actual starter object (contains minutes + status)
-  const starterCap =
-    starterCapId !== null ? starters.find(p => p.playerId === starterCapId) : null;
-
-  // Vice-captain takes over ONLY when captain is confirmed DNP
-  const captainResolvedDidNotPlay =
-    !!starterCap && starterCap.status === "Fin" && starterCap.minutes === 0;
-
-  const eligibleCaptainId = captainResolvedDidNotPlay ? starterVcId : starterCapId;
-
-  // TEMP DEBUG (remove once confirmed)
-  // This will print once per manager load, so expect a lot of lines.
-  // Filter console by "CAP DEBUG" to find them.
+  // 2) What decision did we make?
   console.log("CAP DEBUG", {
     chipCode,
     starterCapId,
@@ -378,6 +374,7 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
     captainResolvedDidNotPlay,
     eligibleCaptainId
   });
+  // --- END TEMP DEBUG ---
 
   if (isBB) {
     // Bench Boost: all 15 score; no autosubs. Captaincy still restricted to XI.
