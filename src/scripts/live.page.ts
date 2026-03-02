@@ -241,6 +241,22 @@ const managerDataCache = new Map<string, any>();
     return fixturesCache.length > 0 && fixturesCache.every(fx => fx.finished || fx.finished_provisional);
   }
 
+  // Returns true if any player from the captain's team has minutes > 0 in the live cache.
+  // This is used as a stale-fixture-cache guard: the fixtures KV cache can store data during
+  // the brief window between a game ending and FPL marking it finished_provisional, which causes
+  // isGwComplete() to return false and playerIsDnp to require status==="Fin". If the captain's
+  // teammates already have minutes > 0 in the live data, the game has definitively ended and
+  // a captain with minutes=0 is confirmed DNP regardless of the cached fixture status.
+  function captainTeamHasPlayed(rawPicks: any[]): boolean {
+    const capPick = rawPicks.find((p: any) => p.is_captain);
+    const capTeamId = capPick ? (playerCache.get(Number(capPick.element))?.team || 0) : 0;
+    if (capTeamId <= 0) return false;
+    for (const [pid, stats] of livePointsCache) {
+      if (stats.minutes > 0 && playerCache.get(pid)?.team === capTeamId) return true;
+    }
+    return false;
+  }
+
   // Keep track of which GW the in-memory live caches refer to
   let liveCachesGw: number | null = null;
   let liveCachesLoadedAt = 0;
@@ -537,7 +553,11 @@ const managerDataCache = new Map<string, any>();
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, isGwComplete(), autoSubs);
+      // isGwComplete() can return false when the server KV cache stored fixture data
+      // during the brief window between a game ending and FPL setting finished_provisional.
+      // Fall back: if any player from the captain's team has minutes > 0 in the live cache,
+      // that team's game has definitively ended regardless of the (possibly stale) fixture status.
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, isGwComplete() || captainTeamHasPlayed(rawPicks), autoSubs);
 
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
 
@@ -1152,7 +1172,8 @@ function buildBreakdownRows(
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, isGwComplete(), autoSubs);
+      // Same stale-fixture-cache guard as in fetchManagerLive (see captainTeamHasPlayed helper).
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, isGwComplete() || captainTeamHasPlayed(rawPicks), autoSubs);
 
       const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
       const originalStarters = sorted.slice(0, 11);
