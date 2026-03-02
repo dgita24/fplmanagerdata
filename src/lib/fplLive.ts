@@ -322,6 +322,26 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   const isTC = chipCode === "TC";
   const capFactor = isTC ? 3 : 2;
 
+  // TEMP: inspect incoming pick shape (remove after)
+  const sample = teamPicks?.[0];
+  const capCandidates = (teamPicks ?? []).filter((p: any) =>
+    p?.iscaptain || p?.isvicecaptain || p?.is_captain || p?.is_vice_captain
+  );
+
+  console.log("CAP SHAPE", {
+    teamPicksLen: teamPicks?.length,
+    sampleKeys: sample ? Object.keys(sample).sort() : null,
+    capCandidates: capCandidates.map((p: any) => ({
+      playerId: p.playerId,
+      position: p.position,
+      iscaptain: p.iscaptain,
+      isvicecaptain: p.isvicecaptain,
+      is_captain: p.is_captain,
+      is_vice_captain: p.is_vice_captain
+    }))
+  });
+
+
   const sorted = [...teamPicks].sort((a, b) => a.position - b.position);
   const starters = sorted.slice(0, 11);
   const bench = sorted.slice(11);
