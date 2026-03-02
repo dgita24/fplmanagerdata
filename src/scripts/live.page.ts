@@ -517,8 +517,8 @@ const managerDataCache = new Map<string, any>();
         return {
           playerId: Number(p.element),
           position: Number(p.position),
-          is_captain: !!p.is_captain,
-          is_vice_captain: !!p.is_vice_captain,
+          is_captain: !!(p.is_captain ?? p.iscaptain) || Number(p.multiplier) >= 2,
+          is_vice_captain: !!(p.is_vice_captain ?? p.isvicecaptain),
 
           web_name: player.name || "",
           teamId,
@@ -1135,8 +1135,8 @@ function buildBreakdownRows(
         return {
           playerId: Number(p.element),
           position: Number(p.position),
-          is_captain: !!p.is_captain,
-          is_vice_captain: !!p.is_vice_captain,
+          is_captain: !!(p.is_captain ?? p.iscaptain) || Number(p.multiplier) >= 2,
+          is_vice_captain: !!(p.is_vice_captain ?? p.isvicecaptain),
           web_name: player.name || "Unknown",
           teamShort: teamInfo.shortName,
           playingPosition: positionLabel(player.position),
