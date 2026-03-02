@@ -507,6 +507,13 @@ const managerDataCache = new Map<string, any>();
         "None";
 
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
+      const rawAutoSubs = Array.isArray((picksData as any).automatic_subs)
+        ? (picksData as any).automatic_subs
+        : [];
+
+      const subInIds = new Set<number>(rawAutoSubs.map((s: any) => Number(s.element_in)).filter(Boolean));
+      const subOutIds = new Set<number>(rawAutoSubs.map((s: any) => Number(s.element_out)).filter(Boolean));
+
 
       const rawAutoSubs = Array.isArray((picksData as any).automatic_subs)
         ? (picksData as any).automatic_subs
@@ -1160,7 +1167,13 @@ function buildBreakdownRows(
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+      const computedTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+ 
+      const finalTeam = computedTeam.map(p => ({
+        ...p,
+        autoSubStatus: subOutIds.has(p.playerId) ? "OUT" : subInIds.has(p.playerId) ? "IN" : null
+      }));
+
 
       const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
 
