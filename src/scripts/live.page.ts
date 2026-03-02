@@ -515,14 +515,6 @@ const managerDataCache = new Map<string, any>();
       const subOutIds = new Set<number>(rawAutoSubs.map((s: any) => Number(s.element_out)).filter(Boolean));
 
 
-      const rawAutoSubs = Array.isArray((picksData as any).automatic_subs)
-        ? (picksData as any).automatic_subs
-        : [];
-
-      const subInIds = new Set<number>(rawAutoSubs.map((s: any) => Number(s.element_in)).filter(Boolean));
-      const subOutIds = new Set<number>(rawAutoSubs.map((s: any) => Number(s.element_out)).filter(Boolean));
-
-
       const picks = rawPicks.map((p: any) => {
         const player = playerCache.get(p.element) || { name: "", position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
