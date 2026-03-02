@@ -328,8 +328,8 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
 
   // SAFETY/FPL RULE ENFORCEMENT:
   // Captain/vice-captain must be from original starting XI.
-  const starterCapId = starters.find(p => p.is_captain)?.playerId ?? null;
-  const starterVcId = starters.find(p => p.is_vice_captain)?.playerId ?? null;
+  const starterCapId = starters.find(p => p.iscaptain)?.playerId ?? null;
+  const starterVcId  = starters.find(p => p.isvicecaptain)?.playerId ?? null;
 
   // Find the actual starter object (contains minutes + status)
   const starterCap =
