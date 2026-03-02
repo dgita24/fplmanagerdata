@@ -1240,7 +1240,7 @@ function buildBreakdownRows(
         `;
       }
 
-      const subbedInPlayers = originalBench.filter(p => p.autoSubStatus === 'IN');
+      const subbedInPlayers = chipCode !== "BB" ? originalBench.filter(p => (p.multiplier ?? 0) > 0) : [];
       for (const p of subbedInPlayers) {
         const mult = p.multiplier || 1;
         const displayPts = Math.round(p.liveTotal * mult);
@@ -1275,7 +1275,7 @@ function buildBreakdownRows(
       `;
 
       for (const p of originalBench) {
-        const isSubbedIn = p.autoSubStatus === 'IN';
+        const isSubbedIn = chipCode !== "BB" && (p.multiplier ?? 0) > 0;
         const isDnp = p.minutes === 0 && p.status === "Fin";
 
         if (isSubbedIn) continue;
