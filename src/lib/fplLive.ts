@@ -322,7 +322,7 @@ function playerIsDnp(p: any, gwComplete: boolean): boolean {
   return p.minutes === 0 && (gwComplete || p.status === "Fin");
 }
 
-export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string, gwComplete = false) {
+export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string, gwComplete = false, autoSubs: any[] = []) {
   const isBB = chipCode === "BB";
   const isTC = chipCode === "TC";
   const capFactor = isTC ? 3 : 2;
@@ -330,6 +330,22 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string, 
   const sorted = [...teamPicks].sort((a, b) => a.position - b.position);
   const starters = sorted.slice(0, 11);
   const bench = sorted.slice(11);
+
+  // Build a set of starters confirmed as DNP by FPL's automatic_subs API.
+  // element_out is always a starter (position 1-11) replaced by a bench player,
+  // so this set never contains bench players.
+  const autoSubsOutSet = new Set(autoSubs.map(s => Number(s.element_out)));
+
+  // Combined DNP check — any one signal is sufficient:
+  //   1. FPL's official automatic_subs confirms the player was subbed out (most reliable;
+  //      FPL sets this when finalising the game, often before finished_provisional).
+  //   2. gwComplete=true (all GW fixtures done): minutes === 0 alone is sufficient —
+  //      status may be stale (e.g. blank-GW team, stale teamStatusCache).
+  //   3. gwComplete=false (active GW): require status === "Fin" to guard against
+  //      NS/Live players whose fixture hasn't finished yet.
+  const isDnp = (p: any): boolean =>
+    (autoSubsOutSet.size > 0 && autoSubsOutSet.has(p.playerId)) ||
+    playerIsDnp(p, gwComplete);
 
   // SAFETY/FPL RULE ENFORCEMENT:
   // Captain/vice-captain must be from original starting XI.
@@ -341,10 +357,7 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string, 
 
   // CRITICAL RULE FIX:
   // Vice-captain takes over ONLY when the captain is confirmed "did not play" for the gameweek.
-  // When gwComplete=false (active GW): require status === "Fin" to guard against NS/Live players.
-  // When gwComplete=true (GW fully finished): minutes === 0 alone is sufficient — status may be
-  // stale or missing (e.g. blank-GW team, stale teamStatusCache after finalization).
-  const captainResolvedDidNotPlay = !!starterCap && playerIsDnp(starterCap, gwComplete);
+  const captainResolvedDidNotPlay = !!starterCap && isDnp(starterCap);
 
   // Captain is eligible for capFactor unless they are confirmed DNP.
   // When captain is confirmed DNP, VC immediately inherits captaincy regardless of whether
@@ -373,11 +386,11 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string, 
   const outfieldBench = bench.filter(p => p.playingPosition !== "GK");
 
   let activeGK = gkStarter;
-  const gkDnp = gkStarter && playerIsDnp(gkStarter, gwComplete);
+  const gkDnp = gkStarter && isDnp(gkStarter);
 
   if (gkDnp && gkStarter) {
     dnpStarters.push(gkStarter.playerId);
-    const benchGK = gkBench.find(p => !playerIsDnp(p, gwComplete));
+    const benchGK = gkBench.find(p => !isDnp(p));
     if (benchGK) {
       activeGK = benchGK;
       subbedIn.push(benchGK.playerId);
@@ -386,8 +399,8 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string, 
     }
   }
 
-  let activeOutfield = outfieldStarters.filter(p => !playerIsDnp(p, gwComplete));
-  const outfieldDnp = outfieldStarters.filter(p => playerIsDnp(p, gwComplete));
+  let activeOutfield = outfieldStarters.filter(p => !isDnp(p));
+  const outfieldDnp = outfieldStarters.filter(p => isDnp(p));
 
   for (const dnp of outfieldDnp) {
     dnpStarters.push(dnp.playerId);

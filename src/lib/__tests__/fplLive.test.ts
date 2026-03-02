@@ -1081,3 +1081,93 @@ describe('applyAutoSubsAndMultipliers - gwComplete flag', () => {
     expect(p7.multiplier).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// automatic_subs: FPL-confirmed captain DNP via picks automatic_subs field
+// ---------------------------------------------------------------------------
+describe('applyAutoSubsAndMultipliers - automatic_subs captain DNP', () => {
+  /**
+   * The core bug scenario (reported): after the GW's last game ends, FPL may not yet
+   * have set finished_provisional=true for the final fixture. This leaves
+   * captain.status="Live" even though the game is over. The existing gwComplete and
+   * status="Fin" checks both fail during this window.
+   *
+   * Fix: if FPL's automatic_subs data (from the picks API) shows the captain as
+   * element_out, treat the captain as confirmed DNP immediately — no status or
+   * gwComplete check needed.
+   *
+   * This mirrors how squads.page.ts already works correctly.
+   */
+  it('VC gets ×2 when captain is in automatic_subs element_out, even with status="Live" and gwComplete=false', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      // Captain: 0 minutes, status="Live" — game ended but finished_provisional not yet set
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'Live', is_captain: true }),
+      // VC: played 75 minutes, scored 13 points (the reported scenario)
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 75, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    // FPL's confirmed auto-sub: captain (playerId=6) was subbed out for bench player 12
+    const autoSubs = [{ element_out: 6, element_in: 12, entry: 123, event: 26 }];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None', /* gwComplete= */ false, autoSubs);
+
+    // Captain (status="Live", 0 min) confirmed DNP via automatic_subs — must be OUT
+    const p6 = result.find(p => p.playerId === 6)!;
+    expect(p6.multiplier).toBe(0);
+    expect(p6.autoSubStatus).toBe('OUT');
+
+    // VC gets ×2 — this is the bug fix
+    const p7 = result.find(p => p.playerId === 7)!;
+    expect(p7.multiplier).toBe(2);
+  });
+
+  /**
+   * Guard: a captain with status="Live" and 0 minutes must NOT be treated as DNP
+   * when automatic_subs is empty (game is genuinely still in progress).
+   */
+  it('captain "Live" with 0 min and empty automatic_subs retains ×2 (game still in progress)', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      // Captain: 0 minutes, status="Live" — game is genuinely still in progress
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'Live', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 75, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    // No automatic_subs — FPL hasn't processed the game yet (it's genuinely live)
+    const result = applyAutoSubsAndMultipliers(picks, 'None', /* gwComplete= */ false, []);
+
+    // Captain retains ×2 (game still in progress, may still play)
+    const p6 = result.find(p => p.playerId === 6)!;
+    expect(p6.multiplier).toBe(2);
+    expect(p6.autoSubStatus).toBeNull();
+
+    // VC stays ×1
+    const p7 = result.find(p => p.playerId === 7)!;
+    expect(p7.multiplier).toBe(1);
+  });
+});

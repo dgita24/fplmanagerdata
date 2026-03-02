@@ -511,6 +511,7 @@ const managerDataCache = new Map<string, any>();
         "None";
 
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
+      const autoSubs = Array.isArray(picksData.automatic_subs) ? picksData.automatic_subs : [];
 
       const picks = rawPicks.map((p: any) => {
         const player = playerCache.get(p.element) || { name: "", position: 4, team: 0 };
@@ -536,7 +537,7 @@ const managerDataCache = new Map<string, any>();
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, isGwComplete());
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, isGwComplete(), autoSubs);
 
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
 
@@ -1126,6 +1127,7 @@ function buildBreakdownRows(
         squadPicksCache.set(cacheKey, picksData);
       }
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
+      const autoSubs = Array.isArray(picksData.automatic_subs) ? picksData.automatic_subs : [];
 
       const chipCode = chipPlayed || "None";
 
@@ -1150,7 +1152,7 @@ function buildBreakdownRows(
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, isGwComplete());
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, isGwComplete(), autoSubs);
 
       const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
       const originalStarters = sorted.slice(0, 11);
