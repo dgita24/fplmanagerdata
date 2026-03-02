@@ -410,6 +410,7 @@ function makePick(opts: {
   status: 'Fin' | 'Live' | 'NS';
   is_captain?: boolean;
   is_vice_captain?: boolean;
+  teamId?: number;
 }) {
   return {
     playerId: opts.playerId,
@@ -419,6 +420,7 @@ function makePick(opts: {
     status: opts.status,
     is_captain: !!opts.is_captain,
     is_vice_captain: !!opts.is_vice_captain,
+    teamId: opts.teamId,
   };
 }
 
@@ -548,6 +550,75 @@ describe('applyAutoSubsAndMultipliers - captain eligibility', () => {
 
     const p7 = result.find(p => p.playerId === 7)!;
     expect(p7.multiplier).toBe(3);
+  });
+
+  /**
+   * Stale-cache fix: captain has status "Live" (stale fixture cache) and 0 minutes,
+   * but a teammate on the same team has played (minutes > 0).
+   * VC should inherit the captain multiplier (×2).
+   */
+  it('VC gets ×2 when captain has stale Live status but 0 minutes and a teammate has played', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin', teamId: 100 }), // teammate of captain
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'Live', is_captain: true, teamId: 100 }), // stale Live status
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    // Captain (p6) has stale Live status — auto-subs can't confirm DNP, so stays active with multiplier=1
+    const p6 = result.find(p => p.playerId === 6)!;
+    expect(p6.multiplier).toBe(1);
+
+    // VC (p7) should inherit captain multiplier (×2) via the teammate-played fallback
+    const p7 = result.find(p => p.playerId === 7)!;
+    expect(p7.multiplier).toBe(2);
+  });
+
+  /**
+   * Stale-cache fix guard: captain has status "NS" and 0 minutes — game genuinely hasn't started.
+   * VC must NOT inherit the multiplier even if no teammate has played.
+   */
+  it('captain NS with 0 minutes and no teammate played → captain keeps ×2, VC does not inherit', () => {
+    const picks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'NS', is_captain: true, teamId: 200 }), // NS — game not started
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    const result = applyAutoSubsAndMultipliers(picks, 'None');
+
+    // Captain (NS) still gets ×2
+    const p6 = result.find(p => p.playerId === 6)!;
+    expect(p6.multiplier).toBe(2);
+
+    // VC does NOT inherit — keeps multiplier=1
+    const p7 = result.find(p => p.playerId === 7)!;
+    expect(p7.multiplier).toBe(1);
   });
 });
 

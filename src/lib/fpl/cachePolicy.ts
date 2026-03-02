@@ -93,7 +93,9 @@ export function getTTLForPath(path: string, queryString: string, currentGW: numb
   // event/{gw}/live
   if (normalizedPath.match(/^event\/\d+\/live$/)) {
     if (gwFromPath === null) return DEFAULT_TTLS.DEFAULT;
-    return gwFromPath < currentGW ? DEFAULT_TTLS.EVENT_LIVE_PAST : DEFAULT_TTLS.EVENT_LIVE_CURRENT;
+    if (gwFromPath < currentGW - 1) return DEFAULT_TTLS.EVENT_LIVE_PAST; // cache forever (safe, GWs before previous)
+    if (gwFromPath < currentGW) return 3600; // 1 hour for immediately-previous GW (self-heals stale data)
+    return DEFAULT_TTLS.EVENT_LIVE_CURRENT;
   }
 
   // fixtures?event={gw}  (GW is in QUERY, not path)
@@ -103,7 +105,9 @@ export function getTTLForPath(path: string, queryString: string, currentGW: numb
       // If event isn't specified, play it safe: don't cache.
       return DEFAULT_TTLS.DEFAULT;
     }
-    return event < currentGW ? DEFAULT_TTLS.FIXTURES_PAST : DEFAULT_TTLS.FIXTURES_CURRENT;
+    if (event < currentGW - 1) return DEFAULT_TTLS.FIXTURES_PAST; // cache forever (safe, GWs before previous)
+    if (event < currentGW) return 3600; // 1 hour for immediately-previous GW (self-heals stale data)
+    return DEFAULT_TTLS.FIXTURES_CURRENT;
   }
 
   // entry/{id}  (contains live-sensitive totals/ranks)

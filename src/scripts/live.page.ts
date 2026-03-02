@@ -22,6 +22,7 @@ import { supabase } from '../lib/supabase.ts'
     managerIds: number[];
     data: any[];
     latestGW: number;
+    allFixturesFinished?: boolean;
   };
 
   let lastBackgroundRefreshAt = 0;

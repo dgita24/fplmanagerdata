@@ -341,7 +341,22 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   // IMPORTANT: If captain is "NS" (not started) or Live with 0 minutes, we must NOT switch to VC yet.
   // This prevents the bug where VC is doubled while captain hasn't played *yet*.
   // The captain retains their capFactor multiplier until confirmed DNP.
-  const captainResolvedDidNotPlay = !!starterCap && starterCap.status === "Fin" && starterCap.minutes === 0;
+  // Primary check: captain confirmed DNP via status
+  let captainResolvedDidNotPlay = !!starterCap && starterCap.status === "Fin" && starterCap.minutes === 0;
+
+  // Fallback for stale fixture data: if captain has 0 minutes but status isn't "Fin" (stale cache),
+  // check if ANY teammate from the same team in the picks has played (minutes > 0).
+  // If so, the captain's game has definitely happened and 0 minutes = confirmed DNP.
+  if (!captainResolvedDidNotPlay && !!starterCap && starterCap.minutes === 0 && starterCap.status !== "NS") {
+    const capTeamId = starterCap.teamId;
+    const capPlayerId = starterCap.playerId;
+    const teammateHasPlayed = capTeamId !== undefined && sorted.some(
+      p => p.teamId === capTeamId && p.playerId !== capPlayerId && p.minutes > 0
+    );
+    if (teammateHasPlayed) {
+      captainResolvedDidNotPlay = true;
+    }
+  }
 
   // Captain is eligible for capFactor unless they are confirmed DNP.
   // When captain is confirmed DNP, VC immediately inherits captaincy regardless of whether
