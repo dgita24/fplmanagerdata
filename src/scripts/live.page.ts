@@ -33,6 +33,12 @@ import { supabase } from '../lib/supabase.ts'
     } catch { /* ignore quota errors */ }
   }
 
+  function clearCapDnpSticky(entryId: number, gw: number) {
+    try {
+      localStorage.removeItem(`${CAP_DNP_KEY_PREFIX}${entryId}:${gw}`);
+    } catch { /* ignore */ }
+  }
+
   function clearAllCapDnpSticky() {
     try {
       for (let i = localStorage.length - 1; i >= 0; i--) {
@@ -561,15 +567,30 @@ const managerDataCache = new Map<string, any>();
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, {
-        captainConfirmedDNP: getCapDnpSticky(entryId, gw)
-      });
-
-      // Update sticky captain-confirmed-DNP flag: once set for a GW, never flip back
+      // Compute captainConfirmedDNP BEFORE calling applyAutoSubsAndMultipliers so fresh data
+      // and the sticky flag are always in sync when the multiplier decision is made.
+      //
+      // Priority:
+      //   1. Captain played (minutes > 0) → definitely NOT DNP → clear flag
+      //   2. Captain confirmed DNP (status=Fin, 0 min from fresh cache) → IS DNP → set flag
+      //   3. Status uncertain (NS/Live, 0 min — e.g. stale CF cache) → use existing sticky flag
+      //      to prevent stale fixture data from flipping VC back to ×1
       const captainInTeam = picks.find((p: any) => p.is_captain && p.position <= 11);
-      if (captainInTeam && captainInTeam.status === "Fin" && captainInTeam.minutes === 0) {
-        setCapDnpSticky(entryId, gw);
+      let captainConfirmedDNP = getCapDnpSticky(entryId, gw);
+      if (captainInTeam) {
+        if (captainInTeam.minutes > 0) {
+          // Captain played — definitely not DNP for this GW
+          captainConfirmedDNP = false;
+          clearCapDnpSticky(entryId, gw);
+        } else if (captainInTeam.status === "Fin") {
+          // Confirmed DNP: finished fixture, 0 minutes
+          captainConfirmedDNP = true;
+          setCapDnpSticky(entryId, gw);
+        }
+        // else NS or Live with 0 min: leave captainConfirmedDNP = existing sticky value
       }
+
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, { captainConfirmedDNP });
 
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
 
@@ -1742,7 +1763,11 @@ function buildBreakdownRows(
         localStorage.removeItem(k);
       }
     }
-    clearAllCapDnpSticky();
+    // Note: sticky captain-DNP flags are intentionally NOT cleared here.
+    // Their lifecycle is managed dynamically in fetchManagerLive based on fresh data:
+    // cleared when captain actually played (minutes > 0), set when confirmed DNP.
+    // Clearing them here would cause VC to lose the captain factor if the fixture
+    // cache is momentarily stale after a manual refresh.
 
     const { managerIds: ids, favouriteManagerIds: favIds } = await loadManagerIdsFromSupabase();
     managerIds = ids;

@@ -1361,3 +1361,92 @@ describe('applyAutoSubsAndMultipliers - BB chip with DNP captain', () => {
     expect(vc.multiplier).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Regression test: stale fixture cache scenario
+// "VC loses multiplier after GW finishes" root-cause reproduction
+// ---------------------------------------------------------------------------
+describe('applyAutoSubsAndMultipliers - stale fixture cache regression', () => {
+  /**
+   * Scenario: GW ends. Captain has 0 minutes (DNP). But the fixture cache/proxy
+   * is momentarily stale and still returns captain's team as "Live" (not finished).
+   * So captain.status = "Live" (not "Fin") in the picks array.
+   *
+   * Without the sticky flag: captain is NOT confirmed DNP (Live ≠ Fin) → captain gets ×2,
+   * VC gets ×1. This is the regression.
+   *
+   * With the sticky flag (captainConfirmedDNP=true from a prior correct computation):
+   * VC retains ×2 regardless of stale status.
+   *
+   * This test ensures the override reliably prevents the regression.
+   */
+  it('stale fixture cache: captain shows Live but sticky flag preserves VC capFactor', () => {
+    // Simulate stale fixture data: captain's team game finished but proxy returns "Live"
+    const stalePicks = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      // Captain: game actually finished (DNP), but stale CF cache returns status='Live'
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes:  0, status: 'Live', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 75, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    // WITHOUT sticky flag: stale "Live" status means captain is NOT confirmed DNP
+    // captain keeps ×2, VC gets ×1 ← THE BUG (regression)
+    const withoutFlag = applyAutoSubsAndMultipliers(stalePicks, 'None');
+    expect(withoutFlag.find(p => p.playerId === 6)!.multiplier).toBe(2); // bug: captain keeps ×2
+    expect(withoutFlag.find(p => p.playerId === 7)!.multiplier).toBe(1); // bug: VC only ×1
+
+    // WITH sticky flag (captainConfirmedDNP=true, set from a prior correct computation
+    // before the cache went stale): VC retains ×2 — regression is prevented
+    const withFlag = applyAutoSubsAndMultipliers(stalePicks, 'None', { captainConfirmedDNP: true });
+    expect(withFlag.find(p => p.playerId === 7)!.multiplier).toBe(2); // VC correctly has ×2
+    expect(withFlag.find(p => p.playerId === 6)!.multiplier).toBe(0); // captain subbed out
+  });
+
+  /**
+   * Inverse: once captain actually plays (minutes > 0), the sticky flag must be
+   * overridden by fresh data so captain correctly gets the captain factor.
+   * This prevents the double-GW false-positive: captain had 0 min in game 1
+   * (sticky flag set), then plays in game 2 — flag must be cleared.
+   */
+  it('captain played (minutes > 0) overrides sticky flag: captain gets capFactor', () => {
+    const picksAfterCaptainPlayed = [
+      makePick({ playerId: 1,  position: 1,  playingPosition: 'GK',  minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 2,  position: 2,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 3,  position: 3,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 4,  position: 4,  playingPosition: 'DEF', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 5,  position: 5,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      // Captain played 90 minutes in game 2 (double GW), total minutes > 0
+      makePick({ playerId: 6,  position: 6,  playingPosition: 'MID', minutes: 90, status: 'Fin', is_captain: true }),
+      makePick({ playerId: 7,  position: 7,  playingPosition: 'MID', minutes: 75, status: 'Fin', is_vice_captain: true }),
+      makePick({ playerId: 8,  position: 8,  playingPosition: 'MID', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 9,  position: 9,  playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 10, position: 10, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 11, position: 11, playingPosition: 'FWD', minutes: 90, status: 'Fin' }),
+      makePick({ playerId: 12, position: 12, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 13, position: 13, playingPosition: 'MID', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 14, position: 14, playingPosition: 'FWD', minutes:  0, status: 'Fin' }),
+      makePick({ playerId: 15, position: 15, playingPosition: 'GK',  minutes:  0, status: 'Fin' }),
+    ];
+
+    // Even with captainConfirmedDNP=true (stale sticky flag from game 1), fresh data
+    // shows minutes > 0.  In live.page.ts, fetchManagerLive clears the flag and passes
+    // captainConfirmedDNP=false before calling applyAutoSubsAndMultipliers.
+    // Here we directly verify that when captainConfirmedDNP=false (flag cleared), captain
+    // with minutes>0 correctly gets capFactor (not VC).
+    const resultFlagCleared = applyAutoSubsAndMultipliers(picksAfterCaptainPlayed, 'None', { captainConfirmedDNP: false });
+    expect(resultFlagCleared.find(p => p.playerId === 6)!.multiplier).toBe(2); // captain gets ×2
+    expect(resultFlagCleared.find(p => p.playerId === 7)!.multiplier).toBe(1); // VC gets ×1
+  });
+});
