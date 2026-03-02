@@ -326,12 +326,9 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   const starters = sorted.slice(0, 11);
   const bench = sorted.slice(11);
 
-  // --- Captain / Vice Captain detection (supports both shapes) ---
-  const isCap = (p: any) => !!(p?.iscaptain ?? p?.is_captain);
-  const isVC = (p: any) => !!(p?.isvicecaptain ?? p?.is_vice_captain);
-
-  const starterCapId = starters.find(isCap)?.playerId ?? null;
-  const starterVcId = starters.find(isVC)?.playerId ?? null;
+  // Captain / VC MUST be from original starting XI (positions 1-11)
+  const starterCapId = starters.find(p => !!p.is_captain)?.playerId ?? null;
+  const starterVcId = starters.find(p => !!p.is_vice_captain)?.playerId ?? null;
 
   const starterCap =
     starterCapId !== null ? starters.find(p => p.playerId === starterCapId) : null;
@@ -340,44 +337,12 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   const captainResolvedDidNotPlay =
     !!starterCap && starterCap.status === "Fin" && starterCap.minutes === 0;
 
-  const eligibleCaptainId = captainResolvedDidNotPlay ? starterVcId : starterCapId;
-
-  // --- TEMP DEBUG (remove after fixed) ---
-  // 1) What shape are we receiving?
-  const sample = starters[0] ?? null;
-  const flaggedStarters = starters
-    .filter(p => isCap(p) || isVC(p))
-    .map(p => ({
-      playerId: p.playerId,
-      position: p.position,
-      iscaptain: p.iscaptain,
-      isvicecaptain: p.isvicecaptain,
-      is_captain: p.is_captain,
-      is_vice_captain: p.is_vice_captain
-    }));
-
-  console.log("CAP SHAPE", {
-    chipCode,
-    startersLen: starters.length,
-    sampleKeys: sample ? Object.keys(sample).sort() : null,
-    flaggedStarters
-  });
-
-  // 2) What decision did we make?
-  console.log("CAP DEBUG", {
-    chipCode,
-    starterCapId,
-    starterVcId,
-    cap: starterCap
-      ? { playerId: starterCap.playerId, minutes: starterCap.minutes, status: starterCap.status }
-      : null,
-    captainResolvedDidNotPlay,
-    eligibleCaptainId
-  });
-  // --- END TEMP DEBUG ---
+  // If VC is missing for any reason, do NOT switch away from captain
+  const eligibleCaptainId = captainResolvedDidNotPlay
+    ? (starterVcId ?? starterCapId)
+    : starterCapId;
 
   if (isBB) {
-    // Bench Boost: all 15 score; no autosubs. Captaincy still restricted to XI.
     return sorted.map(p => ({
       ...p,
       multiplier: eligibleCaptainId && p.playerId === eligibleCaptainId ? capFactor : 1,
@@ -411,9 +376,7 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   let activeOutfield = outfieldStarters.filter(p => !(p.minutes === 0 && p.status === "Fin"));
   const outfieldDnp = outfieldStarters.filter(p => p.minutes === 0 && p.status === "Fin");
 
-  for (const dnp of outfieldDnp) {
-    dnpStarters.push(dnp.playerId);
-  }
+  for (const dnp of outfieldDnp) dnpStarters.push(dnp.playerId);
 
   for (const cand of outfieldBench) {
     if (activeOutfield.length >= 10) break;
@@ -443,7 +406,8 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
       const needFwd = Math.max(0, 1 - fwdCount);
 
       const remainingIdx = outfieldBench.indexOf(cand);
-      let usableBench: any[] = [];
+      const usableBench: any[] = [];
+
       for (let j = remainingIdx + 1; j < outfieldBench.length; j++) {
         const p = outfieldBench[j];
         if (p.status === "NS") break;
