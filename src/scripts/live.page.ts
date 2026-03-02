@@ -237,6 +237,10 @@ const managerDataCache = new Map<string, any>();
   let teamStatusCache = new Map<string, TeamStatus>();
   let fixturesCache: FixtureInfo[] = [];
 
+  function isGwComplete(): boolean {
+    return fixturesCache.length > 0 && fixturesCache.every(fx => fx.finished || fx.finished_provisional);
+  }
+
   // Keep track of which GW the in-memory live caches refer to
   let liveCachesGw: number | null = null;
   let liveCachesLoadedAt = 0;
@@ -532,7 +536,7 @@ const managerDataCache = new Map<string, any>();
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, isGwComplete());
 
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
 
@@ -1146,7 +1150,7 @@ function buildBreakdownRows(
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode, isGwComplete());
 
       const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
       const originalStarters = sorted.slice(0, 11);

@@ -315,7 +315,14 @@ export function getPlayerLiveComputed({
   return { locked: liveTotal - projBonus, projBonus, liveTotal, status, minutes, confirmedBonus };
 }
 
-export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) {
+// Returns true if a player is confirmed DNP.
+// gwComplete=false (active GW): require status === "Fin" to guard against NS/Live players.
+// gwComplete=true (all fixtures done): minutes === 0 is sufficient — status may be stale/missing.
+function playerIsDnp(p: any, gwComplete: boolean): boolean {
+  return p.minutes === 0 && (gwComplete || p.status === "Fin");
+}
+
+export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string, gwComplete = false) {
   const isBB = chipCode === "BB";
   const isTC = chipCode === "TC";
   const capFactor = isTC ? 3 : 2;
@@ -334,14 +341,10 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
 
   // CRITICAL RULE FIX:
   // Vice-captain takes over ONLY when the captain is confirmed "did not play" for the gameweek.
-  // In this app, that means:
-  // - captain's team is finished (or provisionally finished, depending on includeFinishedProvisional used upstream)
-  // - AND captain has 0 minutes
-  //
-  // IMPORTANT: If captain is "NS" (not started) or Live with 0 minutes, we must NOT switch to VC yet.
-  // This prevents the bug where VC is doubled while captain hasn't played *yet*.
-  // The captain retains their capFactor multiplier until confirmed DNP.
-  const captainResolvedDidNotPlay = !!starterCap && starterCap.status === "Fin" && starterCap.minutes === 0;
+  // When gwComplete=false (active GW): require status === "Fin" to guard against NS/Live players.
+  // When gwComplete=true (GW fully finished): minutes === 0 alone is sufficient — status may be
+  // stale or missing (e.g. blank-GW team, stale teamStatusCache after finalization).
+  const captainResolvedDidNotPlay = !!starterCap && playerIsDnp(starterCap, gwComplete);
 
   // Captain is eligible for capFactor unless they are confirmed DNP.
   // When captain is confirmed DNP, VC immediately inherits captaincy regardless of whether
@@ -370,11 +373,11 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
   const outfieldBench = bench.filter(p => p.playingPosition !== "GK");
 
   let activeGK = gkStarter;
-  const gkDnp = gkStarter && gkStarter.minutes === 0 && gkStarter.status === "Fin";
+  const gkDnp = gkStarter && playerIsDnp(gkStarter, gwComplete);
 
   if (gkDnp && gkStarter) {
     dnpStarters.push(gkStarter.playerId);
-    const benchGK = gkBench.find(p => !(p.minutes === 0 && p.status === "Fin"));
+    const benchGK = gkBench.find(p => !playerIsDnp(p, gwComplete));
     if (benchGK) {
       activeGK = benchGK;
       subbedIn.push(benchGK.playerId);
@@ -383,8 +386,8 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
     }
   }
 
-  let activeOutfield = outfieldStarters.filter(p => !(p.minutes === 0 && p.status === "Fin"));
-  const outfieldDnp = outfieldStarters.filter(p => p.minutes === 0 && p.status === "Fin");
+  let activeOutfield = outfieldStarters.filter(p => !playerIsDnp(p, gwComplete));
+  const outfieldDnp = outfieldStarters.filter(p => playerIsDnp(p, gwComplete));
 
   for (const dnp of outfieldDnp) {
     dnpStarters.push(dnp.playerId);
@@ -396,10 +399,15 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
     // Break if the bench player's match hasn't started (can't confirm participation order yet).
     // Also break if the match is live but the player has 0 min: we can't confirm DNP yet,
     // so we must not skip this player to use the next bench player.
-    if (cand.status === "NS") break;
-    if (cand.minutes === 0) {
-      if (cand.status !== "Fin") break; // live game, 0 min — can't confirm DNP yet
-      continue; // finished, 0 min — confirmed DNP, try next bench player
+    // When gwComplete=true, use minutes===0 alone (status may be stale).
+    if (gwComplete) {
+      if (cand.minutes === 0) continue; // GW done: 0 min = confirmed DNP, skip
+    } else {
+      if (cand.status === "NS") break;
+      if (cand.minutes === 0) {
+        if (cand.status !== "Fin") break; // live game, 0 min — can't confirm DNP yet
+        continue; // finished, 0 min — confirmed DNP, try next bench player
+      }
     }
 
     const testOutfield = [...activeOutfield, cand];
@@ -424,10 +432,15 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
       let usableBench: any[] = [];
       for (let j = remainingIdx + 1; j < outfieldBench.length; j++) {
         const p = outfieldBench[j];
-        if (p.status === "NS") break;
-        if (p.minutes === 0 && p.status !== "Fin") break; // live, 0 min — can't confirm DNP
-        if (p.minutes > 0) usableBench.push(p);
-        // Fin + 0 min = confirmed DNP: continue without adding to usable
+        if (gwComplete) {
+          // GW complete: 0 min = DNP (skip), >0 min = usable
+          if (p.minutes > 0) usableBench.push(p);
+        } else {
+          if (p.status === "NS") break;
+          if (p.minutes === 0 && p.status !== "Fin") break; // live, 0 min — can't confirm DNP
+          if (p.minutes > 0) usableBench.push(p);
+          // Fin + 0 min = confirmed DNP: continue without adding to usable
+        }
       }
 
       const availDef = usableBench.filter(p => p.playingPosition === "DEF").length;
