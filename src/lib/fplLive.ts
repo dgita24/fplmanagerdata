@@ -206,7 +206,7 @@ export async function fetchFixtures({
         finished: st.finishedAll,
         finishedProvisional: includeFinishedProvisional ? st.finishedProvAll : false
       });
-
+     }
     return fixtures;
   } catch (e) {
     console.error("Error fetching fixtures:", e);
