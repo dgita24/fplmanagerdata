@@ -1256,12 +1256,12 @@ function buildBreakdownRows(
 
        // Vice-captain badge (cross out if DNP, and also cross out if they became captain)
         if (player.is_vice_captain) {
-          const vcCrossedOut = captainDidNotPlay && player.is_vice_captain;
-          html += `<span class="cap-badge cap-v${(isConfirmedDnp(player) || vcCrossedOut) ? " cap-x" : ""}">V</span>`;
+          const vcInheritedCaptaincy = (player.multiplier ?? 0) > 1;
+          html += `<span class="cap-badge cap-v${(isConfirmedDnp(player) || vcInheritedCaptaincy) ? " cap-x" : ""}">V</span>`;
         }
 
         // Acting captain: show C even though is_captain remains false
-        if (actingCaptainId === player.playerId) {
+        if (player.is_vice_captain && (player.multiplier ?? 0) > 1) {
           html += `<span class="cap-badge cap-c">C</span>`;
         }
 
