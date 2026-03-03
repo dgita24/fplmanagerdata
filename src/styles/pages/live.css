@@ -375,5 +375,11 @@
     padding: var(--space-3);
   }
 
+  .cap-badge.cap-x {
+    text-decoration: line-through;
+    opacity: 0.55;
+  }
+
+
 
   
