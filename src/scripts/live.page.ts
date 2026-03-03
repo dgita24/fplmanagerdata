@@ -1238,17 +1238,20 @@ function buildBreakdownRows(
       for (const p of originalStarters) {
         const captainDnp = originalStarters.some(s => s.is_captain && s.autoSubStatus === 'OUT');
         const isActingCaptain = p.is_vice_captain && captainDnp;
- 
-        let capLabel = '';
-        if (p.is_captain) {
-          capLabel = `<span class="cap-badge cap-c${p.autoSubStatus === 'OUT' ? ' cap-dnp' : ''}">C</span>`;
-        } else if (p.is_vice_captain) {
-          if (isActingCaptain) {
-            capLabel = `<span class="cap-badge cap-c${p.autoSubStatus === 'OUT' ? ' cap-dnp' : ''}">C</span>`;
-          } else {
-            capLabel = `<span class="cap-badge cap-v${p.autoSubStatus === 'OUT' ? ' cap-dnp' : ''}">V</span>`;
-          }
-        }
+        const capLabel = p.is_captain && p.autoSubStatus === 'OUT'
+          ? '<span class="cap-badge cap-c cap-dnp">C</span>'
+          : p.is_captain
+          ? '<span class="cap-badge cap-c">C</span>'
+          : isActingCaptain && p.autoSubStatus === 'OUT'
+          ? '<span class="cap-badge cap-c cap-dnp">C</span>'
+          : isActingCaptain
+          ? '<span class="cap-badge cap-c">C</span>'
+          : p.is_vice_captain && p.autoSubStatus === 'OUT'
+          ? '<span class="cap-badge cap-v cap-dnp">V</span>'
+          : p.is_vice_captain
+          ? '<span class="cap-badge cap-v">V</span>'
+          : '';
+
 
         const isSubbedOut = p.autoSubStatus === 'OUT';
         const isNotStarted = p.status === "NS";
