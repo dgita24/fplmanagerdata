@@ -1136,6 +1136,17 @@ function buildBreakdownRows(
       }
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
 
+      const rawAutoSubs = Array.isArray((picksData as any).automatic_subs)
+        ? (picksData as any).automatic_subs
+        : [];
+
+      const subInIds = new Set<number>(
+        rawAutoSubs.map((s: any) => Number(s.element_in)).filter(Boolean)
+      );
+      const subOutIds = new Set<number>(
+        rawAutoSubs.map((s: any) => Number(s.element_out)).filter(Boolean)
+      );
+
       const chipCode = chipPlayed || "None";
 
       const picks = rawPicks.map((p: any) => {
