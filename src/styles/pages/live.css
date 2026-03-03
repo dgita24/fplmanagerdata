@@ -375,4 +375,11 @@
     padding: var(--space-3);
   }
 
+  /* Captain / Vice-Captain badges: crossed out when DNP */
+  .cap-badge.cap-dnp {
+    text-decoration: line-through;
+    opacity: 0.5;
+  }
+
+
   
