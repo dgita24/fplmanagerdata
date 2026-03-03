@@ -1235,24 +1235,39 @@ function buildBreakdownRows(
             <tbody>
       `;
 
+      const isConfirmedDnp = (x: any) => x.status === "Fin" && x.minutes === 0;
+
+      const renderCapBadges = (player: any, starters: any[]) => {
+        const cap = starters.find(s => s.is_captain);
+        const vc = starters.find(s => s.is_vice_captain);
+
+        const captainDidNotPlay = !!cap && isConfirmedDnp(cap);
+        const actingCaptainId = captainDidNotPlay ? (vc?.playerId ?? null) : null;
+
+        let html = "";
+
+        // Original captain badge (cross out if DNP)
+        if (player.is_captain) {
+          html += `<span class="cap-badge cap-c${isConfirmedDnp(player) ? " cap-x" : ""}">C</span>`;
+        }
+
+       // Vice-captain badge (cross out if DNP, and also cross out if they became captain)
+        if (player.is_vice_captain) {
+          const vcCrossedOut = actingCaptainId === player.playerId;
+          html += `<span class="cap-badge cap-v${(isConfirmedDnp(player) || vcCrossedOut) ? " cap-x" : ""}">V</span>`;
+        }
+
+        // Acting captain: show C even though is_captain remains false
+        if (actingCaptainId === player.playerId) {
+          html += `<span class="cap-badge cap-c">C</span>`;
+        }
+
+        return html;
+      };
+
+
       for (const p of originalStarters) {
-        const captainDnp = originalStarters.some(s => s.is_captain && s.autoSubStatus === 'OUT');
-        const isActingCaptain = p.is_vice_captain && captainDnp;
-        const capLabel = p.is_captain && p.autoSubStatus === 'OUT'
-          ? '<span class="cap-badge cap-c cap-dnp">C</span>'
-          : p.is_captain
-          ? '<span class="cap-badge cap-c">C</span>'
-          : isActingCaptain && p.autoSubStatus === 'OUT'
-          ? '<span class="cap-badge cap-c cap-dnp">C</span>'
-          : isActingCaptain
-          ? '<span class="cap-badge cap-c">C</span>'
-          : p.is_vice_captain && p.autoSubStatus === 'OUT'
-          ? '<span class="cap-badge cap-v cap-dnp">V</span>'
-          : p.is_vice_captain
-          ? '<span class="cap-badge cap-v">V</span>'
-          : '';
-
-
+        const capLabel = renderCapBadges(p, originalStarters);
         const isSubbedOut = p.autoSubStatus === 'OUT';
         const isNotStarted = p.status === "NS";
         const isLive = p.status === "Live";
@@ -1326,7 +1341,8 @@ function buildBreakdownRows(
             <td class="player-cell">
               <span class="player-pos">${p.playingPosition}</span>
               <button type="button" class="player-name-btn" data-player-id="${p.playerId}">${p.web_name}</button>
-              ${statusBadge}
+                ${renderCapBadges(p, originalStarters)}
+                ${statusBadge}
             </td>
             <td class="col-team">${p.teamShort}</td>
             <td class="col-pts">${
