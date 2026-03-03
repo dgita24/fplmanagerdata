@@ -1179,6 +1179,8 @@ function buildBreakdownRows(
 
 
       const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
+      const pickStarters = sorted.slice(0, 11); // original XI from picks order
+
 
       let originalStarters: any[] = [];
       let originalBench: any[] = [];
@@ -1238,8 +1240,9 @@ function buildBreakdownRows(
       const isConfirmedDnp = (x: any) => x.status === "Fin" && x.minutes === 0;
 
       const renderCapBadges = (player: any, starters: any[]) => {
-        const cap = starters.find(s => s.is_captain);
-        const vc = starters.find(s => s.is_vice_captain);
+        const cap = pickStarters.find(s => s.is_captain);
+        const vc = pickStarters.find(s => s.is_vice_captain);
+
 
         const captainDidNotPlay = !!cap && isConfirmedDnp(cap);
         const actingCaptainId = captainDidNotPlay ? (vc?.playerId ?? null) : null;
