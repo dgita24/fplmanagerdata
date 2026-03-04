@@ -1506,6 +1506,31 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ========================================
+     TRANSFER SUMMARY MODAL
+     ======================================== */
+  .transfer-summary-section {
+    margin-bottom: var(--space-5);
+  }
+
+  .transfer-summary-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .transfer-summary-heading {
+    font-size: var(--text-sm);
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-2);
+  }
+
+  .transfer-summary-count {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  /* ========================================
      UTILITIES
      ======================================== */
   .sr-only {

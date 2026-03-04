@@ -13,7 +13,7 @@ import Nav from "../components/Nav.astro";
 
     <div class="meta-row-wide">
       <button id="manager-count" class="badge badge-wide badge-toggle" type="button">⭐ Toggle Favourites</button>
-      <a href="/players?from=transfers" class="badge badge-wide">👕 All FPL Players</a>
+      <button id="transfer-summary-btn" class="badge badge-wide badge-toggle" type="button" disabled title="Select a specific GW to view the Transfer Summary">📊 Transfer Summary</button>
     </div>
 
     <div class="controls-inline">
@@ -52,6 +52,14 @@ import Nav from "../components/Nav.astro";
     <div class="modal-panel">
       <button id="close-chip-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
       <div id="chip-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- Transfer Summary Modal -->
+  <div id="transfer-summary-modal" class="modal">
+    <div class="modal-panel">
+      <button id="close-transfer-summary-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="transfer-summary-content"></div>
     </div>
   </div>
 </Layout>
@@ -254,6 +262,7 @@ import Nav from "../components/Nav.astro";
   }
 
   import { supabase } from '../lib/supabase.ts'
+  import { aggregateTransferSummary } from '../lib/transferSummary.ts'
 
   let managerIds = [];
   let favouriteIds = new Set();
@@ -370,10 +379,17 @@ import Nav from "../components/Nav.astro";
   const chipModal = document.getElementById("chip-modal");
   const chipModalContent = document.getElementById("chip-modal-content");
   const closeChipModal = document.getElementById("close-chip-modal");
+  const transferSummaryModal = document.getElementById("transfer-summary-modal");
+  const transferSummaryContent = document.getElementById("transfer-summary-content");
+  const transferSummaryBtn = document.getElementById("transfer-summary-btn");
+  const closeTransferSummaryModal = document.getElementById("close-transfer-summary-modal");
 
   let allHistories = [];
   let latestGW = null;
   let allPlayersMap = {};
+
+  // In-memory cache for raw transfer data per manager (keyed by manager id)
+  const transferDataCache = new Map();
 
   // Load token for cancellation
   let currentLoadToken = 0;
@@ -394,6 +410,91 @@ import Nav from "../components/Nav.astro";
 
   closeChipModal.addEventListener("click", () => {
     chipModal.classList.remove("is-open");
+  });
+
+  closeTransferSummaryModal?.addEventListener("click", () => {
+    transferSummaryModal.classList.remove("is-open");
+  });
+
+  function updateTransferSummaryBtnState() {
+    if (!transferSummaryBtn) return;
+    const gwSelected = !!(gwFilterSelect.value);
+    transferSummaryBtn.disabled = !gwSelected;
+    transferSummaryBtn.title = gwSelected
+      ? "View Transfer Summary for GW " + gwFilterSelect.value
+      : "Select a specific GW to view the Transfer Summary";
+  }
+
+  async function showTransferSummaryModal() {
+    const gw = Number(gwFilterSelect.value);
+    if (!gw) return;
+
+    transferSummaryContent.innerHTML = "<p class='text-muted'>Loading transfer summary…</p>";
+    transferSummaryModal.classList.add("is-open");
+
+    try {
+      // Fetch transfers for all current managers, using in-memory cache
+      const ids = managerIds;
+      if (!ids || ids.length === 0) {
+        transferSummaryContent.innerHTML = "<p class='status status--error'>No managers loaded.</p>";
+        return;
+      }
+
+      const allTransfers = [];
+      await mapWithConcurrency(
+        ids,
+        DEFAULT_FETCH_CONCURRENCY,
+        async (id) => {
+          let data = transferDataCache.get(String(id));
+          if (!data) {
+            const res = await fetch(`/api/fpl/entry/${id}/transfers`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            data = await res.json();
+            transferDataCache.set(String(id), data);
+          }
+          for (const t of data) {
+            allTransfers.push(t);
+          }
+        },
+        null
+      );
+
+      // Aggregate IN/OUT counts for the selected GW using the helper
+      const { transferredIn, transferredOut } = aggregateTransferSummary(allTransfers, gw);
+
+      function buildSummaryTable(label, rows) {
+        const count = rows.reduce((s, r) => s + r.count, 0);
+        let html = `<div class="transfer-summary-section">`;
+        html += `<h3 class="transfer-summary-heading">${escapeHtml(label)} (${count})</h3>`;
+        if (rows.length === 0) {
+          html += `<p class="text-muted" style="font-size:13px;">No data</p>`;
+        } else {
+          html += `<div class="table-container"><table class="data-table">`;
+          html += `<thead><tr><th>Player</th><th class="num">Count</th></tr></thead>`;
+          html += `<tbody>`;
+          for (const r of rows) {
+            const name = escapeHtml(allPlayersMap[r.playerId] || `Player ${r.playerId}`);
+            html += `<tr><td>${name}</td><td class="num transfer-summary-count">${r.count}</td></tr>`;
+          }
+          html += `</tbody></table></div>`;
+        }
+        html += `</div>`;
+        return html;
+      }
+
+      let html = `<h2 class="modal-title" style="padding-right:40px;">📊 Transfer Summary — GW ${gw}</h2>`;
+      html += buildSummaryTable("Transferred In", transferredIn);
+      html += buildSummaryTable("Transferred Out", transferredOut);
+      transferSummaryContent.innerHTML = html;
+
+    } catch (err) {
+      console.error("Error loading transfer summary:", err);
+      transferSummaryContent.innerHTML = "<p class='status status--error'>Error loading transfer summary.</p>";
+    }
+  }
+
+  transferSummaryBtn?.addEventListener("click", () => {
+    if (!transferSummaryBtn.disabled) showTransferSummaryModal();
   });
 
   // ==== Persistent cache (localStorage) ====
@@ -1048,6 +1149,7 @@ import Nav from "../components/Nav.astro";
         gwFilterSelect.value = latestGW;
       }
       filterByGW();
+      updateTransferSummaryBtnState();
     }
 
     refreshBtn.disabled = false;
@@ -1160,6 +1262,7 @@ import Nav from "../components/Nav.astro";
 
 
       filterByGW();
+      updateTransferSummaryBtnState();
       loadingStatus.textContent = ``;
       if (lastUpdatedEl) {
         lastUpdatedEl.textContent = formatUpdateTime(snap.savedAt);
@@ -1196,6 +1299,7 @@ import Nav from "../components/Nav.astro";
 
   gwFilterSelect.addEventListener('change', () => {
     filterByGW();
+    updateTransferSummaryBtnState();
     saveTransfersSnapshot()
   })
 
