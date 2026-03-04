@@ -507,6 +507,13 @@ const managerDataCache = new Map<string, any>();
         "None";
 
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
+      const rawAutoSubs = Array.isArray((picksData as any).automatic_subs)
+        ? (picksData as any).automatic_subs
+        : [];
+
+      const subInIds = new Set<number>(rawAutoSubs.map((s: any) => Number(s.element_in)).filter(Boolean));
+      const subOutIds = new Set<number>(rawAutoSubs.map((s: any) => Number(s.element_out)).filter(Boolean));
+
 
       const picks = rawPicks.map((p: any) => {
         const player = playerCache.get(p.element) || { name: "", position: 4, team: 0 };
@@ -532,7 +539,13 @@ const managerDataCache = new Map<string, any>();
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+      const computedTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+
+      const finalTeam = computedTeam.map(p => ({
+        ...p,
+        autoSubStatus: subOutIds.has(p.playerId) ? "OUT" : subInIds.has(p.playerId) ? "IN" : null
+      }));
+
 
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
 
@@ -1123,6 +1136,17 @@ function buildBreakdownRows(
       }
       const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
 
+      const rawAutoSubs = Array.isArray((picksData as any).automatic_subs)
+        ? (picksData as any).automatic_subs
+        : [];
+
+      const subInIds = new Set<number>(
+        rawAutoSubs.map((s: any) => Number(s.element_in)).filter(Boolean)
+      );
+      const subOutIds = new Set<number>(
+        rawAutoSubs.map((s: any) => Number(s.element_out)).filter(Boolean)
+      );
+
       const chipCode = chipPlayed || "None";
 
       const picks = rawPicks.map((p: any) => {
@@ -1146,11 +1170,37 @@ function buildBreakdownRows(
         };
       });
 
-      const finalTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+      const computedTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+ 
+      const finalTeam = computedTeam.map(p => ({
+        ...p,
+        autoSubStatus: subOutIds.has(p.playerId) ? "OUT" : subInIds.has(p.playerId) ? "IN" : null
+      }));
+
 
       const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
-      const originalStarters = sorted.slice(0, 11);
-      const originalBench = sorted.slice(11);
+      const pickStarters = sorted.slice(0, 11); // original XI from picks order
+
+
+      let originalStarters: any[] = [];
+      let originalBench: any[] = [];
+
+      if (chipCode === "BB") {
+        // BB: everyone scores, but display still as XI + bench by original pick positions.
+        originalStarters = sorted.slice(0, 11);
+        originalBench = sorted.slice(11);
+      } else {
+        // Non-BB: effective XI are exactly the players with multiplier > 0 after autosubs.
+        originalStarters = sorted.filter(p => (p.multiplier ?? 0) > 0);
+        originalBench = sorted.filter(p => (p.multiplier ?? 0) === 0);
+
+        // Safety fallback (shouldn't happen): keep UI stable if upstream logic ever miscounts.
+        if (originalStarters.length !== 11) {
+          originalStarters = sorted.slice(0, 11);
+          originalBench = sorted.slice(11);
+        }
+      }
+
 
       const chipEmoji = chipPlayed === "WC" ? "🃏" :
                         chipPlayed === "BB" ? "🪑" :
@@ -1187,23 +1237,40 @@ function buildBreakdownRows(
             <tbody>
       `;
 
-      for (const p of originalStarters) {
-        const captainDnp = originalStarters.some(s => s.is_captain && s.autoSubStatus === 'OUT');
-        const isActingCaptain = p.is_vice_captain && captainDnp;
-        const capLabel = p.is_captain && p.autoSubStatus === 'OUT'
-          ? '<span class="cap-badge cap-c cap-dnp">C</span>'
-          : p.is_captain
-          ? '<span class="cap-badge cap-c">C</span>'
-          : isActingCaptain && p.autoSubStatus === 'OUT'
-          ? '<span class="cap-badge cap-c cap-dnp">C</span>'
-          : isActingCaptain
-          ? '<span class="cap-badge cap-c">C</span>'
-          : p.is_vice_captain && p.autoSubStatus === 'OUT'
-          ? '<span class="cap-badge cap-v cap-dnp">V</span>'
-          : p.is_vice_captain
-          ? '<span class="cap-badge cap-v">V</span>'
-          : '';
+      const isConfirmedDnp = (x: any) => x.status === "Fin" && x.minutes === 0;
 
+      const renderCapBadges = (player: any, starters: any[]) => {
+        const dnp = isConfirmedDnp(player);
+        const vcInheritedCaptaincy = player.is_vice_captain && (player.multiplier ?? 0) > 1;
+
+        let html = "";
+
+        // Original chosen captain badge (crossed out if DNP),
+        // but suppress it on the acting-captain row to avoid "C C".
+        if (player.is_captain && !vcInheritedCaptaincy) {
+          html += `<span class="cap-badge cap-c${dnp ? " cap-x" : ""}">C</span>`;
+        }
+
+        // Vice-captain badge (crossed out if DNP, and crossed out if VC inherited captaincy)
+        if (player.is_vice_captain) {
+          html += `<span class="cap-badge cap-v${(dnp || vcInheritedCaptaincy) ? " cap-x" : ""}">V</span>`;
+          // Acting captain: show C as well
+          if (vcInheritedCaptaincy) {
+            html += `<span class="cap-badge cap-c">C</span>`;
+          }
+        }
+
+        // Add explicit DNP badge alongside C/V (only when C or V, avoids duplicate DNP spam)
+        if (dnp && (player.is_captain || player.is_vice_captain)) {
+          html += `<span class="cap-badge cap-dnp">DNP</span>`;
+        }
+
+        return html;
+      };
+
+
+      for (const p of originalStarters) {
+        const capLabel = renderCapBadges(p, originalStarters);
         const isSubbedOut = p.autoSubStatus === 'OUT';
         const isNotStarted = p.status === "NS";
         const isLive = p.status === "Live";
@@ -1218,6 +1285,9 @@ function buildBreakdownRows(
         if (isSubbedOut) {
           rowClass = "sub-off-row";
           statusBadge = `<span class="status-badge status-dnp">DNP</span>`;
+        } else if (p.autoSubStatus === "IN") {
+          // Player was promoted from bench via autosub: show ON in the XI row.
+          statusBadge = `<span class="status-badge status-on">ON</span>`;
         } else if (isNotStarted) {
           rowClass = "not-started-row";
         } else if (isLive) {
@@ -1225,6 +1295,7 @@ function buildBreakdownRows(
         } else if (isFinished) {
           rowClass = "match-finished-row";
         }
+
 
         html += `
           <tr class="${rowClass}">
@@ -1236,29 +1307,6 @@ function buildBreakdownRows(
             </td>
             <td class="col-team">${p.teamShort}</td>
             <td class="col-pts ${isSubbedOut ? 'text-muted' : ''}">${ptsText}</td>
-          </tr>
-        `;
-      }
-
-      const subbedInPlayers = originalBench.filter(p => p.autoSubStatus === 'IN');
-      for (const p of subbedInPlayers) {
-        const mult = p.multiplier || 1;
-        const displayPts = Math.round(p.liveTotal * mult);
-        const ptsText = mult > 1 ? `${p.liveTotal}×${mult}` : String(displayPts);
-        const subOnStatusClass =
-          p.status === "Live" ? " match-live-row" :
-          p.status === "Fin"  ? " match-finished-row" :
-          p.status === "NS"   ? " not-started-row" : "";
-
-        html += `
-          <tr class="sub-on-row${subOnStatusClass}">
-            <td class="player-cell">
-              <span class="player-pos">${p.playingPosition}</span>
-              <button type="button" class="player-name-btn" data-player-id="${p.playerId}">${p.web_name}</button>
-              <span class="status-badge status-on">ON</span>
-            </td>
-            <td class="col-team">${p.teamShort}</td>
-            <td class="col-pts">${ptsText}</td>
           </tr>
         `;
       }
@@ -1296,7 +1344,8 @@ function buildBreakdownRows(
             <td class="player-cell">
               <span class="player-pos">${p.playingPosition}</span>
               <button type="button" class="player-name-btn" data-player-id="${p.playerId}">${p.web_name}</button>
-              ${statusBadge}
+                ${renderCapBadges(p, originalStarters)}
+                ${statusBadge}
             </td>
             <td class="col-team">${p.teamShort}</td>
             <td class="col-pts">${

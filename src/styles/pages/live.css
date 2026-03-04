@@ -375,4 +375,26 @@
     padding: var(--space-3);
   }
 
+  /* Crossed-out captain/vice badges: diagonal slash across the circle */
+  .cap-badge.cap-x {
+    position: relative;
+    opacity: 0.65;
+  }
+
+  .cap-badge.cap-x::after {
+    content: "";
+    position: absolute;
+    left: -15%;
+    top: 50%;
+    width: 130%;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.95);
+    transform: translateY(-50%) rotate(-45deg);
+    transform-origin: center;
+    pointer-events: none;
+    border-radius: 2px;
+  }
+
+
+
   
