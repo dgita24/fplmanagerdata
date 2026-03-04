@@ -1254,19 +1254,19 @@ function buildBreakdownRows(
         // Vice-captain badge (crossed out if DNP, and crossed out if VC inherited captaincy)
         if (player.is_vice_captain) {
           html += `<span class="cap-badge cap-v${(dnp || vcInheritedCaptaincy) ? " cap-x" : ""}">V</span>`;
-          // Acting captain: show C as well
           if (vcInheritedCaptaincy) {
             html += `<span class="cap-badge cap-c">C</span>`;
           }
         }
 
-        // Add explicit DNP badge alongside C/V (only when C or V, avoids duplicate DNP spam)
-        if (dnp && (player.is_captain || player.is_vice_captain)) {
-          html += `<span class="cap-badge cap-dnp">DNP</span>`;
+        // Add DNP badge for C/V players only (uses your existing status-dnp styling)
+        if (dnp && (player.is_captain || player.is_vice_captain) && !player.autoSubStatus) {
+          html += `<span class="status-badge status-dnp">DNP</span>`;
         }
 
         return html;
       };
+
 
 
       for (const p of originalStarters) {
