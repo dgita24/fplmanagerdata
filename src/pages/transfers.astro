@@ -62,6 +62,14 @@ import Nav from "../components/Nav.astro";
       <div id="transfer-summary-content"></div>
     </div>
   </div>
+
+  <!-- Player Detail Modal (nested inside Transfer Summary) -->
+  <div id="player-detail-modal" class="modal modal--nested">
+    <div class="modal-panel">
+      <button id="close-player-detail-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="player-detail-content"></div>
+    </div>
+  </div>
 </Layout>
 
 <style>
@@ -204,6 +212,24 @@ import Nav from "../components/Nav.astro";
     color: var(--color-success) !important;
     font-weight: 700 !important;
   }
+  .player-summary-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--color-primary);
+    font-size: inherit;
+    font-family: inherit;
+    text-align: left;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color 0.15s;
+  }
+
+  .player-summary-btn:hover {
+    text-decoration-color: currentColor;
+  }
+
 </style>
 
 <script>
@@ -383,10 +409,16 @@ import Nav from "../components/Nav.astro";
   const transferSummaryContent = document.getElementById("transfer-summary-content");
   const transferSummaryBtn = document.getElementById("transfer-summary-btn");
   const closeTransferSummaryModal = document.getElementById("close-transfer-summary-modal");
+  const playerDetailModal = document.getElementById("player-detail-modal");
+  const playerDetailContent = document.getElementById("player-detail-content");
 
   let allHistories = [];
   let latestGW = null;
   let allPlayersMap = {};
+
+  // State for the player detail nested modal
+  let currentPlayerManagerMap = {};
+  let currentSummaryGW = null;
 
   // In-memory cache for raw transfer data per manager (keyed by manager id)
   const transferDataCache = new Map();
@@ -415,6 +447,39 @@ import Nav from "../components/Nav.astro";
   closeTransferSummaryModal?.addEventListener("click", () => {
     transferSummaryModal.classList.remove("is-open");
   });
+
+  document.getElementById("close-player-detail-modal")?.addEventListener("click", () => {
+    playerDetailModal.classList.remove("is-open");
+  });
+
+  // Event delegation: player name clicks inside Transfer Summary open the detail modal
+  transferSummaryContent?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".player-summary-btn");
+    if (!btn) return;
+    showPlayerDetailModal(Number(btn.dataset.playerId), btn.dataset.direction);
+  });
+
+  function showPlayerDetailModal(playerId, direction) {
+    const playerName = allPlayersMap[playerId] || `Player ${playerId}`;
+    const data = currentPlayerManagerMap[playerId] || { in: [], out: [] };
+    const managers = direction === "in" ? data.in : data.out;
+    const actionLabel = direction === "in" ? "Bought by" : "Sold by";
+
+    let html = `<h2 class="modal-title" style="padding-right:40px;">${escapeHtml(playerName)}</h2>`;
+    html += `<p class="text-muted" style="margin-bottom:var(--space-3); font-size:13px;">GW ${currentSummaryGW} — ${actionLabel}</p>`;
+    if (managers.length === 0) {
+      html += `<p class="text-muted" style="font-size:13px;">No data</p>`;
+    } else {
+      html += `<ul style="list-style:none;padding:0;margin:0;">`;
+      managers.forEach(name => {
+        html += `<li style="padding:var(--space-2) 0;border-bottom:1px solid var(--color-border);font-size:var(--text-sm);">${escapeHtml(name)}</li>`;
+      });
+      html += `</ul>`;
+    }
+
+    playerDetailContent.innerHTML = html;
+    playerDetailModal.classList.add("is-open");
+  }
 
   function updateTransferSummaryBtnState() {
     if (!transferSummaryBtn) return;
@@ -453,7 +518,7 @@ import Nav from "../components/Nav.astro";
             transferDataCache.set(String(id), data);
           }
           for (const t of data) {
-            allTransfers.push(t);
+            allTransfers.push({ ...t, managerId: id });
           }
         },
         null
@@ -462,7 +527,24 @@ import Nav from "../components/Nav.astro";
       // Aggregate IN/OUT counts for the selected GW using the helper
       const { transferredIn, transferredOut } = aggregateTransferSummary(allTransfers, gw);
 
-      function buildSummaryTable(label, rows) {
+      // Build manager name map from allHistories
+      const managersMap = {};
+      allHistories.forEach(h => { managersMap[h.entryId] = h.managerName; });
+
+      // Build reverse lookup: playerId -> { in: [managerNames], out: [managerNames] }
+      currentPlayerManagerMap = {};
+      currentSummaryGW = gw;
+      for (const t of allTransfers) {
+        if (t.event !== gw) continue;
+        const mgrName = managersMap[t.managerId] || `Manager ${t.managerId}`;
+        for (const id of [t.element_in, t.element_out]) {
+          if (!currentPlayerManagerMap[id]) currentPlayerManagerMap[id] = { in: [], out: [] };
+        }
+        currentPlayerManagerMap[t.element_in].in.push(mgrName);
+        currentPlayerManagerMap[t.element_out].out.push(mgrName);
+      }
+
+      function buildSummaryTable(label, rows, direction) {
         const count = rows.reduce((s, r) => s + r.count, 0);
         let html = `<div class="transfer-summary-section">`;
         html += `<h3 class="transfer-summary-heading">${escapeHtml(label)} (${count})</h3>`;
@@ -474,7 +556,7 @@ import Nav from "../components/Nav.astro";
           html += `<tbody>`;
           for (const r of rows) {
             const name = escapeHtml(allPlayersMap[r.playerId] || `Player ${r.playerId}`);
-            html += `<tr><td>${name}</td><td class="num transfer-summary-count">${r.count}</td></tr>`;
+            html += `<tr><td><button class="player-summary-btn" data-player-id="${r.playerId}" data-direction="${direction}" type="button">${name}</button></td><td class="num transfer-summary-count">${r.count}</td></tr>`;
           }
           html += `</tbody></table></div>`;
         }
@@ -484,8 +566,8 @@ import Nav from "../components/Nav.astro";
 
       let html = `<h2 class="modal-title" style="padding-right:40px;">📊 Transfer Summary</h2>`;
       html += `<p class="text-muted" style="margin-bottom:var(--space-3); font-size:13px;">GW ${gw}</p>`;
-      html += buildSummaryTable("Transferred In", transferredIn);
-      html += buildSummaryTable("Transferred Out", transferredOut);
+      html += buildSummaryTable("Transferred In", transferredIn, "in");
+      html += buildSummaryTable("Transferred Out", transferredOut, "out");
       transferSummaryContent.innerHTML = html;
 
     } catch (err) {
