@@ -215,19 +215,27 @@ import Nav from "../components/Nav.astro";
   .player-summary-btn {
     background: none;
     border: none;
+    outline: none;
     padding: 0;
     cursor: pointer;
-    color: var(--color-primary);
+    color: #38bdf8;
     font-size: inherit;
     font-family: inherit;
+    font-weight: 600;
     text-align: left;
-    text-decoration: underline;
-    text-decoration-color: transparent;
-    transition: text-decoration-color 0.15s;
+    text-decoration: none;
+    -webkit-appearance: none;
+    appearance: none;
   }
 
   .player-summary-btn:hover {
-    text-decoration-color: currentColor;
+    color: #7dd3fc;
+    text-decoration: underline;
+  }
+
+  .player-summary-btn:focus-visible {
+    outline: 2px solid #38bdf8;
+    border-radius: 2px;
   }
 
 </style>
@@ -527,9 +535,9 @@ import Nav from "../components/Nav.astro";
       // Aggregate IN/OUT counts for the selected GW using the helper
       const { transferredIn, transferredOut } = aggregateTransferSummary(allTransfers, gw);
 
-      // Build manager name map from allHistories
+      // Build manager name map from allHistories (array-of-arrays, one per manager)
       const managersMap = {};
-      allHistories.forEach(h => { managersMap[h.entryId] = h.managerName; });
+      allHistories.flat().forEach(h => { managersMap[h.entryId] = h.managerName; });
 
       // Build reverse lookup: playerId -> { in: [managerNames], out: [managerNames] }
       currentPlayerManagerMap = {};
