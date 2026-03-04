@@ -1258,6 +1258,7 @@ import Nav from "../components/Nav.astro";
       <div style="display:flex;align-items:center;gap:var(--space-2);padding-right:40px;margin-bottom:var(--space-1);">
         <h2 class="modal-title" style="flex:1;min-width:0;margin-bottom:0;">
           <button type="button" class="manager-name-btn" data-entry-id="${manager.entryId}">${manager.managerName}</button>
+          <div class="squad-modal-entryid">ID ${manager.entryId}</div>
         </h2>
         <button type="button" class="fav-toggle-btn ${favouriteIds.has(manager.entryId) ? 'fav-toggle-btn--active' : ''}"
           data-entry-id="${manager.entryId}"
