@@ -282,40 +282,62 @@ export function getPlayerLiveComputed({
     bonus: 0,
     minutes: 0
   };
-  const { started, finished, finishedProvisional } = getTeamGwStatus(teamStatusCache, teamId, gw);
+
+  const { started, finished, finishedProvisional } = getTeamGwStatus(
+    teamStatusCache,
+    teamId,
+    gw
+  );
 
   const isFinishedForSubs = finished || finishedProvisional;
-  const bonusConfirmed = bonusConfirmedOnProvisional ? (finished || finishedProvisional) : finished;
+
+  // "Bonus confirmed" means: trust FPL's total_points as final (includes confirmed bonus).
+  const bonusConfirmed = bonusConfirmedOnProvisional
+    ? (finished || finishedProvisional)
+    : finished;
 
   const officialTotal = Number(live.points) || 0;
   const confirmedBonus = Number(live.bonus) || 0;
   const minutes = Number(live.minutes) || 0;
 
+  const projBonus = Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0;
+
   let liveTotal: number;
-  let projBonus: number;
+  let projBonusUsed: number;
 
   if (bonusConfirmed) {
+    // Once confirmed, use official total as-is.
     liveTotal = officialTotal;
-    projBonus = 0;
+    projBonusUsed = 0;
   } else if (finishedProvisional && projectedBonusDuringProvisional) {
-    const basePoints = officialTotal - confirmedBonus;
-    projBonus = Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0;
-    liveTotal = basePoints + projBonus;
+    // During provisional, always use projected bonus (don’t trust live.bonus yet).
+    liveTotal = officialTotal - confirmedBonus + projBonus;
+    projBonusUsed = projBonus;
   } else if (started && projectedBonusDuringLive) {
-    const basePoints = officialTotal - confirmedBonus;
-    projBonus = Number(projectedBonusCache.get(`${gw}:${playerId}`)) || 0;
-    liveTotal = basePoints + projBonus;
+    // During live, always use projected bonus (same logic).
+    liveTotal = officialTotal - confirmedBonus + projBonus;
+    projBonusUsed = projBonus;
   } else if (started || finishedProvisional) {
+    // If we're not projecting in this phase, show points excluding bonus.
     liveTotal = officialTotal - confirmedBonus;
-    projBonus = 0;
+    projBonusUsed = 0;
   } else {
     liveTotal = 0;
-    projBonus = 0;
+    projBonusUsed = 0;
   }
 
   const status = isFinishedForSubs ? "Fin" : started ? "Live" : "NS";
-  return { locked: liveTotal - projBonus, projBonus, liveTotal, status, minutes, confirmedBonus };
+
+  return {
+    locked: liveTotal - projBonusUsed,
+    projBonus: projBonusUsed,
+    liveTotal,
+    status,
+    minutes,
+    confirmedBonus
+  };
 }
+
 
 export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) {
   const isBB = chipCode === "BB";
