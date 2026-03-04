@@ -1213,6 +1213,7 @@ function buildBreakdownRows(
           <h2 class="modal-title" style="flex:1;min-width:0;">
             ${managerName}
             ${chipPlayed ? `<span class="badge" style="margin-left:8px;">${chipEmoji} ${chipPlayed}</span>` : ""}
+            <div class="squad-modal-entryid">ID ${entryId}</div>
           </h2>
           <button type="button" class="fav-toggle-btn ${isFav ? 'fav-toggle-btn--active' : ''}"
             data-entry-id="${entryId}"
