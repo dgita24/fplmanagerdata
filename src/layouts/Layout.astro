@@ -1525,6 +1525,11 @@ const { title = "FPL Manager Data" } = Astro.props;
     margin-bottom: var(--space-2);
   }
 
+  .transfer-summary-section .table-container {
+    max-height: 33vh;
+    overflow-y: auto;
+  }
+
   .transfer-summary-count {
     font-variant-numeric: tabular-nums;
     font-weight: 600;

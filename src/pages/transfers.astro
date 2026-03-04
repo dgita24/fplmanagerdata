@@ -482,7 +482,8 @@ import Nav from "../components/Nav.astro";
         return html;
       }
 
-      let html = `<h2 class="modal-title" style="padding-right:40px;">📊 Transfer Summary — GW ${gw}</h2>`;
+      let html = `<h2 class="modal-title" style="padding-right:40px;">📊 Transfer Summary</h2>`;
+      html += `<p class="text-muted" style="margin-bottom:var(--space-3); font-size:13px;">GW ${gw}</p>`;
       html += buildSummaryTable("Transferred In", transferredIn);
       html += buildSummaryTable("Transferred Out", transferredOut);
       transferSummaryContent.innerHTML = html;
