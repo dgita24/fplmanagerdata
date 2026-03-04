@@ -1245,7 +1245,7 @@ function buildBreakdownRows(
 
         let html = "";
 
-        // Captain badge (crossed out if DNP),
+        // Original chosen captain badge (crossed out if DNP),
         // but suppress it on the acting-captain row to avoid "C C".
         if (player.is_captain && !vcInheritedCaptaincy) {
           html += `<span class="cap-badge cap-c${dnp ? " cap-x" : ""}">C</span>`;
@@ -1254,19 +1254,19 @@ function buildBreakdownRows(
         // Vice-captain badge (crossed out if DNP, and crossed out if VC inherited captaincy)
         if (player.is_vice_captain) {
           html += `<span class="cap-badge cap-v${(dnp || vcInheritedCaptaincy) ? " cap-x" : ""}">V</span>`;
+          // Acting captain: show C as well
           if (vcInheritedCaptaincy) {
             html += `<span class="cap-badge cap-c">C</span>`;
           }
         }
 
-        // Add explicit DNP badge as well (so you can show DNP + crossed-out C/V)
-        if (dnp) {
+        // Add explicit DNP badge alongside C/V (only when C or V, avoids duplicate DNP spam)
+        if (dnp && (player.is_captain || player.is_vice_captain)) {
           html += `<span class="cap-badge cap-dnp">DNP</span>`;
         }
 
         return html;
       };
-
 
 
       for (const p of originalStarters) {
