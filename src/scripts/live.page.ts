@@ -1240,27 +1240,33 @@ function buildBreakdownRows(
       const isConfirmedDnp = (x: any) => x.status === "Fin" && x.minutes === 0;
 
       const renderCapBadges = (player: any, starters: any[]) => {
-      const vcInheritedCaptaincy = player.is_vice_captain && (player.multiplier ?? 0) > 1;
+        const dnp = isConfirmedDnp(player);
+        const vcInheritedCaptaincy = player.is_vice_captain && (player.multiplier ?? 0) > 1;
 
-      let html = "";
+        let html = "";
 
-      // Original chosen captain badge (crossed out if DNP),
-      // but suppress it on the acting-captain row to avoid "C C".
-      if (player.is_captain && !vcInheritedCaptaincy) {
-        html += `<span class="cap-badge cap-c${isConfirmedDnp(player) ? " cap-x" : ""}">C</span>`;
-      }
-
-      // Vice-captain badge (crossed out if DNP, and crossed out if VC inherited captaincy)
-      if (player.is_vice_captain) {
-        html += `<span class="cap-badge cap-v${(isConfirmedDnp(player) || vcInheritedCaptaincy) ? " cap-x" : ""}">V</span>`;
-        // Acting captain: show C as well
-        if (vcInheritedCaptaincy) {
-          html += `<span class="cap-badge cap-c">C</span>`;
+        // Captain badge (crossed out if DNP),
+        // but suppress it on the acting-captain row to avoid "C C".
+        if (player.is_captain && !vcInheritedCaptaincy) {
+          html += `<span class="cap-badge cap-c${dnp ? " cap-x" : ""}">C</span>`;
         }
-      }
 
-      return html;
-    };
+        // Vice-captain badge (crossed out if DNP, and crossed out if VC inherited captaincy)
+        if (player.is_vice_captain) {
+          html += `<span class="cap-badge cap-v${(dnp || vcInheritedCaptaincy) ? " cap-x" : ""}">V</span>`;
+          if (vcInheritedCaptaincy) {
+            html += `<span class="cap-badge cap-c">C</span>`;
+          }
+        }
+
+        // Add explicit DNP badge as well (so you can show DNP + crossed-out C/V)
+        if (dnp) {
+          html += `<span class="cap-badge cap-dnp">DNP</span>`;
+        }
+
+        return html;
+      };
+
 
 
       for (const p of originalStarters) {
