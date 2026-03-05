@@ -305,23 +305,29 @@ export function getPlayerLiveComputed({
   let liveTotal: number;
   let projBonusUsed: number;
 
+  const isInScopeForLivePoints = started || finishedProvisional;
+
+  const shouldUseProjectedBonus =
+    !bonusConfirmed &&
+    (
+      (finishedProvisional && projectedBonusDuringProvisional) ||
+      (!finishedProvisional && started && projectedBonusDuringLive)
+    );
+
   if (bonusConfirmed) {
     // Once confirmed, use official total as-is.
     liveTotal = officialTotal;
     projBonusUsed = 0;
-  } else if (finishedProvisional && projectedBonusDuringProvisional) {
-    // During provisional, always use projected bonus (don’t trust live.bonus yet).
+  } else if (shouldUseProjectedBonus) {
+    // Before confirmation, replace any embedded/partial bonus with projected bonus.
     liveTotal = officialTotal - confirmedBonus + projBonus;
     projBonusUsed = projBonus;
-  } else if (started && projectedBonusDuringLive) {
-    // During live, always use projected bonus (same logic).
-    liveTotal = officialTotal - confirmedBonus + projBonus;
-    projBonusUsed = projBonus;
-  } else if (started || finishedProvisional) {
-    // If we're not projecting in this phase, show points excluding bonus.
+  } else if (isInScopeForLivePoints) {
+    // Live/provisional but projection disabled for this phase: show points excluding bonus.
     liveTotal = officialTotal - confirmedBonus;
     projBonusUsed = 0;
   } else {
+    // Not started
     liveTotal = 0;
     projBonusUsed = 0;
   }
