@@ -295,14 +295,6 @@
     font-weight: 600;
   }
 
-  .leagues-live-table .col-hit {
-    width: 36px;
-  }
-
-  .leagues-live-table .col-ltp {
-    width: 36px;
-  }
-
   .leagues-live-table .col-total {
     width: 54px;
     font-weight: 600;
@@ -310,11 +302,6 @@
 
   .leagues-live-table .top-scorer-row td {
     background: rgb(34 197 94 / 0.06);
-  }
-
-  .leagues-live-table .hit-highlight {
-    color: var(--color-danger);
-    font-weight: 700;
   }
 
   .leagues-live-table .row-highlight td {

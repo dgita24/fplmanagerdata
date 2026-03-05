@@ -360,8 +360,6 @@ function makeLiveTable(managers: any[], myEntryId: number | null): string {
               <th class="col-rank">#</th>
               <th class="col-manager">Manager</th>
               <th class="col-gw">GW</th>
-              <th class="col-hit">Hit</th>
-              <th class="col-ltp">LtP</th>
               <th class="col-total">Total</th>
             </tr>
           </thead>
@@ -376,7 +374,6 @@ function makeLiveTable(managers: any[], myEntryId: number | null): string {
       isTop ? 'top-scorer-row' : '',
       isMe ? 'row-highlight' : '',
     ].filter(Boolean).join(' ');
-    const hitClass = m.transferCost > 0 ? 'hit-highlight' : '';
     const name = escapeHtml(m.managerName || m.teamName || `Entry ${m.entryId}`);
     const chip = m.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${escapeHtml(m.chipPlayed)}</span>` : '';
 
@@ -385,8 +382,6 @@ function makeLiveTable(managers: any[], myEntryId: number | null): string {
         <td class="col-rank">${rank}</td>
         <td class="col-manager" title="${name}">${name}${chip}</td>
         <td class="col-gw">${m.livePointsBeforeHits}</td>
-        <td class="col-hit ${hitClass}">${m.transferCost}</td>
-        <td class="col-ltp">${m.ltp ?? 0}</td>
         <td class="col-total">${m.totalPoints.toLocaleString()}</td>
       </tr>
     `;
