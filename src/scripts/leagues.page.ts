@@ -343,9 +343,14 @@ async function mapWithConcurrency<T, R>(
 // Live table HTML rendering
 // ==============================
 
-function makeLiveTable(managers: any[], myEntryId: number | null): string {
-  // Keep FPL's order (already sorted by league rank / total points from the API)
-  const sorted = [...managers].sort((a, b) => (a.leagueRank ?? 999999) - (b.leagueRank ?? 999999));
+function makeLiveTable(managers: any[], myEntryId: number | null, rankOffset: number): string {
+  // Sort by live total points descending so the rank column matches the points column
+  const sorted = [...managers].sort((a, b) => {
+    const diff = b.totalPoints - a.totalPoints;
+    if (diff !== 0) return diff;
+    // Tie-break: higher live GW points first
+    return b.livePoints - a.livePoints;
+  });
 
   let maxGwPoints = -Infinity;
   for (const m of sorted) {
@@ -367,7 +372,7 @@ function makeLiveTable(managers: any[], myEntryId: number | null): string {
           <tbody>
   `;
 
-  for (const m of sorted) {
+  sorted.forEach((m, idx) => {
     const isTop = m.livePoints === maxGwPoints;
     const isMe = myEntryId !== null && m.entryId === myEntryId;
     const rowClass = [
@@ -376,7 +381,7 @@ function makeLiveTable(managers: any[], myEntryId: number | null): string {
     ].filter(Boolean).join(' ');
     const name = escapeHtml(m.managerName || m.teamName || `Entry ${m.entryId}`);
     const chip = m.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${escapeHtml(m.chipPlayed)}</span>` : '';
-    const rankDisplay = m.leagueRank ?? '—';
+    const rankDisplay = rankOffset + idx + 1;
 
     html += `
       <tr class="${rowClass}">
@@ -386,7 +391,7 @@ function makeLiveTable(managers: any[], myEntryId: number | null): string {
         <td class="col-total">${m.totalPoints.toLocaleString()}</td>
       </tr>
     `;
-  }
+  });
 
   html += `
           </tbody>
@@ -609,7 +614,7 @@ async function loadStandingsPage(page: number) {
     const pageInfo = `Page ${currentPage}`;
     standingsSubtitleEl.textContent = `${selectedLeague.type === 'h2h' ? 'Head-to-Head' : 'Classic'} · ${pageInfo} · GW ${gw}`;
 
-    standingsOutputEl.innerHTML = makeLiveTable(managers, currentEntryId);
+    standingsOutputEl.innerHTML = makeLiveTable(managers, currentEntryId, (currentPage - 1) * STANDINGS_PAGE_SIZE);
 
     standingsStatusEl.innerHTML = `<span class="text-success font-bold">✅ Loaded ${managers.length} entries</span>`;
 
