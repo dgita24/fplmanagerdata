@@ -1,0 +1,44 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import "../styles/pages/leagues.css";
+---
+<Layout title="My Leagues - FPL Manager Watch">
+  <Nav />
+
+  <main class="page">
+    <header class="page-header">
+      <h1 class="page-title">🏆 My Leagues</h1>
+      <p class="page-subtitle">Browse all leagues for a manager with live standings and points.</p>
+    </header>
+
+    <!-- Entry ID input -->
+    <div class="card" id="leagues-input-card">
+      <div class="card-body">
+        <p class="leagues-input-notice">
+          ⚠️ <strong>Please only enter your own Entry ID.</strong> Do not abuse this feature or the FPL API. Excessive requests may result in rate limiting.
+        </p>
+        <div class="leagues-input-row">
+          <input
+            type="text"
+            id="leagues-entry-input"
+            class="leagues-entry-input"
+            placeholder="Manager ID or FPL URL (e.g. 123456)"
+            autocomplete="off"
+          />
+          <button id="leagues-fetch-btn" class="leagues-fetch-btn" type="button">
+            View Leagues
+          </button>
+        </div>
+        <div id="leagues-status" class="leagues-status"></div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="leagues-output"></div>
+  </main>
+</Layout>
+
+<script>
+  import '../scripts/leagues.page.ts';
+</script>

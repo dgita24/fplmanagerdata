@@ -5,6 +5,8 @@ type StandingRow = {
   entryId: number;
   entryName: string;
   playerName?: string | null;
+  total: number;
+  eventTotal: number;
 };
 
 export const GET: APIRoute = async ({ params, url }) => {
@@ -31,6 +33,8 @@ export const GET: APIRoute = async ({ params, url }) => {
     entryId: Number(r.entry),
     entryName: String(r.entry_name ?? ""),
     playerName: r.player_name ? String(r.player_name) : null,
+    total: Number(r.total ?? 0),
+    eventTotal: Number(r.event_total ?? 0),
   }));
 
   return new Response(
