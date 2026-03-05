@@ -8,6 +8,7 @@ import {
   type LiveStatLine,
   type TeamStatus,
 } from '../lib/fplLive.ts';
+import { supabase } from '../lib/supabase.ts';
 
 // ==============================
 // Constants
@@ -424,6 +425,18 @@ let currentHasPrev = false;
 // DOM references
 // ==============================
 
+// ==============================
+// DOM elements — auth state
+// ==============================
+
+const leaguesLoadingEl = document.getElementById('leagues-loading') as HTMLElement;
+const leaguesRequireLoginEl = document.getElementById('leagues-require-login') as HTMLElement;
+const leaguesAuthContentEl = document.getElementById('leagues-auth-content') as HTMLElement;
+
+// ==============================
+// DOM elements — page content
+// ==============================
+
 const entryInput = document.getElementById('leagues-entry-id') as HTMLInputElement;
 const loadBtn = document.getElementById('leagues-load-btn') as HTMLButtonElement;
 const loadStatus = document.getElementById('leagues-load-status') as HTMLElement;
@@ -756,3 +769,19 @@ nextBtn.addEventListener('click', () => {
 });
 
 closeBtn.addEventListener('click', () => closeStandings());
+
+// ==============================
+// Auth guard — initialise page
+// ==============================
+
+async function checkAuth() {
+  const { data: { user } } = await supabase.auth.getUser();
+  leaguesLoadingEl.style.display = 'none';
+  if (user) {
+    leaguesAuthContentEl.style.display = 'block';
+  } else {
+    leaguesRequireLoginEl.style.display = 'block';
+  }
+}
+
+(async () => { await checkAuth(); })();

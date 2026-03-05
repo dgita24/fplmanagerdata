@@ -12,6 +12,27 @@ import "../styles/pages/leagues.css";
       <p class="page-subtitle">Live mini-league tables for your entry. Enter your Entry ID to load your leagues.</p>
     </header>
 
+    <!-- Auth loading state -->
+    <div id="leagues-loading" class="card">
+      <div class="card-body text-center">
+        <p class="text-muted">Checking authentication...</p>
+      </div>
+    </div>
+
+    <!-- Logged-out state -->
+    <div id="leagues-require-login" class="card" style="display: none;">
+      <div class="card-body text-center">
+        <h2 class="card-title">Login Required</h2>
+        <p class="text-muted">You need to be logged in to view your leagues.</p>
+        <div style="margin-top: var(--space-4);">
+          <a href="/login" class="btn btn--primary">Go to Login</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Authenticated content -->
+    <div id="leagues-auth-content" style="display: none;">
+
     <!-- Entry ID input -->
     <div class="card">
       <div class="card-body">
@@ -96,6 +117,7 @@ import "../styles/pages/leagues.css";
         </div>
       </div>
     </div>
+    </div> <!-- /#leagues-auth-content -->
   </main>
 </Layout>
 
