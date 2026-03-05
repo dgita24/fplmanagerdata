@@ -344,7 +344,7 @@ async function mapWithConcurrency<T, R>(
 // ==============================
 
 function makeLiveTable(managers: any[], myEntryId: number | null): string {
-  const sorted = [...managers].sort((a, b) => b.livePointsBeforeHits - a.livePointsBeforeHits);
+  const sorted = [...managers].sort((a, b) => b.totalPoints - a.totalPoints);
 
   let maxGwPoints = -Infinity;
   for (const m of sorted) {
@@ -441,6 +441,19 @@ const topBtn = document.getElementById('standings-top-btn') as HTMLButtonElement
 const meBtn = document.getElementById('standings-me-btn') as HTMLButtonElement;
 const prevBtn = document.getElementById('standings-prev-btn') as HTMLButtonElement;
 const nextBtn = document.getElementById('standings-next-btn') as HTMLButtonElement;
+const closeBtn = document.getElementById('standings-close-btn') as HTMLButtonElement;
+
+// ==============================
+// Close standings panel
+// ==============================
+
+function closeStandings() {
+  selectedLeague = null;
+  standingsSection.style.display = 'none';
+  standingsOutputEl.innerHTML = '';
+  standingsStatusEl.textContent = '';
+  renderLeaguesList(); // clear active state
+}
 
 // ==============================
 // Render leagues list
@@ -490,6 +503,11 @@ function renderLeaguesList() {
       const type = btn.dataset.leagueType as 'classic' | 'h2h';
       const league = leagues.find(l => l.id === id && l.type === type);
       if (!league) return;
+      // Toggle: clicking the active league closes it
+      if (selectedLeague?.id === league.id && selectedLeague?.type === league.type) {
+        closeStandings();
+        return;
+      }
       selectLeague(league);
     });
   });
@@ -723,3 +741,5 @@ nextBtn.addEventListener('click', () => {
   if (!currentHasNext) return;
   loadStandingsPage(currentPage + 1);
 });
+
+closeBtn.addEventListener('click', () => closeStandings());

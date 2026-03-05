@@ -178,6 +178,18 @@
     border-color: var(--color-primary-hover);
   }
 
+  .standings-nav-btn--close {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+    background: transparent;
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .standings-nav-btn--close:hover:not(:disabled) {
+    background: rgb(220 38 38 / 0.08);
+    border-color: var(--color-danger-hover);
+  }
+
   .standings-status {
     font-size: var(--text-xs);
     color: var(--color-text-secondary);
