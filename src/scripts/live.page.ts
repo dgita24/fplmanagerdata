@@ -1284,14 +1284,18 @@ function buildBreakdownRows(
         const displayPts = (isSubbedOut || effMult === 0) ? 0 : Math.round(p.liveTotal * effMult);
         const ptsText = effMult > 1 ? `${p.liveTotal}×${effMult}` : String(displayPts);
 
+        // Treat as autosubbed-in if explicitly flagged OR promoted from bench into effective XI
+        const isAutoSubIn =
+          p.autoSubStatus === "IN" ||
+          (Number(p.position) > 11 && effMult > 0);
+
         let rowClass = "";
         let statusBadge = "";
 
         if (isSubbedOut) {
           rowClass = "sub-off-row";
           statusBadge = `<span class="status-badge status-dnp">DNP</span>`;
-        } else if (p.autoSubStatus === "IN") {
-          // Player was promoted from bench via autosub: show ON in the XI row.
+        } else if (isAutoSubIn) {
           statusBadge = `<span class="status-badge status-on">ON</span>`;
         } else if (isNotStarted) {
           rowClass = "not-started-row";
@@ -1300,7 +1304,6 @@ function buildBreakdownRows(
         } else if (isFinished) {
           rowClass = "match-finished-row";
         }
-
 
         html += `
           <tr class="${rowClass}">
