@@ -1506,6 +1506,36 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   /* ========================================
+     TRANSFER SUMMARY MODAL
+     ======================================== */
+  .transfer-summary-section {
+    margin-bottom: var(--space-5);
+  }
+
+  .transfer-summary-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .transfer-summary-heading {
+    font-size: var(--text-sm);
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-2);
+  }
+
+  .transfer-summary-section .table-container {
+    max-height: 33vh;
+    overflow-y: auto;
+  }
+
+  .transfer-summary-count {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  /* ========================================
      UTILITIES
      ======================================== */
   .sr-only {
@@ -2323,6 +2353,37 @@ const { title = "FPL Manager Data" } = Astro.props;
   .live-table .manager-btn:hover {
     color: var(--color-primary-hover);
     text-decoration: underline;
+  }
+
+  /* Transfer Summary modal — player name buttons (dynamically created via innerHTML,
+     so these rules MUST live here in the global stylesheet, not in a scoped <style>) */
+  .player-summary-btn {
+    background: none;
+    border: none;
+    outline: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    color: var(--color-primary);
+    font-size: inherit;
+    font-family: inherit;
+    font-weight: 600;
+    line-height: inherit;
+    text-align: left;
+    text-decoration: none;
+    -webkit-appearance: none;
+    appearance: none;
+    display: inline;
+  }
+
+  .player-summary-btn:hover {
+    color: var(--color-primary-hover);
+    text-decoration: underline;
+  }
+
+  .player-summary-btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    border-radius: 2px;
   }
   
   /* ========================================
