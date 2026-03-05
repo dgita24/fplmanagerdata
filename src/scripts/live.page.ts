@@ -541,10 +541,14 @@ const managerDataCache = new Map<string, any>();
 
       const computedTeam = applyAutoSubsAndMultipliers(picks, chipCode);
 
-      const finalTeam = computedTeam.map(p => ({
-        ...p,
-        autoSubStatus: subOutIds.has(p.playerId) ? "OUT" : subInIds.has(p.playerId) ? "IN" : null
-      }));
+      const finalTeam = computedTeam.map(p => {
+        // Prefer locally computed autosub state (works during live GW)
+        if (p.autoSubStatus === "IN" || p.autoSubStatus === "OUT") return p;
+
+        // Fallback to API automatic_subs (useful for completed/past GW consistency)
+        const apiStatus = subOutIds.has(p.playerId) ? "OUT" : subInIds.has(p.playerId) ? "IN" : null;
+        return { ...p, autoSubStatus: apiStatus };
+      });
 
 
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
@@ -1280,14 +1284,18 @@ function buildBreakdownRows(
         const displayPts = (isSubbedOut || effMult === 0) ? 0 : Math.round(p.liveTotal * effMult);
         const ptsText = effMult > 1 ? `${p.liveTotal}×${effMult}` : String(displayPts);
 
+        // Treat as autosubbed-in if explicitly flagged OR promoted from bench into effective XI
+        const isAutoSubIn =
+          p.autoSubStatus === "IN" ||
+          (Number(p.position) > 11 && effMult > 0);
+
         let rowClass = "";
         let statusBadge = "";
 
         if (isSubbedOut) {
           rowClass = "sub-off-row";
           statusBadge = `<span class="status-badge status-dnp">DNP</span>`;
-        } else if (p.autoSubStatus === "IN") {
-          // Player was promoted from bench via autosub: show ON in the XI row.
+        } else if (isAutoSubIn) {
           statusBadge = `<span class="status-badge status-on">ON</span>`;
         } else if (isNotStarted) {
           rowClass = "not-started-row";
@@ -1296,7 +1304,6 @@ function buildBreakdownRows(
         } else if (isFinished) {
           rowClass = "match-finished-row";
         }
-
 
         html += `
           <tr class="${rowClass}">
