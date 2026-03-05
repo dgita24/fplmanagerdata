@@ -47,7 +47,7 @@ export const GET: APIRoute = async ({ params, url }) => {
       league: { id: Number(leagueId), name: data?.league?.name ?? null },
       page: Number(page),
       hasNext: Boolean(data?.standings?.has_next),
-      hasPrev: Boolean(data?.standings?.has_previous),
+      hasPrev: Number(page) > 1,
       results: rows,
     }),
     { status: 200, headers: { "content-type": "application/json" } }

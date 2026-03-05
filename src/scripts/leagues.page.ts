@@ -344,7 +344,8 @@ async function mapWithConcurrency<T, R>(
 // ==============================
 
 function makeLiveTable(managers: any[], myEntryId: number | null): string {
-  const sorted = [...managers].sort((a, b) => b.totalPoints - a.totalPoints);
+  // Keep FPL's order (already sorted by league rank / total points from the API)
+  const sorted = [...managers].sort((a, b) => (a.leagueRank ?? 999999) - (b.leagueRank ?? 999999));
 
   let maxGwPoints = -Infinity;
   for (const m of sorted) {
@@ -366,7 +367,6 @@ function makeLiveTable(managers: any[], myEntryId: number | null): string {
           <tbody>
   `;
 
-  let rank = 1;
   for (const m of sorted) {
     const isTop = m.livePoints === maxGwPoints;
     const isMe = myEntryId !== null && m.entryId === myEntryId;
@@ -376,16 +376,16 @@ function makeLiveTable(managers: any[], myEntryId: number | null): string {
     ].filter(Boolean).join(' ');
     const name = escapeHtml(m.managerName || m.teamName || `Entry ${m.entryId}`);
     const chip = m.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${escapeHtml(m.chipPlayed)}</span>` : '';
+    const rankDisplay = m.leagueRank ?? '—';
 
     html += `
       <tr class="${rowClass}">
-        <td class="col-rank">${rank}</td>
+        <td class="col-rank">${rankDisplay}</td>
         <td class="col-manager" title="${name}">${name}${chip}</td>
         <td class="col-gw">${m.livePointsBeforeHits}</td>
         <td class="col-total">${m.totalPoints.toLocaleString()}</td>
       </tr>
     `;
-    rank++;
   }
 
   html += `
@@ -523,6 +523,9 @@ function selectLeague(league: LeagueInfo) {
 
   // Update "Me" button
   meBtn.disabled = league.entryRank <= 0;
+  // Reset to "Top" being the active nav button
+  meBtn.classList.remove('standings-nav-btn--primary');
+  topBtn.classList.add('standings-nav-btn--primary');
 
   // Scroll to standings section
   standingsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -588,7 +591,7 @@ async function loadStandingsPage(page: number) {
     // Build manager list, falling back to standings row info when live fetch failed
     const managers = rows.map(r => {
       const live = liveMap.get(r.entryId);
-      if (live) return live;
+      if (live) return { ...live, leagueRank: r.rank };
       return {
         entryId: r.entryId,
         managerName: r.entryName || `Entry ${r.entryId}`,
@@ -599,6 +602,7 @@ async function loadStandingsPage(page: number) {
         livePoints: 0,
         ltp: 0,
         totalPoints: 0,
+        leagueRank: r.rank,
       };
     });
 
@@ -716,24 +720,33 @@ entryInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') loadEntry();
 });
 
+function setMeActive(active: boolean) {
+  meBtn.classList.toggle('standings-nav-btn--primary', active);
+  topBtn.classList.toggle('standings-nav-btn--primary', !active);
+}
+
 topBtn.addEventListener('click', () => {
   if (!selectedLeague) return;
+  setMeActive(false);
   loadStandingsPage(1);
 });
 
 meBtn.addEventListener('click', () => {
   if (!selectedLeague || selectedLeague.entryRank <= 0) return;
+  setMeActive(true);
   const myPage = Math.floor((selectedLeague.entryRank - 1) / STANDINGS_PAGE_SIZE) + 1;
   loadStandingsPage(myPage);
 });
 
 prevBtn.addEventListener('click', () => {
   if (!currentHasPrev) return;
+  setMeActive(false);
   loadStandingsPage(currentPage - 1);
 });
 
 nextBtn.addEventListener('click', () => {
   if (!currentHasNext) return;
+  setMeActive(false);
   loadStandingsPage(currentPage + 1);
 });
 
