@@ -541,10 +541,14 @@ const managerDataCache = new Map<string, any>();
 
       const computedTeam = applyAutoSubsAndMultipliers(picks, chipCode);
 
-      const finalTeam = computedTeam.map(p => ({
-        ...p,
-        autoSubStatus: subOutIds.has(p.playerId) ? "OUT" : subInIds.has(p.playerId) ? "IN" : null
-      }));
+      const finalTeam = computedTeam.map(p => {
+        // Prefer locally computed autosub state (works during live GW)
+        if (p.autoSubStatus === "IN" || p.autoSubStatus === "OUT") return p;
+
+        // Fallback to API automatic_subs (useful for completed/past GW consistency)
+        const apiStatus = subOutIds.has(p.playerId) ? "OUT" : subInIds.has(p.playerId) ? "IN" : null;
+        return { ...p, autoSubStatus: apiStatus };
+      });
 
 
       const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
