@@ -2,6 +2,50 @@
    Leagues page specific styles
    =========================== */
 
+  /* Card containers — add vertical gap between cards */
+  #leagues-auth-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  #leagues-output {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  /* ---- Collapsible entry ID card ---- */
+
+  /* Summary bar — hidden by default, shown when card is collapsed */
+  .entry-id-summary {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+  }
+
+  .entry-id-summary__text {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .entry-id-summary__btn {
+    font-size: var(--text-xs);
+    min-height: 28px;
+    padding: 0 var(--space-3);
+  }
+
+  /* When collapsed, hide the body and show the summary */
+  #entry-id-card.is-collapsed .card-body {
+    display: none;
+  }
+
+  #entry-id-card.is-collapsed .entry-id-summary {
+    display: flex;
+  }
+
   .leagues-load-btn {
     align-self: flex-end;
     min-height: 40px;

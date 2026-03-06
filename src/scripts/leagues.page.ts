@@ -438,6 +438,9 @@ const leaguesAuthContentEl = document.getElementById('leagues-auth-content') as 
 // DOM elements — page content
 // ==============================
 
+const entryIdCard = document.getElementById('entry-id-card') as HTMLElement;
+const entryIdCardValueEl = document.getElementById('entry-id-card-value') as HTMLElement;
+const entryIdCardExpandBtn = document.getElementById('entry-id-card-expand') as HTMLButtonElement;
 const entryInput = document.getElementById('leagues-entry-id') as HTMLInputElement;
 const loadBtn = document.getElementById('leagues-load-btn') as HTMLButtonElement;
 const loadStatus = document.getElementById('leagues-load-status') as HTMLElement;
@@ -468,6 +471,21 @@ function closeStandings() {
   standingsStatusEl.textContent = '';
   renderLeaguesList(); // clear active state
 }
+
+// ==============================
+// Entry ID card collapse/expand
+// ==============================
+
+function collapseEntryCard(entryId: number) {
+  entryIdCardValueEl.textContent = String(entryId);
+  entryIdCard.classList.add('is-collapsed');
+}
+
+function expandEntryCard() {
+  entryIdCard.classList.remove('is-collapsed');
+}
+
+entryIdCardExpandBtn.addEventListener('click', () => expandEntryCard());
 
 // ==============================
 // Render leagues list
@@ -720,6 +738,9 @@ async function loadEntry() {
     leaguesOutput.style.display = '';
     loadStatus.innerHTML = `<span class="text-success font-bold">✅ Loaded ${leagues.length} leagues for GW ${gw}</span>`;
 
+    // Collapse the entry ID card now that data is loaded
+    collapseEntryCard(entryId);
+
     // Persist the entry ID so it's restored on next visit
     await saveEntryId(entryId);
 
@@ -819,7 +840,7 @@ async function checkAuth() {
   leaguesLoadingEl.style.display = 'none';
   if (user) {
     currentUser = user;
-    leaguesAuthContentEl.style.display = 'block';
+    leaguesAuthContentEl.style.display = 'flex';
     // Restore previously saved entry ID and auto-load
     const savedId = await loadSavedEntryId();
     if (savedId) {
