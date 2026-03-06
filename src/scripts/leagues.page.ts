@@ -358,11 +358,6 @@ function makeLiveTable(
     return b.livePoints - a.livePoints;
   });
 
-  let maxGwPoints = -Infinity;
-  for (const m of sorted) {
-    if (m.livePoints > maxGwPoints) maxGwPoints = m.livePoints;
-  }
-
   let html = `
     <div class="table-container">
       <div class="table-scroll">
@@ -379,12 +374,8 @@ function makeLiveTable(
   `;
 
   sorted.forEach((m, idx) => {
-    const isTop = m.livePoints === maxGwPoints;
     const isMe = myEntryId !== null && m.entryId === myEntryId;
-    const rowClass = [
-      isTop ? 'top-scorer-row' : '',
-      isMe ? 'row-highlight' : '',
-    ].filter(Boolean).join(' ');
+    const rowClass = isMe ? 'row-highlight' : '';
     const name = escapeHtml(m.managerName || m.teamName || `Entry ${m.entryId}`);
     const chip = m.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${escapeHtml(m.chipPlayed)}</span>` : '';
     const rankDisplay = rankOffset + idx + 1;

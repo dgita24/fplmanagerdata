@@ -547,15 +547,14 @@ const { title = "FPL Manager Data" } = Astro.props;
     white-space: nowrap !important;
   }
 
-  .stats-table .top-scorer-row td {
-    color: var(--color-success) !important;
-    font-weight: 700 !important;
+  .stats-table .row-highlight td {
+    background: rgb(59 130 246 / 0.18) !important;
   }
 
-  .stats-table .top-scorer-row .manager-btn,
-  .stats-table .top-scorer-row .or-rank-btn,
-  .stats-table .top-scorer-row .total-pts-btn {
-    color: var(--color-success) !important;
+  .stats-table .row-highlight .manager-btn,
+  .stats-table .row-highlight .or-rank-btn,
+  .stats-table .row-highlight .total-pts-btn {
+    font-weight: 700;
   }
 
   /* Mobile ONLY: fixed layout */
@@ -1044,15 +1043,6 @@ const { title = "FPL Manager Data" } = Astro.props;
     font-weight: 700 !important;
   }
 
-  .transfers-table .top-scorer-row td {
-    color: var(--color-success) !important;
-    font-weight: 700 !important;
-  }
-
-  .transfers-table .top-scorer-row a {
-    color: var(--color-success) !important;
-  }
-
   /* ========================================
    TRANSFERS TABLE - FT-based row colors
    ======================================== */
@@ -1088,17 +1078,12 @@ const { title = "FPL Manager Data" } = Astro.props;
     font-weight: 700 !important;
   }
 
-  .live-table .top-scorer-row td {
-    color: var(--color-success) !important;
-    font-weight: 700 !important;
+  .live-table .row-highlight td {
+    background: rgb(59 130 246 / 0.18) !important;
   }
 
-  .live-table .top-scorer-row td a {
-    color: var(--color-success) !important;
-  }
-
-  .live-table .top-scorer-row td.diff-col {
-    font-weight: 400 !important;
+  .live-table .row-highlight .manager-btn {
+    font-weight: 700;
   }
 
   /* ========================================
@@ -2323,20 +2308,6 @@ const { title = "FPL Manager Data" } = Astro.props;
   .live-table .hit-highlight {
     color: var(--color-danger) !important;
     font-weight: 700 !important;
-  }
-
-  .live-table .top-scorer-row td {
-    color: var(--color-success) !important;
-    font-weight: 700 !important;
-  }
-
-  .live-table .top-scorer-row td a,
-  .live-table .top-scorer-row td button {
-    color: var(--color-success) !important;
-  }
-
-  .live-table .top-scorer-row td.diff-col {
-    font-weight: 400 !important;
   }
 
   .live-table .manager-btn {

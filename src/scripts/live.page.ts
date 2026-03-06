@@ -116,16 +116,28 @@ const managerDataCache = new Map<string, any>();
     }
 
     try {
-      const { data, error } = await supabase
-        .from('user_manager_lists')
-        .select('manager_ids, favourite_manager_ids')
-        .eq('user_id', user.id)
-        .single()
+      const [listResult, profileResult] = await Promise.all([
+        supabase
+          .from('user_manager_lists')
+          .select('manager_ids, favourite_manager_ids')
+          .eq('user_id', user.id)
+          .single(),
+        supabase
+          .from('user_profiles')
+          .select('fpl_entry_id')
+          .eq('user_id', user.id)
+          .single()
+      ]);
 
+      const { data, error } = listResult;
       if (error && error.code !== 'PGRST116') {
         console.error('Error loading manager IDs:', error)
         return { authenticated: true, managerIds: [], favouriteManagerIds: [] }
       }
+
+      const profileData = profileResult.data;
+      const rawId = Number(profileData?.fpl_entry_id);
+      ownEntryId = Number.isFinite(rawId) && rawId > 0 ? rawId : null;
 
       return {
         authenticated: true,
@@ -230,6 +242,7 @@ const managerDataCache = new Map<string, any>();
 
   let liveData: any[] = [];
   let latestGW: number = 1;
+  let ownEntryId: number | null = null;
   let playerCache = new Map<number, PlayerInfo>();
   let teamCache = new Map<number, TeamInfo>();
   let livePointsCache = new Map<number, LiveStats>();
@@ -1460,13 +1473,6 @@ function buildBreakdownRows(
 
     // Sort AFTER diff exists
     const sorted = sortLiveRows(base);
-
-    let maxGwPoints = -Infinity;
-    sorted.forEach(m => {
-      if (m.livePoints > maxGwPoints) {
-        maxGwPoints = m.livePoints;
-      }
-    });
     
     let html = `
       <div class="table-container">
@@ -1491,8 +1497,8 @@ function buildBreakdownRows(
       const diffOverall = m.diff;
       const diffText = diffOverall > 0 ? `+${diffOverall}` : diffOverall === 0 ? "—" : `${diffOverall}`;
 
-      const isTopScorer = m.livePoints === maxGwPoints;
-      const rowClass = isTopScorer ? 'top-scorer-row' : '';
+      const isMe = ownEntryId !== null && m.entryId === ownEntryId;
+      const rowClass = isMe ? 'row-highlight' : '';
       const hitClass = m.transferCost > 0 ? 'hit-highlight' : '';
 
       html += `

@@ -473,16 +473,28 @@ import Nav from "../components/Nav.astro";
     }
 
     try {
-      const { data, error } = await supabase
-        .from("user_manager_lists")
-        .select("manager_ids, favourite_manager_ids")
-        .eq("user_id", user.id)
-        .single();
+      const [listResult, profileResult] = await Promise.all([
+        supabase
+          .from("user_manager_lists")
+          .select("manager_ids, favourite_manager_ids")
+          .eq("user_id", user.id)
+          .single(),
+        supabase
+          .from("user_profiles")
+          .select("fpl_entry_id")
+          .eq("user_id", user.id)
+          .single()
+      ]);
 
+      const { data, error } = listResult;
       if (error && error.code !== "PGRST116") {
         console.error("Error loading manager IDs:", error);
         return { authenticated: true, managerIds: [], favouriteManagerIds: [] };
       }
+
+      const profileData = profileResult.data;
+      const rawId = Number(profileData?.fpl_entry_id);
+      ownEntryId = Number.isFinite(rawId) && rawId > 0 ? rawId : null;
 
       return {
         authenticated: true,
@@ -545,6 +557,7 @@ import Nav from "../components/Nav.astro";
   let managerIds: number[] = [];
   let favouriteIds = new Set<number>();
   let showFavouritesOnly = false;
+  let ownEntryId: number | null = null;
   let allManagerData: ManagerData[] = [];
   let playerCache = new Map<number, { name: string; position: number; team: number }>();
   let teamCache = new Map<number, { name: string; shortName: string }>();
@@ -947,12 +960,6 @@ import Nav from "../components/Nav.astro";
   function makeStatsTable(managersData: ManagerData[], gw: number): string {
     const sortedData = sortStatsRows(managersData);
 
-    // Find max for highlighting
-    let maxGwPoints = -Infinity;
-    sortedData.forEach(m => {
-      if (m.gwPoints > maxGwPoints) maxGwPoints = m.gwPoints;
-    });
-
     let html = `
       <div class="table-container">
         <div class="table-scroll">
@@ -971,8 +978,8 @@ import Nav from "../components/Nav.astro";
 
     let rank = 1;
     for (const m of sortedData) {
-      const isTopScorer = m.gwPoints === maxGwPoints && maxGwPoints > 0;
-      const rowClass = isTopScorer ? 'top-scorer-row' : '';
+      const isMe = ownEntryId !== null && Number(m.entryId) === ownEntryId;
+      const rowClass = isMe ? 'row-highlight' : '';
 
       html += `
         <tr class="${rowClass}">
