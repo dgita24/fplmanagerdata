@@ -7,6 +7,7 @@ export interface FixtureInfo {
   started: boolean;
   finished: boolean;
   finished_provisional: boolean;
+  kickoff_time?: string;
 }
 
 export interface LiveStatLine {
@@ -477,4 +478,70 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
       autoSubStatus: isDnpStarter ? "OUT" : isSubbedIn ? "IN" : null
     };
   });
+}
+
+/**
+ * Computes a player's Left-to-Play (LtP) contribution for the current GW,
+ * correctly handling Double Gameweeks (DGWs) by evaluating each fixture
+ * individually rather than relying on aggregate team status.
+ *
+ * Rules (preserving existing single-GW behaviour):
+ * - Players with multiplier === 0 (benched / subbed out) never contribute.
+ * - Players whose team has no fixture this GW return 0.
+ * - Finished/provisional fixtures do not contribute to LtP.
+ * - Not-yet-started fixtures always contribute `multiplier` to LtP.
+ * - Live fixtures: estimate whether the player has played in this specific
+ *   fixture by subtracting minutes attributed to earlier finished fixtures
+ *   (120 per finished fixture to cover extra time). If estimated minutes
+ *   in the live fixture are 0 the player is still "left to play" and
+ *   contributes `multiplier`; if > 0 they are already playing and do not.
+ *
+ * DGW example: F1 finished (player had 90 min), F2 not started →
+ *   minutesAttributed = 120 after F1; F2 not started → ltp += multiplier.
+ *   Result: multiplier (player still has one fixture left to play).
+ */
+export function computePlayerLtpContribution(
+  teamId: number,
+  playerMinutes: number,
+  multiplier: number,
+  fixturesCache: FixtureInfo[]
+): number {
+  if (multiplier === 0) return 0;
+
+  // Filter to this team's fixtures and sort by id (chronological within GW).
+  const teamFixtures = fixturesCache
+    .filter(f => f.team_h === teamId || f.team_a === teamId)
+    .sort((a, b) => a.id - b.id);
+
+  if (teamFixtures.length === 0) return 0;
+
+  let ltp = 0;
+  // Track minutes "attributed" to completed fixtures so we can estimate
+  // whether the player has already appeared in a subsequent live fixture.
+  // 120 covers standard time plus extra time in knockout scenarios.
+  let minutesAttributed = 0;
+
+  for (const fx of teamFixtures) {
+    if (fx.finished || fx.finished_provisional) {
+      // Fixture is over – no LtP contribution; account for potential minutes.
+      minutesAttributed += 120;
+      continue;
+    }
+
+    if (!fx.started) {
+      // Fixture has not kicked off – player cannot have played here yet.
+      ltp += multiplier;
+      continue;
+    }
+
+    // Live fixture: estimate the player's minutes in this specific match.
+    const minutesInThisFixture = Math.max(0, playerMinutes - minutesAttributed);
+    if (minutesInThisFixture === 0) {
+      // Player has not appeared in this live fixture yet → still left to play.
+      ltp += multiplier;
+    }
+    // If minutesInThisFixture > 0 the player is already playing → no LtP.
+  }
+
+  return ltp;
 }

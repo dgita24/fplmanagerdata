@@ -1,5 +1,6 @@
 import {
   applyAutoSubsAndMultipliers,
+  computePlayerLtpContribution,
   fetchFixtures,
   fetchLiveGW,
   getPlayerLiveComputed,
@@ -204,7 +205,7 @@ async function fetchManagerLive(entryId: number, gw: number): Promise<{
 
     const liveNet = livePointsBeforeHits - transferCost;
 
-    // Left to Play
+    // Left to Play (DGW-aware)
     const teamsWithFixture = new Set<number>();
     for (const f of fixturesCache) {
       teamsWithFixture.add(f.team_h);
@@ -212,13 +213,7 @@ async function fetchManagerLive(entryId: number, gw: number): Promise<{
     }
 
     let ltp = finalTeam.reduce((sum, p) => {
-      const mult = p.multiplier ?? 0;
-      if (mult === 0) return sum;
-      if (!teamsWithFixture.has(p.teamId)) return sum;
-      if (p.minutes > 0) return sum;
-      const { finished, finishedProvisional } = getTeamGwStatusLocal(p.teamId, gw);
-      if (finished || finishedProvisional) return sum;
-      return sum + mult;
+      return sum + computePlayerLtpContribution(p.teamId, p.minutes, p.multiplier ?? 0, fixturesCache);
     }, 0);
 
     // Speculative subs (non-BB only)
@@ -234,10 +229,8 @@ async function fetchManagerLive(entryId: number, gw: number): Promise<{
       if (gkStarterDnp && !gkActive) {
         for (const gk of gkBench) {
           if (gk.autoSubStatus === 'IN') continue;
-          if (gk.minutes > 0) continue;
-          const { finished, finishedProvisional } = getTeamGwStatusLocal(gk.teamId, gw);
-          if (finished || finishedProvisional) continue;
-          if (!teamsWithFixture.has(gk.teamId)) continue;
+          // DGW-aware: bench GK who played in F1 but has F2 upcoming is still eligible.
+          if (computePlayerLtpContribution(gk.teamId, gk.minutes, 1, fixturesCache) === 0) continue;
           ltp += 1;
           break;
         }
@@ -245,10 +238,8 @@ async function fetchManagerLive(entryId: number, gw: number): Promise<{
 
       for (const cand of outfieldBench) {
         if (activeOutfield.length >= 10) break;
-        if (cand.minutes > 0) continue;
-        const { finished, finishedProvisional } = getTeamGwStatusLocal(cand.teamId, gw);
-        if (finished || finishedProvisional) continue;
-        if (!teamsWithFixture.has(cand.teamId)) continue;
+        // DGW-aware: bench player who played in F1 but has F2 upcoming is still eligible.
+        if (computePlayerLtpContribution(cand.teamId, cand.minutes, 1, fixturesCache) === 0) continue;
 
         const testOutfield = [...activeOutfield, cand];
         const defCount = testOutfield.filter(p => p.playingPosition === 'DEF').length;
@@ -265,9 +256,7 @@ async function fetchManagerLive(entryId: number, gw: number): Promise<{
           const needFwd = Math.max(0, 1 - fwdCount);
           const candidateIndex = outfieldBench.indexOf(cand);
           const remainingCandidates = outfieldBench.slice(candidateIndex + 1).filter(b => {
-            if (b.minutes > 0) return false;
-            const { finished: f, finishedProvisional: fp } = getTeamGwStatusLocal(b.teamId, gw);
-            return !f && !fp && teamsWithFixture.has(b.teamId);
+            return computePlayerLtpContribution(b.teamId, b.minutes, 1, fixturesCache) > 0;
           });
           canSub =
             remainingCandidates.filter(p => p.playingPosition === 'DEF').length >= needDef &&
