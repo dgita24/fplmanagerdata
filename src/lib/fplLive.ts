@@ -510,8 +510,13 @@ export function computePlayerLtpContribution(
 
   // Filter to this team's fixtures and sort by id (chronological within GW).
   const teamFixtures = fixturesCache
-    .filter(f => f.team_h === teamId || f.team_a === teamId)
-    .sort((a, b) => a.id - b.id);
+  .filter(f => f.team_h === teamId || f.team_a === teamId)
+  .sort((a, b) => {
+    const aTime = a.kickoff_time ? new Date(a.kickoff_time).getTime() : 0;
+    const bTime = b.kickoff_time ? new Date(b.kickoff_time).getTime() : 0;
+    if (aTime !== bTime) return aTime - bTime;
+    return a.id - b.id;
+  });
 
   if (teamFixtures.length === 0) return 0;
 
