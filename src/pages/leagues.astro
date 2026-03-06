@@ -1,0 +1,132 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Nav from "../components/Nav.astro";
+import "../styles/pages/leagues.css";
+---
+<Layout title="My Leagues - FPL Manager Watch">
+  <Nav />
+
+  <main class="page">
+    <header class="page-header">
+      <h1 class="page-title">🏆 My Leagues</h1>
+      <p class="page-subtitle">Live mini-league tables for your entry. Enter your Entry ID to load your leagues.</p>
+    </header>
+
+    <!-- Auth loading state -->
+    <div id="leagues-loading" class="card">
+      <div class="card-body text-center">
+        <p class="text-muted">Checking authentication...</p>
+      </div>
+    </div>
+
+    <!-- Logged-out state -->
+    <div id="leagues-require-login" class="card" style="display: none;">
+      <div class="card-body text-center">
+        <h2 class="card-title">Login Required</h2>
+        <p class="text-muted">You need to be logged in to view your leagues.</p>
+        <div style="margin-top: var(--space-4);">
+          <a href="/login" class="btn btn--primary">Go to Login</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Authenticated content -->
+    <div id="leagues-auth-content" style="display: none;">
+
+    <!-- Entry ID input -->
+    <div class="card" id="entry-id-card">
+      <!-- Collapsed summary bar (shown after a successful load) -->
+      <div class="entry-id-summary" id="entry-id-summary">
+        <span class="entry-id-summary__text">Entry ID: <strong id="entry-id-card-value">—</strong></span>
+        <button id="entry-id-card-expand" class="btn btn--neutral entry-id-summary__btn" type="button">Change</button>
+      </div>
+      <!-- Full form (shown by default) -->
+      <div class="card-body" id="entry-id-card-body">
+        <div class="leagues-entry-form">
+          <div class="leagues-warning">
+            ⚠️ <strong>Please only enter your own Entry ID.</strong> Do not abuse this tool or the FPL API. Excessive requests may result in rate limiting.
+          </div>
+          <div class="leagues-entry-row">
+            <div class="input-wrapper">
+              <label class="label-small" for="leagues-entry-id">Your Entry ID</label>
+              <input
+                id="leagues-entry-id"
+                class="input"
+                type="text"
+                placeholder="e.g. 1234567"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+            </div>
+            <button id="leagues-load-btn" class="btn btn--primary leagues-load-btn" type="button">
+              Load
+            </button>
+          </div>
+          <div id="leagues-load-status" class="standings-status" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Output area (Overall + leagues list) -->
+    <div id="leagues-output" style="display:none;">
+
+      <!-- Overall section -->
+      <div class="card" id="overall-card">
+        <div class="card-body">
+          <div class="card-title">🌐 Overall</div>
+          <div id="overall-grid" class="overall-grid">
+            <div class="overall-stat">
+              <span class="overall-stat__label">Overall Rank</span>
+              <span id="overall-rank-value" class="overall-stat__value">—</span>
+              <span class="overall-stat__note">Updates periodically</span>
+            </div>
+            <div class="overall-stat">
+              <span class="overall-stat__label">GW Live Pts</span>
+              <span id="overall-live-pts-value" class="overall-stat__value">—</span>
+              <span class="overall-stat__note">Live / Projection</span>
+            </div>
+            <div class="overall-stat">
+              <span class="overall-stat__label">Left to Play</span>
+              <span id="overall-ltp-value" class="overall-stat__value">—</span>
+              <span class="overall-stat__note">Players yet to play</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Leagues list -->
+      <div class="card">
+        <div class="card-body">
+          <div class="card-title">📋 Your Leagues</div>
+          <div id="leagues-list" class="leagues-list"></div>
+        </div>
+      </div>
+
+      <!-- Standings view (shown when a league is selected) -->
+      <div id="standings-section" class="card" style="display:none;">
+        <div class="card-body">
+          <div class="standings-header">
+            <div>
+              <div id="standings-title" class="standings-title"></div>
+              <div id="standings-subtitle" class="standings-subtitle"></div>
+            </div>
+            <div class="standings-nav">
+              <button id="standings-top-btn" class="standings-nav-btn standings-nav-btn--primary" type="button">Top</button>
+              <button id="standings-me-btn" class="standings-nav-btn" type="button">Me</button>
+              <button id="standings-prev-btn" class="standings-nav-btn" type="button" disabled>◀ Prev</button>
+              <button id="standings-next-btn" class="standings-nav-btn" type="button" disabled>Next ▶</button>
+              <button id="standings-close-btn" class="standings-nav-btn standings-nav-btn--close" type="button" aria-label="Close standings">✕</button>
+            </div>
+          </div>
+          <div id="standings-status" class="standings-status" aria-live="polite" style="margin-top:var(--space-2);"></div>
+          <div id="standings-output" style="margin-top:var(--space-3);"></div>
+        </div>
+      </div>
+    </div>
+    </div> <!-- /#leagues-auth-content -->
+  </main>
+</Layout>
+
+<script>
+  import '../scripts/leagues.page.ts';
+</script>

@@ -1,0 +1,403 @@
+/* ===========================
+   Leagues page specific styles
+   =========================== */
+
+  /* Card containers — add vertical gap between cards */
+  #leagues-auth-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  #leagues-output {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  /* ---- Collapsible entry ID card ---- */
+
+  /* Summary bar — hidden by default, shown when card is collapsed */
+  .entry-id-summary {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+  }
+
+  .entry-id-summary__text {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .entry-id-summary__btn {
+    font-size: var(--text-xs);
+    min-height: 28px;
+    padding: 0 var(--space-3);
+  }
+
+  /* When collapsed, hide the body and show the summary */
+  #entry-id-card.is-collapsed .card-body {
+    display: none;
+  }
+
+  #entry-id-card.is-collapsed .entry-id-summary {
+    display: flex;
+  }
+
+  .leagues-load-btn {
+    align-self: flex-end;
+    min-height: 40px;
+    padding: 0 var(--space-4);
+  }
+
+  .leagues-entry-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .leagues-entry-row {
+    display: flex;
+    gap: var(--space-2);
+    align-items: flex-end;
+  }
+
+  .leagues-entry-row .input-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .leagues-warning {
+    font-size: var(--text-xs);
+    color: var(--color-warning);
+    background: rgb(245 158 11 / 0.1);
+    border: 1px solid rgb(245 158 11 / 0.3);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    line-height: 1.4;
+  }
+
+  .leagues-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .league-section-title {
+    font-size: var(--text-xs);
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: var(--space-1) 0;
+    border-bottom: 1px solid var(--color-border);
+    margin-top: var(--space-2);
+  }
+
+  .league-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+    text-align: left;
+    width: 100%;
+  }
+
+  .league-item:hover {
+    background: var(--color-surface-alt);
+  }
+
+  .league-item.is-active {
+    border-color: var(--color-primary);
+    background: rgb(59 130 246 / 0.05);
+  }
+
+  .league-item__name {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--color-text);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .league-item__rank {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .league-item__badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 5px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-alt);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+    flex-shrink: 0;
+  }
+
+  .league-item__badge--h2h {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+    background: rgb(59 130 246 / 0.08);
+  }
+
+  /* Standings view */
+  .standings-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .standings-title {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .standings-subtitle {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    margin-top: 2px;
+  }
+
+  .standings-nav {
+    display: flex;
+    gap: var(--space-1);
+    flex-wrap: wrap;
+  }
+
+  .standings-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: var(--space-1) var(--space-3);
+    font-family: inherit;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .standings-nav-btn:hover:not(:disabled) {
+    background: var(--color-surface-alt);
+    border-color: var(--color-border-strong);
+  }
+
+  .standings-nav-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .standings-nav-btn--primary {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+  }
+
+  .standings-nav-btn--primary:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+  }
+
+  .standings-nav-btn--close {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+    background: transparent;
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .standings-nav-btn--close:hover:not(:disabled) {
+    background: rgb(220 38 38 / 0.08);
+    border-color: var(--color-danger-hover);
+  }
+
+  .standings-status {
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    min-height: 18px;
+  }
+
+  /* Overall card — always 3 columns across all screen sizes */
+  .overall-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
+  }
+
+  .overall-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface-alt);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    text-align: center;
+  }
+
+  .overall-stat__label {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+  }
+
+  .overall-stat__value {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--color-text);
+    line-height: 1.2;
+  }
+
+  .overall-stat__note {
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+
+  /* Mobile: compact stat boxes so all 3 fit without wrapping */
+  @media (max-width: 479px) {
+    .overall-grid {
+      gap: var(--space-1);
+    }
+
+    .overall-stat {
+      padding: var(--space-1) var(--space-2);
+      gap: 1px;
+    }
+
+    .overall-stat__label {
+      font-size: 11px;
+    }
+
+    .overall-stat__value {
+      font-size: 13px;
+    }
+
+    .overall-stat__note {
+      display: none;
+    }
+  }
+
+  /* Live table inside leagues page */
+  .leagues-live-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .leagues-live-table thead {
+    background: var(--color-surface-alt);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .leagues-live-table th {
+    padding: var(--space-2) var(--space-1);
+    text-align: center;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    border-bottom: 2px solid var(--color-border);
+    white-space: nowrap;
+  }
+
+  .leagues-live-table th.col-manager {
+    text-align: left;
+    padding-left: var(--space-2);
+  }
+
+  .leagues-live-table td {
+    padding: var(--space-1) var(--space-1);
+    border-bottom: 1px solid var(--color-border);
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  .leagues-live-table td.col-manager {
+    text-align: left;
+    padding-left: var(--space-2);
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .leagues-live-table tbody tr:hover {
+    background: var(--color-surface-alt);
+  }
+
+  .leagues-live-table .col-rank {
+    width: 30px;
+    font-weight: 700;
+  }
+
+  .leagues-live-table .col-gw {
+    width: 44px;
+    font-weight: 600;
+  }
+
+  .leagues-live-table .col-total {
+    width: 54px;
+    font-weight: 600;
+  }
+
+  .leagues-live-table .row-highlight td {
+    background: rgb(59 130 246 / 0.18);
+    font-weight: 700;
+  }
+
+  /* Pinned "Me" row separator */
+  .leagues-live-table .me-separator-row td {
+    padding: 6px 4px;
+    text-align: center;
+    font-size: 10px;
+    color: var(--color-text-muted);
+    letter-spacing: 0.1em;
+    border-bottom: none;
+    background: transparent;
+  }
+
+  /* Pinned "Me" row — dashed top border to distinguish from paginated rows */
+  .leagues-live-table .me-pinned-row td {
+    border-top: 2px dashed var(--color-primary);
+  }
+
+  .input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: inherit;
+    font-family: inherit;
+    font-size: var(--text-sm);
+    outline: none;
+    transition: border-color var(--transition-fast);
+  }
+
+  .input:focus {
+    border-color: var(--color-primary);
+  }
