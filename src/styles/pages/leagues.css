@@ -240,17 +240,11 @@
     min-height: 18px;
   }
 
-  /* Overall card */
+  /* Overall card — always 3 columns across all screen sizes */
   .overall-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--space-3);
-  }
-
-  @media (min-width: 480px) {
-    .overall-grid {
-      grid-template-columns: repeat(3, 1fr);
-    }
   }
 
   .overall-stat {
@@ -279,6 +273,30 @@
   .overall-stat__note {
     font-size: 10px;
     color: var(--color-text-muted);
+  }
+
+  /* Mobile: compact stat boxes so all 3 fit without wrapping */
+  @media (max-width: 479px) {
+    .overall-grid {
+      gap: var(--space-1);
+    }
+
+    .overall-stat {
+      padding: var(--space-1) var(--space-2);
+      gap: 1px;
+    }
+
+    .overall-stat__label {
+      font-size: 9px;
+    }
+
+    .overall-stat__value {
+      font-size: 13px;
+    }
+
+    .overall-stat__note {
+      display: none;
+    }
   }
 
   /* Live table inside leagues page */
