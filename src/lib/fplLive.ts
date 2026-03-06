@@ -164,7 +164,7 @@ export async function fetchFixtures({
       // IMPORTANT:
       // Keep official `finished` separate from `finished_provisional`.
       // During the FT -> bonus-confirmed window we still want projected bonus
-      // to count, so only true official finished fixtures should set finishedAll.
+      // to count, so only true official finished fixtures should set finishedAll......adding this to force deploy on cloudflare
       cur.finishedAll = cur.finishedAll && !!finished;
       cur.finishedProvAll = cur.finishedProvAll && (!!finished || !!finishedProvisional);
       perTeam.set(teamId, cur);
