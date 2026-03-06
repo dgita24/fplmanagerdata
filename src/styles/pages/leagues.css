@@ -352,6 +352,22 @@
     background: rgb(59 130 246 / 0.08);
   }
 
+  /* Pinned "Me" row separator */
+  .leagues-live-table .me-separator-row td {
+    padding: 6px 4px;
+    text-align: center;
+    font-size: 10px;
+    color: var(--color-text-muted);
+    letter-spacing: 0.1em;
+    border-bottom: none;
+    background: transparent;
+  }
+
+  /* Pinned "Me" row — dashed top border to distinguish from paginated rows */
+  .leagues-live-table .me-pinned-row td {
+    border-top: 2px dashed var(--color-primary);
+  }
+
   .input {
     width: 100%;
     padding: 10px 12px;

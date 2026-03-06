@@ -344,7 +344,12 @@ async function mapWithConcurrency<T, R>(
 // Live table HTML rendering
 // ==============================
 
-function makeLiveTable(managers: any[], myEntryId: number | null, rankOffset: number): string {
+function makeLiveTable(
+  managers: any[],
+  myEntryId: number | null,
+  rankOffset: number,
+  pinnedMe?: { manager: any; leagueRank: number } | null
+): string {
   // Sort by live total points descending so the rank column matches the points column
   const sorted = [...managers].sort((a, b) => {
     const diff = b.totalPoints - a.totalPoints;
@@ -385,7 +390,7 @@ function makeLiveTable(managers: any[], myEntryId: number | null, rankOffset: nu
     const rankDisplay = rankOffset + idx + 1;
 
     html += `
-      <tr class="${rowClass}">
+      <tr class="${rowClass}"${isMe ? ' id="standings-me-row"' : ''}>
         <td class="col-rank">${rankDisplay}</td>
         <td class="col-manager" title="${name}">${name}${chip}</td>
         <td class="col-gw">${m.livePointsBeforeHits}</td>
@@ -393,6 +398,24 @@ function makeLiveTable(managers: any[], myEntryId: number | null, rankOffset: nu
       </tr>
     `;
   });
+
+  // Pinned "Me" row — appended when user is not on the current page
+  if (pinnedMe) {
+    const pm = pinnedMe.manager;
+    const name = escapeHtml(pm.managerName || pm.teamName || `Entry ${pm.entryId}`);
+    const chip = pm.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${escapeHtml(pm.chipPlayed)}</span>` : '';
+    html += `
+      <tr class="me-separator-row">
+        <td colspan="4" class="me-separator-cell">· · · my position · · ·</td>
+      </tr>
+      <tr class="row-highlight me-pinned-row" id="standings-me-row">
+        <td class="col-rank">${pinnedMe.leagueRank > 0 ? pinnedMe.leagueRank : '—'}</td>
+        <td class="col-manager" title="${name}">📍 ${name}${chip}</td>
+        <td class="col-gw">${pm.livePointsBeforeHits}</td>
+        <td class="col-total">${pm.totalPoints.toLocaleString()}</td>
+      </tr>
+    `;
+  }
 
   html += `
           </tbody>
@@ -643,10 +666,20 @@ async function loadStandingsPage(page: number) {
       };
     });
 
+    // Pinned "Me" row: shown at the bottom when the user is not on this page
+    let pinnedMe: { manager: any; leagueRank: number } | null = null;
+    const myInPage = currentEntryId !== null && managers.some(m => m.entryId === currentEntryId);
+    if (!myInPage && currentEntryId && selectedLeague) {
+      const myLive = await fetchManagerLive(currentEntryId, gw);
+      if (myLive) {
+        pinnedMe = { manager: myLive, leagueRank: selectedLeague.entryRank };
+      }
+    }
+
     const pageInfo = `Page ${currentPage}`;
     standingsSubtitleEl.textContent = `${selectedLeague.type === 'h2h' ? 'Head-to-Head' : 'Classic'} · ${pageInfo} · GW ${gw}`;
 
-    standingsOutputEl.innerHTML = makeLiveTable(managers, currentEntryId, (currentPage - 1) * STANDINGS_PAGE_SIZE);
+    standingsOutputEl.innerHTML = makeLiveTable(managers, currentEntryId, (currentPage - 1) * STANDINGS_PAGE_SIZE, pinnedMe);
 
     standingsStatusEl.innerHTML = `<span class="text-success font-bold">✅ Loaded ${managers.length} entries</span>`;
 
@@ -777,8 +810,16 @@ topBtn.addEventListener('click', () => {
 meBtn.addEventListener('click', () => {
   if (!selectedLeague || selectedLeague.entryRank <= 0) return;
   setMeActive(true);
-  const myPage = Math.floor((selectedLeague.entryRank - 1) / STANDINGS_PAGE_SIZE) + 1;
-  loadStandingsPage(myPage);
+  // Scroll to the user's row if it is already visible in the current page
+  // (either highlighted naturally or as the pinned "Me" row at the bottom)
+  const meRow = standingsOutputEl.querySelector<HTMLElement>('#standings-me-row');
+  if (meRow) {
+    meRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  // Fall back to page 1; the pinned "Me" row will be appended since the user
+  // is very unlikely to be in the top results on page 1
+  loadStandingsPage(1);
 });
 
 prevBtn.addEventListener('click', () => {
