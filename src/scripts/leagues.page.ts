@@ -415,6 +415,7 @@ interface LeagueInfo {
 }
 
 let currentEntryId: number | null = null;
+let currentUser: { id: string } | null = null;
 let leagues: LeagueInfo[] = [];
 let selectedLeague: LeagueInfo | null = null;
 let currentPage = 1;
@@ -719,6 +720,9 @@ async function loadEntry() {
     leaguesOutput.style.display = '';
     loadStatus.innerHTML = `<span class="text-success font-bold">✅ Loaded ${leagues.length} leagues for GW ${gw}</span>`;
 
+    // Persist the entry ID so it's restored on next visit
+    await saveEntryId(entryId);
+
   } catch (e) {
     console.error('loadEntry error', e);
     loadStatus.innerHTML = `<span class="status status--error">Could not load entry data. Check the ID and try again.</span>`;
@@ -771,6 +775,42 @@ nextBtn.addEventListener('click', () => {
 closeBtn.addEventListener('click', () => closeStandings());
 
 // ==============================
+// Supabase helpers — entry ID persistence
+// ==============================
+
+async function saveEntryId(entryId: number): Promise<void> {
+  if (!currentUser) return;
+  try {
+    const { error } = await supabase
+      .from('user_profiles')
+      .upsert(
+        { user_id: currentUser.id, fpl_entry_id: entryId, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      );
+    if (error) console.error('Failed to save entry ID:', error);
+  } catch (e) {
+    console.error('saveEntryId error:', e);
+  }
+}
+
+async function loadSavedEntryId(): Promise<number | null> {
+  if (!currentUser) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('fpl_entry_id')
+      .eq('user_id', currentUser.id)
+      .single();
+    if (error || !data) return null;
+    const id = Number(data.fpl_entry_id);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch (e) {
+    console.error('loadSavedEntryId error:', e);
+    return null;
+  }
+}
+
+// ==============================
 // Auth guard — initialise page
 // ==============================
 
@@ -778,7 +818,14 @@ async function checkAuth() {
   const { data: { user } } = await supabase.auth.getUser();
   leaguesLoadingEl.style.display = 'none';
   if (user) {
+    currentUser = user;
     leaguesAuthContentEl.style.display = 'block';
+    // Restore previously saved entry ID and auto-load
+    const savedId = await loadSavedEntryId();
+    if (savedId) {
+      entryInput.value = String(savedId);
+      await loadEntry();
+    }
   } else {
     leaguesRequireLoginEl.style.display = 'block';
   }
