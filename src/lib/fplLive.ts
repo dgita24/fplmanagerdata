@@ -161,9 +161,11 @@ export async function fetchFixtures({
           finishedProvAll: true
         };
       cur.startedAny = cur.startedAny || !!started || !!finished || !!finishedProvisional;
-      // If we're including provisional, treat finished_provisional as finished for "GW finished" logic
-      const isDone = includeFinishedProvisional ? (!!finished || !!finishedProvisional) : !!finished;
-      cur.finishedAll = cur.finishedAll && isDone;
+      // IMPORTANT:
+      // Keep official `finished` separate from `finished_provisional`.
+      // During the FT -> bonus-confirmed window we still want projected bonus
+      // to count, so only true official finished fixtures should set finishedAll.
+      cur.finishedAll = cur.finishedAll && !!finished;
       cur.finishedProvAll = cur.finishedProvAll && (!!finished || !!finishedProvisional);
       perTeam.set(teamId, cur);
     }
@@ -202,7 +204,6 @@ export async function fetchFixtures({
     for (const [teamId, st] of perTeam.entries()) {
       teamStatusCache.set(`${gw}:${teamId}`, {
         started: st.startedAny,
-        // With provisional enabled, finishedAll already accounts for finished_provisional too
         finished: st.finishedAll,
         finishedProvisional: includeFinishedProvisional ? st.finishedProvAll : false
       });
