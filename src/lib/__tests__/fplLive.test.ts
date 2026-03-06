@@ -999,3 +999,166 @@ describe('applyAutoSubsAndMultipliers - live-match bench autosub (ON badge timin
     expect(leftToPlay.every(p => [7, 8, 9].includes(p.playerId))).toBe(true);
   });
 });
+
+// ============================================================
+// computePlayerLtpContribution – DGW-aware LtP helper
+// ============================================================
+
+import { computePlayerLtpContribution } from '../fplLive';
+import type { FixtureInfo } from '../fplLive';
+
+/** Helper to build a FixtureInfo object. */
+function makeFixture(overrides: Partial<FixtureInfo> & { id: number; team_h: number; team_a: number }): FixtureInfo {
+  return {
+    team_h_score: null,
+    team_a_score: null,
+    started: false,
+    finished: false,
+    finished_provisional: false,
+    ...overrides,
+  };
+}
+
+describe('computePlayerLtpContribution', () => {
+  const TEAM = 1;
+  const OTHER_TEAM = 99;
+
+  // ── Single-GW: preserves existing behaviour ──────────────────────────────
+
+  it('returns 0 when multiplier is 0', () => {
+    const fx = [makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: false })];
+    expect(computePlayerLtpContribution(TEAM, 0, 0, fx)).toBe(0);
+  });
+
+  it('returns 0 when team has no fixture this GW', () => {
+    const fx = [makeFixture({ id: 1, team_h: 5, team_a: 6 })];
+    expect(computePlayerLtpContribution(TEAM, 0, 1, fx)).toBe(0);
+  });
+
+  it('single GW – fixture not started, 0 min → multiplier (will play)', () => {
+    const fx = [makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: false })];
+    expect(computePlayerLtpContribution(TEAM, 0, 1, fx)).toBe(1);
+  });
+
+  it('single GW – fixture live, 0 min → multiplier (not yet played)', () => {
+    const fx = [makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: true })];
+    expect(computePlayerLtpContribution(TEAM, 0, 1, fx)).toBe(1);
+  });
+
+  it('single GW – fixture live, 45 min → 0 (already playing)', () => {
+    const fx = [makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: true })];
+    expect(computePlayerLtpContribution(TEAM, 45, 1, fx)).toBe(0);
+  });
+
+  it('single GW – fixture finished, 90 min → 0 (played and done)', () => {
+    const fx = [makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, finished: true, started: true })];
+    expect(computePlayerLtpContribution(TEAM, 90, 1, fx)).toBe(0);
+  });
+
+  it('single GW – fixture finished, 0 min → 0 (DNP and done)', () => {
+    const fx = [makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, finished: true, started: true })];
+    expect(computePlayerLtpContribution(TEAM, 0, 1, fx)).toBe(0);
+  });
+
+  it('single GW – fixture finished_provisional, 0 min → 0', () => {
+    const fx = [makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: true, finished_provisional: true })];
+    expect(computePlayerLtpContribution(TEAM, 0, 1, fx)).toBe(0);
+  });
+
+  it('captain multiplier (2) is applied correctly', () => {
+    const fx = [makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: false })];
+    expect(computePlayerLtpContribution(TEAM, 0, 2, fx)).toBe(2);
+  });
+
+  it('triple captain multiplier (3) is applied correctly', () => {
+    const fx = [makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: false })];
+    expect(computePlayerLtpContribution(TEAM, 0, 3, fx)).toBe(3);
+  });
+
+  // ── DGW: two fixtures ────────────────────────────────────────────────────
+
+  it('DGW – both fixtures not started, 0 min → 2× multiplier', () => {
+    const fx = [
+      makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: false }),
+      makeFixture({ id: 2, team_h: OTHER_TEAM, team_a: TEAM, started: false }),
+    ];
+    expect(computePlayerLtpContribution(TEAM, 0, 1, fx)).toBe(2);
+  });
+
+  it('DGW captain – both not started → 4 (2 fixtures × multiplier 2)', () => {
+    const fx = [
+      makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: false }),
+      makeFixture({ id: 2, team_h: OTHER_TEAM, team_a: TEAM, started: false }),
+    ];
+    expect(computePlayerLtpContribution(TEAM, 0, 2, fx)).toBe(4);
+  });
+
+  it('DGW – F1 finished (90 min), F2 not started → multiplier (still has F2)', () => {
+    const fx = [
+      makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: true, finished: true }),
+      makeFixture({ id: 2, team_h: OTHER_TEAM, team_a: TEAM, started: false }),
+    ];
+    // Player played 90 in F1; F2 not started → LtP = 1
+    expect(computePlayerLtpContribution(TEAM, 90, 1, fx)).toBe(1);
+  });
+
+  it('DGW – F1 finished (DNP, 0 min), F2 not started → multiplier (still has F2)', () => {
+    const fx = [
+      makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: true, finished: true }),
+      makeFixture({ id: 2, team_h: OTHER_TEAM, team_a: TEAM, started: false }),
+    ];
+    expect(computePlayerLtpContribution(TEAM, 0, 1, fx)).toBe(1);
+  });
+
+  it('DGW – F1 live (0 min), F2 not started → 2× multiplier (neither played yet)', () => {
+    const fx = [
+      makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: true }),
+      makeFixture({ id: 2, team_h: OTHER_TEAM, team_a: TEAM, started: false }),
+    ];
+    expect(computePlayerLtpContribution(TEAM, 0, 1, fx)).toBe(2);
+  });
+
+  it('DGW – F1 live (45 min), F2 not started → multiplier (playing F1, F2 still ahead)', () => {
+    const fx = [
+      makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: true }),
+      makeFixture({ id: 2, team_h: OTHER_TEAM, team_a: TEAM, started: false }),
+    ];
+    expect(computePlayerLtpContribution(TEAM, 45, 1, fx)).toBe(1);
+  });
+
+  it('DGW – F1 finished (90 min), F2 live (0 min) → multiplier (not yet played in F2)', () => {
+    const fx = [
+      makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: true, finished: true }),
+      makeFixture({ id: 2, team_h: OTHER_TEAM, team_a: TEAM, started: true }),
+    ];
+    // 90 min attributed to F1; F2 live with minutesInF2 = max(0, 90-120) = 0 → ltp += 1
+    expect(computePlayerLtpContribution(TEAM, 90, 1, fx)).toBe(1);
+  });
+
+  it('DGW – F1 finished (90 min), F2 live (45 min) → 0 (playing F2 now)', () => {
+    const fx = [
+      makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: true, finished: true }),
+      makeFixture({ id: 2, team_h: OTHER_TEAM, team_a: TEAM, started: true }),
+    ];
+    // minutesAttributed = 120 after F1; minutesInF2 = max(0, 135-120) = 15 > 0 → no LtP
+    expect(computePlayerLtpContribution(TEAM, 135, 1, fx)).toBe(0);
+  });
+
+  it('DGW – both fixtures finished → 0 (all done)', () => {
+    const fx = [
+      makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: true, finished: true }),
+      makeFixture({ id: 2, team_h: OTHER_TEAM, team_a: TEAM, started: true, finished: true }),
+    ];
+    expect(computePlayerLtpContribution(TEAM, 180, 1, fx)).toBe(0);
+  });
+
+  it('fixtures are sorted by id regardless of array order', () => {
+    // F2 (id=2, finished) listed before F1 (id=1, not started) – should still work correctly
+    const fx = [
+      makeFixture({ id: 2, team_h: OTHER_TEAM, team_a: TEAM, started: true, finished: true }),
+      makeFixture({ id: 1, team_h: TEAM, team_a: OTHER_TEAM, started: false }),
+    ];
+    // After sorting by id: F1 (id=1, not started) → ltp += 1; F2 (id=2, finished) → no ltp
+    expect(computePlayerLtpContribution(TEAM, 0, 1, fx)).toBe(1);
+  });
+});

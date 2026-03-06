@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase.ts'
-  import { applyAutoSubsAndMultipliers, bonusFromBpsRows, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { applyAutoSubsAndMultipliers, bonusFromBpsRows, computePlayerLtpContribution, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
   import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
 
   let managerIds: number[] = []
@@ -575,8 +575,8 @@ const managerDataCache = new Map<string, any>();
       // =========================
       // LEFT TO PLAY (LtP)
       // Sum multipliers for effective players (multiplier > 0) who still have points left to score.
-      // A player is removed from LtP once they register any minutes played (minutes > 0), even if
-      // their fixture is still live. Players are also removed once their fixture is fully finished.
+      // DGW-aware: uses computePlayerLtpContribution to handle per-fixture tracking so that a
+      // player who has played in fixture 1 still contributes to LtP for their remaining fixture 2.
       // This accounts for BB (bench players get multiplier=1), auto-subs (DNP starters get
       // multiplier=0), captain (multiplier=2) and TC (multiplier=3), and players from teams with
       // no fixture this GW (excluded via fixturesCache).
@@ -589,16 +589,7 @@ const managerDataCache = new Map<string, any>();
         teamsWithFixture.add(f.team_a);
       }
       let ltp = finalTeam.reduce((sum, p) => {
-        const mult = p.multiplier ?? 0;
-        if (mult === 0) return sum;
-        if (!teamsWithFixture.has(p.teamId)) return sum;
-        // Remove from LtP once the player has registered any minutes
-        if (p.minutes > 0) return sum;
-        // Also remove if their team's fixture is fully finished (catches 0-min bench players in finished games)
-        const { finished, finishedProvisional } = getTeamGwStatusLocal(p.teamId, gw);
-        if (finished || finishedProvisional) return sum;
-        // Player is still "left to play" — contribute their full multiplier
-        return sum + mult;
+        return sum + computePlayerLtpContribution(p.teamId, p.minutes, p.multiplier ?? 0, fixturesCache);
       }, 0);
 
       // Speculative sub pass (only for non-BB, since BB has no auto-subs)
@@ -618,10 +609,8 @@ const managerDataCache = new Map<string, any>();
         if (gkStarterDnp && !gkActive) {
           for (const gk of gkBench) {
             if (gk.autoSubStatus === 'IN') continue;
-            if (gk.minutes > 0) continue;
-            const { finished, finishedProvisional } = getTeamGwStatusLocal(gk.teamId, gw);
-            if (finished || finishedProvisional) continue;
-            if (!teamsWithFixture.has(gk.teamId)) continue;
+            // DGW-aware: bench GK who played in F1 but has F2 upcoming is still eligible.
+            if (computePlayerLtpContribution(gk.teamId, gk.minutes, 1, fixturesCache) === 0) continue;
             ltp += 1;
             break;
           }
@@ -630,10 +619,8 @@ const managerDataCache = new Map<string, any>();
         // Speculative outfield subs: for each empty outfield slot, find next eligible bench player
         for (const cand of outfieldBench) {
           if (activeOutfield.length >= 10) break;
-          if (cand.minutes > 0) continue;
-          const { finished, finishedProvisional } = getTeamGwStatusLocal(cand.teamId, gw);
-          if (finished || finishedProvisional) continue;
-          if (!teamsWithFixture.has(cand.teamId)) continue;
+          // DGW-aware: bench player who played in F1 but has F2 upcoming is still eligible.
+          if (computePlayerLtpContribution(cand.teamId, cand.minutes, 1, fixturesCache) === 0) continue;
 
           const testOutfield = [...activeOutfield, cand];
           const defCount = testOutfield.filter(p => p.playingPosition === 'DEF').length;
@@ -650,9 +637,7 @@ const managerDataCache = new Map<string, any>();
             const needFwd = Math.max(0, 1 - fwdCount);
             const candidateIndex = outfieldBench.indexOf(cand);
             const remainingCandidates = outfieldBench.slice(candidateIndex + 1).filter(b => {
-              if (b.minutes > 0) return false;
-              const { finished: f, finishedProvisional: fp } = getTeamGwStatusLocal(b.teamId, gw);
-              return !f && !fp && teamsWithFixture.has(b.teamId);
+              return computePlayerLtpContribution(b.teamId, b.minutes, 1, fixturesCache) > 0;
             });
             canSub =
               remainingCandidates.filter(p => p.playingPosition === 'DEF').length >= needDef &&
