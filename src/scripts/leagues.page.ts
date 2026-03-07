@@ -751,13 +751,22 @@ async function loadStandingsPage(page: number) {
       } else {
         pageSuffix = ` of ${totalPages}`;
       }
-    } else if (selectedLeague.entryRank > 0) {
+    } else {
       // Approximate: user's rank is a lower-bound on total entries.
-      const totalPages = Math.ceil(selectedLeague.entryRank / STANDINGS_PAGE_SIZE);
-      if (totalPages >= 1000) {
-        pageSuffix = ` of ~${Math.floor(totalPages / 1000)}k`;
-      } else {
-        pageSuffix = ` of ~${totalPages}`;
+      // If hasNext is true we know there are at least currentPage+1 pages,
+      // so clamp up to avoid misleading output like "~1" when more pages exist.
+      const rankPages = selectedLeague.entryRank > 0
+        ? Math.ceil(selectedLeague.entryRank / STANDINGS_PAGE_SIZE)
+        : 0;
+      const lowerBound = currentHasNext
+        ? Math.max(rankPages, currentPage + 1)
+        : Math.max(rankPages, currentPage);
+      if (lowerBound > 0) {
+        if (lowerBound >= 1000) {
+          pageSuffix = ` of ~${Math.floor(lowerBound / 1000)}k`;
+        } else {
+          pageSuffix = ` of ~${lowerBound}`;
+        }
       }
     }
     const pageInfo = `Page ${currentPage}${pageSuffix}`;
