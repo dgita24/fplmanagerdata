@@ -7,11 +7,19 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
 import "../styles/pages/live.css";
 ---
 <Layout title="Live League Standings - FPL Manager Data">
-  <Nav />
+  <Nav pageTitle="Live Table" />
 
   <main class="page">
     <header class="page-header">
-      <h1 class="page-title"><a class="page-title-emoji" href="/stats" aria-label="Go to Stats">🔢</a><a class="page-title-emoji" href="/transfers" aria-label="Go to Transfers">🔁</a><a class="page-title-emoji" href="/chips" aria-label="Go to Chips">🎲</a>  Live Table  <a class="page-title-emoji" href="/ownership" aria-label="Go to Ownership">👥</a><a class="page-title-emoji" href="/squads" aria-label="Go to Squads">🧱</a><a class="page-title-emoji" href="/players" aria-label="Go to Players">👕</a></h1>
+      <div class="emoji-nav">
+        <a class="page-title-emoji" href="/leagues" aria-label="Go to Leagues">🏆</a>
+        <a class="page-title-emoji" href="/stats" aria-label="Go to Stats">🔢</a>
+        <a class="page-title-emoji" href="/transfers" aria-label="Go to Transfers">🔁</a>
+        <a class="page-title-emoji" href="/chips" aria-label="Go to Chips">🎲</a>
+        <a class="page-title-emoji" href="/ownership" aria-label="Go to Ownership">👥</a>
+        <a class="page-title-emoji" href="/squads" aria-label="Go to Squads">🧱</a>
+        <a class="page-title-emoji" href="/players" aria-label="Go to Players">👕</a>
+      </div>
       <p class="page-subtitle">Real-time league table with live points, projected bonus & auto subs.</p>
     </header>
 

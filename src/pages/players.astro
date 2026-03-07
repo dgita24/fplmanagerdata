@@ -4,11 +4,19 @@ import Nav from "../components/Nav.astro";
 import PlayerExplorer from "../components/PlayerExplorer.astro";
 ---
 <Layout title="All FPL Players - FPL Manager Data">
-  <Nav />
+  <Nav pageTitle="Players" />
 
   <main class="page">
     <header class="page-header">
-      <h1 class="page-title"><a class="page-title-emoji" href="/live" aria-label="Go to Live">📡</a><a class="page-title-emoji" href="/stats" aria-label="Go to Stats">🔢</a><a class="page-title-emoji" href="/transfers" aria-label="Go to Transfers">🔁</a>  Players  <a class="page-title-emoji" href="/chips" aria-label="Go to Chips">🎲</a><a class="page-title-emoji" href="/ownership" aria-label="Go to Ownership">👥</a><a class="page-title-emoji" href="/squads" aria-label="Go to Squads">🧱</a></h1>
+      <div class="emoji-nav">
+        <a class="page-title-emoji" href="/live" aria-label="Go to Live">📡</a>
+        <a class="page-title-emoji" href="/leagues" aria-label="Go to Leagues">🏆</a>
+        <a class="page-title-emoji" href="/stats" aria-label="Go to Stats">🔢</a>
+        <a class="page-title-emoji" href="/transfers" aria-label="Go to Transfers">🔁</a>
+        <a class="page-title-emoji" href="/chips" aria-label="Go to Chips">🎲</a>
+        <a class="page-title-emoji" href="/ownership" aria-label="Go to Ownership">👥</a>
+        <a class="page-title-emoji" href="/squads" aria-label="Go to Squads">🧱</a>
+      </div>
       <p class="page-subtitle">Browse, search and filter every FPL player.</p>
     </header>
 
