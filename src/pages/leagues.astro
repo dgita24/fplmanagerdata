@@ -95,8 +95,14 @@ import "../styles/pages/leagues.css";
       </div>
 
       <!-- Leagues list -->
-      <div class="card">
-        <div class="card-body">
+      <div class="card" id="leagues-list-card">
+        <!-- Collapsed summary bar (shown when a league is open) -->
+        <div class="leagues-list-summary" id="leagues-list-summary">
+          <span class="leagues-list-summary__text">📋 Leagues · <strong id="leagues-list-summary-name">—</strong></span>
+          <button id="leagues-list-expand-btn" class="btn btn--neutral leagues-list-summary__btn" type="button">All Leagues</button>
+        </div>
+        <!-- Full list (shown by default) -->
+        <div class="card-body" id="leagues-list-card-body">
           <div class="card-title">📋 Your Leagues</div>
           <div id="leagues-list" class="leagues-list"></div>
         </div>
