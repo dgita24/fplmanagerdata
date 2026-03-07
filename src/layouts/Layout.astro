@@ -562,21 +562,14 @@ const { title = "FPL Manager Data" } = Astro.props;
   }
 
   .stats-table .or-trend-arrow--up {
-    color: var(--color-success);
+    color: #39ff7e;
   }
 
   .stats-table .or-trend-arrow--down {
     color: var(--color-danger);
   }
 
-  /* Compact font for ranks >= 1,000,000 to fit rank + arrow in narrow column */
-  .stats-table .or-cell-wrap--large .or-rank-btn {
-    font-size: 10px;
-  }
-
-  .stats-table .or-cell-wrap--large .or-trend-arrow {
-    font-size: 8px;
-  }
+  /* Compact font for ranks >= 1,000,000 — mobile only */
 
   .stats-table .row-highlight td {
     background: rgb(59 130 246 / 0.18) !important;
@@ -593,6 +586,14 @@ const { title = "FPL Manager Data" } = Astro.props;
     .stats-table {
       table-layout: fixed !important;
       width: 100% !important;
+    }
+
+    .stats-table .or-cell-wrap--large .or-rank-btn {
+      font-size: 10px;
+    }
+
+    .stats-table .or-cell-wrap--large .or-trend-arrow {
+      font-size: 8px;
     }
   }
 
