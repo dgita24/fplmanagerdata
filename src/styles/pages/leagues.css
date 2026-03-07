@@ -46,6 +46,43 @@
     display: flex;
   }
 
+  /* ---- Collapsible leagues list card ---- */
+
+  /* Summary bar — hidden by default, shown when list is collapsed */
+  .leagues-list-summary {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+  }
+
+  .leagues-list-summary__text {
+    font-size: var(--text-sm);
+    color: var(--color-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .leagues-list-summary__btn {
+    font-size: var(--text-xs);
+    min-height: 28px;
+    padding: 0 var(--space-3);
+    flex-shrink: 0;
+  }
+
+  /* When collapsed, hide the card body and show the summary bar */
+  #leagues-list-card.is-collapsed .card-body {
+    display: none;
+  }
+
+  #leagues-list-card.is-collapsed .leagues-list-summary {
+    display: flex;
+  }
+
   .leagues-load-btn {
     align-self: flex-end;
     min-height: 40px;

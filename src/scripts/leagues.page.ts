@@ -510,6 +510,9 @@ const overallRankEl = document.getElementById('overall-rank-value') as HTMLEleme
 const overallLivePtsEl = document.getElementById('overall-live-pts-value') as HTMLElement;
 const overallLtpEl = document.getElementById('overall-ltp-value') as HTMLElement;
 const leaguesListEl = document.getElementById('leagues-list') as HTMLElement;
+const leaguesListCard = document.getElementById('leagues-list-card') as HTMLElement;
+const leaguesListSummaryNameEl = document.getElementById('leagues-list-summary-name') as HTMLElement;
+const leaguesListExpandBtn = document.getElementById('leagues-list-expand-btn') as HTMLButtonElement;
 const standingsSection = document.getElementById('standings-section') as HTMLElement;
 const standingsTitleEl = document.getElementById('standings-title') as HTMLElement;
 const standingsSubtitleEl = document.getElementById('standings-subtitle') as HTMLElement;
@@ -530,6 +533,7 @@ function closeStandings() {
   standingsSection.style.display = 'none';
   standingsOutputEl.innerHTML = '';
   standingsStatusEl.textContent = '';
+  expandLeaguesList(); // restore leagues list when standings close
   renderLeaguesList(); // clear active state
 }
 
@@ -547,6 +551,21 @@ function expandEntryCard() {
 }
 
 entryIdCardExpandBtn.addEventListener('click', () => expandEntryCard());
+
+// ==============================
+// Leagues list collapse/expand
+// ==============================
+
+function collapseLeaguesList(league: LeagueInfo) {
+  leaguesListSummaryNameEl.textContent = league.name || `League ${league.id}`;
+  leaguesListCard.classList.add('is-collapsed');
+}
+
+function expandLeaguesList() {
+  leaguesListCard.classList.remove('is-collapsed');
+}
+
+leaguesListExpandBtn.addEventListener('click', () => expandLeaguesList());
 
 // ==============================
 // Render leagues list
@@ -613,6 +632,7 @@ function renderLeaguesList() {
 function selectLeague(league: LeagueInfo) {
   selectedLeague = league;
   renderLeaguesList(); // re-render to update active state
+  collapseLeaguesList(league); // collapse the list to bring standings into view
   standingsSection.style.display = '';
   standingsTitleEl.textContent = league.name || `League ${league.id}`;
   standingsSubtitleEl.textContent = league.type === 'h2h' ? 'Head-to-Head' : 'Classic';
