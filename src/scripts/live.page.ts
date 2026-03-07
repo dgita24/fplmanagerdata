@@ -460,7 +460,7 @@ const managerDataCache = new Map<string, any>();
         playerCache.set(player.id, {
           name: player.web_name,
           position: player.element_type,
-          team: player.team
+          team: player.team,
           availabilityStatus: player.status
         });
       });
