@@ -42,12 +42,15 @@ export const GET: APIRoute = async ({ params, url }) => {
     total: Number(r.total ?? 0),
   }));
 
+  const count = typeof data?.standings?.count === 'number' ? data.standings.count : null;
+
   return new Response(
     JSON.stringify({
       league: { id: Number(leagueId), name: data?.league?.name ?? null },
       page: Number(page),
       hasNext: Boolean(data?.standings?.has_next),
       hasPrev: Number(page) > 1,
+      count,
       results: rows,
     }),
     { status: 200, headers: { "content-type": "application/json" } }

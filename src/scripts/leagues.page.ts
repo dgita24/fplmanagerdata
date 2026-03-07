@@ -734,7 +734,33 @@ async function loadStandingsPage(page: number) {
       }
     }
 
-    const pageInfo = `Page ${currentPage}`;
+    // Determine total pages as exactly as possible:
+    //  1. If this is the last page (hasNext=false), total pages = currentPage — exact.
+    //  2. Else if the FPL API returned a count, derive exact total pages from it.
+    //  3. Else use the user's own league rank as a safe lower-bound estimate (~).
+    const apiCount: number | null = typeof standings.count === 'number' ? standings.count : null;
+    let pageSuffix = '';
+    if (!currentHasNext) {
+      // We are on the final page — total is exactly currentPage.
+      pageSuffix = ` of ${currentPage}`;
+    } else if (apiCount !== null && apiCount > 0) {
+      // Exact count from the API.
+      const totalPages = Math.ceil(apiCount / STANDINGS_PAGE_SIZE);
+      if (totalPages >= 1000) {
+        pageSuffix = ` of ${Math.floor(totalPages / 1000)}k`;
+      } else {
+        pageSuffix = ` of ${totalPages}`;
+      }
+    } else if (selectedLeague.entryRank > 0) {
+      // Approximate: user's rank is a lower-bound on total entries.
+      const totalPages = Math.ceil(selectedLeague.entryRank / STANDINGS_PAGE_SIZE);
+      if (totalPages >= 1000) {
+        pageSuffix = ` of ~${Math.floor(totalPages / 1000)}k`;
+      } else {
+        pageSuffix = ` of ~${totalPages}`;
+      }
+    }
+    const pageInfo = `Page ${currentPage}${pageSuffix}`;
     standingsSubtitleEl.textContent = `${selectedLeague.type === 'h2h' ? 'Head-to-Head' : 'Classic'} · ${pageInfo} · GW ${gw}`;
 
     standingsOutputEl.innerHTML = makeLiveTable(managers, currentEntryId, (currentPage - 1) * STANDINGS_PAGE_SIZE, pinnedMe);
