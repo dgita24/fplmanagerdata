@@ -957,6 +957,19 @@ import Nav from "../components/Nav.astro";
     });
   }
 
+  function getORTrendArrow(m: ManagerData, gw: number): string {
+    if (gw <= 1 || !m.historyData || m.overallRank <= 0) return '';
+    const current = Array.isArray(m.historyData.current) ? m.historyData.current : [];
+    const prevRow = current.find((r: HistoryRow) => r.event === gw - 1);
+    if (!prevRow || !prevRow.overall_rank || prevRow.overall_rank <= 0) return '';
+    if (m.overallRank < prevRow.overall_rank) {
+      return '<span class="or-trend-arrow or-trend-arrow--up" aria-label="Rank improved">▲</span>';
+    } else if (m.overallRank > prevRow.overall_rank) {
+      return '<span class="or-trend-arrow or-trend-arrow--down" aria-label="Rank worsened">▼</span>';
+    }
+    return '';
+  }
+
   function makeStatsTable(managersData: ManagerData[], gw: number): string {
     const sortedData = sortStatsRows(managersData);
 
@@ -980,6 +993,8 @@ import Nav from "../components/Nav.astro";
     for (const m of sortedData) {
       const isMe = ownEntryId !== null && Number(m.entryId) === ownEntryId;
       const rowClass = isMe ? 'row-highlight' : '';
+      const trendArrow = getORTrendArrow(m, gw);
+      const isLargeRank = m.overallRank >= 1000000;
 
       html += `
         <tr class="${rowClass}">
@@ -992,7 +1007,7 @@ import Nav from "../components/Nav.astro";
           </td>
           <td class="pts-col">${m.gwPoints}</td>
           <td class="total-col"><button type="button" class="total-pts-btn" data-entry-id="${m.entryId}">${m.totalPoints.toLocaleString()}</button></td>
-          <td class="or-col"><button type="button" class="or-rank-btn" data-entry-id="${m.entryId}">${formatRank(m.overallRank)}</button></td>
+          <td class="or-col"><span class="or-cell-wrap${isLargeRank ? ' or-cell-wrap--large' : ''}"><button type="button" class="or-rank-btn" data-entry-id="${m.entryId}">${formatRank(m.overallRank)}</button>${trendArrow}</span></td>
         </tr>
       `;
       rank++;
