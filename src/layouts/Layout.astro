@@ -547,6 +547,37 @@ const { title = "FPL Manager Data" } = Astro.props;
     white-space: nowrap !important;
   }
 
+  /* OR rank trend arrow in stats table */
+  .stats-table .or-cell-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    white-space: nowrap;
+  }
+
+  .stats-table .or-trend-arrow {
+    font-size: 9px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .stats-table .or-trend-arrow--up {
+    color: var(--color-success);
+  }
+
+  .stats-table .or-trend-arrow--down {
+    color: var(--color-danger);
+  }
+
+  /* Compact font for ranks >= 1,000,000 to fit rank + arrow in narrow column */
+  .stats-table .or-cell-wrap--large .or-rank-btn {
+    font-size: 10px;
+  }
+
+  .stats-table .or-cell-wrap--large .or-trend-arrow {
+    font-size: 8px;
+  }
+
   .stats-table .row-highlight td {
     background: rgb(59 130 246 / 0.18) !important;
   }
