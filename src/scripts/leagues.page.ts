@@ -734,24 +734,30 @@ async function loadStandingsPage(page: number) {
       }
     }
 
-    // The FPL API does not return a total entry count in the standings response.
-    // Use the user's own rank in the league as a safe lower-bound estimate of
-    // total entries (if rank is known). For very large leagues (e.g. overall)
-    // this gives a compact "60k pages" approximation; for small private leagues
-    // it gives an exact or near-exact page count.
+    // Determine total pages as exactly as possible:
+    //  1. If this is the last page (hasNext=false), total pages = currentPage — exact.
+    //  2. Else if the FPL API returned a count, derive exact total pages from it.
+    //  3. Else use the user's own league rank as a safe lower-bound estimate (~).
     const apiCount: number | null = typeof standings.count === 'number' ? standings.count : null;
-    const estimatedCount: number | null =
-      apiCount ?? (selectedLeague.entryRank > 0 ? selectedLeague.entryRank : null);
     let pageSuffix = '';
-    if (estimatedCount !== null && estimatedCount > 0) {
-      const totalPages = Math.ceil(estimatedCount / STANDINGS_PAGE_SIZE);
-      const approx = apiCount === null ? '~' : '';
+    if (!currentHasNext) {
+      // We are on the final page — total is exactly currentPage.
+      pageSuffix = ` of ${currentPage}`;
+    } else if (apiCount !== null && apiCount > 0) {
+      // Exact count from the API.
+      const totalPages = Math.ceil(apiCount / STANDINGS_PAGE_SIZE);
       if (totalPages >= 1000) {
-        // Compact notation for very large leagues (e.g. ~60k)
-        const k = Math.floor(totalPages / 1000);
-        pageSuffix = ` of ${approx}${k}k`;
+        pageSuffix = ` of ${Math.floor(totalPages / 1000)}k`;
       } else {
-        pageSuffix = ` of ${approx}${totalPages}`;
+        pageSuffix = ` of ${totalPages}`;
+      }
+    } else if (selectedLeague.entryRank > 0) {
+      // Approximate: user's rank is a lower-bound on total entries.
+      const totalPages = Math.ceil(selectedLeague.entryRank / STANDINGS_PAGE_SIZE);
+      if (totalPages >= 1000) {
+        pageSuffix = ` of ~${Math.floor(totalPages / 1000)}k`;
+      } else {
+        pageSuffix = ` of ~${totalPages}`;
       }
     }
     const pageInfo = `Page ${currentPage}${pageSuffix}`;
