@@ -517,6 +517,38 @@ const { title = "FPL Manager Data" } = Astro.props;
     color: var(--color-text-secondary);
   }
 
+  /* Shared row: loading-status left, last-updated right */
+  .status-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-1);
+  }
+
+  .status-row > .meta-row:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .status-row > .meta-row:last-child {
+    flex: 0 1 auto;
+    min-width: 0;
+    text-align: right;
+  }
+
+  @media (min-width: 375px) {
+    .status-row {
+      margin-bottom: var(--space-2);
+    }
+  }
+
+  @media (min-width: 640px) {
+    .status-row {
+      margin-bottom: 0;
+    }
+  }
+
     /* ========================================
      STATS TABLE - Balanced columns
    ======================================== */
