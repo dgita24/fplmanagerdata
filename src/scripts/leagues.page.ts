@@ -734,7 +734,19 @@ async function loadStandingsPage(page: number) {
       }
     }
 
-    const pageInfo = `Page ${currentPage}`;
+    const totalCount: number | null = typeof standings.count === 'number' ? standings.count : null;
+    let pageSuffix = '';
+    if (totalCount !== null && totalCount > 0) {
+      const totalPages = Math.ceil(totalCount / STANDINGS_PAGE_SIZE);
+      if (totalPages >= 1000) {
+        // Compact notation for very large leagues (e.g. 104k)
+        const k = Math.floor(totalPages / 1000);
+        pageSuffix = ` of ${k}k`;
+      } else {
+        pageSuffix = ` of ${totalPages}`;
+      }
+    }
+    const pageInfo = `Page ${currentPage}${pageSuffix}`;
     standingsSubtitleEl.textContent = `${selectedLeague.type === 'h2h' ? 'Head-to-Head' : 'Classic'} · ${pageInfo} · GW ${gw}`;
 
     standingsOutputEl.innerHTML = makeLiveTable(managers, currentEntryId, (currentPage - 1) * STANDINGS_PAGE_SIZE, pinnedMe);

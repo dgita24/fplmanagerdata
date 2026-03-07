@@ -277,6 +277,26 @@
     min-height: 18px;
   }
 
+  /* Mobile: standings nav buttons fill the full card width */
+  @media (max-width: 479px) {
+    .standings-header {
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .standings-nav {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: var(--space-1);
+    }
+
+    .standings-nav-btn {
+      width: 100%;
+      padding: var(--space-1) var(--space-1);
+    }
+  }
+
   /* Overall card — always 3 columns across all screen sizes */
   .overall-grid {
     display: grid;
