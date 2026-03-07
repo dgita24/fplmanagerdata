@@ -4,11 +4,19 @@ import Nav from "../components/Nav.astro";
 import GWPointsModal from "../components/modals/GWPointsModal.astro";
 ---
 <Layout title="Manager Squads - FPL Manager Data">
-  <Nav />
+  <Nav pageTitle="Squads" />
 
   <main class="page squads-page-v1">
     <header class="page-header">
-      <h1 class="page-title"><a class="page-title-emoji" href="/live" aria-label="Go to Live">📡</a><a class="page-title-emoji" href="/stats" aria-label="Go to Stats">🔢</a><a class="page-title-emoji" href="/transfers" aria-label="Go to Transfers">🔁</a>  Squads  <a class="page-title-emoji" href="/chips" aria-label="Go to Chips">🎲</a><a class="page-title-emoji" href="/ownership" aria-label="Go to Ownership">👥</a><a class="page-title-emoji" href="/players" aria-label="Go to Players">👕</a></h1>
+      <div class="emoji-nav">
+        <a class="page-title-emoji" href="/live" aria-label="Go to Live">📡</a>
+        <a class="page-title-emoji" href="/leagues" aria-label="Go to Leagues">🏆</a>
+        <a class="page-title-emoji" href="/stats" aria-label="Go to Stats">🔢</a>
+        <a class="page-title-emoji" href="/transfers" aria-label="Go to Transfers">🔁</a>
+        <a class="page-title-emoji" href="/chips" aria-label="Go to Chips">🎲</a>
+        <a class="page-title-emoji" href="/ownership" aria-label="Go to Ownership">👥</a>
+        <a class="page-title-emoji" href="/players" aria-label="Go to Players">👕</a>
+      </div>
       <p class="page-subtitle">View each manager's squad for any gameweek.</p>
     </header>
 
