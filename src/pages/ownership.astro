@@ -150,6 +150,19 @@ import Nav from "../components/Nav.astro";
     background: var(--color-primary-hover);
   }
 
+  /* Tighten gap between status row and ownership table.
+     .page flex gap = 8px (mobile) / 20px (≥640px).
+     Negative margin-bottom offsets that gap to ~4px / ~8px. */
+  .status-row {
+    margin-bottom: -4px; /* 8px page-gap − 4px = ~4px net */
+  }
+
+  @media (min-width: 640px) {
+    .status-row {
+      margin-bottom: -12px; /* 20px page-gap − 12px = ~8px net */
+    }
+  }
+
 </style>
 
 <script>
