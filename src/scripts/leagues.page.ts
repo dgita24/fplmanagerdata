@@ -734,16 +734,24 @@ async function loadStandingsPage(page: number) {
       }
     }
 
-    const totalCount: number | null = typeof standings.count === 'number' ? standings.count : null;
+    // The FPL API does not return a total entry count in the standings response.
+    // Use the user's own rank in the league as a safe lower-bound estimate of
+    // total entries (if rank is known). For very large leagues (e.g. overall)
+    // this gives a compact "60k pages" approximation; for small private leagues
+    // it gives an exact or near-exact page count.
+    const apiCount: number | null = typeof standings.count === 'number' ? standings.count : null;
+    const estimatedCount: number | null =
+      apiCount ?? (selectedLeague.entryRank > 0 ? selectedLeague.entryRank : null);
     let pageSuffix = '';
-    if (totalCount !== null && totalCount > 0) {
-      const totalPages = Math.ceil(totalCount / STANDINGS_PAGE_SIZE);
+    if (estimatedCount !== null && estimatedCount > 0) {
+      const totalPages = Math.ceil(estimatedCount / STANDINGS_PAGE_SIZE);
+      const approx = apiCount === null ? '~' : '';
       if (totalPages >= 1000) {
-        // Compact notation for very large leagues (e.g. 104k)
+        // Compact notation for very large leagues (e.g. ~60k)
         const k = Math.floor(totalPages / 1000);
-        pageSuffix = ` of ${k}k`;
+        pageSuffix = ` of ${approx}${k}k`;
       } else {
-        pageSuffix = ` of ${totalPages}`;
+        pageSuffix = ` of ${approx}${totalPages}`;
       }
     }
     const pageInfo = `Page ${currentPage}${pageSuffix}`;
