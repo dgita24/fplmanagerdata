@@ -208,6 +208,7 @@ const managerDataCache = new Map<string, any>();
     name: string;
     position: number;
     team: number;
+    availabilityStatus?: string;
   }
 
   interface TeamInfo {
@@ -460,6 +461,7 @@ const managerDataCache = new Map<string, any>();
           name: player.web_name,
           position: player.element_type,
           team: player.team
+          availabilityStatus: player.status
         });
       });
 
@@ -543,6 +545,7 @@ const managerDataCache = new Map<string, any>();
           web_name: player.name || "",
           teamId,
           playingPosition: positionLabel(player.position),
+          availabilityStatus: player.availabilityStatus || "a",
 
           minutes: computed.minutes,
           status: computed.status,
@@ -589,6 +592,7 @@ const managerDataCache = new Map<string, any>();
         teamsWithFixture.add(f.team_a);
       }
       let ltp = finalTeam.reduce((sum, p) => {
+        if (p.availabilityStatus === "s") return sum;
         return sum + computePlayerLtpContribution(p.teamId, p.minutes, p.multiplier ?? 0, fixturesCache);
       }, 0);
 
@@ -609,6 +613,7 @@ const managerDataCache = new Map<string, any>();
         if (gkStarterDnp && !gkActive) {
           for (const gk of gkBench) {
             if (gk.autoSubStatus === 'IN') continue;
+            if (gk.availabilityStatus === "s") continue;
             // DGW-aware: bench GK who played in F1 but has F2 upcoming is still eligible.
             if (computePlayerLtpContribution(gk.teamId, gk.minutes, 1, fixturesCache) === 0) continue;
             ltp += 1;
@@ -619,6 +624,7 @@ const managerDataCache = new Map<string, any>();
         // Speculative outfield subs: for each empty outfield slot, find next eligible bench player
         for (const cand of outfieldBench) {
           if (activeOutfield.length >= 10) break;
+          if (cand.availabilityStatus === "s") continue;
           // DGW-aware: bench player who played in F1 but has F2 upcoming is still eligible.
           if (computePlayerLtpContribution(cand.teamId, cand.minutes, 1, fixturesCache) === 0) continue;
 
@@ -637,6 +643,7 @@ const managerDataCache = new Map<string, any>();
             const needFwd = Math.max(0, 1 - fwdCount);
             const candidateIndex = outfieldBench.indexOf(cand);
             const remainingCandidates = outfieldBench.slice(candidateIndex + 1).filter(b => {
+              if (b.availabilityStatus === "s") return false;
               return computePlayerLtpContribution(b.teamId, b.minutes, 1, fixturesCache) > 0;
             });
             canSub =
