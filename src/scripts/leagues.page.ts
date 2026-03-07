@@ -482,6 +482,10 @@ let selectedLeague: LeagueInfo | null = null;
 let currentPage = 1;
 let currentHasNext = false;
 let currentHasPrev = false;
+// Total pages for the current league — only set when we have exact information
+// (i.e. we have visited the last page, or the API returned a count).
+// Reset whenever a different league or entry is loaded.
+let knownTotalPages: number | null = null;
 
 // ==============================
 // DOM references
@@ -631,6 +635,7 @@ function renderLeaguesList() {
 
 function selectLeague(league: LeagueInfo) {
   selectedLeague = league;
+  knownTotalPages = null; // reset when switching leagues
   renderLeaguesList(); // re-render to update active state
   collapseLeaguesList(league); // collapse the list to bring standings into view
   standingsSection.style.display = '';
@@ -734,39 +739,32 @@ async function loadStandingsPage(page: number) {
       }
     }
 
-    // Determine total pages as exactly as possible:
-    //  1. If this is the last page (hasNext=false), total pages = currentPage — exact.
-    //  2. Else if the FPL API returned a count, derive exact total pages from it.
-    //  3. Else use the user's own league rank as a safe lower-bound estimate (~).
+    // Determine total pages as exactly as possible and store in module state so
+    // that the total remains consistent as the user navigates between pages.
+    //
+    // NOTE: entryRank is the user's position in the league (e.g. 3rd), NOT the
+    // total number of entries, so it must NOT be used as a proxy for league size.
+    //
+    // Sources of truth, in priority order:
+    //  1. API returned an explicit count → exact total pages.
+    //  2. hasNext === false → we are on the last page, total = currentPage (exact).
+    //  3. knownTotalPages already set from a previous page load → reuse it.
+    //  4. None of the above → total unknown, omit the "of N" suffix entirely.
     const apiCount: number | null = typeof standings.count === 'number' ? standings.count : null;
+    if (apiCount !== null && apiCount > 0) {
+      knownTotalPages = Math.ceil(apiCount / STANDINGS_PAGE_SIZE);
+    } else if (!currentHasNext) {
+      // Last page — total is exactly currentPage.
+      knownTotalPages = currentPage;
+    }
+    // else: keep whatever knownTotalPages already holds (may still be null)
+
     let pageSuffix = '';
-    if (!currentHasNext) {
-      // We are on the final page — total is exactly currentPage.
-      pageSuffix = ` of ${currentPage}`;
-    } else if (apiCount !== null && apiCount > 0) {
-      // Exact count from the API.
-      const totalPages = Math.ceil(apiCount / STANDINGS_PAGE_SIZE);
-      if (totalPages >= 1000) {
-        pageSuffix = ` of ${Math.floor(totalPages / 1000)}k`;
+    if (knownTotalPages !== null) {
+      if (knownTotalPages >= 1000) {
+        pageSuffix = ` of ${Math.floor(knownTotalPages / 1000)}k`;
       } else {
-        pageSuffix = ` of ${totalPages}`;
-      }
-    } else {
-      // Approximate: user's rank is a lower-bound on total entries.
-      // If hasNext is true we know there are at least currentPage+1 pages,
-      // so clamp up to avoid misleading output like "~1" when more pages exist.
-      const rankPages = selectedLeague.entryRank > 0
-        ? Math.ceil(selectedLeague.entryRank / STANDINGS_PAGE_SIZE)
-        : 0;
-      const lowerBound = currentHasNext
-        ? Math.max(rankPages, currentPage + 1)
-        : Math.max(rankPages, currentPage);
-      if (lowerBound > 0) {
-        if (lowerBound >= 1000) {
-          pageSuffix = ` of ~${Math.floor(lowerBound / 1000)}k`;
-        } else {
-          pageSuffix = ` of ~${lowerBound}`;
-        }
+        pageSuffix = ` of ${knownTotalPages}`;
       }
     }
     const pageInfo = `Page ${currentPage}${pageSuffix}`;
@@ -809,6 +807,7 @@ async function loadEntry(opts: { silentRefresh?: boolean } = {}) {
     currentPage = 1;
     currentHasNext = false;
     currentHasPrev = false;
+    knownTotalPages = null;
 
     // Reset standings section
     standingsSection.style.display = 'none';
