@@ -49,8 +49,10 @@ import Nav from "../components/Nav.astro";
       </div>
     </div>
 
-    <div id="loading-status" class="meta-row"></div>
-    <div id="last-updated" class="meta-row"></div>
+    <div class="status-row">
+      <div id="loading-status" class="meta-row"></div>
+      <div id="last-updated" class="meta-row"></div>
+    </div>
     <section id="ownership-output" aria-live="polite"></section>
   </main>
 
@@ -680,7 +682,7 @@ import Nav from "../components/Nav.astro";
       attachPlayerButtons();
     }
 
-    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${managerSquads.length} managers for GW${gw}</span>`;
+    loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${managerSquads.length} managers</span>`;
     if (lastUpdatedEl) {
       lastUpdatedEl.textContent = formatUpdateTime(Date.now());
     }
