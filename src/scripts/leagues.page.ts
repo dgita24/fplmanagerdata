@@ -482,6 +482,15 @@ let selectedLeague: LeagueInfo | null = null;
 let currentPage = 1;
 let currentHasNext = false;
 let currentHasPrev = false;
+// Total pages for the current league — only set when we have exact information
+// (i.e. we have visited the last page, or the API returned a count, or the
+// background discovery has completed).  Reset whenever a different league or
+// entry is loaded.
+let knownTotalPages: number | null = null;
+// When true the stored total is a lower-bound ("N+") rather than the exact value.
+let totalPagesApproximate = false;
+// Prevents launching more than one background discovery task at a time.
+let discoveryInProgress = false;
 
 // ==============================
 // DOM references
@@ -631,6 +640,9 @@ function renderLeaguesList() {
 
 function selectLeague(league: LeagueInfo) {
   selectedLeague = league;
+  knownTotalPages = null;      // reset when switching leagues
+  totalPagesApproximate = false;
+  discoveryInProgress = false; // allow fresh discovery for this league
   renderLeaguesList(); // re-render to update active state
   collapseLeaguesList(league); // collapse the list to bring standings into view
   standingsSection.style.display = '';
@@ -652,11 +664,101 @@ function selectLeague(league: LeagueInfo) {
 }
 
 // ==============================
+// Background total-page discovery
+// ==============================
+
+// Probes the standings API for a single page number and returns whether it has
+// results and whether there is a next page.  Only fetches the lightweight
+// standings payload — no live data is fetched.
+async function probeStandingsPage(
+  leagueId: number,
+  leagueType: 'classic' | 'h2h',
+  pageNum: number
+): Promise<{ hasResults: boolean; hasNext: boolean }> {
+  const endpoint = leagueType === 'h2h'
+    ? `/api/fpl/league/${leagueId}/h2h-standings?page=${pageNum}`
+    : `/api/fpl/league/${leagueId}/standings?page=${pageNum}`;
+  try {
+    const res = await fetch(endpoint, { cache: 'no-store' });
+    if (!res.ok) return { hasResults: false, hasNext: false };
+    const data = await res.json();
+    return {
+      hasResults: Array.isArray(data.results) && data.results.length > 0,
+      hasNext: Boolean(data.hasNext),
+    };
+  } catch {
+    return { hasResults: false, hasNext: false };
+  }
+}
+
+// Discovers the last page number for a league using an exponential probe up to
+// page MAX_EXACT_PAGES+1, followed by binary search when an upper bound is found
+// within that range.
+//
+// Returns { totalPages, approximate }:
+//   approximate = false  → totalPages is the exact last page number.
+//   approximate = true   → league has more than MAX_EXACT_PAGES pages; totalPages
+//                          is a confirmed lower bound and the display will show "N+".
+async function discoverLastPage(
+  leagueId: number,
+  leagueType: 'classic' | 'h2h'
+): Promise<{ totalPages: number; approximate: boolean } | null> {
+  const MAX_EXACT_PAGES = 20;
+
+  // lo = highest page confirmed to have results (page 1 just loaded → safe start).
+  let lo = 1;
+  let p = 2;
+
+  // Exponential probe capped at MAX_EXACT_PAGES + 1
+  while (p <= MAX_EXACT_PAGES + 1) {
+    const { hasResults, hasNext } = await probeStandingsPage(leagueId, leagueType, p);
+
+    if (!hasResults) {
+      // p is beyond the last page; last page is somewhere in (lo, p).
+      // Binary-search for the exact boundary.
+      let hi = p;
+      while (hi - lo > 1) {
+        const mid = Math.floor((lo + hi) / 2);
+        const r = await probeStandingsPage(leagueId, leagueType, mid);
+        if (r.hasResults) {
+          if (!r.hasNext) return { totalPages: mid, approximate: false };
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+      // lo has results; lo+1 does not → lo is the last page.
+      return { totalPages: lo, approximate: false };
+    }
+
+    if (!hasNext) {
+      // p is exactly the last page.
+      return { totalPages: p, approximate: false };
+    }
+
+    lo = p;
+    const next = Math.min(p * 2, MAX_EXACT_PAGES + 1);
+    if (next === p) {
+      // Already at the cap and the league still has more pages.
+      // Return lo as a confirmed lower bound — display will show "lo+".
+      return { totalPages: lo, approximate: true };
+    }
+    p = next;
+  }
+
+  // Safety fallback (should not be reached in practice).
+  return { totalPages: lo, approximate: true };
+}
+
+// ==============================
 // Load standings page
 // ==============================
 
 async function loadStandingsPage(page: number) {
   if (!selectedLeague || !currentEntryId) return;
+  // Capture selectedLeague in a local variable — TypeScript-safe inside async
+  // code where the module-level reference could theoretically change.
+  const league = selectedLeague;
 
   standingsStatusEl.textContent = `Loading page ${page}...`;
   standingsOutputEl.innerHTML = '';
@@ -669,9 +771,9 @@ async function loadStandingsPage(page: number) {
     const gw = latestGW;
     await ensureLiveCaches(gw);
 
-    const endpoint = selectedLeague.type === 'h2h'
-      ? `/api/fpl/league/${selectedLeague.id}/h2h-standings?page=${page}`
-      : `/api/fpl/league/${selectedLeague.id}/standings?page=${page}`;
+    const endpoint = league.type === 'h2h'
+      ? `/api/fpl/league/${league.id}/h2h-standings?page=${page}`
+      : `/api/fpl/league/${league.id}/standings?page=${page}`;
 
     const standingsRes = await fetch(endpoint, { cache: 'no-store' });
     if (!standingsRes.ok) throw new Error(`Standings fetch failed (${standingsRes.status})`);
@@ -727,52 +829,87 @@ async function loadStandingsPage(page: number) {
     // Pinned "Me" row: shown at the bottom when the user is not on this page
     let pinnedMe: { manager: any; leagueRank: number } | null = null;
     const myInPage = currentEntryId !== null && managers.some(m => m.entryId === currentEntryId);
-    if (!myInPage && currentEntryId && selectedLeague) {
+    if (!myInPage && currentEntryId) {
       const myLive = await fetchManagerLive(currentEntryId, gw);
       if (myLive) {
-        pinnedMe = { manager: myLive, leagueRank: selectedLeague.entryRank };
+        pinnedMe = { manager: myLive, leagueRank: league.entryRank };
       }
     }
 
-    // Determine total pages as exactly as possible:
-    //  1. If this is the last page (hasNext=false), total pages = currentPage — exact.
-    //  2. Else if the FPL API returned a count, derive exact total pages from it.
-    //  3. Else use the user's own league rank as a safe lower-bound estimate (~).
+    // Determine total pages and store in module state so the total remains
+    // consistent as the user navigates between pages.
+    //
+    // Sources of truth, in priority order:
+    //  1. API returned an explicit count → exact total pages.
+    //  2. hasNext === false → we are on the last page, total = currentPage (exact).
+    //  3. knownTotalPages already set by a previous load → reuse it.
+    //  4. None of the above → kick off background discovery (see below).
     const apiCount: number | null = typeof standings.count === 'number' ? standings.count : null;
-    let pageSuffix = '';
-    if (!currentHasNext) {
-      // We are on the final page — total is exactly currentPage.
-      pageSuffix = ` of ${currentPage}`;
-    } else if (apiCount !== null && apiCount > 0) {
-      // Exact count from the API.
-      const totalPages = Math.ceil(apiCount / STANDINGS_PAGE_SIZE);
-      if (totalPages >= 1000) {
-        pageSuffix = ` of ${Math.floor(totalPages / 1000)}k`;
-      } else {
-        pageSuffix = ` of ${totalPages}`;
-      }
-    } else if (selectedLeague.entryRank > 0) {
-      // Approximate: user's rank is a lower-bound on total entries.
-      const totalPages = Math.ceil(selectedLeague.entryRank / STANDINGS_PAGE_SIZE);
-      if (totalPages >= 1000) {
-        pageSuffix = ` of ~${Math.floor(totalPages / 1000)}k`;
-      } else {
-        pageSuffix = ` of ~${totalPages}`;
-      }
+    if (apiCount !== null && apiCount > 0) {
+      knownTotalPages = Math.ceil(apiCount / STANDINGS_PAGE_SIZE);
+      totalPagesApproximate = false;
+    } else if (!currentHasNext) {
+      // Last page — total is exactly currentPage.
+      knownTotalPages = currentPage;
+      totalPagesApproximate = false;
     }
-    const pageInfo = `Page ${currentPage}${pageSuffix}`;
-    standingsSubtitleEl.textContent = `${selectedLeague.type === 'h2h' ? 'Head-to-Head' : 'Classic'} · ${pageInfo} · GW ${gw}`;
+    // else: keep whatever knownTotalPages already holds (may still be null)
+
+    // Build the subtitle immediately with what is known so far.
+    const buildSubtitle = (pg: number) => {
+      let suffix = '';
+      if (knownTotalPages !== null) {
+        const t = knownTotalPages;
+        const approxMark = totalPagesApproximate ? '+' : '';
+        suffix = t >= 1000
+          ? ` of ${Math.floor(t / 1000)}k${approxMark}`
+          : ` of ${t}${approxMark}`;
+      }
+      return `${league.type === 'h2h' ? 'Head-to-Head' : 'Classic'} · Page ${pg}${suffix} · GW ${gw}`;
+    };
+
+    standingsSubtitleEl.textContent = buildSubtitle(currentPage);
 
     standingsOutputEl.innerHTML = makeLiveTable(managers, currentEntryId, (currentPage - 1) * STANDINGS_PAGE_SIZE, pinnedMe);
 
     standingsStatusEl.innerHTML = `<span class="text-success font-bold">✅ Loaded ${managers.length} entries</span>`;
+
+    // If the total is still unknown and there are more pages, kick off a
+    // background discovery to find it.  The discovery updates knownTotalPages
+    // and the subtitle once it completes.  At most one task runs at a time.
+    if (currentHasNext && knownTotalPages === null && !discoveryInProgress) {
+      discoveryInProgress = true;
+      const snapLeagueId = league.id;
+      const snapLeagueType = league.type;
+
+      void (async () => {
+        try {
+          const result = await discoverLastPage(snapLeagueId, snapLeagueType);
+          if (
+            result !== null &&
+            selectedLeague?.id === snapLeagueId &&
+            selectedLeague?.type === snapLeagueType
+          ) {
+            // Only set knownTotalPages if we don't have a value yet, or if we
+            // can upgrade from an approximate lower-bound to an exact count.
+            if (knownTotalPages === null || (totalPagesApproximate && !result.approximate)) {
+              knownTotalPages = result.totalPages;
+              totalPagesApproximate = result.approximate;
+            }
+            standingsSubtitleEl.textContent = buildSubtitle(currentPage);
+          }
+        } finally {
+          discoveryInProgress = false;
+        }
+      })();
+    }
 
   } catch (e) {
     console.error('loadStandingsPage error', e);
     standingsStatusEl.innerHTML = `<span class="status status--error">Error loading standings. Please try again.</span>`;
   } finally {
     topBtn.disabled = false;
-    meBtn.disabled = !selectedLeague || selectedLeague.entryRank <= 0;
+    meBtn.disabled = league.entryRank <= 0;
     prevBtn.disabled = !currentHasPrev;
     nextBtn.disabled = !currentHasNext;
   }
@@ -800,6 +937,9 @@ async function loadEntry(opts: { silentRefresh?: boolean } = {}) {
     currentPage = 1;
     currentHasNext = false;
     currentHasPrev = false;
+    knownTotalPages = null;
+    totalPagesApproximate = false;
+    discoveryInProgress = false;
 
     // Reset standings section
     standingsSection.style.display = 'none';
