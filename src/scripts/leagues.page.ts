@@ -417,6 +417,64 @@ interface LeagueInfo {
   entryRank: number;
 }
 
+// ==============================
+// localStorage leagues snapshot cache
+// ==============================
+
+const LEAGUES_SNAPSHOT_KEY = 'fpl_leagues_snapshot';
+const LEAGUES_SNAPSHOT_VERSION = 1;
+
+interface LeaguesSnapshot {
+  version: number;
+  entryId: number;
+  overallRank: number;
+  leagues: LeagueInfo[];
+  cachedAt: number;
+}
+
+function saveLeaguesSnapshot(entryId: number, overallRank: number, leaguesList: LeagueInfo[]): void {
+  try {
+    const snapshot: LeaguesSnapshot = {
+      version: LEAGUES_SNAPSHOT_VERSION,
+      entryId,
+      overallRank,
+      leagues: leaguesList,
+      cachedAt: Date.now(),
+    };
+    localStorage.setItem(LEAGUES_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch (e) {
+    console.warn('Failed to save leagues snapshot:', e);
+  }
+}
+
+function loadLeaguesSnapshot(entryId: number): LeaguesSnapshot | null {
+  try {
+    const raw = localStorage.getItem(LEAGUES_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as Partial<LeaguesSnapshot>;
+    if (
+      data.version !== LEAGUES_SNAPSHOT_VERSION ||
+      Number(data.entryId) !== entryId ||
+      !Array.isArray(data.leagues) ||
+      typeof data.overallRank !== 'number' ||
+      typeof data.cachedAt !== 'number'
+    ) return null;
+    return data as LeaguesSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+function applyLeaguesSnapshot(snapshot: LeaguesSnapshot): void {
+  currentEntryId = snapshot.entryId;
+  leagues = snapshot.leagues;
+  overallRankEl.textContent = snapshot.overallRank > 0 ? snapshot.overallRank.toLocaleString() : '—';
+  renderLeaguesList();
+  leaguesOutput.style.display = '';
+  loadStatus.innerHTML = `<span class="text-muted">Refreshing data&hellip;</span>`;
+  collapseEntryCard(snapshot.entryId);
+}
+
 let currentEntryId: number | null = null;
 let currentUser: { id: string } | null = null;
 let leagues: LeagueInfo[] = [];
@@ -678,36 +736,35 @@ async function loadStandingsPage(page: number) {
 // Main load entry handler
 // ==============================
 
-async function loadEntry() {
+async function loadEntry(opts: { silentRefresh?: boolean } = {}) {
   const raw = entryInput.value;
   const entryId = parseManagerIdFromInput(raw);
 
   if (!entryId || !Number.isFinite(entryId)) {
-    loadStatus.textContent = 'Please enter a valid Entry ID.';
+    if (!opts.silentRefresh) loadStatus.textContent = 'Please enter a valid Entry ID.';
     return;
   }
 
-  loadBtn.disabled = true;
-  loadStatus.textContent = 'Loading...';
-  leaguesOutput.style.display = 'none';
-  leagues = [];
-  selectedLeague = null;
-  currentEntryId = entryId;
-  currentPage = 1;
-  currentHasNext = false;
-  currentHasPrev = false;
+  if (!opts.silentRefresh) {
+    loadBtn.disabled = true;
+    loadStatus.textContent = 'Loading...';
+    leaguesOutput.style.display = 'none';
+    leagues = [];
+    selectedLeague = null;
+    currentPage = 1;
+    currentHasNext = false;
+    currentHasPrev = false;
 
-  // Reset standings section
-  standingsSection.style.display = 'none';
-  standingsOutputEl.innerHTML = '';
-  standingsStatusEl.textContent = '';
+    // Reset standings section
+    standingsSection.style.display = 'none';
+    standingsOutputEl.innerHTML = '';
+    standingsStatusEl.textContent = '';
+  }
+
+  currentEntryId = entryId;
 
   try {
-    await fetchBootstrapData();
-
-    const gw = latestGW;
-    await ensureLiveCaches(gw);
-
+    // Phase 1: Fetch entry data and render league list without waiting for live data
     const entryRes = await fetch(`/api/fpl/entry/${entryId}`, { cache: 'no-store' });
     if (!entryRes.ok) throw new Error(`Entry fetch failed (${entryRes.status})`);
     const entryData = await entryRes.json();
@@ -715,17 +772,6 @@ async function loadEntry() {
     // Overall rank
     const overallRank = Number(entryData.summary_overall_rank) || 0;
     overallRankEl.textContent = overallRank > 0 ? overallRank.toLocaleString() : '—';
-
-    // Live GW data for the entry
-    loadStatus.textContent = 'Computing live points...';
-    const liveResult = await fetchManagerLive(entryId, gw);
-    if (liveResult) {
-      overallLivePtsEl.textContent = String(liveResult.livePoints);
-      overallLtpEl.textContent = String(liveResult.ltp ?? 0);
-    } else {
-      overallLivePtsEl.textContent = '—';
-      overallLtpEl.textContent = '—';
-    }
 
     // Build leagues list
     const classicLeagues = Array.isArray(entryData.leagues?.classic) ? entryData.leagues.classic : [];
@@ -747,22 +793,57 @@ async function loadEntry() {
     ].filter(l => Number.isFinite(l.id) && l.id > 0);
 
     renderLeaguesList();
-
     leaguesOutput.style.display = '';
-    loadStatus.innerHTML = `<span class="text-success font-bold">✅ Loaded ${leagues.length} leagues for GW ${gw}</span>`;
 
-    // Collapse the entry ID card now that data is loaded
-    collapseEntryCard(entryId);
+    if (!opts.silentRefresh) {
+      loadStatus.innerHTML = `<span class="text-success font-bold">✅ Loaded ${leagues.length} leagues</span>`;
+      collapseEntryCard(entryId);
+    }
 
-    // Persist the entry ID so it's restored on next visit
-    await saveEntryId(entryId);
+    // Persist snapshot to localStorage (non-blocking)
+    saveLeaguesSnapshot(entryId, overallRank, leagues);
+
+    // Persist the entry ID to Supabase (non-blocking)
+    void saveEntryId(entryId);
+
+    // Phase 2: Bootstrap + live data — runs in background, does not block league list rendering
+    void (async () => {
+      try {
+        await fetchBootstrapData();
+        const gw = latestGW;
+        await ensureLiveCaches(gw);
+
+        // Only update UI if the user hasn't switched to a different entry
+        if (currentEntryId !== entryId) return;
+
+        loadStatus.innerHTML = `<span class="text-success font-bold">✅ Loaded ${leagues.length} leagues for GW ${gw}</span>`;
+
+        const liveResult = await fetchManagerLive(entryId, gw);
+        if (currentEntryId !== entryId) return;
+        if (liveResult) {
+          overallLivePtsEl.textContent = String(liveResult.livePoints);
+          overallLtpEl.textContent = String(liveResult.ltp ?? 0);
+        } else {
+          overallLivePtsEl.textContent = '—';
+          overallLtpEl.textContent = '—';
+        }
+      } catch (e) {
+        console.error('Live data refresh error', e);
+      }
+    })();
 
   } catch (e) {
-    console.error('loadEntry error', e);
-    loadStatus.innerHTML = `<span class="status status--error">Could not load entry data. Check the ID and try again.</span>`;
-    currentEntryId = null;
+    if (!opts.silentRefresh) {
+      console.error('loadEntry error', e);
+      loadStatus.innerHTML = `<span class="status status--error">Could not load entry data. Check the ID and try again.</span>`;
+      currentEntryId = null;
+    } else {
+      console.error('Background refresh error', e);
+    }
   } finally {
-    loadBtn.disabled = false;
+    if (!opts.silentRefresh) {
+      loadBtn.disabled = false;
+    }
   }
 }
 
@@ -866,7 +947,15 @@ async function checkAuth() {
     const savedId = await loadSavedEntryId();
     if (savedId) {
       entryInput.value = String(savedId);
-      await loadEntry();
+      const snapshot = loadLeaguesSnapshot(savedId);
+      if (snapshot) {
+        // Render cached data immediately for an instant-feeling restore
+        applyLeaguesSnapshot(snapshot);
+        // Refresh from FPL in the background without blocking the UI
+        void loadEntry({ silentRefresh: true });
+      } else {
+        await loadEntry();
+      }
     }
   } else {
     leaguesRequireLoginEl.style.display = 'block';
