@@ -4,6 +4,7 @@ on:
   # Run at 02:30 UTC (≈ 02:30 UK winter / 03:30 UK summer) — off-peak
   schedule:
     - cron: '30 2 * * *'
+
   # Allow manual runs with optional inputs
   workflow_dispatch:
     inputs:
@@ -64,12 +65,14 @@ jobs:
           [ -n "$END_GW"   ] && ARGS="$ARGS --endGw=$END_GW"
           ARGS="$ARGS --recentGwRevalidate=$REVALIDATE"
 
-          # Enable Supabase upsert only when both secrets are present
-          if [ -n "${{ secrets.SUPABASE_URL }}" ] && [ -n "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" ]; then
+          # Enable Supabase upsert only when both dedicated secrets are present.
+          # NOTE: We intentionally do NOT use SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY here
+          # to avoid collisions with other repos/workflows.
+          if [ -n "${{ secrets.FPLMANAGERDATA_SUPABASE_URL }}" ] && [ -n "${{ secrets.FPLMANAGERDATA_SUPABASE_SERVICE_ROLE_KEY }}" ]; then
             ARGS="$ARGS --supabase"
-            echo "Supabase secrets detected — Supabase upsert enabled."
+            echo "Supabase secrets detected (FPLMANAGERDATA_*) — Supabase upsert enabled."
           else
-            echo "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — skipping Supabase upsert (NDJSON snapshot only)."
+            echo "FPLMANAGERDATA_SUPABASE_URL / FPLMANAGERDATA_SUPABASE_SERVICE_ROLE_KEY not set — skipping Supabase upsert (NDJSON snapshot only)."
           fi
 
           echo "INGEST_ARGS=$ARGS" >> "$GITHUB_OUTPUT"
@@ -77,8 +80,9 @@ jobs:
 
       - name: Run ingest script
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # The script expects these env var names:
+          SUPABASE_URL: ${{ secrets.FPLMANAGERDATA_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.FPLMANAGERDATA_SUPABASE_SERVICE_ROLE_KEY }}
         run: npx tsx src/tools/ingest-player-history.ts ${{ steps.args.outputs.INGEST_ARGS }}
 
       - name: Upload snapshot as workflow artifact
