@@ -16,6 +16,11 @@
  *   --baseUrl=<url>           FPL API base URL (default: https://fantasy.premierleague.com/api)
  *   --supabase                Enable Supabase upsert (reads SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY from env)
  *
+ * Anti-block / throttling options:
+ *   --delayMs=N               Delay (ms) before each element-summary request (default: 800)
+ *   --jitterMs=N              Random jitter (ms) added to delay (default: 200)
+ *   --maxRequests=N           Optional cap on number of element-summary requests per run
+ *
  * Examples:
  *   # Nightly run (only missing/recent GWs)
  *   npx tsx src/tools/ingest-player-history.ts --mode=nightly
@@ -28,6 +33,9 @@
  *
  *   # Use local proxy instead of direct FPL API
  *   npx tsx src/tools/ingest-player-history.ts --baseUrl=http://localhost:4321/api/fpl
+ *
+ *   # Slow it down further (extra safe)
+ *   npx tsx src/tools/ingest-player-history.ts --mode=nightly --delayMs=1200 --jitterMs=400
  */
 
 import * as fs from 'node:fs';
@@ -86,9 +94,29 @@ export interface IngestOptions {
   baseUrl: string;
   /** When true, upsert rows to Supabase using SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY env vars. */
   supabase: boolean;
+
+  /** Delay in ms before each element-summary request. */
+  delayMs: number;
+  /** Random jitter in ms added to delay. */
+  jitterMs: number;
+  /** Optional cap on number of element-summary requests per run. */
+  maxRequests?: number;
 }
 
 // ── CLI argument parsing ───────────────────────────────────────────────────────
+
+function parseOptionalInt(value: string | undefined): number | undefined {
+  if (value == null) return undefined;
+  if (value.trim() === '') return undefined;
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function parseRequiredInt(name: string, value: string | undefined): number {
+  const n = parseOptionalInt(value);
+  if (n == null) throw new Error(`${name} must be an integer`);
+  return n;
+}
 
 export function parseArgs(argv: string[]): IngestOptions {
   const args: Record<string, string> = {};
@@ -109,8 +137,8 @@ export function parseArgs(argv: string[]): IngestOptions {
     throw new Error(`--mode must be "nightly" or "backfill", got "${mode}"`);
   }
 
-  const startGw = args['startGw'] !== undefined ? parseInt(args['startGw'], 10) : undefined;
-  const endGw = args['endGw'] !== undefined ? parseInt(args['endGw'], 10) : undefined;
+  const startGw = parseOptionalInt(args['startGw']);
+  const endGw = parseOptionalInt(args['endGw']);
 
   if (mode === 'backfill') {
     if (startGw === undefined || endGw === undefined) {
@@ -121,17 +149,26 @@ export function parseArgs(argv: string[]): IngestOptions {
     }
   }
 
+  const recentGwRevalidate = parseOptionalInt(args['recentGwRevalidate']) ?? 2;
+  const delayMs = parseOptionalInt(args['delayMs']) ?? 800;
+  const jitterMs = parseOptionalInt(args['jitterMs']) ?? 200;
+  const maxRequests = parseOptionalInt(args['maxRequests']);
+
+  if (delayMs < 0) throw new Error('--delayMs must be >= 0');
+  if (jitterMs < 0) throw new Error('--jitterMs must be >= 0');
+  if (maxRequests != null && maxRequests <= 0) throw new Error('--maxRequests must be > 0');
+
   return {
     mode,
     startGw,
     endGw,
-    recentGwRevalidate:
-      args['recentGwRevalidate'] !== undefined
-        ? parseInt(args['recentGwRevalidate'], 10)
-        : 2,
+    recentGwRevalidate,
     outDir: args['outDir'] ?? './data',
     baseUrl: args['baseUrl'] ?? 'https://fantasy.premierleague.com/api',
     supabase: args['supabase'] === 'true',
+    delayMs,
+    jitterMs,
+    maxRequests,
   };
 }
 
@@ -141,7 +178,34 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function jitter(ms: number): number {
+  if (ms <= 0) return 0;
+  return Math.floor(Math.random() * (ms + 1));
+}
+
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+function defaultHeaders(): HeadersInit {
+  return {
+    'accept': 'application/json',
+    // A stable, honest UA is better than looking like an anonymous script.
+    'user-agent': 'fplmanagerdata-ingest/1.0 (+https://github.com/dgita24/fplmanagerdata)',
+  };
+}
+
+function parseRetryAfterMs(res: Response): number | null {
+  const ra = res.headers.get('retry-after');
+  if (!ra) return null;
+
+  // Retry-After can be seconds or a HTTP date. Handle seconds reliably.
+  const seconds = parseInt(ra, 10);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds) * 1000;
+
+  const date = Date.parse(ra);
+  if (!Number.isNaN(date)) return Math.max(0, date - Date.now());
+
+  return null;
+}
 
 export async function fetchWithRetry(
   url: string,
@@ -153,11 +217,11 @@ export async function fetchWithRetry(
   for (let attempt = 0; attempt <= retries; attempt++) {
     let res: Response;
     try {
-      res = await fetch(url);
+      res = await fetch(url, { headers: defaultHeaders() });
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       if (attempt < retries) {
-        const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 200;
+        const delay = baseDelayMs * Math.pow(2, attempt) + jitter(250);
         console.warn(`  ⚠️  Network error for ${url}, retrying in ${Math.round(delay)}ms…`);
         await sleep(delay);
         continue;
@@ -168,7 +232,15 @@ export async function fetchWithRetry(
     if (res.ok) return res;
 
     if (RETRYABLE_STATUSES.has(res.status) && attempt < retries) {
-      const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 200;
+      // For 429, prefer server guidance via Retry-After.
+      const retryAfterMs = res.status === 429 ? parseRetryAfterMs(res) : null;
+
+      // Use a larger base delay for 429s if no Retry-After provided.
+      const effectiveBase = res.status === 429 ? Math.max(baseDelayMs, 2000) : baseDelayMs;
+
+      const delay =
+        (retryAfterMs ?? (effectiveBase * Math.pow(2, attempt) + jitter(500)));
+
       console.warn(`  ⚠️  HTTP ${res.status} for ${url}, retrying in ${Math.round(delay)}ms…`);
       await sleep(delay);
       lastError = new Error(`HTTP ${res.status}`);
@@ -271,10 +343,6 @@ export function rowKey(row: Pick<MatchRow, 'player_id' | 'fixture_id'>): string 
 
 // ── Snapshot I/O ───────────────────────────────────────────────────────────────
 
-/**
- * Load an existing NDJSON snapshot into a Map keyed by "player_id:fixture_id".
- * Returns an empty Map if the file does not exist.
- */
 export async function loadExistingSnapshot(
   snapshotPath: string,
 ): Promise<Map<string, MatchRow>> {
@@ -301,9 +369,6 @@ export async function loadExistingSnapshot(
   return map;
 }
 
-/**
- * Write all rows to an NDJSON file, sorted by player_id then gw for determinism.
- */
 export function writeSnapshot(snapshotPath: string, rows: Map<string, MatchRow>): void {
   const sorted = Array.from(rows.values()).sort(
     (a, b) => a.player_id - b.player_id || a.gw - b.gw || a.fixture_id - b.fixture_id,
@@ -318,17 +383,8 @@ export function writeMeta(metaPath: string, meta: SnapshotMeta): void {
 
 // ── Supabase upsert (optional) ─────────────────────────────────────────────────
 
-const SUPABASE_BATCH_SIZE = 500; // rows per upsert call
+const SUPABASE_BATCH_SIZE = 500;
 
-/**
- * Upsert a batch of MatchRows into the `player_match_history` Supabase table.
- *
- * Requires:
- *   process.env.SUPABASE_URL
- *   process.env.SUPABASE_SERVICE_ROLE_KEY
- *
- * The table must exist — run supabase/migrations/create_player_match_history.sql first.
- */
 export async function upsertToSupabase(rows: MatchRow[]): Promise<void> {
   const supabaseUrl = process.env['SUPABASE_URL'];
   const supabaseKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
@@ -339,7 +395,6 @@ export async function upsertToSupabase(rows: MatchRow[]): Promise<void> {
     );
   }
 
-  // Dynamic import so the package is only required when --supabase is passed.
   const { createClient } = await import('@supabase/supabase-js');
   const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -366,9 +421,6 @@ export async function upsertToSupabase(rows: MatchRow[]): Promise<void> {
 
 // ── Season derivation ──────────────────────────────────────────────────────────
 
-/**
- * Derive the FPL season string (e.g. "2025-26") from the first event deadline.
- */
 export function deriveSeason(events: BootstrapEvent[]): string {
   const first = events[0];
   if (!first?.deadline_time) return 'unknown';
@@ -386,10 +438,8 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
   const snapshotPath = path.join(opts.outDir, 'player-history.ndjson');
   const metaPath = path.join(opts.outDir, 'player-history-meta.json');
 
-  // Load existing data
   const existingRows = await loadExistingSnapshot(snapshotPath);
 
-  // Fetch bootstrap
   const bootstrap = await fetchBootstrap(opts.baseUrl);
 
   const currentEvent = bootstrap.events.find((e) => e.is_current);
@@ -399,7 +449,6 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
 
   console.log(`Current GW: ${latestGw} | Total players: ${bootstrap.elements.length}`);
 
-  // Determine the set of GWs to revalidate (always re-fetch even if rows exist)
   const revalidateGws = new Set<number>();
   for (
     let gw = Math.max(1, latestGw - opts.recentGwRevalidate + 1);
@@ -412,20 +461,19 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
     console.log(`Will revalidate GWs: ${[...revalidateGws].sort((a, b) => a - b).join(', ')}`);
   }
 
-  // Determine GW range to consider
   const gwRangeStart = opts.mode === 'backfill' && opts.startGw ? opts.startGw : 1;
   const gwRangeEnd = opts.mode === 'backfill' && opts.endGw ? opts.endGw : latestGw;
 
-  // Build an index of which (player, gw) combos we already have
   const existingByPlayerGw = new Map<string, boolean>();
   for (const row of existingRows.values()) {
     existingByPlayerGw.set(`${row.player_id}:${row.gw}`, true);
   }
 
-  const RATE_LIMIT_DELAY_MS = 300; // ~3 req/s — conservative, adjust if needed
   let processed = 0;
   let newRows = 0;
   let updatedRows = 0;
+
+  let elementSummaryRequests = 0;
 
   for (const player of bootstrap.elements) {
     processed++;
@@ -433,7 +481,6 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
       console.log(`  Progress: ${processed}/${bootstrap.elements.length} players…`);
     }
 
-    // Decide whether we need to fetch this player
     let needFetch = false;
 
     for (let gw = gwRangeStart; gw <= gwRangeEnd; gw++) {
@@ -442,8 +489,6 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
         break;
       }
       if (!existingByPlayerGw.has(`${player.id}:${gw}`)) {
-        // Missing data — but a player may not have played every GW (benched/injured),
-        // so only trigger a fetch if the GW has finished.
         const event = bootstrap.events.find((e) => e.id === gw);
         if (event?.is_finished) {
           needFetch = true;
@@ -454,16 +499,24 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
 
     if (!needFetch) continue;
 
-    await sleep(RATE_LIMIT_DELAY_MS);
+    if (opts.maxRequests != null && elementSummaryRequests >= opts.maxRequests) {
+      console.warn(
+        `Reached --maxRequests=${opts.maxRequests}. Stopping early to reduce load. ` +
+        `Processed ${processed}/${bootstrap.elements.length} players.`,
+      );
+      break;
+    }
+
+    // Delay with jitter (anti-bot: avoid perfectly periodic pattern)
+    await sleep(opts.delayMs + jitter(opts.jitterMs));
 
     try {
+      elementSummaryRequests++;
       const summary = await fetchElementSummary(opts.baseUrl, player.id);
       const history = summary.history ?? [];
 
       for (const rawRow of history) {
         const gw = Number(rawRow['round']);
-
-        // Apply GW range filter
         if (gw < gwRangeStart || gw > gwRangeEnd) continue;
 
         const row = normalizeRow(player.id, rawRow);
@@ -485,6 +538,7 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
   }
 
   console.log(`\n✅ Ingest complete`);
+  console.log(`   element-summary requests: ${elementSummaryRequests}`);
   console.log(`   New rows:     ${newRows}`);
   console.log(`   Updated rows: ${updatedRows}`);
   console.log(`   Total rows:   ${existingRows.size}`);
@@ -503,7 +557,6 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
   writeMeta(metaPath, meta);
   console.log(`   Metadata:     ${metaPath}`);
 
-  // Optional Supabase upsert — only runs when --supabase flag is passed
   if (opts.supabase) {
     console.log(`\n▶ Upserting to Supabase…`);
     const allRows = Array.from(existingRows.values());
@@ -513,8 +566,6 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
 
 // ── Entry point ────────────────────────────────────────────────────────────────
 
-// Detect whether this file is being executed directly (not imported by tests).
-// pathToFileURL gives a reliable cross-platform comparison in ESM.
 const isMain =
   process.argv[1] != null &&
   import.meta.url === pathToFileURL(process.argv[1]).href;
