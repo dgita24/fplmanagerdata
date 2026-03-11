@@ -92,7 +92,7 @@ export interface IngestOptions {
   recentGwRevalidate: number;
   outDir: string;
   baseUrl: string;
-  /** When true, upsert rows to Supabase using SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY env vars. */
+  /** When true, --push to cloudflare--upsert rows to Supabase using SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY env vars. */
   supabase: boolean;
 
   /** Delay in ms before each element-summary request. */
