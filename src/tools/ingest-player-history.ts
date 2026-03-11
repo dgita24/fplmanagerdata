@@ -14,10 +14,14 @@
  *   --recentGwRevalidate=N    Number of recent GWs to re-fetch even if cached (default: 2)
  *   --outDir=./data           Output directory (default: ./data)
  *   --baseUrl=<url>           FPL API base URL (default: https://fantasy.premierleague.com/api)
+ *   --supabase                Enable Supabase upsert (reads SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY from env)
  *
  * Examples:
  *   # Nightly run (only missing/recent GWs)
  *   npx tsx src/tools/ingest-player-history.ts --mode=nightly
+ *
+ *   # Nightly run + upsert to Supabase
+ *   npx tsx src/tools/ingest-player-history.ts --mode=nightly --supabase
  *
  *   # Backfill GW 1–10
  *   npx tsx src/tools/ingest-player-history.ts --mode=backfill --startGw=1 --endGw=10
@@ -80,6 +84,8 @@ export interface IngestOptions {
   recentGwRevalidate: number;
   outDir: string;
   baseUrl: string;
+  /** When true, upsert rows to Supabase using SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY env vars. */
+  supabase: boolean;
 }
 
 // ── CLI argument parsing ───────────────────────────────────────────────────────
@@ -88,7 +94,11 @@ export function parseArgs(argv: string[]): IngestOptions {
   const args: Record<string, string> = {};
   for (const arg of argv.slice(2)) {
     const eq = arg.indexOf('=');
-    if (eq === -1) continue;
+    if (eq === -1) {
+      // Boolean flag: --supabase → args['supabase'] = 'true'
+      args[arg.replace(/^--/, '')] = 'true';
+      continue;
+    }
     const key = arg.slice(0, eq).replace(/^--/, '');
     const val = arg.slice(eq + 1);
     args[key] = val;
@@ -121,6 +131,7 @@ export function parseArgs(argv: string[]): IngestOptions {
         : 2,
     outDir: args['outDir'] ?? './data',
     baseUrl: args['baseUrl'] ?? 'https://fantasy.premierleague.com/api',
+    supabase: args['supabase'] === 'true',
   };
 }
 
@@ -305,6 +316,54 @@ export function writeMeta(metaPath: string, meta: SnapshotMeta): void {
   fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n', 'utf8');
 }
 
+// ── Supabase upsert (optional) ─────────────────────────────────────────────────
+
+const SUPABASE_BATCH_SIZE = 500; // rows per upsert call
+
+/**
+ * Upsert a batch of MatchRows into the `player_match_history` Supabase table.
+ *
+ * Requires:
+ *   process.env.SUPABASE_URL
+ *   process.env.SUPABASE_SERVICE_ROLE_KEY
+ *
+ * The table must exist — run supabase/migrations/create_player_match_history.sql first.
+ */
+export async function upsertToSupabase(rows: MatchRow[]): Promise<void> {
+  const supabaseUrl = process.env['SUPABASE_URL'];
+  const supabaseKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error(
+      'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables must be set for --supabase',
+    );
+  }
+
+  // Dynamic import so the package is only required when --supabase is passed.
+  const { createClient } = await import('@supabase/supabase-js');
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const total = rows.length;
+  let upserted = 0;
+
+  for (let i = 0; i < total; i += SUPABASE_BATCH_SIZE) {
+    const batch = rows.slice(i, i + SUPABASE_BATCH_SIZE);
+
+    const { error } = await supabase
+      .from('player_match_history')
+      .upsert(batch, { onConflict: 'player_id,fixture_id', ignoreDuplicates: false });
+
+    if (error) {
+      throw new Error(`Supabase upsert failed (batch starting at ${i}): ${error.message}`);
+    }
+
+    upserted += batch.length;
+    console.log(`   Supabase: upserted ${upserted}/${total} rows…`);
+  }
+
+  console.log(`   Supabase: ✅ ${upserted} rows upserted to player_match_history`);
+}
+
 // ── Season derivation ──────────────────────────────────────────────────────────
 
 /**
@@ -443,6 +502,13 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
   };
   writeMeta(metaPath, meta);
   console.log(`   Metadata:     ${metaPath}`);
+
+  // Optional Supabase upsert — only runs when --supabase flag is passed
+  if (opts.supabase) {
+    console.log(`\n▶ Upserting to Supabase…`);
+    const allRows = Array.from(existingRows.values());
+    await upsertToSupabase(allRows);
+  }
 }
 
 // ── Entry point ────────────────────────────────────────────────────────────────

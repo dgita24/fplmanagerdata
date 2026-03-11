@@ -12,9 +12,10 @@ that can be consumed by any client without hitting the FPL API directly.
 2. [How incremental updates work](#how-incremental-updates-work)
 3. [Running locally](#running-locally)
 4. [Storage options & cost notes](#storage-options--cost-notes)
-5. [Setting up a free database (Cloudflare D1 or Turso)](#setting-up-a-free-database)
-6. [How both sites consume the snapshot](#how-both-sites-consume-the-snapshot)
-7. [GitHub Actions schedule](#github-actions-schedule)
+5. [Setting up Supabase (recommended)](#setting-up-supabase)
+6. [Setting up an alternative free database (Cloudflare D1 or Turso)](#setting-up-an-alternative-free-database)
+7. [How both sites consume the snapshot](#how-both-sites-consume-the-snapshot)
+8. [GitHub Actions schedule](#github-actions-schedule)
 
 ---
 
@@ -38,6 +39,7 @@ data/player-history-meta.json    ← season, latestGw, rowCount, lastUpdated
          │
          ├─ Committed to repo (default) — served via GitHub raw / CDN
          ├─ Also uploaded as GitHub Actions artifact (7-day retention)
+         ├─ (Optional) upserted to Supabase `player_match_history` table via --supabase flag
          └─ (Optional) uploaded to Cloudflare R2 / Turso / D1 — see below
 ```
 
@@ -134,6 +136,7 @@ npx tsx src/tools/ingest-player-history.ts \
 | `--recentGwRevalidate` | `2` | GWs from current tip to always re-fetch |
 | `--outDir` | `./data` | Output directory |
 | `--baseUrl` | `https://fantasy.premierleague.com/api` | FPL API base URL |
+| `--supabase` | off | Also upsert rows to Supabase (reads env vars) |
 
 ### Use the local proxy instead of hitting FPL directly
 
@@ -236,15 +239,79 @@ Required secrets: `CF_ACCOUNT_ID`, `CF_R2_BUCKET`, `CF_R2_ACCESS_KEY_ID`, `CF_R2
 
 ---
 
-## Setting up a free database
+## Setting up Supabase
 
-Static snapshots are the recommended primary storage. If you also want SQL
-queryability (e.g. for server-side filtering or leaderboards), here are two
-free options that work well with this stack. **Neither uses Supabase.**
+The pipeline has first-class Supabase support — just add `--supabase` to any
+ingest run. The script will upsert all rows into the `player_match_history` table
+using the existing `@supabase/supabase-js` package (already a project dependency).
+
+### 1. Run the migration
+
+In the Supabase dashboard → **SQL Editor**, paste and run the migration at
+`supabase/migrations/create_player_match_history.sql`.
+
+This creates the `player_match_history` table with a `(player_id, fixture_id)`
+primary key, so every upsert is idempotent.
+
+### 2. Add secrets to GitHub
+
+In your repository: **Settings → Secrets and variables → Actions**, add:
+
+| Secret | Value |
+|---|---|
+| `SUPABASE_URL` | Your project URL, e.g. `https://xxxx.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Found in Supabase → Settings → API (service role, not anon) |
+
+Once both secrets exist, the `Ingest Player History` workflow **automatically
+detects them and appends `--supabase`** — no workflow edits needed.
+
+### 3. Run locally with Supabase
+
+```bash
+export SUPABASE_URL=https://xxxx.supabase.co
+export SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+npx tsx src/tools/ingest-player-history.ts --mode=nightly --supabase
+```
+
+### 4. Query from Supabase / Astro
+
+```typescript
+// src/lib/supabase.ts (existing helper)
+import { supabase } from '@/lib/supabase';
+
+// Last 6 GWs, home games only, sorted by avg xGC ascending (better defenders first)
+const maxGwResult = await supabase
+  .from('player_match_history')
+  .select('gw')
+  .order('gw', { ascending: false })
+  .limit(1)
+  .single();
+
+const maxGw = maxGwResult.data?.gw ?? 38;
+const minGw = maxGw - 5; // last 6 GWs
+
+const { data } = await supabase
+  .from('player_match_history')
+  .select('player_id, expected_goals_conceded, total_points, minutes')
+  .gte('gw', minGw)
+  .eq('was_home', true);
+
+// Compute averages client-side using the consumer helper
+import { computeAllPlayerAverages } from '@/lib/playerHistorySnapshot';
+const ranked = computeAllPlayerAverages(data ?? [], 'avgXGC', false);
+```
 
 ---
 
-### Option D — Cloudflare D1 (recommended for this project)
+## Setting up an alternative free database
+
+If you prefer not to use Supabase, or want a second read replica, here are two
+further options that work well with this stack.
+
+---
+
+### Option D — Cloudflare D1
 
 [Cloudflare D1](https://developers.cloudflare.com/d1/) is a serverless SQLite
 database that runs at the Cloudflare edge. Since this site already uses
