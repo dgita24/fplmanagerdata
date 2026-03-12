@@ -548,8 +548,6 @@ const { inline = false } = Astro.props;
    */
   function getAggCols(): ColDef[] {
     const agg = (id: number) => sbAggMap.get(id);
-    const dcVal = (el: BootstrapElement): number =>
-      defconLoaded ? (defconMap.get(el.id) ?? 0) : computeProxyDEFCON(el);
     return [
       { key: "agg_price", label: "£",    title: "Price (£m)",
         fn: (el: BootstrapElement) => (el.now_cost / 10).toFixed(1), numeric: true },
@@ -568,8 +566,8 @@ const { inline = false } = Astro.props;
         fn: (el: BootstrapElement) => agg(el.id)?.assists ?? 0, numeric: true,
         highlight: (el: BootstrapElement) => (agg(el.id)?.assists ?? 0) > 0 },
       { key: "agg_dc",    label: "DC",   title: `DEFCON points ${DEFCON_NOTE}`,
-        fn: dcVal, numeric: true,
-        highlight: (el: BootstrapElement) => dcVal(el) > 0 },
+        fn: (el: BootstrapElement) => agg(el.id)?.defcon_points ?? 0, numeric: true,
+        highlight: (el: BootstrapElement) => (agg(el.id)?.defcon_points ?? 0) > 0 },
       { key: "agg_cs",    label: "CS",   title: "Clean sheets",
         fn: (el: BootstrapElement) => agg(el.id)?.clean_sheets ?? 0, numeric: true },
       { key: "agg_bon",   label: "Bon",  title: "Bonus points",
