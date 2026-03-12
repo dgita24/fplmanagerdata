@@ -5,7 +5,7 @@ on:
   schedule:
     - cron: '30 2 * * *'
 
-  # Allow manual runs with optional inputs
+  # Allow manual runs with optional inputs edit to force deploy
   workflow_dispatch:
     inputs:
       mode:
