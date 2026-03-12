@@ -36,21 +36,23 @@ const { inline = false } = Astro.props;
 
   <!-- Filters -->
   <div class="pe-filters" role="group" aria-label="Player filters">
-    <input
-      type="search"
-      id="pe-search"
-      class="pe-search"
-      placeholder="Search player…"
-      autocomplete="off"
-      aria-label="Search player by name"
-    />
+    <div class="pe-row1">
+      <input
+        type="search"
+        id="pe-search"
+        class="pe-search"
+        placeholder="Search player…"
+        autocomplete="off"
+        aria-label="Search player by name"
+      />
 
-    <div class="pe-pos-group" role="group" aria-label="Filter by position">
-      <button type="button" class="pe-pos-btn is-active" data-pos="">All</button>
-      <button type="button" class="pe-pos-btn" data-pos="1">GK</button>
-      <button type="button" class="pe-pos-btn" data-pos="2">DEF</button>
-      <button type="button" class="pe-pos-btn" data-pos="3">MID</button>
-      <button type="button" class="pe-pos-btn" data-pos="4">FWD</button>
+      <select id="pe-pos-filter" class="pe-pos-select" aria-label="Filter by position">
+        <option value="">All</option>
+        <option value="1">GK</option>
+        <option value="2">DEF</option>
+        <option value="3">MID</option>
+        <option value="4">FWD</option>
+      </select>
     </div>
 
     <div class="pe-selects-row">
@@ -98,12 +100,10 @@ const { inline = false } = Astro.props;
       </div>
       <span class="pe-agg-sep" aria-hidden="true"></span>
       <div class="pe-agg-window" role="group" aria-label="GW window filter">
-        <button type="button" class="pe-agg-win-btn" data-n="1">Last 1</button>
-        <button type="button" class="pe-agg-win-btn" data-n="3">Last 3</button>
-        <button type="button" class="pe-agg-win-btn is-active" data-n="5">Last 5</button>
-        <button type="button" class="pe-agg-win-btn" data-n="10">Last 10</button>
+        <button type="button" class="pe-agg-win-btn" data-n="3">3GWs</button>
+        <button type="button" class="pe-agg-win-btn is-active" data-n="5">5GWs</button>
         <span class="pe-agg-custom">
-          <span>Last</span>
+          <span class="pe-agg-custom-lbl"><span>Last</span><span>GWs</span></span>
           <input
             type="number"
             id="pe-agg-custom-n"
@@ -113,7 +113,6 @@ const { inline = false } = Astro.props;
             placeholder="N"
             aria-label="Custom number of GWs"
           />
-          <span>GWs</span>
         </span>
       </div>
     </div>
@@ -272,10 +271,10 @@ const { inline = false } = Astro.props;
   const teamFilter   = document.getElementById("pe-team-filter") as HTMLSelectElement;
   const priceFilter  = document.getElementById("pe-price-filter") as HTMLSelectElement;
   const statSelect   = document.getElementById("pe-stat-view") as HTMLSelectElement;
+  const posSelect    = document.getElementById("pe-pos-filter") as HTMLSelectElement | null;
   const body        = document.getElementById("pe-body")!;
   const subtitle    = document.getElementById("pe-subtitle")!;
   const statusEl    = document.getElementById("pe-status")!;
-  const posBtns     = document.querySelectorAll<HTMLButtonElement>(".pe-pos-btn");
 
   // ----------------------------------------------------------------
   // Open / close (modal mode only)
@@ -361,13 +360,9 @@ const { inline = false } = Astro.props;
   // ----------------------------------------------------------------
   // Filters
   // ----------------------------------------------------------------
-  posBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      posBtns.forEach(b => b.classList.remove("is-active"));
-      btn.classList.add("is-active");
-      filterPos = btn.dataset.pos ?? "";
-      render();
-    });
+  posSelect?.addEventListener("change", () => {
+    filterPos = posSelect.value;
+    render();
   });
 
   teamFilter.addEventListener("change", () => {
