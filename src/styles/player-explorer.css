@@ -513,6 +513,34 @@
   }
 
   /* Agg toolbar: venue left / window right, side-by-side */
+  /* ---- Mobile-only fixes (< 640px) ---- */
+@media (max-width: 639px) {
+  #player-explorer-sheet {
+    left: 6px;
+    right: 6px;
+    width: auto;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .pe-selects-row {
+    flex-shrink: 1;
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .pe-team-select,
+  .pe-stat-select,
+  .pe-price-select {
+    flex: 1 1 0%;
+    min-width: 0;
+    width: auto;
+  }
+
+  /* Agg toolbar: venue left / window right, side-by-side */
   .pe-agg-toolbar {
     flex-wrap: nowrap;
     align-items: flex-start;
