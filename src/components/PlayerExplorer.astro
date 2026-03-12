@@ -149,6 +149,8 @@ const { inline = false } = Astro.props;
 
   // DEFCON: map of player_id -> season DC points (accurate, from live GW data) adding these chars to force deploy
   let defconMap: Map<number, number> = new Map();
+  // Per-GW DEFCON: gwNumber -> (player_id -> dcPoints) — used for range-specific DC in inline mode.
+  let defconByGW: Map<number, Map<number, number>> = new Map();
   let defconLoaded = false;
 
   // Supabase aggregate state (inline mode on /players page only)
@@ -159,24 +161,36 @@ const { inline = false } = Astro.props;
   let filterWindow = 5;
   let sbAggReqId = 0; // monotonic counter to ignore stale aggregate responses
 
-  const DEFCON_LS_KEY = 'fpl_defcon_cache_v1';
+  const DEFCON_LS_KEY = 'fpl_defcon_cache_v2';
   const DEFCON_TTL_MS = 60 * 60 * 1000; // 1 hour
 
-  function loadDefconFromStorage(): Map<number, number> | null {
+  function loadDefconFromStorage(): { season: Map<number, number>; byGW: Map<number, Map<number, number>> } | null {
     try {
       const raw = localStorage.getItem(DEFCON_LS_KEY);
       if (!raw) return null;
-      const p = JSON.parse(raw) as { data: [number, number][]; fetchedAt: number };
-      if (!Array.isArray(p?.data) || typeof p.fetchedAt !== 'number') return null;
+      // v2 format: { byGW: [gwId, [[playerId, pts], ...]][], fetchedAt: number }
+      const p = JSON.parse(raw) as { byGW: [number, [number, number][]][]; fetchedAt: number };
+      if (!Array.isArray(p?.byGW) || typeof p.fetchedAt !== 'number') return null;
       if (Date.now() - p.fetchedAt > DEFCON_TTL_MS) return null;
-      return new Map(p.data);
+      const byGW = new Map<number, Map<number, number>>(
+        p.byGW.map(([gw, entries]) => [gw, new Map<number, number>(entries)])
+      );
+      // Derive season totals from per-GW data
+      const season = new Map<number, number>();
+      for (const gwMap of byGW.values()) {
+        for (const [pid, pts] of gwMap) {
+          season.set(pid, (season.get(pid) ?? 0) + pts);
+        }
+      }
+      return { season, byGW };
     } catch { return null; }
   }
 
-  function saveDefconToStorage(map: Map<number, number>): void {
+  function saveDefconToStorage(byGW: Map<number, Map<number, number>>): void {
     try {
       localStorage.setItem(DEFCON_LS_KEY, JSON.stringify({
-        data: Array.from(map.entries()),
+        // Serialise the per-GW map: [[gwId, [[playerId, pts], ...]], ...]
+        byGW: Array.from(byGW.entries()).map(([gw, gwMap]) => [gw, Array.from(gwMap.entries())]),
         fetchedAt: Date.now(),
       }));
     } catch { /* ignore */ }
@@ -186,7 +200,8 @@ const { inline = false } = Astro.props;
     // 1. Try localStorage cache first
     const cached = loadDefconFromStorage();
     if (cached) {
-      defconMap = cached;
+      defconMap = cached.season;
+      defconByGW = cached.byGW;
       defconLoaded = true;
       render();
       return;
@@ -211,10 +226,14 @@ const { inline = false } = Astro.props;
       )
     );
 
-    // 5. Aggregate per-fixture DC points from explain.stats
+    // 5. Aggregate per-fixture DC points from explain.stats, tracking per-GW so
+    //    the inline /players table can sum only the selected GW window client-side.
     const newMap = new Map<number, number>();
-    results.forEach((data: any) => {
+    const newByGW = new Map<number, Map<number, number>>();
+    results.forEach((data: any, i: number) => {
+      const gw = completedGWs[i];
       if (!data?.elements) return;
+      const gwMap = new Map<number, number>();
       (data.elements as any[]).forEach(p => {
         if (!eligible.has(p.id)) return;
         const posType = eligible.get(p.id)!;
@@ -227,13 +246,18 @@ const { inline = false } = Astro.props;
             pts += 2;
           }
         });
-        if (pts > 0) newMap.set(p.id, (newMap.get(p.id) ?? 0) + pts);
+        if (pts > 0) {
+          newMap.set(p.id, (newMap.get(p.id) ?? 0) + pts);
+          gwMap.set(p.id, pts);
+        }
       });
+      if (gwMap.size > 0) newByGW.set(gw, gwMap);
     });
 
     defconMap = newMap;
+    defconByGW = newByGW;
     defconLoaded = true;
-    saveDefconToStorage(newMap);
+    saveDefconToStorage(newByGW);
     render(); // re-render with accurate values
   }
 

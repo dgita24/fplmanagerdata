@@ -12,12 +12,6 @@ import { supabase } from './supabase';
 
 export type VenueFilter = 'all' | 'home' | 'away';
 
-/** Row shape returned by player_defensive_stats for DEFCON aggregation. */
-interface DefensiveStatsRow {
-  player_id: number;
-  defcon_points: number | null;
-}
-
 export interface PlayerAggregate {
   player_id: number;
   matches: number;
@@ -41,8 +35,6 @@ export interface PlayerAggregate {
   expected_goals_conceded: number;
   min_gw: number;
   max_gw: number;
-  /** Sum of defcon_points from player_defensive_stats for this GW window. */
-  defcon_points: number;
 }
 
 const SELECTED_COLS = [
@@ -56,36 +48,6 @@ const SELECTED_COLS = [
 ].join(',');
 
 const PAGE_SIZE = 1000;
-
-/**
- * Fetch DEFCON points from `player_defensive_stats` for a specific GW window.
- * Aggregates client-side — no RPC required.
- *
- * @param minGw  First gameweek in the range (inclusive)
- * @param maxGw  Last gameweek in the range (inclusive)
- * @returns Map of player_id → summed defcon_points for the range
- */
-async function fetchDefconForRange(minGw: number, maxGw: number): Promise<Map<number, number>> {
-  const defconMap = new Map<number, number>();
-  let offset = 0;
-  while (true) {
-    const { data, error } = await supabase
-      .from('player_defensive_stats')
-      .select('player_id,defcon_points')
-      .gte('gameweek', minGw)
-      .lte('gameweek', maxGw)
-      .range(offset, offset + PAGE_SIZE - 1);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    for (const row of data as DefensiveStatsRow[]) {
-      const current = defconMap.get(row.player_id) ?? 0;
-      defconMap.set(row.player_id, current + (row.defcon_points ?? 0));
-    }
-    if (data.length < PAGE_SIZE) break;
-    offset += PAGE_SIZE;
-  }
-  return defconMap;
-}
 
 /**
  * Fetch aggregated player stats by querying `player_match_history` directly.
@@ -112,8 +74,8 @@ export async function fetchPlayerAggregates(
   const maxGw: number = maxGwRow.gw;
   const minGw: number = Math.max(1, maxGw - lastN + 1);
 
-  // Step 2: Fetch match history rows and DEFCON data for the same GW window in parallel.
-  // Fetching both concurrently reduces total round-trip time.
+  // Step 2: Paginate through all rows in [minGw, maxGw] matching the venue.
+  // 820 players × 10 GWs ≈ 8 200 rows max — paginated in 1 000-row pages.
   const buildQuery = (offset: number) => {
     const base = supabase
       .from('player_match_history')
@@ -127,10 +89,6 @@ export async function fetchPlayerAggregates(
     if (venue === 'away') return base.eq('was_home', false);
     return base;
   };
-
-  // Kick off DEFCON fetch for [minGw, maxGw] immediately alongside the main pagination.
-  // fetchDefconForRange queries player_defensive_stats — no RPC required.
-  const defconPromise = fetchDefconForRange(minGw, maxGw);
 
   const allRows: Record<string, unknown>[] = [];
   let offset = 0;
@@ -192,7 +150,6 @@ export async function fetchPlayerAggregates(
         expected_goals_conceded: xgc,
         min_gw: minGw,
         max_gw: maxGw,
-        defcon_points: 0, // merged from player_defensive_stats below
       });
     } else {
       existing.matches            += 1;
@@ -223,13 +180,6 @@ export async function fetchPlayerAggregates(
     agg.expected_assists           = Math.round(agg.expected_assists           * 100) / 100;
     agg.expected_goal_involvements = Math.round(agg.expected_goal_involvements * 100) / 100;
     agg.expected_goals_conceded    = Math.round(agg.expected_goals_conceded    * 100) / 100;
-  }
-
-  // Step 4: Merge DEFCON totals for the same [minGw, maxGw] window.
-  // Falls back to 0 for players with no rows in player_defensive_stats.
-  const defconByPlayer = await defconPromise;
-  for (const agg of aggMap.values()) {
-    agg.defcon_points = defconByPlayer.get(agg.player_id) ?? 0;
   }
 
   return Array.from(aggMap.values());
