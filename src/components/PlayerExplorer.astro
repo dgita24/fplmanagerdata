@@ -147,7 +147,7 @@ const { inline = false } = Astro.props;
   let sortCol = "total_points";
   let sortDir: "asc" | "desc" = "desc";
 
-  // DEFCON: map of player_id -> season DC points (accurate, from live GW data)
+  // DEFCON: map of player_id -> season DC points (accurate, from live GW data) adding these chars to force deploy
   let defconMap: Map<number, number> = new Map();
   let defconLoaded = false;
 
