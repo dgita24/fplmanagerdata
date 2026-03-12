@@ -1,12 +1,15 @@
--- Supabase RPC: aggregated player stats for the /players page.
+-- OPTIONAL: Supabase RPC for server-side aggregated player stats.
+--
+-- This function is NO LONGER required by the /players page.
+-- The app now queries the `player_match_history` table directly and
+-- aggregates client-side, so no custom SQL function needs to be deployed.
+--
+-- This file is kept here in case you want to use server-side aggregation
+-- for performance at very large scale, or to expose an API endpoint.
+--
 -- Parameters:
 --   p_venue  TEXT    'all' | 'home' | 'away'
 --   p_last_n INTEGER number of most-recent distinct GWs to include
---
--- Returns one row per player with summed/averaged stats over the window.
---
--- NOTE: Run this migration in your Supabase project (SQL Editor or supabase db push)
--- before deploying the new /players aggregated UI.
 --
 -- Example: SELECT * FROM get_player_aggregates('home', 5);
 
