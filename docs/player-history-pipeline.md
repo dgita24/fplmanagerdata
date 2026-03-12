@@ -253,9 +253,12 @@ In the Supabase dashboard → **SQL Editor**, paste and run each migration in or
    This creates the `player_match_history` table with a `(player_id, fixture_id)`
    primary key, so every upsert is idempotent.
 
-2. `supabase/migrations/get_player_aggregates.sql` — creates the `get_player_aggregates`
-   RPC function used by the `/players` page to serve aggregated stats.  
-   **Required for the aggregated players table to work.**
+2. `supabase/migrations/get_player_aggregates.sql` — defines the optional
+   `get_player_aggregates` RPC function.  
+   **No longer required** — the `/players` page now queries the
+   `player_match_history` table directly and aggregates client-side. You only
+   need to run this migration if you want server-side aggregation for custom
+   tooling or API endpoints.
 
 ```sql
 -- Run in Supabase SQL Editor after deploying
@@ -286,13 +289,13 @@ npx tsx src/tools/ingest-player-history.ts --mode=nightly --supabase
 
 ### 4. Query from Supabase / Astro
 
-**Preferred: use the `get_player_aggregates` RPC (used by `/players` page)**
+**Use `fetchPlayerAggregates` (used by `/players` page)**
 
 ```typescript
-// src/lib/supabasePlayerAggregates.ts (new helper)
+// src/lib/supabasePlayerAggregates.ts
 import { fetchPlayerAggregates } from '@/lib/supabasePlayerAggregates';
 
-// All venues, last 5 GWs — returns one row per player with summed/avg stats
+// All venues, last 5 GWs — queries player_match_history and aggregates client-side
 const rows = await fetchPlayerAggregates('all', 5);
 // home only, last 3 GWs
 const homeRows = await fetchPlayerAggregates('home', 3);
@@ -332,11 +335,11 @@ The `/players` page (inline `PlayerExplorer`) now uses **Supabase-backed aggrega
 stats** instead of raw per-player FPL element-summary data for the main table:
 
 1. Bootstrap API (`/api/bootstrap.json`) → player metadata (name, team, position, price, status)
-2. Supabase `get_player_aggregates(venue, last_n)` RPC → aggregated match stats for the selected window
+2. `fetchPlayerAggregates(venue, last_n)` → queries `player_match_history` directly and aggregates client-side
 3. The two are merged client-side: bootstrap provides player identity, Supabase provides the stats
 
 The venue (All / Home / Away) and GW window (Last 1 / 3 / 5 / 10 / Custom N) filters
-trigger a new Supabase RPC call, so the main page no longer needs raw per-player
+trigger a new fetch, so the main page no longer needs raw per-player
 `/element-summary/:id/` requests to populate the aggregate table.
 
 The existing per-player `PlayerMatchHistorySheet` drill-down sheet still fetches
