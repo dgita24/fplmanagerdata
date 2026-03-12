@@ -533,6 +533,7 @@
     min-width: 0;
     flex-wrap: nowrap;
     justify-content: flex-end;
+    margin-left: 8px;
   }
 
   .pe-agg-win-btn {
