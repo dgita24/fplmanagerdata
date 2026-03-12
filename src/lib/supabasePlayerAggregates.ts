@@ -35,6 +35,13 @@ export interface PlayerAggregate {
   expected_goals_conceded: number;
   min_gw: number;
   max_gw: number;
+  /**
+   * Sum of DC (DEFCON) points earned across all matches in the GW window.
+   * Computed client-side from clearances_blocks_interceptions + tackles + recoveries,
+   * using the same per-match threshold logic as the player modal (computeMatchDC).
+   * GKs always score 0; DEF need CBIT ≥ 10; MID/FWD need CBITR ≥ 12 per match.
+   */
+  defcon_points: number;
 }
 
 const SELECTED_COLS = [
@@ -45,6 +52,8 @@ const SELECTED_COLS = [
   'penalties_saved', 'penalties_missed',
   'expected_goals', 'expected_assists',
   'expected_goal_involvements', 'expected_goals_conceded',
+  // DC calculation (mirrors computeMatchDC in playerMatchHistory.ts)
+  'clearances_blocks_interceptions', 'tackles', 'recoveries',
 ].join(',');
 
 const PAGE_SIZE = 1000;
@@ -53,13 +62,20 @@ const PAGE_SIZE = 1000;
  * Fetch aggregated player stats by querying `player_match_history` directly.
  * Aggregation is performed client-side over the N most-recent GW window.
  *
- * @param venue  'all' | 'home' | 'away'
- * @param lastN  Number of most-recent GWs to include (e.g. 5 = last 5 GWs).
- *               GWs are determined by the max GW in the table minus lastN.
+ * DC (DEFCON) points are computed per match from the defensive stats already
+ * present in player_match_history, using the same threshold logic as the
+ * player modal's computeMatchDC — no separate table or RPC required.
+ *
+ * @param venue        'all' | 'home' | 'away'
+ * @param lastN        Number of most-recent GWs to include (e.g. 5 = last 5 GWs).
+ *                     GWs are determined by the max GW in the table minus lastN.
+ * @param positionMap  player_id → element_type (1=GK,2=DEF,3=MID,4=FWD).
+ *                     Used for per-match DC threshold. Defaults to empty map (DC=0).
  */
 export async function fetchPlayerAggregates(
   venue: VenueFilter = 'all',
   lastN: number = 5,
+  positionMap: Map<number, number> = new Map(),
 ): Promise<PlayerAggregate[]> {
   // Step 1: Get the highest GW present in the table (single-row query)
   const { data: maxGwRow, error: maxGwErr } = await supabase
@@ -125,6 +141,18 @@ export async function fetchPlayerAggregates(
     const xgi = parseFloat(String(row.expected_goal_involvements ?? '0'));
     const xgc = parseFloat(String(row.expected_goals_conceded    ?? '0'));
 
+    // Compute DC per match — same logic as computeMatchDC in playerMatchHistory.ts.
+    // cbi = clearances_blocks_interceptions, tac = tackles, rec = recoveries.
+    const etype = positionMap.get(pid) ?? 0;
+    let dc = 0;
+    if (etype >= 2) {
+      const cbi  = Number(row.clearances_blocks_interceptions) || 0;
+      const tac  = Number(row.tackles) || 0;
+      const rec  = Number(row.recoveries) || 0;
+      const cbit = cbi + tac;
+      dc = etype === 2 ? (cbit >= 10 ? 2 : 0) : ((cbit + rec) >= 12 ? 2 : 0);
+    }
+
     const existing = aggMap.get(pid);
     if (!existing) {
       aggMap.set(pid, {
@@ -150,6 +178,7 @@ export async function fetchPlayerAggregates(
         expected_goals_conceded: xgc,
         min_gw: minGw,
         max_gw: maxGw,
+        defcon_points: dc,
       });
     } else {
       existing.matches            += 1;
@@ -170,6 +199,7 @@ export async function fetchPlayerAggregates(
       existing.expected_assists           += xa;
       existing.expected_goal_involvements += xgi;
       existing.expected_goals_conceded    += xgc;
+      existing.defcon_points      += dc;
     }
   }
 
