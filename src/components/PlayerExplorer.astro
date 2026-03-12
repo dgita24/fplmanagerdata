@@ -423,6 +423,10 @@ const { inline = false } = Astro.props;
       if (isInline) {
         // Inline /players mode: load Supabase aggregated stats (calls render when done)
         loadAggregates();
+        // Fetch accurate DEFCON in background; render() will be called again when ready
+        fetchAndCacheDefcon(bootstrapData.elements, bootstrapData.events).catch(() => {
+          defconLoaded = true;
+        });
       } else {
         render();
         // Fetch accurate DEFCON in background; render() will be called again when ready
@@ -441,6 +445,9 @@ const { inline = false } = Astro.props;
     if (isInline) {
       sbAggMap = new Map();
       sbAggError = false;
+      defconMap = new Map();
+      defconLoaded = false;
+      try { localStorage.removeItem(DEFCON_LS_KEY); } catch { /* ignore */ }
     } else {
       defconMap = new Map();
       defconLoaded = false;
@@ -465,6 +472,7 @@ const { inline = false } = Astro.props;
     title?: string;
     fn?: (el: BootstrapElement) => number | string;
     numeric?: boolean;
+    highlight?: (el: BootstrapElement) => boolean;
   }
 
   const DEFAULT_SORT: Record<string, string> = {
@@ -540,6 +548,8 @@ const { inline = false } = Astro.props;
    */
   function getAggCols(): ColDef[] {
     const agg = (id: number) => sbAggMap.get(id);
+    const dcVal = (el: BootstrapElement): number =>
+      defconLoaded ? (defconMap.get(el.id) ?? 0) : computeProxyDEFCON(el);
     return [
       { key: "agg_price", label: "£",    title: "Price (£m)",
         fn: (el: BootstrapElement) => (el.now_cost / 10).toFixed(1), numeric: true },
@@ -552,9 +562,14 @@ const { inline = false } = Astro.props;
       { key: "agg_min",   label: "Min",  title: "Minutes played",
         fn: (el: BootstrapElement) => agg(el.id)?.minutes ?? 0, numeric: true },
       { key: "agg_gs",    label: "G",    title: "Goals scored",
-        fn: (el: BootstrapElement) => agg(el.id)?.goals_scored ?? 0, numeric: true },
+        fn: (el: BootstrapElement) => agg(el.id)?.goals_scored ?? 0, numeric: true,
+        highlight: (el: BootstrapElement) => (agg(el.id)?.goals_scored ?? 0) > 0 },
       { key: "agg_a",     label: "A",    title: "Assists",
-        fn: (el: BootstrapElement) => agg(el.id)?.assists ?? 0, numeric: true },
+        fn: (el: BootstrapElement) => agg(el.id)?.assists ?? 0, numeric: true,
+        highlight: (el: BootstrapElement) => (agg(el.id)?.assists ?? 0) > 0 },
+      { key: "agg_dc",    label: "DC",   title: `DEFCON points ${DEFCON_NOTE}`,
+        fn: dcVal, numeric: true,
+        highlight: (el: BootstrapElement) => dcVal(el) > 0 },
       { key: "agg_cs",    label: "CS",   title: "Clean sheets",
         fn: (el: BootstrapElement) => agg(el.id)?.clean_sheets ?? 0, numeric: true },
       { key: "agg_bon",   label: "Bon",  title: "Bonus points",
@@ -600,6 +615,12 @@ const { inline = false } = Astro.props;
   function getNumericValue(el: BootstrapElement, col: ColDef): number {
     const v = getColValue(el, col);
     return typeof v === "number" ? v : parseFloat(String(v)) || 0;
+  }
+
+  function renderCell(el: BootstrapElement, c: ColDef): string {
+    const val = getColValue(el, c);
+    const cls = c.highlight?.(el) ? ' class="value-achieved"' : '';
+    return `<td${cls}>${val}</td>`;
   }
 
   function render() {
@@ -665,7 +686,7 @@ const { inline = false } = Astro.props;
       const dot = `<span class="pe-status-dot pe-status-dot--${el.status ?? "a"}" title="${el.news || "Available"}"></span>`;
       return `<tr data-id="${el.id}">
         <td class="pe-player-name">${dot}<button class="pe-player-link" data-id="${el.id}" data-name="${el.web_name}" data-etype="${el.element_type}">${el.web_name}</button><br><span class="pe-player-meta">${team?.short_name ?? ""}  ${pos}</span></td>
-        ${cols.map(c => `<td>${getColValue(el, c)}</td>`).join("")}
+        ${cols.map(c => renderCell(el, c)).join("")}
       </tr>`;
     }).join("");
 
