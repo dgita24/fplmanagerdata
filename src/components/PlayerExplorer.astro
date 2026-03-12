@@ -580,9 +580,9 @@ const { inline = false } = Astro.props;
     const agg = (id: number) => sbAggMap.get(id);
 
     // Compute the last `filterWindow` completed GW IDs from bootstrap once per render.
-    // Using bootstrap (not player_match_history's maxGw) keeps the window current even
-    // when the Supabase table lags behind by one GW — which is the root cause of the
-    // overcounting bug (e.g. Rice showing 8 DC instead of 6 for last 5 GWs).
+    // DC window is based on last N completed GAMEWEEKS, not last N matches.
+    // A player can earn DC in multiple fixtures within the same GW (e.g. DGW),
+    // so a single GW may contribute 0, 2, 4, ... points.
     const completedGWIds = (bootstrapData?.events ?? [])
       .filter(e => e.finished).map(e => e.id).sort((a, b) => a - b);
     const dcWindowGWs = completedGWIds.slice(-filterWindow);
