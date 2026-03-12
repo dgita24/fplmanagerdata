@@ -143,9 +143,9 @@
 }
 
 .pe-pos-select {
-  flex: 0 0 auto;
+  flex: 1 1 0%;
   height: 34px;
-  min-width: 70px;
+  min-width: 0;
   padding: 0 var(--space-2);
   font-family: inherit;
   font-size: var(--text-sm);
@@ -244,6 +244,7 @@
   height: 18px;
   background: rgba(255, 255, 255, 0.15);
   align-self: center;
+  margin-inline: 4px;
 }
 
 .pe-agg-custom {
@@ -337,6 +338,10 @@
 
 .pe-table th:first-child {
   text-align: left;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--color-surface-alt);
 }
 
 .pe-table th:last-child {
@@ -360,10 +365,18 @@
 
 .pe-table td:first-child {
   text-align: left;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-surface);
 }
 
 .pe-table td:last-child {
   border-right: none;
+}
+
+.pe-table tbody tr:hover td:first-child {
+  background: var(--color-surface-alt);
 }
 
 .pe-table tbody tr {
