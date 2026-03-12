@@ -619,8 +619,10 @@ const { inline = false } = Astro.props;
 
   function renderCell(el: BootstrapElement, c: ColDef): string {
     const val = getColValue(el, c);
-    const cls = c.highlight?.(el) ? ' class="value-achieved"' : '';
-    return `<td${cls}>${val}</td>`;
+    if (c.highlight?.(el)) {
+      return `<td><span class="pmh-dc">${val}</span></td>`;
+    }
+    return `<td>${val}</td>`;
   }
 
   function render() {
