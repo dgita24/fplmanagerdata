@@ -251,6 +251,7 @@
 
 /* ---- Body (scrollable content) ---- */
 .pmh-body {
+  overflow-x: auto;                  /* both axes on one container so sticky thead works */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -264,7 +265,9 @@
 
 /* ---- Match history table ---- */
 .pmh-table-wrapper {
-  overflow-x: auto;
+  /* overflow intentionally removed — .pmh-body owns both scroll axes so that
+     position:sticky on thead works correctly. */
+  overflow: visible;
 }
 
 .pmh-table {

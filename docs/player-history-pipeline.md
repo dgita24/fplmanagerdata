@@ -245,13 +245,26 @@ The pipeline has first-class Supabase support — just add `--supabase` to any
 ingest run. The script will upsert all rows into the `player_match_history` table
 using the existing `@supabase/supabase-js` package (already a project dependency).
 
-### 1. Run the migration
+### 1. Run the migrations
 
-In the Supabase dashboard → **SQL Editor**, paste and run the migration at
-`supabase/migrations/create_player_match_history.sql`.
+In the Supabase dashboard → **SQL Editor**, paste and run each migration in order:
 
-This creates the `player_match_history` table with a `(player_id, fixture_id)`
-primary key, so every upsert is idempotent.
+1. `supabase/migrations/create_player_match_history.sql` — creates the base table.  
+   This creates the `player_match_history` table with a `(player_id, fixture_id)`
+   primary key, so every upsert is idempotent.
+
+2. `supabase/migrations/get_player_aggregates.sql` — defines the optional
+   `get_player_aggregates` RPC function.  
+   **No longer required** — the `/players` page now queries the
+   `player_match_history` table directly and aggregates client-side. You only
+   need to run this migration if you want server-side aggregation for custom
+   tooling or API endpoints.
+
+```sql
+-- Run in Supabase SQL Editor after deploying
+-- Parameters: venue ('all'|'home'|'away'), last_n (number of recent GWs)
+SELECT * FROM get_player_aggregates('all', 5);
+```
 
 ### 2. Add secrets to GitHub
 
@@ -275,6 +288,20 @@ npx tsx src/tools/ingest-player-history.ts --mode=nightly --supabase
 ```
 
 ### 4. Query from Supabase / Astro
+
+**Use `fetchPlayerAggregates` (used by `/players` page)**
+
+```typescript
+// src/lib/supabasePlayerAggregates.ts
+import { fetchPlayerAggregates } from '@/lib/supabasePlayerAggregates';
+
+// All venues, last 5 GWs — queries player_match_history and aggregates client-side
+const rows = await fetchPlayerAggregates('all', 5);
+// home only, last 3 GWs
+const homeRows = await fetchPlayerAggregates('home', 3);
+```
+
+**Raw query (for custom use cases):**
 
 ```typescript
 // src/lib/supabase.ts (existing helper)
@@ -301,6 +328,22 @@ const { data } = await supabase
 import { computeAllPlayerAverages } from '@/lib/playerHistorySnapshot';
 const ranked = computeAllPlayerAverages(data ?? [], 'avgXGC', false);
 ```
+
+### `/players` page data flow
+
+The `/players` page (inline `PlayerExplorer`) now uses **Supabase-backed aggregated
+stats** instead of raw per-player FPL element-summary data for the main table:
+
+1. Bootstrap API (`/api/bootstrap.json`) → player metadata (name, team, position, price, status)
+2. `fetchPlayerAggregates(venue, last_n)` → queries `player_match_history` directly and aggregates client-side
+3. The two are merged client-side: bootstrap provides player identity, Supabase provides the stats
+
+The venue (All / Home / Away) and GW window (Last 1 / 3 / 5 / 10 / Custom N) filters
+trigger a new fetch, so the main page no longer needs raw per-player
+`/element-summary/:id/` requests to populate the aggregate table.
+
+The existing per-player `PlayerMatchHistorySheet` drill-down sheet still fetches
+`/element-summary/:id/` on demand when a player name is clicked.
 
 ---
 

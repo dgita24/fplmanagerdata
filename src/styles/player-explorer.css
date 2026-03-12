@@ -192,8 +192,99 @@
   border-color: var(--color-primary);
 }
 
+/* ---- Aggregate toolbar (inline /players mode only) ---- */
+.pe-agg-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.pe-agg-venue,
+.pe-agg-window {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.pe-agg-btn,
+.pe-agg-win-btn {
+  height: 28px;
+  padding: 0 10px;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.pe-agg-btn:hover,
+.pe-agg-win-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.pe-agg-btn.is-active,
+.pe-agg-win-btn.is-active {
+  background: var(--color-primary, #3b82f6);
+  border-color: var(--color-primary, #3b82f6);
+  color: #fff;
+}
+
+.pe-agg-sep {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.15);
+  align-self: center;
+}
+
+.pe-agg-custom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.pe-agg-custom-n {
+  width: 44px;
+  height: 28px;
+  padding: 0 4px;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
+.pe-agg-custom-n:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.pe-agg-error {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: var(--radius-md);
+  margin: var(--space-2) var(--space-3) 0;
+}
+
 /* ---- Body / player list ---- */
 .pe-body {
+  overflow-x: auto;                  /* both axes on one container so sticky thead works */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -207,7 +298,10 @@
 
 /* ---- Player table ---- */
 .pe-table-wrapper {
-  overflow-x: auto;
+  /* overflow intentionally removed — .pe-body owns both scroll axes so that
+     position:sticky on thead works correctly (sticky breaks if its nearest
+     overflow ancestor is a different element than the scroll container). */
+  overflow: visible;
 }
 
 .pe-table {
@@ -435,6 +529,14 @@
 #player-explorer-sheet.pe-inline .pe-filters {
   border: 1px solid var(--color-border);
   border-top: none;
+  border-radius: 0;
+  background: var(--color-surface);
+}
+
+/* Aggregate toolbar is the bottom of the filter card */
+#player-explorer-sheet.pe-inline .pe-agg-toolbar {
+  border: 1px solid var(--color-border);
+  border-top: none;
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   background: var(--color-surface);
 }
@@ -445,12 +547,21 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  /* overflow axes already set by .pe-body; add mobile height cap so the table
+     scrolls internally rather than the whole page scrolling */
+  overflow-y: auto;
+  max-height: 60vh;              /* mobile default */
 }
 
-/* Desktop: constrain table card height so it scrolls vertically */
+/* Desktop: more room */
 @media (min-width: 640px) {
   #player-explorer-sheet.pe-inline .pe-body {
-    overflow-y: auto;
     max-height: 70vh;
   }
+}
+
+/* Let inline table grow to natural width so horizontal scroll triggers */
+#player-explorer-sheet.pe-inline .pe-table {
+  width: auto;
+  min-width: 100%;
 }

@@ -77,15 +77,47 @@ const { inline = false } = Astro.props;
         <option value="13.0">£13.0m</option>
       </select>
 
-      <select id="pe-stat-view" class="pe-stat-select" aria-label="Choose stat view">
-        <option value="overview">Overview</option>
-        <option value="attacking">Attacking</option>
-        <option value="defensive">Defensive</option>
-        <option value="ownership">Ownership / Transfers</option>
-        <option value="discipline">Discipline</option>
-      </select>
+      {!inline && (
+        <select id="pe-stat-view" class="pe-stat-select" aria-label="Choose stat view">
+          <option value="overview">Overview</option>
+          <option value="attacking">Attacking</option>
+          <option value="defensive">Defensive</option>
+          <option value="ownership">Ownership / Transfers</option>
+          <option value="discipline">Discipline</option>
+        </select>
+      )}
     </div>
   </div>
+
+  {inline && (
+    <div class="pe-agg-toolbar" id="pe-agg-toolbar" role="group" aria-label="Aggregate filters">
+      <div class="pe-agg-venue" role="group" aria-label="Venue filter">
+        <button type="button" class="pe-agg-btn is-active" data-venue="all">All</button>
+        <button type="button" class="pe-agg-btn" data-venue="home">Home</button>
+        <button type="button" class="pe-agg-btn" data-venue="away">Away</button>
+      </div>
+      <span class="pe-agg-sep" aria-hidden="true"></span>
+      <div class="pe-agg-window" role="group" aria-label="GW window filter">
+        <button type="button" class="pe-agg-win-btn" data-n="1">Last 1</button>
+        <button type="button" class="pe-agg-win-btn" data-n="3">Last 3</button>
+        <button type="button" class="pe-agg-win-btn is-active" data-n="5">Last 5</button>
+        <button type="button" class="pe-agg-win-btn" data-n="10">Last 10</button>
+        <span class="pe-agg-custom">
+          <span>Last</span>
+          <input
+            type="number"
+            id="pe-agg-custom-n"
+            class="pe-agg-custom-n"
+            min="1"
+            max="38"
+            placeholder="N"
+            aria-label="Custom number of GWs"
+          />
+          <span>GWs</span>
+        </span>
+      </div>
+    </div>
+  )}
 
   <!-- Body -->
   <div class="pe-body" id="pe-body">
@@ -100,6 +132,8 @@ const { inline = false } = Astro.props;
   import "../styles/player-explorer.css";
   import { getBootstrapData, clearBootstrapCache, computeProxyDEFCON, DEFCON_NOTE } from "../lib/fpl/bootstrapCache";
   import type { BootstrapElement, BootstrapTeam, BootstrapStatic } from "../lib/fpl/bootstrapCache";
+  import { fetchPlayerAggregates } from "../lib/supabasePlayerAggregates";
+  import type { PlayerAggregate, VenueFilter } from "../lib/supabasePlayerAggregates";
 
   // ----------------------------------------------------------------
   // State
@@ -117,6 +151,14 @@ const { inline = false } = Astro.props;
   // DEFCON: map of player_id -> season DC points (accurate, from live GW data)
   let defconMap: Map<number, number> = new Map();
   let defconLoaded = false;
+
+  // Supabase aggregate state (inline mode on /players page only)
+  let sbAggMap: Map<number, PlayerAggregate> = new Map();
+  let sbAggLoading = false;
+  let sbAggError = false;
+  let filterVenue: VenueFilter = "all";
+  let filterWindow = 5;
+  let sbAggReqId = 0; // monotonic counter to ignore stale aggregate responses
 
   const DEFCON_LS_KEY = 'fpl_defcon_cache_v1';
   const DEFCON_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -197,6 +239,29 @@ const { inline = false } = Astro.props;
   }
 
   // ----------------------------------------------------------------
+  // Supabase aggregate loading (inline mode on /players page only)
+  // ----------------------------------------------------------------
+  async function loadAggregates() {
+    const reqId = ++sbAggReqId;
+    sbAggLoading = true;
+    sbAggError = false;
+    body.innerHTML = '<div class="pe-status" id="pe-status">Loading GW stats…</div>';
+    subtitle.textContent = "Loading…";
+    try {
+      const rows = await fetchPlayerAggregates(filterVenue, filterWindow);
+      if (reqId !== sbAggReqId) return; // a newer request supersedes this one
+      sbAggMap = new Map(rows.map(r => [r.player_id, r]));
+    } catch (e) {
+      if (reqId !== sbAggReqId) return; // stale — discard
+      console.error("[PlayerExplorer] Supabase aggregate fetch failed:", e);
+      sbAggError = true;
+      sbAggMap = new Map();
+    }
+    sbAggLoading = false;
+    render();
+  }
+
+  // ----------------------------------------------------------------
   // DOM refs (populated on first open)
   // ----------------------------------------------------------------
   const sheet    = document.getElementById("player-explorer-sheet")!;
@@ -245,6 +310,42 @@ const { inline = false } = Astro.props;
   if (isInline) {
     // Inline mode: load immediately, no modal open/close behaviour
     loadBootstrap();
+
+    // Wire up venue filter buttons
+    document.querySelectorAll<HTMLButtonElement>(".pe-agg-btn[data-venue]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll<HTMLButtonElement>(".pe-agg-btn[data-venue]")
+          .forEach(b => b.classList.remove("is-active"));
+        btn.classList.add("is-active");
+        filterVenue = (btn.dataset.venue as typeof filterVenue) ?? "all";
+        loadAggregates();
+      });
+    });
+
+    // Wire up GW window preset buttons
+    document.querySelectorAll<HTMLButtonElement>(".pe-agg-win-btn[data-n]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll<HTMLButtonElement>(".pe-agg-win-btn")
+          .forEach(b => b.classList.remove("is-active"));
+        btn.classList.add("is-active");
+        const customInput = document.getElementById("pe-agg-custom-n") as HTMLInputElement | null;
+        if (customInput) customInput.value = "";
+        filterWindow = parseInt(btn.dataset.n ?? "5", 10);
+        loadAggregates();
+      });
+    });
+
+    // Wire up custom N input
+    const customNInput = document.getElementById("pe-agg-custom-n") as HTMLInputElement | null;
+    customNInput?.addEventListener("change", () => {
+      const n = parseInt(customNInput.value, 10);
+      if (n >= 1 && n <= 38) {
+        document.querySelectorAll<HTMLButtonElement>(".pe-agg-win-btn")
+          .forEach(b => b.classList.remove("is-active"));
+        filterWindow = n;
+        loadAggregates();
+      }
+    });
   } else {
     // Modal mode: wire up open/close
     closeBtn?.addEventListener("click", closeExplorer);
@@ -307,7 +408,7 @@ const { inline = false } = Astro.props;
     render();
   });
 
-  statSelect.addEventListener("change", () => {
+  statSelect?.addEventListener("change", () => {
     statView = statSelect.value;
     sortCol = DEFAULT_SORT[statView] ?? "total_points";
     sortDir = "desc";
@@ -324,11 +425,16 @@ const { inline = false } = Astro.props;
       bootstrapData = await getBootstrapData(6 * 60 * 60 * 1000, force);
       teamMap = new Map(bootstrapData.teams.map(t => [t.id, t]));
       populateTeamFilter();
-      render();
-      // Fetch accurate DEFCON in background; render() will be called again when ready
-      fetchAndCacheDefcon(bootstrapData.elements, bootstrapData.events).catch(() => {
-        defconLoaded = true;
-      });
+      if (isInline) {
+        // Inline /players mode: load Supabase aggregated stats (calls render when done)
+        loadAggregates();
+      } else {
+        render();
+        // Fetch accurate DEFCON in background; render() will be called again when ready
+        fetchAndCacheDefcon(bootstrapData.elements, bootstrapData.events).catch(() => {
+          defconLoaded = true;
+        });
+      }
     } catch (err) {
       body.innerHTML = `<div class="pe-status">❌ Failed to load players. <button id="pe-retry" style="margin-left:8px;cursor:pointer;text-decoration:underline;background:none;border:none;color:var(--color-primary);">Retry</button></div>`;
       document.getElementById("pe-retry")?.addEventListener("click", () => loadBootstrap(true));
@@ -337,9 +443,14 @@ const { inline = false } = Astro.props;
 
   refreshBtn.addEventListener("click", () => {
     clearBootstrapCache();
-    defconMap = new Map();
-    defconLoaded = false;
-    try { localStorage.removeItem(DEFCON_LS_KEY); } catch { /* ignore */ }
+    if (isInline) {
+      sbAggMap = new Map();
+      sbAggError = false;
+    } else {
+      defconMap = new Map();
+      defconLoaded = false;
+      try { localStorage.removeItem(DEFCON_LS_KEY); } catch { /* ignore */ }
+    }
     loadBootstrap(true);
   });
 
@@ -427,6 +538,59 @@ const { inline = false } = Astro.props;
     return cols;
   }
 
+  /**
+   * Return aggregated column definitions for inline /players mode.
+   * Values are read from sbAggMap (Supabase-backed) at render time.
+   * Bootstrap-derived columns (£, Sel%) are read from the element directly.
+   */
+  function getAggCols(): ColDef[] {
+    const agg = (id: number) => sbAggMap.get(id);
+    return [
+      { key: "agg_price", label: "£",    title: "Price (£m)",
+        fn: (el: BootstrapElement) => (el.now_cost / 10).toFixed(1), numeric: true },
+      { key: "agg_gms",   label: "Gms",  title: "Matches in window",
+        fn: (el: BootstrapElement) => agg(el.id)?.matches ?? 0, numeric: true },
+      { key: "agg_pts",   label: "Pts",  title: "Total points in window",
+        fn: (el: BootstrapElement) => agg(el.id)?.total_points ?? 0, numeric: true },
+      { key: "agg_avg",   label: "Avg",  title: "Avg points per game",
+        fn: (el: BootstrapElement) => agg(el.id)?.avg_points ?? 0, numeric: true },
+      { key: "agg_min",   label: "Min",  title: "Minutes played",
+        fn: (el: BootstrapElement) => agg(el.id)?.minutes ?? 0, numeric: true },
+      { key: "agg_gs",    label: "G",    title: "Goals scored",
+        fn: (el: BootstrapElement) => agg(el.id)?.goals_scored ?? 0, numeric: true },
+      { key: "agg_a",     label: "A",    title: "Assists",
+        fn: (el: BootstrapElement) => agg(el.id)?.assists ?? 0, numeric: true },
+      { key: "agg_cs",    label: "CS",   title: "Clean sheets",
+        fn: (el: BootstrapElement) => agg(el.id)?.clean_sheets ?? 0, numeric: true },
+      { key: "agg_bon",   label: "Bon",  title: "Bonus points",
+        fn: (el: BootstrapElement) => agg(el.id)?.bonus ?? 0, numeric: true },
+      { key: "agg_xg",    label: "xG",   title: "Expected goals",
+        fn: (el: BootstrapElement) => agg(el.id)?.expected_goals ?? 0, numeric: true },
+      { key: "agg_xa",    label: "xA",   title: "Expected assists",
+        fn: (el: BootstrapElement) => agg(el.id)?.expected_assists ?? 0, numeric: true },
+      { key: "agg_xgi",   label: "xGI",  title: "Expected goal involvements (xG+xA)",
+        fn: (el: BootstrapElement) => agg(el.id)?.expected_goal_involvements ?? 0, numeric: true },
+      { key: "agg_gc",    label: "GC",   title: "Goals conceded",
+        fn: (el: BootstrapElement) => agg(el.id)?.goals_conceded ?? 0, numeric: true },
+      { key: "agg_xgc",   label: "xGC",  title: "Expected goals conceded",
+        fn: (el: BootstrapElement) => agg(el.id)?.expected_goals_conceded ?? 0, numeric: true },
+      { key: "agg_svs",   label: "Svs",  title: "Saves (GK)",
+        fn: (el: BootstrapElement) => agg(el.id)?.saves ?? 0, numeric: true },
+      { key: "agg_ps",    label: "PenSv",title: "Penalties saved",
+        fn: (el: BootstrapElement) => agg(el.id)?.penalties_saved ?? 0, numeric: true },
+      { key: "agg_pm",    label: "PenM", title: "Penalties missed",
+        fn: (el: BootstrapElement) => agg(el.id)?.penalties_missed ?? 0, numeric: true },
+      { key: "agg_yc",    label: "YC",   title: "Yellow cards",
+        fn: (el: BootstrapElement) => agg(el.id)?.yellow_cards ?? 0, numeric: true },
+      { key: "agg_rc",    label: "RC",   title: "Red cards",
+        fn: (el: BootstrapElement) => agg(el.id)?.red_cards ?? 0, numeric: true },
+      { key: "agg_og",    label: "OG",   title: "Own goals",
+        fn: (el: BootstrapElement) => agg(el.id)?.own_goals ?? 0, numeric: true },
+      { key: "agg_sel",   label: "Sel%", title: "Selected by % of FPL managers",
+        fn: (el: BootstrapElement) => el.selected_by_percent, numeric: true },
+    ];
+  }
+
   // ----------------------------------------------------------------
   // Rendering
   // ----------------------------------------------------------------
@@ -446,7 +610,20 @@ const { inline = false } = Astro.props;
   function render() {
     if (!bootstrapData) return;
 
-    const cols = getEffectiveCols(statView, filterPos);
+    let cols: ColDef[];
+
+    if (isInline) {
+      // Inline /players mode: use Supabase aggregated columns
+      cols = getAggCols();
+      // Ensure sortCol is valid for aggregated columns; reset to default if not
+      if (!cols.find(c => c.key === sortCol)) {
+        sortCol = "agg_pts";
+        sortDir = "desc";
+      }
+    } else {
+      cols = getEffectiveCols(statView, filterPos);
+    }
+
     const activeSortCol = cols.find(c => c.key === sortCol) ?? cols[0];
 
     // Filter
@@ -468,10 +645,19 @@ const { inline = false } = Astro.props;
       return sortDir === "desc" ? vb - va : va - vb;
     });
 
-    subtitle.textContent = `${players.length} player${players.length !== 1 ? "s" : ""}`;
+    // Subtitle: show player count + GW range for inline aggregated mode.
+    // All rows returned by a single get_player_aggregates RPC call share the same
+    // min_gw/max_gw window, so reading from any entry gives the correct range.
+    if (isInline && sbAggMap.size > 0) {
+      const firstAgg = sbAggMap.values().next().value as PlayerAggregate | undefined;
+      const gwRange = firstAgg ? ` · GW ${firstAgg.min_gw}–${firstAgg.max_gw}` : "";
+      subtitle.textContent = `${players.length} player${players.length !== 1 ? "s" : ""}${gwRange}`;
+    } else {
+      subtitle.textContent = `${players.length} player${players.length !== 1 ? "s" : ""}`;
+    }
 
     // Build table HTML
-    const showDefconNote = statView === "defensive";
+    const showDefconNote = !isInline && statView === "defensive";
 
     const thead = `<thead><tr>
       <th data-col="name" title="Player">Player</th>
@@ -492,7 +678,11 @@ const { inline = false } = Astro.props;
       ? `<span class="pe-defcon-note">DC ${defconLoaded ? DEFCON_NOTE : '⏳ Loading DC data from GW live stats…'}</span>`
       : "";
 
-    body.innerHTML = `<div class="pe-table-wrapper"><table class="pe-table">${thead}<tbody>${rows}</tbody></table></div>${note}`;
+    const errorNote = isInline && sbAggError
+      ? `<div class="pe-agg-error">⚠️ Could not load GW stats from Supabase. Stats unavailable.</div>`
+      : "";
+
+    body.innerHTML = `${errorNote}<div class="pe-table-wrapper"><table class="pe-table">${thead}<tbody>${rows}</tbody></table></div>${note}`;
 
     // Sort header click
     body.querySelectorAll<HTMLElement>(".pe-table th[data-col]").forEach(th => {
