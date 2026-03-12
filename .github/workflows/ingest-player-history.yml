@@ -27,7 +27,7 @@ on:
       recent_gw_revalidate:
         description: 'Number of recent GWs to re-fetch even if cached (default: 2)'
         required: false
-        default: '2'
+        default: '0'
 
 jobs:
   ingest:
@@ -59,7 +59,11 @@ jobs:
 
           START_GW="${{ github.event.inputs.start_gw }}"
           END_GW="${{ github.event.inputs.end_gw }}"
-          REVALIDATE="${{ github.event.inputs.recent_gw_revalidate || '2' }}"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            REVALIDATE="0"
+          else
+            REVALIDATE="${{ github.event.inputs.recent_gw_revalidate || '0' }}"
+          fi
 
           [ -n "$START_GW" ] && ARGS="$ARGS --startGw=$START_GW"
           [ -n "$END_GW"   ] && ARGS="$ARGS --endGw=$END_GW"
