@@ -147,8 +147,12 @@ const { inline = false } = Astro.props;
   let sortCol = "total_points";
   let sortDir: "asc" | "desc" = "desc";
 
-  // DEFCON: map of player_id -> season DC points (accurate, from live GW data) adding these chars to force deploy
+  // DEFCON: season totals and per-GW breakdown, both derived from FPL live event data.
+  // defconMap: player_id → total DC points across all completed GWs (season).
+  // defconByGW: gw → (player_id → DC points earned that GW).
+  // Both are populated by fetchAndCacheDefcon and used for the DC column.
   let defconMap: Map<number, number> = new Map();
+  let defconByGW: Map<number, Map<number, number>> = new Map();
   let defconLoaded = false;
 
   // Supabase aggregate state (inline mode on /players page only)
@@ -159,24 +163,34 @@ const { inline = false } = Astro.props;
   let filterWindow = 5;
   let sbAggReqId = 0; // monotonic counter to ignore stale aggregate responses
 
-  const DEFCON_LS_KEY = 'fpl_defcon_cache_v1';
+  // v2 cache stores per-GW breakdown so the inline table can scope DC to any window.
+  const DEFCON_LS_KEY = 'fpl_defcon_cache_v2';
   const DEFCON_TTL_MS = 60 * 60 * 1000; // 1 hour
 
-  function loadDefconFromStorage(): Map<number, number> | null {
+  function loadDefconFromStorage(): { season: Map<number, number>; byGW: Map<number, Map<number, number>> } | null {
     try {
       const raw = localStorage.getItem(DEFCON_LS_KEY);
       if (!raw) return null;
-      const p = JSON.parse(raw) as { data: [number, number][]; fetchedAt: number };
-      if (!Array.isArray(p?.data) || typeof p.fetchedAt !== 'number') return null;
+      const p = JSON.parse(raw) as {
+        season: [number, number][];
+        byGW: [number, [number, number][]][];
+        fetchedAt: number;
+      };
+      if (!Array.isArray(p?.season) || !Array.isArray(p?.byGW) || typeof p.fetchedAt !== 'number') return null;
       if (Date.now() - p.fetchedAt > DEFCON_TTL_MS) return null;
-      return new Map(p.data);
+      const season = new Map<number, number>(p.season);
+      const byGW   = new Map<number, Map<number, number>>(
+        p.byGW.map(([gw, entries]) => [gw, new Map<number, number>(entries)])
+      );
+      return { season, byGW };
     } catch { return null; }
   }
 
-  function saveDefconToStorage(map: Map<number, number>): void {
+  function saveDefconToStorage(season: Map<number, number>, byGW: Map<number, Map<number, number>>): void {
     try {
       localStorage.setItem(DEFCON_LS_KEY, JSON.stringify({
-        data: Array.from(map.entries()),
+        season: Array.from(season.entries()),
+        byGW:   Array.from(byGW.entries()).map(([gw, m]) => [gw, Array.from(m.entries())]),
         fetchedAt: Date.now(),
       }));
     } catch { /* ignore */ }
@@ -186,7 +200,8 @@ const { inline = false } = Astro.props;
     // 1. Try localStorage cache first
     const cached = loadDefconFromStorage();
     if (cached) {
-      defconMap = cached;
+      defconMap = cached.season;
+      defconByGW = cached.byGW;
       defconLoaded = true;
       render();
       return;
@@ -211,10 +226,17 @@ const { inline = false } = Astro.props;
       )
     );
 
-    // 5. Aggregate per-fixture DC points from explain.stats
-    const newMap = new Map<number, number>();
-    results.forEach((data: any) => {
+    // 5. Aggregate per-fixture DC points from explain.stats.
+    //    Track both season totals (defconMap) and per-GW breakdown (defconByGW)
+    //    so the inline table can scope DC to any GW window.
+    const newMap  = new Map<number, number>();
+    const newByGW = new Map<number, Map<number, number>>();
+
+    results.forEach((data: any, i: number) => {
+      const gw = completedGWs[i];
       if (!data?.elements) return;
+      const gwMap = new Map<number, number>();
+
       (data.elements as any[]).forEach(p => {
         if (!eligible.has(p.id)) return;
         const posType = eligible.get(p.id)!;
@@ -227,13 +249,19 @@ const { inline = false } = Astro.props;
             pts += 2;
           }
         });
-        if (pts > 0) newMap.set(p.id, (newMap.get(p.id) ?? 0) + pts);
+        if (pts > 0) {
+          newMap.set(p.id, (newMap.get(p.id) ?? 0) + pts);
+          gwMap.set(p.id, pts);
+        }
       });
+
+      if (gwMap.size > 0) newByGW.set(gw, gwMap);
     });
 
-    defconMap = newMap;
+    defconMap  = newMap;
+    defconByGW = newByGW;
     defconLoaded = true;
-    saveDefconToStorage(newMap);
+    saveDefconToStorage(newMap, newByGW);
     render(); // re-render with accurate values
   }
 
@@ -247,12 +275,7 @@ const { inline = false } = Astro.props;
     body.innerHTML = '<div class="pe-status" id="pe-status">Loading GW stats…</div>';
     subtitle.textContent = "Loading…";
     try {
-      // Build player_id → element_type map from bootstrap so fetchPlayerAggregates
-      // can compute per-match DC using the same threshold logic as the player modal.
-      const positionMap = new Map(
-        (bootstrapData?.elements ?? []).map(e => [e.id, e.element_type])
-      );
-      const rows = await fetchPlayerAggregates(filterVenue, filterWindow, positionMap);
+      const rows = await fetchPlayerAggregates(filterVenue, filterWindow);
       if (reqId !== sbAggReqId) return; // a newer request supersedes this one
       sbAggMap = new Map(rows.map(r => [r.player_id, r]));
     } catch (e) {
@@ -451,10 +474,12 @@ const { inline = false } = Astro.props;
       sbAggMap = new Map();
       sbAggError = false;
       defconMap = new Map();
+      defconByGW = new Map();
       defconLoaded = false;
       try { localStorage.removeItem(DEFCON_LS_KEY); } catch { /* ignore */ }
     } else {
       defconMap = new Map();
+      defconByGW = new Map();
       defconLoaded = false;
       try { localStorage.removeItem(DEFCON_LS_KEY); } catch { /* ignore */ }
     }
@@ -553,6 +578,21 @@ const { inline = false } = Astro.props;
    */
   function getAggCols(): ColDef[] {
     const agg = (id: number) => sbAggMap.get(id);
+
+    // Compute the last `filterWindow` completed GW IDs from bootstrap once per render.
+    // Using bootstrap (not player_match_history's maxGw) keeps the window current even
+    // when the Supabase table lags behind by one GW — which is the root cause of the
+    // overcounting bug (e.g. Rice showing 8 DC instead of 6 for last 5 GWs).
+    const completedGWIds = (bootstrapData?.events ?? [])
+      .filter(e => e.finished).map(e => e.id).sort((a, b) => a - b);
+    const dcWindowGWs = completedGWIds.slice(-filterWindow);
+    const getDCForPlayer = (playerId: number): number => {
+      if (!defconLoaded) return 0;
+      let total = 0;
+      for (const gw of dcWindowGWs) total += defconByGW.get(gw)?.get(playerId) ?? 0;
+      return total;
+    };
+
     return [
       { key: "agg_price", label: "£",    title: "Price (£m)",
         fn: (el: BootstrapElement) => (el.now_cost / 10).toFixed(1), numeric: true },
@@ -570,9 +610,9 @@ const { inline = false } = Astro.props;
       { key: "agg_a",     label: "A",    title: "Assists",
         fn: (el: BootstrapElement) => agg(el.id)?.assists ?? 0, numeric: true,
         highlight: (el: BootstrapElement) => (agg(el.id)?.assists ?? 0) > 0 },
-      { key: "agg_dc",    label: "DC",   title: "DEFCON points in window (from match history stats)",
-        fn: (el: BootstrapElement) => agg(el.id)?.defcon_points ?? 0, numeric: true,
-        highlight: (el: BootstrapElement) => (agg(el.id)?.defcon_points ?? 0) > 0 },
+      { key: "agg_dc",    label: "DC",   title: `DEFCON points in window ${DEFCON_NOTE}`,
+        fn: (el: BootstrapElement) => getDCForPlayer(el.id), numeric: true,
+        highlight: (el: BootstrapElement) => getDCForPlayer(el.id) > 0 },
       { key: "agg_cs",    label: "CS",   title: "Clean sheets",
         fn: (el: BootstrapElement) => agg(el.id)?.clean_sheets ?? 0, numeric: true },
       { key: "agg_bon",   label: "Bon",  title: "Bonus points",
