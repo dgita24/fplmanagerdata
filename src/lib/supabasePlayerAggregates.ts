@@ -53,6 +53,11 @@ const PAGE_SIZE = 1000;
  * Fetch aggregated player stats by querying `player_match_history` directly.
  * Aggregation is performed client-side over the N most-recent GW window.
  *
+ * DC (DEFCON) points are NOT computed here — they are derived separately in
+ * PlayerExplorer from FPL live event data (defconByGW), which is the same
+ * authoritative source as the season DC column. This avoids window-anchor
+ * drift when the Supabase table lags behind the FPL API by one GW.
+ *
  * @param venue  'all' | 'home' | 'away'
  * @param lastN  Number of most-recent GWs to include (e.g. 5 = last 5 GWs).
  *               GWs are determined by the max GW in the table minus lastN.
