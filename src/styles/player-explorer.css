@@ -196,6 +196,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  width: 100%;
   padding: var(--space-1) var(--space-3);
   align-items: center;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -204,7 +205,9 @@
 .pe-agg-venue,
 .pe-agg-window {
   display: flex;
+  flex: 1;
   align-items: center;
+  justify-content: center;
   gap: var(--space-1);
   flex-wrap: wrap;
 }
