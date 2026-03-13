@@ -523,22 +523,23 @@
     display: inline-block;
     width: 1px;
     height: 18px;
-    margin-inline: 6px;   /* breathing room on each side */
+    background: rgba(255, 255, 255, 0.15);
+    margin-inline: 8px;   /* breathing room on each side */
     flex-shrink: 0;        /* never let it collapse to 0 */
   }
 
   .pe-agg-venue {
-    flex: 1 1 0%;
+    flex: 0 0 auto;
     min-width: 0;
     flex-wrap: nowrap;
   }
 
   .pe-agg-window {
-    flex: 1 1 0%;
+    flex: 0 0 auto;
     min-width: 0;
     flex-wrap: nowrap;
     justify-content: flex-end;
-    margin-left: 8px;
+    margin-left: auto;
   }
 
   .pe-agg-win-btn {
