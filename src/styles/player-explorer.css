@@ -165,15 +165,15 @@
 .pe-selects-row {
   display: flex;
   gap: var(--space-2);
-  flex-shrink: 0;
+  width: 100%;
 }
 
 .pe-team-select,
 .pe-stat-select,
 .pe-price-select {
   height: 34px;
-  width: 110px;
-  flex: 0 0 110px;
+  flex: 1 1 0%;
+  min-width: 0;
   padding: 0 var(--space-2);
   font-family: inherit;
   font-size: var(--text-sm);
@@ -196,6 +196,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  width: 100%;
   padding: var(--space-1) var(--space-3);
   align-items: center;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -204,15 +205,17 @@
 .pe-agg-venue,
 .pe-agg-window {
   display: flex;
+  flex: 1;
   align-items: center;
   gap: var(--space-1);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .pe-agg-btn,
 .pe-agg-win-btn {
+  flex: 1;
   height: 28px;
-  padding: 0 10px;
+  padding: 0 4px;
   background: var(--color-surface-alt);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -222,6 +225,7 @@
   font-size: var(--text-xs);
   font-weight: 600;
   line-height: 1;
+  text-align: center;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
@@ -248,11 +252,20 @@
 }
 
 .pe-agg-custom {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 3px;
+  height: 28px;
+  padding: 0 4px;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   font-size: var(--text-xs);
-  color: var(--color-text-muted);
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: text;
 }
 
 .pe-agg-custom-lbl {
@@ -260,18 +273,21 @@
   flex-direction: column;
   align-items: center;
   line-height: 1.1;
+  white-space: nowrap;
 }
 
 .pe-agg-custom-n {
-  width: 44px;
-  height: 28px;
+  flex: 1;
+  min-width: 0;
+  height: 22px;
   padding: 0 4px;
-  background: var(--color-surface-alt);
+  background: rgba(255, 255, 255, 0.1);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   color: var(--color-text);
   font-family: inherit;
   font-size: var(--text-xs);
+  font-weight: 600;
   text-align: center;
 }
 
