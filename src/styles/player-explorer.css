@@ -519,7 +519,12 @@
   }
 
   .pe-agg-sep {
-    display: none;
+    /* Instead of display:none, keep it visible as a vertical divider */
+    display: inline-block;
+    width: 1px;
+    height: 18px;
+    margin-inline: 6px;   /* breathing room on each side */
+    flex-shrink: 0;        /* never let it collapse to 0 */
   }
 
   .pe-agg-venue {
