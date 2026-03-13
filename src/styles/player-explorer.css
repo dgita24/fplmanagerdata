@@ -515,25 +515,34 @@
   /* Agg toolbar: venue left / window right, side-by-side */
   .pe-agg-toolbar {
     flex-wrap: nowrap;
-    align-items: flex-start;
+    align-items: center;
+    justify-content: center;
   }
 
   .pe-agg-sep {
-    display: none;
+    /* Instead of display:none, keep it visible as a vertical divider */
+    display: inline-block;
+    width: 1px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.15);
+    margin-inline: 3px;   /* breathing room on each side */
+    flex-shrink: 0;        /* never let it collapse to 0 */
   }
 
   .pe-agg-venue {
-    flex: 1 1 0%;
+    flex: 0 0 auto;
     min-width: 0;
     flex-wrap: nowrap;
   }
 
   .pe-agg-window {
-    flex: 1 1 0%;
+    flex: 0 0 auto;
     min-width: 0;
     flex-wrap: nowrap;
-    justify-content: flex-end;
-    margin-left: 8px;
+  }
+
+   .pe-agg-btn {
+    padding: 0 6px;
   }
 
   .pe-agg-win-btn {
@@ -541,7 +550,7 @@
   }
 
   .pe-agg-custom-n {
-    width: 32px;
+    width: 28px;
   }
 }
 
