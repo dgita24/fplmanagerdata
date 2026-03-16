@@ -1,15 +1,16 @@
 /**
  * Tests for ingest-player-history.ts helper functions.
  *
- * Focuses on the two bugs that caused GW30 data to be missing from Supabase:
- *   1. Wrong field name (`is_finished` vs `finished`) on BootstrapEvent.
- *   2. Current (non-finished) GW never included in revalidateGws when
- *      recentGwRevalidate=0 (the nightly scheduled-run default).
+ * Covers:
+ *   1. buildRevalidateGws — only uses recentGwRevalidate window (no unconditional latestGw).
+ *   2. computeLivePlayerIds — selective revalidation from /event/{gw}/live response.
+ *   3. deriveSeason, normalizeRow, parseArgs — unchanged helpers.
  */
 
 import { describe, it, expect } from 'vitest';
 import {
   buildRevalidateGws,
+  computeLivePlayerIds,
   deriveSeason,
   normalizeRow,
   parseArgs,
@@ -28,29 +29,20 @@ function makeEvent(
 }
 
 // --------------------------------------------------------------------------
-// buildRevalidateGws — the core fix
+// buildRevalidateGws — only handles recentGwRevalidate window
+// The current unfinished GW is no longer forcibly added here; instead
+// runIngest uses computeLivePlayerIds for selective per-player revalidation.
 // --------------------------------------------------------------------------
 
-describe('buildRevalidateGws — current GW always included when not finished', () => {
-  it('includes current GW (not finished) even when recentGwRevalidate=0', () => {
+describe('buildRevalidateGws', () => {
+  it('returns empty set when recentGwRevalidate=0 (regardless of current GW state)', () => {
     const events = [
       makeEvent(28, false, true),
       makeEvent(29, false, true),
       makeEvent(30, true, false), // GW30: current, not finished
     ];
     const result = buildRevalidateGws(events, 30, 0);
-    expect(result.has(30)).toBe(true);
-  });
-
-  it('does NOT duplicate current GW when it is already finished and revalidate=0', () => {
-    const events = [
-      makeEvent(29, false, true),
-      makeEvent(30, true, true), // GW30: current AND finished
-    ];
-    const result = buildRevalidateGws(events, 30, 0);
-    // finished + is_current: not added via the "live" path, but may be added via revalidate window
-    // With revalidate=0, loop covers gw=31..30 (no iterations) → not added
-    expect(result.has(30)).toBe(false);
+    expect(result.size).toBe(0);
   });
 
   it('returns empty set when GW is finished and recentGwRevalidate=0', () => {
@@ -62,7 +54,7 @@ describe('buildRevalidateGws — current GW always included when not finished', 
     expect(result.size).toBe(0);
   });
 
-  it('includes current GW plus N most-recent when recentGwRevalidate=2', () => {
+  it('includes N most-recent GWs when recentGwRevalidate=2', () => {
     const events = [
       makeEvent(28, false, true),
       makeEvent(29, false, true),
@@ -82,19 +74,17 @@ describe('buildRevalidateGws — current GW always included when not finished', 
     expect([...result].sort((a, b) => a - b)).toEqual([29, 30]);
   });
 
-  it('includes all GWs up to latestGw when recentGwRevalidate spans the full season', () => {
+  it('includes all GWs in window when recentGwRevalidate spans multiple GWs', () => {
     const events = [
       makeEvent(29, false, true),
       makeEvent(30, true, false),
     ];
     const result = buildRevalidateGws(events, 30, 5);
-    // revalidate covers GW26-30; current (30) also added by live-GW logic
     const arr = [...result].sort((a, b) => a - b);
     expect(arr).toEqual([26, 27, 28, 29, 30]);
   });
 
-  it('handles no is_current event — treats current GW as finished (conservative)', () => {
-    // If no event has is_current=true, currentGwFinished defaults to true → no forced add
+  it('handles no is_current event — returns empty when recentGwRevalidate=0', () => {
     const events = [
       makeEvent(28, false, true),
       makeEvent(29, false, true),
@@ -103,13 +93,77 @@ describe('buildRevalidateGws — current GW always included when not finished', 
     expect(result.size).toBe(0);
   });
 
-  it('handles latestGw=1 at the start of a season', () => {
+  it('handles latestGw=1 at the start of a season with recentGwRevalidate=0', () => {
     const events = [
       makeEvent(1, true, false),
     ];
     const result = buildRevalidateGws(events, 1, 0);
+    // No unconditional add for unfinished GW — must use recentGwRevalidate >= 1 to include it
+    expect(result.size).toBe(0);
+  });
+
+  it('includes latestGw=1 when recentGwRevalidate=1', () => {
+    const events = [
+      makeEvent(1, true, false),
+    ];
+    const result = buildRevalidateGws(events, 1, 1);
     expect(result.has(1)).toBe(true);
     expect(result.size).toBe(1);
+  });
+});
+
+// --------------------------------------------------------------------------
+// computeLivePlayerIds — selective live-GW revalidation
+// --------------------------------------------------------------------------
+
+describe('computeLivePlayerIds', () => {
+  it('returns IDs of players with minutes > 0', () => {
+    const liveData = {
+      elements: [
+        { id: 1, stats: { minutes: 90 } },
+        { id: 2, stats: { minutes: 0 } },
+        { id: 3, stats: { minutes: 1 } },
+        { id: 4, stats: { minutes: 45 } },
+      ],
+    };
+    const result = computeLivePlayerIds(liveData);
+    expect(result.has(1)).toBe(true);
+    expect(result.has(2)).toBe(false); // 0 minutes — skip
+    expect(result.has(3)).toBe(true);  // even 1 minute counts (e.g. sent off immediately)
+    expect(result.has(4)).toBe(true);
+    expect(result.size).toBe(3);
+  });
+
+  it('returns empty set when no players have played yet', () => {
+    const liveData = {
+      elements: [
+        { id: 1, stats: { minutes: 0 } },
+        { id: 2, stats: { minutes: 0 } },
+      ],
+    };
+    const result = computeLivePlayerIds(liveData);
+    expect(result.size).toBe(0);
+  });
+
+  it('returns empty set for empty elements array', () => {
+    const liveData = { elements: [] };
+    const result = computeLivePlayerIds(liveData);
+    expect(result.size).toBe(0);
+  });
+
+  it('includes all players when all have played', () => {
+    const liveData = {
+      elements: [
+        { id: 10, stats: { minutes: 90 } },
+        { id: 20, stats: { minutes: 90 } },
+        { id: 30, stats: { minutes: 60 } },
+      ],
+    };
+    const result = computeLivePlayerIds(liveData);
+    expect(result.size).toBe(3);
+    expect(result.has(10)).toBe(true);
+    expect(result.has(20)).toBe(true);
+    expect(result.has(30)).toBe(true);
   });
 });
 

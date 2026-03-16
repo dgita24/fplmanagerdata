@@ -290,6 +290,55 @@ export async function fetchElementSummary(
   return res.json() as Promise<{ history: Array<Record<string, unknown>> }>;
 }
 
+// ── GW live endpoint ───────────────────────────────────────────────────────────
+
+/** Minimal typing for the /event/{gw}/live response. */
+interface EventLiveStats {
+  minutes: number;
+}
+
+interface EventLiveElement {
+  id: number;
+  stats: EventLiveStats;
+}
+
+interface EventLiveData {
+  elements: EventLiveElement[];
+}
+
+/**
+ * Fetch live stats for a specific GW from the FPL API.
+ * Returns null if the fetch fails (caller should fall back conservatively).
+ */
+export async function fetchEventLive(
+  baseUrl: string,
+  gw: number,
+): Promise<EventLiveData | null> {
+  const url = `${baseUrl}/event/${gw}/live/`;
+  console.log(`Fetching GW live data: ${url}`);
+  try {
+    const res = await fetchWithRetry(url);
+    return res.json() as Promise<EventLiveData>;
+  } catch (err) {
+    console.warn(`  ⚠️  Failed to fetch /event/${gw}/live — will fall back conservatively:`, err);
+    return null;
+  }
+}
+
+/**
+ * Compute the set of player IDs who have recorded minutes > 0 in GW live data.
+ * These are players whose element-summary should be re-fetched for the current GW.
+ */
+export function computeLivePlayerIds(liveData: EventLiveData): Set<number> {
+  const result = new Set<number>();
+  for (const el of liveData.elements) {
+    if (el.stats.minutes > 0) {
+      result.add(el.id);
+    }
+  }
+  return result;
+}
+
 // ── Row normalisation ──────────────────────────────────────────────────────────
 
 export function normalizeRow(
@@ -431,13 +480,12 @@ export function deriveSeason(events: BootstrapEvent[]): string {
 // ── Revalidation window ────────────────────────────────────────────────────────
 
 /**
- * Compute the set of GW IDs that should be re-fetched (revalidated) on this run.
+ * Compute the set of GW IDs that should be re-fetched (revalidated) on this run
+ * for ALL players (e.g. recently-finished GWs requested via --recentGwRevalidate).
  *
- * Rules:
- * 1. Always include the current GW when it is not yet finished, regardless of
- *    recentGwRevalidate.  This ensures live/partial GW data is ingested every
- *    nightly run even when recentGwRevalidate=0 (the scheduled-run default).
- * 2. Include the N most-recent GWs as requested by recentGwRevalidate.
+ * Note: the current (unfinished) GW is intentionally NOT added here.  Instead,
+ * runIngest uses /event/{gw}/live to selectively revalidate only players who
+ * have recorded minutes > 0, avoiding a full 820-player refresh every night.
  */
 export function buildRevalidateGws(
   events: BootstrapEvent[],
@@ -445,14 +493,6 @@ export function buildRevalidateGws(
   recentGwRevalidate: number,
 ): Set<number> {
   const result = new Set<number>();
-  const currentEvent = events.find((e) => e.is_current);
-  // Default to true (finished) when no current event is found.
-  // This is conservative: we only force-add latestGw when we are certain it is
-  // still in progress, to avoid unnecessary re-fetching of immutable past GWs.
-  const currentGwFinished = currentEvent?.finished ?? true;
-  if (!currentGwFinished) {
-    result.add(latestGw);
-  }
   for (
     let gw = Math.max(1, latestGw - recentGwRevalidate + 1);
     gw <= latestGw;
@@ -486,7 +526,34 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
 
   const revalidateGws = buildRevalidateGws(bootstrap.events, latestGw, opts.recentGwRevalidate);
   if (revalidateGws.size > 0) {
-    console.log(`Will revalidate GWs: ${[...revalidateGws].sort((a, b) => a - b).join(', ')}`);
+    console.log(`Will revalidate GWs (all players): ${[...revalidateGws].sort((a, b) => a - b).join(', ')}`);
+  }
+
+  // ── Live GW selective revalidation ────────────────────────────────────────
+  // For the current unfinished GW, only re-fetch players who have minutes > 0
+  // in the live endpoint, rather than hammering all 820 players every night.
+  const currentGwFinished = currentEvent?.finished ?? true;
+  let livePlayerIds: Set<number> | null = null;
+  let liveEndpointFailed = false;
+
+  if (!currentGwFinished) {
+    const liveData = await fetchEventLive(opts.baseUrl, latestGw);
+    if (liveData !== null) {
+      livePlayerIds = computeLivePlayerIds(liveData);
+      console.log(
+        `GW${latestGw} live: ${livePlayerIds.size} players have minutes > 0 ` +
+        `(will re-fetch element-summary for those players only)`,
+      );
+    } else {
+      // Fallback: live endpoint failed — revalidate latestGw for all players to
+      // ensure we never miss data. This is the conservative path.
+      liveEndpointFailed = true;
+      console.warn(
+        `⚠️  /event/${latestGw}/live failed. Falling back to revalidating GW${latestGw} ` +
+        `for ALL players (conservative fallback). This may cause a full ~820-player refresh.`,
+      );
+      revalidateGws.add(latestGw);
+    }
   }
 
   const gwRangeStart = opts.mode === 'backfill' && opts.startGw ? opts.startGw : 1;
@@ -503,19 +570,38 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
 
   let elementSummaryRequests = 0;
 
+  // Track only rows that were inserted or updated this run (for delta upsert).
+  const changedRows = new Map<string, MatchRow>();
+
   for (const player of bootstrap.elements) {
     processed++;
     if (processed % 100 === 0) {
       console.log(`  Progress: ${processed}/${bootstrap.elements.length} players…`);
     }
 
+    // True when this specific player should have their current (unfinished) GW re-fetched
+    // because they have recorded minutes > 0 in the live endpoint.
+    const playerHasLiveMinutes =
+      !currentGwFinished && !liveEndpointFailed && livePlayerIds !== null && livePlayerIds.has(player.id);
+
     let needFetch = false;
 
     for (let gw = gwRangeStart; gw <= gwRangeEnd; gw++) {
+      // Revalidate this GW for all players (e.g. recent finished GWs or live-fallback).
       if (revalidateGws.has(gw)) {
         needFetch = true;
         break;
       }
+      // For the current unfinished GW, only fetch if this player has live minutes.
+      if (gw === latestGw && !currentGwFinished && !liveEndpointFailed) {
+        if (playerHasLiveMinutes) {
+          needFetch = true;
+          break;
+        }
+        // Player has no live minutes yet — skip (no data to update).
+        continue;
+      }
+      // For any finished GW: fetch if we're missing a row for this player.
       if (!existingByPlayerGw.has(`${player.id}:${gw}`)) {
         const event = bootstrap.events.find((e) => e.id === gw);
         if (event?.finished) {
@@ -549,14 +635,18 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
 
         const row = normalizeRow(player.id, rawRow);
         const key = rowKey(row);
-        const isRevalidate = revalidateGws.has(gw);
+        const isRevalidate =
+          revalidateGws.has(gw) ||
+          (gw === latestGw && playerHasLiveMinutes);
 
         if (!existingRows.has(key)) {
           existingRows.set(key, row);
           existingByPlayerGw.set(`${row.player_id}:${row.gw}`, true);
+          changedRows.set(key, row);
           newRows++;
         } else if (isRevalidate) {
           existingRows.set(key, row);
+          changedRows.set(key, row);
           updatedRows++;
         }
       }
@@ -569,6 +659,7 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
   console.log(`   element-summary requests: ${elementSummaryRequests}`);
   console.log(`   New rows:     ${newRows}`);
   console.log(`   Updated rows: ${updatedRows}`);
+  console.log(`   Changed rows (delta): ${changedRows.size}`);
   console.log(`   Total rows:   ${existingRows.size}`);
 
   writeSnapshot(snapshotPath, existingRows);
@@ -586,9 +677,13 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
   console.log(`   Metadata:     ${metaPath}`);
 
   if (opts.supabase) {
-    console.log(`\n▶ Upserting to Supabase…`);
-    const allRows = Array.from(existingRows.values());
-    await upsertToSupabase(allRows);
+    console.log(`\n▶ Upserting to Supabase (delta: ${changedRows.size} changed rows)…`);
+    const rowsToUpsert = Array.from(changedRows.values());
+    if (rowsToUpsert.length > 0) {
+      await upsertToSupabase(rowsToUpsert);
+    } else {
+      console.log(`   Supabase: no changed rows — skipping upsert.`);
+    }
   }
 }
 
