@@ -177,7 +177,7 @@ export function parseArgs(argv: string[]): IngestOptions {
     }
   }
 
-  const recentGwRevalidate = parseOptionalInt(args['recentGwRevalidate']) ?? 2;
+  const recentGwRevalidate = parseOptionalInt(args['recentGwRevalidate']) ?? 0;
   const delayMs = parseOptionalInt(args['delayMs']) ?? 800;
   const jitterMs = parseOptionalInt(args['jitterMs']) ?? 200;
   const maxRequests = parseOptionalInt(args['maxRequests']);
