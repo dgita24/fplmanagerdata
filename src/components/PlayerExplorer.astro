@@ -163,8 +163,8 @@ const { inline = false } = Astro.props;
   let filterWindow = 5;
   let sbAggReqId = 0; // monotonic counter to ignore stale aggregate responses
 
-  // v2 cache stores per-GW breakdown so the inline table can scope DC to any window.
-  const DEFCON_LS_KEY = 'fpl_defcon_cache_v2';
+  // v3 cache stores per-GW breakdown including current (live) GW.
+  const DEFCON_LS_KEY = 'fpl_defcon_cache_v3';
   const DEFCON_TTL_MS = 60 * 60 * 1000; // 1 hour
 
   function loadDefconFromStorage(): { season: Map<number, number>; byGW: Map<number, Map<number, number>> } | null {
@@ -207,9 +207,19 @@ const { inline = false } = Astro.props;
       return;
     }
 
-    // 2. Determine all completed GWs
-    const completedGWs = events.filter(e => e.finished).map(e => e.id);
-    if (!completedGWs.length) { defconLoaded = true; return; }
+    // 2. Determine GWs to fetch: all finished GWs + current GW (even if not finished).
+    //    This ensures live data for an in-progress GW is included.
+    const finishedGWs = events.filter(e => e.finished).map(e => e.id);
+    const currentEvent = events.find(e => e.is_current) ?? events.filter(e => e.finished).at(-1);
+    const currentGw = currentEvent?.id ?? null;
+
+    // Include current GW if it isn't already in the finished list
+    const gwsToFetch = [...finishedGWs];
+    if (currentGw != null && !finishedGWs.includes(currentGw)) {
+      gwsToFetch.push(currentGw);
+    }
+
+    if (!gwsToFetch.length) { defconLoaded = true; return; }
 
     // 3. Build eligible-player position map (exclude GK)
     const eligible = new Map<number, number>(); // id -> element_type
@@ -217,9 +227,9 @@ const { inline = false } = Astro.props;
       if (el.element_type >= 2) eligible.set(el.id, el.element_type);
     });
 
-    // 4. Fetch all completed GW live data in parallel
+    // 4. Fetch all GW live data in parallel (finished + current GW)
     const results = await Promise.all(
-      completedGWs.map(gw =>
+      gwsToFetch.map(gw =>
         fetch(`/api/fpl/event/${gw}/live`)
           .then(r => r.ok ? r.json() : null)
           .catch(() => null)
@@ -233,7 +243,7 @@ const { inline = false } = Astro.props;
     const newByGW = new Map<number, Map<number, number>>();
 
     results.forEach((data: any, i: number) => {
-      const gw = completedGWs[i];
+      const gw = gwsToFetch[i];
       if (!data?.elements) return;
       const gwMap = new Map<number, number>();
 
@@ -579,13 +589,12 @@ const { inline = false } = Astro.props;
   function getAggCols(): ColDef[] {
     const agg = (id: number) => sbAggMap.get(id);
 
-    // Compute the last `filterWindow` completed GW IDs from bootstrap once per render.
-    // DC window is based on last N completed GAMEWEEKS, not last N matches.
-    // A player can earn DC in multiple fixtures within the same GW (e.g. DGW),
-    // so a single GW may contribute 0, 2, 4, ... points.
-    const completedGWIds = (bootstrapData?.events ?? [])
-      .filter(e => e.finished).map(e => e.id).sort((a, b) => a - b);
-    const dcWindowGWs = completedGWIds.slice(-filterWindow);
+    // Compute DC window GW IDs from the Supabase aggregate window (min_gw..max_gw).
+    // This ensures DC scope matches the data window, including the current live GW.
+    const firstAggDc = sbAggMap.values().next().value as PlayerAggregate | undefined;
+    const dcWindowGWs: number[] = firstAggDc
+      ? Array.from({ length: firstAggDc.max_gw - firstAggDc.min_gw + 1 }, (_, i) => firstAggDc.min_gw + i)
+      : [];
     const getDCForPlayer = (playerId: number): number => {
       if (!defconLoaded) return 0;
       let total = 0;
@@ -707,11 +716,17 @@ const { inline = false } = Astro.props;
     });
 
     // Subtitle: show player count + GW range for inline aggregated mode.
-    // All rows returned by a single get_player_aggregates RPC call share the same
+    // All rows returned by a single fetchPlayerAggregates call share the same
     // min_gw/max_gw window, so reading from any entry gives the correct range.
     if (isInline && sbAggMap.size > 0) {
       const firstAgg = sbAggMap.values().next().value as PlayerAggregate | undefined;
-      const gwRange = firstAgg ? ` · GW ${firstAgg.min_gw}–${firstAgg.max_gw}` : "";
+      let gwRange = firstAgg ? ` · GW ${firstAgg.min_gw}–${firstAgg.max_gw}` : "";
+      if (firstAgg) {
+        const maxGwEvent = bootstrapData?.events.find(e => e.id === firstAgg.max_gw);
+        if (maxGwEvent?.is_current && !maxGwEvent.finished) {
+          gwRange += ` (GW${firstAgg.max_gw} live)`;
+        }
+      }
       subtitle.textContent = `${players.length} player${players.length !== 1 ? "s" : ""}${gwRange}`;
     } else {
       subtitle.textContent = `${players.length} player${players.length !== 1 ? "s" : ""}`;

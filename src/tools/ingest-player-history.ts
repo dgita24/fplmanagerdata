@@ -265,7 +265,7 @@ interface BootstrapElement {
 interface BootstrapEvent {
   id: number;
   is_current: boolean;
-  is_finished: boolean;
+  finished: boolean;
   deadline_time: string;
 }
 
@@ -428,6 +428,41 @@ export function deriveSeason(events: BootstrapEvent[]): string {
   return `${year}-${String(year + 1).slice(2)}`;
 }
 
+// ── Revalidation window ────────────────────────────────────────────────────────
+
+/**
+ * Compute the set of GW IDs that should be re-fetched (revalidated) on this run.
+ *
+ * Rules:
+ * 1. Always include the current GW when it is not yet finished, regardless of
+ *    recentGwRevalidate.  This ensures live/partial GW data is ingested every
+ *    nightly run even when recentGwRevalidate=0 (the scheduled-run default).
+ * 2. Include the N most-recent GWs as requested by recentGwRevalidate.
+ */
+export function buildRevalidateGws(
+  events: BootstrapEvent[],
+  latestGw: number,
+  recentGwRevalidate: number,
+): Set<number> {
+  const result = new Set<number>();
+  const currentEvent = events.find((e) => e.is_current);
+  // Default to true (finished) when no current event is found.
+  // This is conservative: we only force-add latestGw when we are certain it is
+  // still in progress, to avoid unnecessary re-fetching of immutable past GWs.
+  const currentGwFinished = currentEvent?.finished ?? true;
+  if (!currentGwFinished) {
+    result.add(latestGw);
+  }
+  for (
+    let gw = Math.max(1, latestGw - recentGwRevalidate + 1);
+    gw <= latestGw;
+    gw++
+  ) {
+    result.add(gw);
+  }
+  return result;
+}
+
 // ── Main orchestration ─────────────────────────────────────────────────────────
 
 export async function runIngest(opts: IngestOptions): Promise<void> {
@@ -443,20 +478,13 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
   const bootstrap = await fetchBootstrap(opts.baseUrl);
 
   const currentEvent = bootstrap.events.find((e) => e.is_current);
-  const finishedEvents = bootstrap.events.filter((e) => e.is_finished);
+  const finishedEvents = bootstrap.events.filter((e) => e.finished);
   const latestGw =
     currentEvent?.id ?? (finishedEvents.length > 0 ? finishedEvents[finishedEvents.length - 1].id : 1);
 
   console.log(`Current GW: ${latestGw} | Total players: ${bootstrap.elements.length}`);
 
-  const revalidateGws = new Set<number>();
-  for (
-    let gw = Math.max(1, latestGw - opts.recentGwRevalidate + 1);
-    gw <= latestGw;
-    gw++
-  ) {
-    revalidateGws.add(gw);
-  }
+  const revalidateGws = buildRevalidateGws(bootstrap.events, latestGw, opts.recentGwRevalidate);
   if (revalidateGws.size > 0) {
     console.log(`Will revalidate GWs: ${[...revalidateGws].sort((a, b) => a - b).join(', ')}`);
   }
@@ -490,7 +518,7 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
       }
       if (!existingByPlayerGw.has(`${player.id}:${gw}`)) {
         const event = bootstrap.events.find((e) => e.id === gw);
-        if (event?.is_finished) {
+        if (event?.finished) {
           needFetch = true;
           break;
         }
