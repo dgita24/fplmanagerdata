@@ -11,7 +11,9 @@
  *   --mode=nightly|backfill   (default: nightly)
  *   --startGw=N               Required for backfill mode
  *   --endGw=N                 Required for backfill mode
- *   --recentGwRevalidate=N    Number of recent GWs to re-fetch even if cached (default: 2)
+ *   --recentGwRevalidate=N    Force re-fetch of the N most-recent GWs for ALL players
+ *                             even if already cached (default: 0 — use live-endpoint
+ *                             selection instead; set to 2+ to force a full window refresh)
  *   --outDir=./data           Output directory (default: ./data)
  *   --baseUrl=<url>           FPL API base URL (default: https://fantasy.premierleague.com/api)
  *   --supabase                Enable Supabase upsert (reads SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY from env)
@@ -21,12 +23,38 @@
  *   --jitterMs=N              Random jitter (ms) added to delay (default: 200)
  *   --maxRequests=N           Optional cap on number of element-summary requests per run
  *
+ * --- Nightly run behaviour (recentGwRevalidate=0, the default) ---
+ *
+ * For finished GWs:
+ *   Fetches element-summary only for players who are missing a row for any
+ *   finished GW (e.g. newly-added players or newly-finished GWs).
+ *
+ * For the current in-progress GW:
+ *   1. Makes ONE call to /event/{gw}/live to check which players have
+ *      minutes > 0 (i.e. have actually played a match since the last run).
+ *   2. Fetches element-summary ONLY for those players.
+ *   3. If /event/{gw}/live fails, falls back conservatively to revalidating
+ *      the current GW for all players (logged clearly).
+ *
+ * Result when no games have been played since the last run:
+ *   - /event/{gw}/live returns 0 players with minutes > 0.
+ *   - 0 element-summary requests are made.
+ *   - Snapshot and Supabase are unchanged.
+ *   - Run completes in seconds.
+ *
+ * Supabase upsert:
+ *   Only rows that were inserted or updated in this run are upserted (delta).
+ *   When there are no changes, the upsert is skipped entirely.
+ *
  * Examples:
- *   # Nightly run (only missing/recent GWs)
+ *   # Nightly run (only fetch players who need updating)
  *   npx tsx src/tools/ingest-player-history.ts --mode=nightly
  *
  *   # Nightly run + upsert to Supabase
  *   npx tsx src/tools/ingest-player-history.ts --mode=nightly --supabase
+ *
+ *   # Force re-fetch the last 2 GWs for all players (e.g. after a data issue)
+ *   npx tsx src/tools/ingest-player-history.ts --mode=nightly --recentGwRevalidate=2
  *
  *   # Backfill GW 1–10
  *   npx tsx src/tools/ingest-player-history.ts --mode=backfill --startGw=1 --endGw=10
@@ -540,10 +568,17 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
     const liveData = await fetchEventLive(opts.baseUrl, latestGw);
     if (liveData !== null) {
       livePlayerIds = computeLivePlayerIds(liveData);
-      console.log(
-        `GW${latestGw} live: ${livePlayerIds.size} players have minutes > 0 ` +
-        `(will re-fetch element-summary for those players only)`,
-      );
+      if (livePlayerIds.size === 0) {
+        console.log(
+          `GW${latestGw} live: no players have minutes > 0 yet — ` +
+          `no matches played since last run. Skipping element-summary fetches for current GW.`,
+        );
+      } else {
+        console.log(
+          `GW${latestGw} live: ${livePlayerIds.size} players have minutes > 0 ` +
+          `(will re-fetch element-summary for those players only)`,
+        );
+      }
     } else {
       // Fallback: live endpoint failed — revalidate latestGw for all players to
       // ensure we never miss data. This is the conservative path.
@@ -554,6 +589,8 @@ export async function runIngest(opts: IngestOptions): Promise<void> {
       );
       revalidateGws.add(latestGw);
     }
+  } else {
+    console.log(`GW${latestGw} is finished — no live-endpoint fetch needed.`);
   }
 
   const gwRangeStart = opts.mode === 'backfill' && opts.startGw ? opts.startGw : 1;
