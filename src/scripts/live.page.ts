@@ -692,6 +692,11 @@ const managerDataCache = new Map<string, any>();
         totalPoints = Number(gwRow?.total_points) || 0;
       }
 
+      const captainPick = rawPicks.find((p: any) => p.is_captain);
+      const vcPick = rawPicks.find((p: any) => p.is_vice_captain);
+      const captainPlayer = captainPick ? playerCache.get(captainPick.element) : null;
+      const vcPlayer = vcPick ? playerCache.get(vcPick.element) : null;
+
       return {
         entryId,
         managerName: `${summaryData.player_first_name || ""} ${summaryData.player_last_name || ""}`.trim(),
@@ -702,10 +707,10 @@ const managerDataCache = new Map<string, any>();
         livePoints: liveNet,
         ltp,
         totalPoints,
-        captainId: rawPicks.find((p: any) => p.is_captain)?.element || 0,
-        captainName: (() => { const cp = rawPicks.find((p: any) => p.is_captain); return cp ? playerCache.get(cp.element)?.name || '' : ''; })(),
-        vcId: rawPicks.find((p: any) => p.is_vice_captain)?.element || 0,
-        vcName: (() => { const vcp = rawPicks.find((p: any) => p.is_vice_captain); return vcp ? playerCache.get(vcp.element)?.name || '' : ''; })()
+        captainId: captainPick?.element || 0,
+        captainName: captainPlayer?.name || '',
+        vcId: vcPick?.element || 0,
+        vcName: vcPlayer?.name || ''
       };
     } catch (e) {
       console.error(`Error fetching live data for manager ${entryId}:`, e);

@@ -509,7 +509,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     return Array.from(ownership.values());
   }
 
-  function showPlayerModal(playerId) {
+  function showPlayerModal(playerId: number) {
     const player = playerCache.get(playerId);
     if (!player) return;
 
@@ -590,7 +590,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     playerModal.classList.add("is-open");
   }
 
-  function showOwnershipModal(playerName, position, teamName, ownedByList, playerId) {
+  function showOwnershipModal(playerName: string, position: string, teamName: string, ownedByList: number[], playerId: number) {
     const totalManagers = allManagers.length;
     const notOwnedBy = allManagers.filter(m => !ownedByList.includes(m.id)).sort((a, b) => a.name.localeCompare(b.name));
     const ownedBySorted = allManagers.filter(m => ownedByList.includes(m.id)).sort((a, b) => a.name.localeCompare(b.name));
