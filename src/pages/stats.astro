@@ -422,12 +422,14 @@ import Nav from "../components/Nav.astro";
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     font-family: inherit;
-    transition: background var(--transition-fast), border-color var(--transition-fast);
+    color: var(--color-warning);
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   }
 
   :global(.chip-badge--btn:hover) {
     background: var(--color-surface-alt);
-    border-color: var(--color-primary);
+    border-color: var(--color-warning);
+    color: var(--color-text);
   }
 
   :global(.btn-contribution-history) {

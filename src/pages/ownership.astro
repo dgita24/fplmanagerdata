@@ -171,19 +171,16 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
   :global(.player-name-modal-btn) {
     background: none;
     border: none;
-    color: var(--color-text);
+    color: var(--color-warning);
     cursor: pointer;
     font: inherit;
     font-weight: 700;
     padding: 0;
     text-align: left;
-    text-decoration: underline;
-    text-decoration-color: transparent;
-    transition: text-decoration-color 0.2s;
+    transition: color 0.2s;
   }
 
   :global(.player-name-modal-btn:hover) {
-    text-decoration-color: var(--color-primary);
     color: var(--color-primary);
   }
 
@@ -417,6 +414,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
           assists: player.assists,
           cleanSheets: player.clean_sheets,
           penaltiesSaved: player.penalties_saved,
+          penaltiesMissed: player.penalties_missed,
           yellowCards: player.yellow_cards,
           redCards: player.red_cards,
           bonus: player.bonus
@@ -515,13 +513,56 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
 
     const teamInfo = teamCache.get(player.team) || { short: "???", full: "???" };
 
+    // FPL point calculation helpers
+    const pos = player.position; // "GK" | "DEF" | "MID" | "FWD"
+
+    const goalPts = (goals: number) => {
+      if (!goals) return 0;
+      const ppg = pos === "GK" || pos === "DEF" ? 6 : pos === "MID" ? 5 : 4;
+      return goals * ppg;
+    };
+    const assistPts = (n: number) => (n || 0) * 3;
+    const csPts = (n: number) => {
+      if (!n) return 0;
+      const pp = pos === "GK" || pos === "DEF" ? 4 : pos === "MID" ? 1 : 0;
+      return n * pp;
+    };
+    const penSavedPts = (n: number) => (n || 0) * 5;
+    const penMissedPts = (n: number) => (n || 0) * -2;
+    const yellowPts = (n: number) => (n || 0) * -1;
+    const redPts = (n: number) => (n || 0) * -3;
+
+    const fmtPts = (pts: number): string => {
+      if (pts === 0) return "—";
+      return pts > 0 ? `+${pts}` : `${pts}`;
+    };
+    const ptsClass = (pts: number) =>
+      pts > 0 ? "points-positive" : pts < 0 ? "points-negative" : "";
+
+    const goals       = player.goalsScored ?? 0;
+    const assists     = player.assists ?? 0;
+    const cs          = player.cleanSheets ?? 0;
+    const penSaved    = player.penaltiesSaved ?? 0;
+    const penMissed   = player.penaltiesMissed ?? 0;
+    const yellows     = player.yellowCards ?? 0;
+    const reds        = player.redCards ?? 0;
+    const bonus       = player.bonus ?? 0;
+
+    const gp = goalPts(goals);
+    const ap = assistPts(assists);
+    const cp = csPts(cs);
+    const psp = penSavedPts(penSaved);
+    const pmp = penMissedPts(penMissed);
+    const yp = yellowPts(yellows);
+    const rp = redPts(reds);
+
     let html = `
       <div class="player-modal-header">
         <div class="player-modal-info">
           <h2 class="player-modal-name">${player.name}</h2>
           <div class="player-modal-meta">
             <span class="player-modal-team">${teamInfo.short}</span>
-            <span class="player-modal-pos">${player.position}</span>
+            <span class="player-modal-pos">${pos}</span>
           </div>
         </div>
         <div class="player-modal-points">
@@ -535,41 +576,47 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
         <div class="breakdown-list">
           <div class="breakdown-row">
             <span class="breakdown-label">Goals</span>
-            <span class="breakdown-value">${player.goalsScored ?? 0}</span>
-            <span class="breakdown-points"></span>
+            <span class="breakdown-value">${goals}</span>
+            <span class="breakdown-points ${ptsClass(gp)}">${fmtPts(gp)}</span>
           </div>
           <div class="breakdown-row">
             <span class="breakdown-label">Assists</span>
-            <span class="breakdown-value">${player.assists ?? 0}</span>
-            <span class="breakdown-points"></span>
+            <span class="breakdown-value">${assists}</span>
+            <span class="breakdown-points ${ptsClass(ap)}">${fmtPts(ap)}</span>
           </div>
           <div class="breakdown-row">
             <span class="breakdown-label">Clean Sheets</span>
-            <span class="breakdown-value">${player.cleanSheets ?? 0}</span>
-            <span class="breakdown-points"></span>
+            <span class="breakdown-value">${cs}</span>
+            <span class="breakdown-points ${ptsClass(cp)}">${fmtPts(cp)}</span>
           </div>
           <div class="breakdown-row">
-            <span class="breakdown-label">Bonus</span>
-            <span class="breakdown-value">${player.bonus ?? 0}</span>
-            <span class="breakdown-points"></span>
+            <span class="breakdown-label">Bonus Points</span>
+            <span class="breakdown-value">${bonus}</span>
+            <span class="breakdown-points ${ptsClass(bonus)}">${fmtPts(bonus)}</span>
           </div>
-          ${(player.penaltiesSaved ?? 0) > 0 ? `
+          ${pos === "GK" ? `
           <div class="breakdown-row">
             <span class="breakdown-label">Pen Saved</span>
-            <span class="breakdown-value">${player.penaltiesSaved}</span>
-            <span class="breakdown-points"></span>
+            <span class="breakdown-value">${penSaved}</span>
+            <span class="breakdown-points ${ptsClass(psp)}">${fmtPts(psp)}</span>
           </div>` : ''}
-          ${(player.yellowCards ?? 0) > 0 ? `
+          ${penMissed > 0 ? `
+          <div class="breakdown-row">
+            <span class="breakdown-label">Pen Missed</span>
+            <span class="breakdown-value">${penMissed}</span>
+            <span class="breakdown-points ${ptsClass(pmp)}">${fmtPts(pmp)}</span>
+          </div>` : ''}
+          ${yellows > 0 ? `
           <div class="breakdown-row">
             <span class="breakdown-label">Yellow Cards</span>
-            <span class="breakdown-value">${player.yellowCards}</span>
-            <span class="breakdown-points points-negative">-${player.yellowCards}</span>
+            <span class="breakdown-value">${yellows}</span>
+            <span class="breakdown-points ${ptsClass(yp)}">${fmtPts(yp)}</span>
           </div>` : ''}
-          ${(player.redCards ?? 0) > 0 ? `
+          ${reds > 0 ? `
           <div class="breakdown-row">
             <span class="breakdown-label">Red Cards</span>
-            <span class="breakdown-value">${player.redCards}</span>
-            <span class="breakdown-points points-negative">-${player.redCards * 3}</span>
+            <span class="breakdown-value">${reds}</span>
+            <span class="breakdown-points ${ptsClass(rp)}">${fmtPts(rp)}</span>
           </div>` : ''}
           <div class="breakdown-row">
             <span class="breakdown-label">Selected by</span>
