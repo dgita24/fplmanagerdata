@@ -23,7 +23,7 @@ import "../styles/pages/live.css";
 
     <div class="meta-row-wide">
       <button id="manager-count" class="badge badge-wide badge-toggle" type="button">Loading...</button>
-      <a href="/players?from=live" class="badge badge-wide">👕 All FPL Players</a>
+      <button id="captains-btn" class="badge badge-wide" type="button">👑 Captains & Vice</button>
     </div>
 
     <div class="controls-inline">
@@ -60,6 +60,14 @@ import "../styles/pages/live.css";
   <SquadModal /> 
   <PlayerModal />
   <GWPointsModal />
+
+  <!-- Captains & Vice Modal -->
+  <div id="captains-modal" class="modal modal--nested">
+    <div class="modal-panel">
+      <button id="close-captains-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="captains-modal-content"></div>
+    </div>
+  </div>
 
 </Layout>
 

@@ -164,6 +164,10 @@ const managerDataCache = new Map<string, any>();
   const playerModal = document.getElementById("player-modal")!;
   const playerModalContent = document.getElementById("player-modal-content")!;
   const closePlayerModal = document.getElementById("close-player-modal")!;
+  const captainsBtn = document.getElementById("captains-btn");
+  const captainsModal = document.getElementById("captains-modal");
+  const captainsModalContent = document.getElementById("captains-modal-content");
+  const closeCaptainsModal = document.getElementById("close-captains-modal");
 
   async function saveFavouritesToSupabase(ids: number[]) {
     try {
@@ -378,6 +382,16 @@ const managerDataCache = new Map<string, any>();
 
   closePlayerModal.addEventListener("click", () => {
     playerModal.classList.remove("is-open");
+  });
+
+  closeCaptainsModal?.addEventListener("click", () => {
+    captainsModal?.classList.remove("is-open");
+  });
+
+  captainsBtn?.addEventListener("click", () => {
+    if (!captainsModal || !captainsModalContent) return;
+    captainsModalContent.innerHTML = makeCaptainVcTable(liveData);
+    captainsModal.classList.add("is-open");
   });
 
   // Initialize GW Points Modal
@@ -687,7 +701,11 @@ const managerDataCache = new Map<string, any>();
         livePointsBeforeHits,
         livePoints: liveNet,
         ltp,
-        totalPoints
+        totalPoints,
+        captainId: rawPicks.find((p: any) => p.is_captain)?.element || 0,
+        captainName: (() => { const cp = rawPicks.find((p: any) => p.is_captain); return cp ? playerCache.get(cp.element)?.name || '' : ''; })(),
+        vcId: rawPicks.find((p: any) => p.is_vice_captain)?.element || 0,
+        vcName: (() => { const vcp = rawPicks.find((p: any) => p.is_vice_captain); return vcp ? playerCache.get(vcp.element)?.name || '' : ''; })()
       };
     } catch (e) {
       console.error(`Error fetching live data for manager ${entryId}:`, e);
@@ -1523,6 +1541,40 @@ function buildBreakdownRows(
         </div>
       </div>
     `;
+    return html;
+  }
+
+  function makeCaptainVcTable(data: any[]): string {
+    if (!data || data.length === 0) return "<p class='status status--error'>No data available.</p>";
+
+    const sorted = [...data].sort((a, b) => a.managerName.localeCompare(b.managerName));
+
+    let html = `
+      <h2 class="modal-title" style="padding-right:40px;">👑 Captains &amp; Vice-Captains</h2>
+      <div class="table-container">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Manager</th>
+                <th>Captain</th>
+                <th>Vice</th>
+              </tr>
+            </thead>
+            <tbody>
+    `;
+
+    for (const m of sorted) {
+      html += `
+        <tr>
+          <td>${m.managerName}</td>
+          <td>${m.captainName || '—'}</td>
+          <td>${m.vcName || '—'}</td>
+        </tr>
+      `;
+    }
+
+    html += `</tbody></table></div></div>`;
     return html;
   }
 

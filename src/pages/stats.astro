@@ -87,6 +87,22 @@ import Nav from "../components/Nav.astro";
       <div id="total-history-modal-content"></div>
     </div>
   </div>
+
+  <!-- Chip Squad Modal (opened from chip badge in manager modal) -->
+  <div id="chip-modal" class="modal modal--nested" style="z-index:10002;">
+    <div class="modal-panel">
+      <button id="close-chip-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="chip-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- Contribution History Modal (opened from button in manager modal) -->
+  <div id="history-modal" class="modal modal--nested" style="z-index:10002;">
+    <div class="modal-panel">
+      <button id="close-history-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="history-modal-content"></div>
+    </div>
+  </div>
 </Layout>
 
 <style>
@@ -398,6 +414,52 @@ import Nav from "../components/Nav.astro";
     font-size: 12px;
     color: var(--color-text-muted);
     margin-bottom: var(--space-3);
+  }
+
+  :global(.chip-badge--btn) {
+    cursor: pointer;
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  :global(.chip-badge--btn:hover) {
+    background: var(--color-surface-alt);
+    border-color: var(--color-primary);
+  }
+
+  :global(.btn-contribution-history) {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-2) var(--space-3);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  :global(.btn-contribution-history:hover) {
+    background: var(--color-border);
+  }
+
+  :global(.chip-squad-section) {
+    margin-bottom: var(--space-3);
+  }
+
+  :global(.chip-squad-heading) {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-2);
   }</style>
 
 <script>
@@ -569,6 +631,8 @@ import Nav from "../components/Nav.astro";
   let allManagerData: ManagerData[] = [];
   let playerCache = new Map<number, { name: string; position: number; team: number }>();
   let teamCache = new Map<number, { name: string; shortName: string }>();
+  let playerHistoryCache = new Map<number, any[]>();
+  let managerPicksCache = new Map<string, any>();
   let livePointsCache = new Map<number, LiveStatLine>();
   let projectedBonusCache = new Map<string, number>();
   let teamStatusCache = new Map<string, TeamStatus>();
@@ -631,6 +695,12 @@ import Nav from "../components/Nav.astro";
   const totalHistoryModal = document.getElementById("total-history-modal")!;
   const totalHistoryModalContent = document.getElementById("total-history-modal-content")!;
   const closeTotalHistoryModal = document.getElementById("close-total-history-modal")!;
+  const chipModal = document.getElementById("chip-modal")!;
+  const chipModalContent = document.getElementById("chip-modal-content")!;
+  const closeChipModal = document.getElementById("close-chip-modal")!;
+  const historyModal = document.getElementById("history-modal")!;
+  const historyModalContent = document.getElementById("history-modal-content")!;
+  const closeHistoryModal = document.getElementById("close-history-modal")!;
   function updateManagerCountButton() {
     if (!managerCountEl) return;
 
@@ -699,6 +769,14 @@ import Nav from "../components/Nav.astro";
 
   closeTotalHistoryModal.addEventListener("click", () => {
     totalHistoryModal.classList.remove("is-open");
+  });
+
+  closeChipModal.addEventListener("click", () => {
+    chipModal.classList.remove("is-open");
+  });
+
+  closeHistoryModal.addEventListener("click", () => {
+    historyModal.classList.remove("is-open");
   });
 
   function populateGWSelector(currentGW: number) {
@@ -1379,10 +1457,15 @@ import Nav from "../components/Nav.astro";
         <h3 class="stats-section-title">🎮 Chips Used</h3>
         <div class="chips-row">
           ${stats.chipsUsed.length > 0 
-            ? stats.chipsUsed.map((c: any) => `<span class="chip-badge">${c.name} <span class="chip-gw">GW${c.gw}</span></span>`).join('')
+            ? stats.chipsUsed.map((c: any) => `<button type="button" class="chip-badge chip-badge--btn" data-manager-id="${manager.entryId}" data-manager-name="${manager.managerName}" data-chip="${c.name}" data-gw="${c.gw}" data-points="0">${c.name} <span class="chip-gw">GW${c.gw}</span></button>`).join('')
             : '<span class="text-muted" style="font-size:12px;">No chips used yet</span>'
           }
         </div>
+      </div>
+
+      <!-- Contribution History -->
+      <div class="stats-section">
+        <button type="button" class="btn-contribution-history" data-entry-id="${manager.entryId}">📊 Contribution History</button>
       </div>
 
       <!-- Captaincy -->
@@ -1426,6 +1509,361 @@ import Nav from "../components/Nav.astro";
     const orStatBtn = statsModalContent.querySelector('.stat-item--or');
     if(orStatBtn) {
         orStatBtn.addEventListener('click', () => populatePastSeasonModal(manager.entryId));
+    }
+
+    // Attach chip badge buttons → show chip squad
+    statsModalContent.querySelectorAll('.chip-badge--btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const el = btn as HTMLElement;
+        const managerId = parseInt(el.dataset.managerId || '0');
+        const managerName = el.dataset.managerName || '';
+        const chipName = el.dataset.chip || '';
+        const gw = parseInt(el.dataset.gw || '0');
+        const points = parseInt(el.dataset.points || '0');
+        if (managerId && chipName && gw) {
+          showChipSquad(managerId, managerName, chipName, gw, points);
+        }
+      });
+    });
+
+    // Attach contribution history button
+    const histBtn = statsModalContent.querySelector('.btn-contribution-history');
+    if (histBtn) {
+      histBtn.addEventListener('click', () => {
+        const id = parseInt((histBtn as HTMLElement).dataset.entryId || '0');
+        if (id) showManagerHistoryModal(id, manager.managerName);
+      });
+    }
+  }
+
+  async function showChipSquad(managerId: number, managerName: string, chipName: string, gw: number, points: number) {
+    const chipEmoji = chipName === "WC" ? "🃏" :
+                      chipName === "BB" ? "🪑" :
+                      chipName === "TC" ? "👑" :
+                      chipName === "FH" ? "🎯" : "";
+
+    const chipFull = chipName === "WC" ? "Wildcard" :
+                     chipName === "BB" ? "Bench Boost" :
+                     chipName === "TC" ? "Triple Captain" :
+                     chipName === "FH" ? "Free Hit" : chipName;
+
+    chipModalContent.innerHTML = `<p class="text-muted">Loading squad...</p>`;
+    chipModal.classList.add("is-open");
+
+    try {
+      const [picksRes, liveRes] = await Promise.all([
+        fetch(`/api/fpl/entry/${managerId}/event/${gw}/picks`),
+        fetch(`/api/fpl/event/${gw}/live`)
+      ]);
+
+      if (!picksRes.ok || !liveRes.ok) throw new Error("Failed to fetch data");
+
+      const picksData = await picksRes.json();
+      const liveData = await liveRes.json();
+
+      const livePointsMap = new Map<number, number>();
+      (liveData.elements || []).forEach((el: any) => {
+        livePointsMap.set(el.id, el.stats?.total_points || 0);
+      });
+
+      const picks = ((picksData.picks || []) as any[]).map(pick => {
+        const player = playerCache.get(pick.element) || { name: "Unknown", position: 4, team: 0 };
+        const teamShort = teamCache.get(player.team)?.shortName || "???";
+        const pts = livePointsMap.get(pick.element) || 0;
+        const multiplier = pick.multiplier || 1;
+
+        return {
+          position: pick.position,
+          name: player.name,
+          posLabel: positionLabel(player.position),
+          team: teamShort,
+          points: pts * multiplier,
+          rawPoints: pts,
+          multiplier,
+          isCaptain: pick.is_captain,
+          isViceCaptain: pick.is_vice_captain
+        };
+      }).sort((a: any, b: any) => a.position - b.position);
+
+      const starters = picks.filter((p: any) => p.position <= 11);
+      const bench = picks.filter((p: any) => p.position > 11);
+
+      const totalPts = starters.reduce((sum: number, p: any) => sum + p.points, 0) +
+                       (chipName === "BB" ? bench.reduce((sum: number, p: any) => sum + p.points, 0) : 0);
+
+      let html = `
+        <h2 class="modal-title" style="padding-right:40px;">
+          ${chipEmoji} ${chipFull}
+        </h2>
+        <p class="text-muted" style="margin-bottom:var(--space-3);">
+          <strong>${managerName}</strong> · GW${gw} · <span class="text-success font-bold">${totalPts} pts</span>
+        </p>
+
+        <div class="chip-squad-section">
+          <h3 class="chip-squad-heading">Starting XI</h3>
+          <table class="chip-squad-table">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th class="col-team">Team</th>
+                <th class="col-pts">Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      for (const p of starters) {
+        const capLabel = p.isCaptain ? '<span class="cap-badge cap-c">C</span>' :
+                         p.isViceCaptain ? '<span class="cap-badge cap-v">V</span>' : '';
+        const ptsDisplay = p.multiplier > 1 ? `${p.rawPoints}×${p.multiplier}=${p.points}` : p.points;
+
+        html += `
+          <tr>
+            <td class="player-cell">
+              <span class="player-pos">${p.posLabel}</span>
+              <span class="player-name">${p.name}</span>
+              ${capLabel}
+            </td>
+            <td class="col-team">${p.team}</td>
+            <td class="col-pts">${ptsDisplay}</td>
+          </tr>
+        `;
+      }
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+
+        <div class="chip-squad-section">
+          <h3 class="chip-squad-heading">Bench</h3>
+          <table class="chip-squad-table bench-table">
+            <tbody>
+      `;
+
+      for (const p of bench) {
+        const ptsDisplay = chipName === "BB" && p.multiplier > 0 ? p.points :
+                           `<span class="text-muted">${p.rawPoints}</span>`;
+        const rowClass = chipName === "BB" ? "" : "bench-inactive";
+
+        html += `
+          <tr class="${rowClass}">
+            <td class="player-cell">
+              <span class="player-pos">${p.posLabel}</span>
+              <span class="player-name">${p.name}</span>
+            </td>
+            <td class="col-team">${p.team}</td>
+            <td class="col-pts">${ptsDisplay}</td>
+          </tr>
+        `;
+      }
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      chipModalContent.innerHTML = html;
+    } catch (e) {
+      console.error("Error loading chip squad:", e);
+      chipModalContent.innerHTML = "<p class='status status--error'>Error loading squad data.</p>";
+    }
+  }
+
+  async function showManagerHistoryModal(managerId: number, managerName: string) {
+    historyModalContent.innerHTML = `
+      <h2 class="modal-title">${managerName}</h2>
+      <div class="stats-loading">
+        <p class="text-muted">Calculating points breakdown...</p>
+        <p class="text-muted" style="font-size:11px;">Fetching history for GW1 to GW${latestGW}...</p>
+      </div>
+    `;
+    historyModal.classList.add("is-open");
+
+    try {
+      const maxGw = latestGW;
+      if (maxGw < 1) throw new Error("Season not started");
+
+      const pickPromises: Promise<any>[] = [];
+      for (let i = 1; i <= maxGw; i++) {
+        const cacheKey = `${managerId}:${i}`;
+        if (managerPicksCache.has(cacheKey)) {
+          pickPromises.push(Promise.resolve(managerPicksCache.get(cacheKey)));
+        } else {
+          pickPromises.push(
+            fetch(`/api/fpl/entry/${managerId}/event/${i}/picks`)
+              .then(r => r.ok ? r.json() : null)
+              .then(data => {
+                if (data) managerPicksCache.set(cacheKey, data);
+                return data;
+              })
+          );
+        }
+      }
+
+      const historyPromise = fetch(`/api/fpl/entry/${managerId}/history`).then(r => r.ok ? r.json() : null);
+      const [picksResults, historyData] = await Promise.all([Promise.all(pickPromises), historyPromise]);
+
+      const uniquePlayerIds = new Set<number>();
+      picksResults.forEach((p: any) => {
+        if (p && p.picks) p.picks.forEach((pick: any) => uniquePlayerIds.add(pick.element));
+      });
+
+      const playerHistoryMap = new Map<number, any[]>();
+      const playerPromises: Promise<void>[] = [];
+
+      for (const pid of uniquePlayerIds) {
+        if (playerHistoryCache.has(pid)) {
+          playerHistoryMap.set(pid, playerHistoryCache.get(pid)!);
+        } else {
+          playerPromises.push(
+            fetch(`/api/fpl/element-summary/${pid}`)
+              .then(r => r.ok ? r.json() : null)
+              .then(data => {
+                if (data && data.history) {
+                  playerHistoryCache.set(pid, data.history);
+                  playerHistoryMap.set(pid, data.history);
+                }
+              })
+          );
+        }
+      }
+
+      await Promise.all(playerPromises);
+
+      const playerTotals = new Map<number, { name: string; pos: string; team: string; games: number; points: number; currentlyOwned: boolean }>();
+
+      for (const pid of uniquePlayerIds) {
+        const pInfo = playerCache.get(pid);
+        if (pInfo) {
+          playerTotals.set(pid, {
+            name: pInfo.name,
+            pos: positionLabel(pInfo.position),
+            team: teamCache.get(pInfo.team)?.shortName || "",
+            games: 0,
+            points: 0,
+            currentlyOwned: false
+          });
+        }
+      }
+
+      for (let i = 0; i < picksResults.length; i++) {
+        const gw = i + 1;
+        const pickData = picksResults[i];
+        if (!pickData) continue;
+
+        const chipName = ((historyData?.chips || []) as any[]).find((c: any) => c.event === gw)?.name;
+        const isBB = chipName === "bboost";
+        const isTC = chipName === "3xc";
+
+        const autoSubs = pickData.automatic_subs || [];
+        const subbedOutIds = new Set<number>(autoSubs.map((s: any) => s.element_out));
+        const subbedInIds = new Set<number>(autoSubs.map((s: any) => s.element_in));
+
+        for (const p of (pickData.picks as any[])) {
+          const pid = p.element;
+          const stats = playerTotals.get(pid);
+          if (!stats) continue;
+
+          if (gw === maxGw) stats.currentlyOwned = true;
+
+          const isStarter = p.position <= 11;
+          const wasSubbedOut = subbedOutIds.has(pid);
+          const wasSubbedIn = subbedInIds.has(pid);
+
+          const played = (isStarter && !wasSubbedOut) || wasSubbedIn || (isBB && !isStarter);
+
+          if (played) {
+            stats.games++;
+
+            const pHist = playerHistoryMap.get(pid);
+            const gwEntries = pHist ? pHist.filter((h: any) => h.round === gw) : [];
+            const rawPoints = gwEntries.reduce((sum: number, h: any) => sum + (h.total_points || 0), 0);
+
+            const capPick = (pickData.picks as any[]).find((pk: any) => pk.is_captain);
+            const capPlayed = capPick && ((capPick.position <= 11 && !subbedOutIds.has(capPick.element)) || subbedInIds.has(capPick.element));
+
+            let multiplier = 1;
+            if (p.is_captain && capPlayed) {
+              multiplier = isTC ? 3 : 2;
+            } else if (p.is_vice_captain && !capPlayed) {
+              const vcPlayed = (p.position <= 11 && !wasSubbedOut) || wasSubbedIn;
+              if (vcPlayed) multiplier = isTC ? 3 : 2;
+            }
+
+            stats.points += rawPoints * multiplier;
+          }
+        }
+      }
+
+      const rows = Array.from(playerTotals.values()).sort((a, b) => b.points - a.points);
+      const totalPointsSum = rows.reduce((acc, r) => acc + r.points, 0);
+      const totalHitsCost = ((historyData?.current || []) as any[]).reduce((acc: number, row: any) => acc + (Number(row.event_transfers_cost) || 0), 0);
+
+      const isFav = favouriteIds.has(managerId);
+      let html = `
+        <div style="display:flex;align-items:center;gap:var(--space-2);padding-right:40px;margin-bottom:var(--space-1);">
+          <h2 class="modal-title" style="flex:1;min-width:0;margin-bottom:0;">${managerName}</h2>
+          <button type="button" class="fav-toggle-btn ${isFav ? 'fav-toggle-btn--active' : ''}"
+            data-entry-id="${managerId}"
+            title="${isFav ? 'Remove from favourites' : 'Add to favourites'}">
+            ${isFav ? '⭐' : '☆'}
+          </button>
+        </div>
+        <p class="text-muted" style="margin-bottom:1rem;">
+          Contribution History (GW1 - GW${maxGw}) <br>
+          <span class="text-success">Total Contributed: ${totalPointsSum} pts</span>
+          ${totalHitsCost > 0 ? `<br><span class="text-muted" style="font-size:11px;">After ${totalHitsCost} pts in transfer hits: ${totalPointsSum - totalHitsCost}</span>` : ''}
+        </p>
+
+        <div class="table-container" style="max-height:50vh;overflow-y:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="text-align:left;">Player</th>
+                <th style="text-align:center;">Pos</th>
+                <th style="text-align:center;">Games</th>
+                <th style="text-align:center;">Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      for (const r of rows) {
+        if (r.points === 0 && r.games === 0) continue;
+        const rowStyle = r.currentlyOwned ? "font-weight:600;" : "";
+        html += `
+          <tr style="${rowStyle}">
+            <td class="player-cell">
+              ${r.name}
+              <span class="text-muted" style="font-size:10px;">${r.team}</span>
+            </td>
+            <td style="text-align:center;">${r.pos}</td>
+            <td style="text-align:center;">${r.games}</td>
+            <td style="text-align:center;" class="points-positive">${r.points}</td>
+          </tr>
+        `;
+      }
+
+      html += `</tbody></table></div>`;
+      historyModalContent.innerHTML = html;
+
+      const favBtn = historyModalContent.querySelector('.fav-toggle-btn');
+      if (favBtn) {
+        favBtn.addEventListener('click', () => {
+          const id = parseInt((favBtn as HTMLElement).dataset.entryId || '0');
+          if (!id) return;
+          toggleFavourite(id);
+          const nowFav = favouriteIds.has(id);
+          favBtn.textContent = nowFav ? '⭐' : '☆';
+          favBtn.classList.toggle('fav-toggle-btn--active', nowFav);
+          (favBtn as HTMLElement).title = nowFav ? 'Remove from favourites' : 'Add to favourites';
+        });
+      }
+    } catch (e) {
+      console.error(e);
+      historyModalContent.innerHTML = `<p class="status status--error">Error calculating history.</p>`;
     }
   }
 

@@ -1,6 +1,8 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
+import PlayerModal from "../components/modals/PlayerModal.astro";
+import GWPointsModal from "../components/modals/GWPointsModal.astro";
 ---
 <Layout title="Player Ownership - FPL Manager Data">
   <Nav pageTitle="Ownership" />
@@ -61,6 +63,11 @@ import Nav from "../components/Nav.astro";
       <div id="ownership-modal-content"></div>
     </div>
   </div>
+
+  <!-- Player Stats Modal -->
+  <PlayerModal />
+
+  <GWPointsModal />
 </Layout>
 
 <style>
@@ -161,10 +168,30 @@ import Nav from "../components/Nav.astro";
     }
   }
 
+  :global(.player-name-modal-btn) {
+    background: none;
+    border: none;
+    color: var(--color-text);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    padding: 0;
+    text-align: left;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color 0.2s;
+  }
+
+  :global(.player-name-modal-btn:hover) {
+    text-decoration-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
 </style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
+  import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
 
   async function loadManagerIdsFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -203,6 +230,9 @@ import Nav from "../components/Nav.astro";
   const ownershipModalContent = document.getElementById("ownership-modal-content");
   const closeOwnershipModal = document.getElementById("close-ownership-modal");
   const clubFilter = document.getElementById("club-filter") as HTMLSelectElement;
+  const playerModal = document.getElementById("player-modal")!;
+  const playerModalContent = document.getElementById("player-modal-content")!;
+  const closePlayerModal = document.getElementById("close-player-modal")!;
 
   let managerIds = [];
   let ownershipData = [];
@@ -309,6 +339,12 @@ import Nav from "../components/Nav.astro";
     ownershipModal.classList.remove("is-open");
   });
 
+  closePlayerModal.addEventListener("click", () => {
+    playerModal.classList.remove("is-open");
+  });
+
+  const gwPointsModal = initGWPointsModal('gw-points-modal');
+
   /**
    * Concurrent mapping with limited concurrency
    */
@@ -374,7 +410,16 @@ import Nav from "../components/Nav.astro";
           position: player.element_type === 1 ? "GK" :
                     player.element_type === 2 ? "DEF" :
                     player.element_type === 3 ? "MID" : "FWD",
-          team: player.team
+          team: player.team,
+          totalPoints: player.total_points,
+          selectedByPercent: player.selected_by_percent,
+          goalsScored: player.goals_scored,
+          assists: player.assists,
+          cleanSheets: player.clean_sheets,
+          penaltiesSaved: player.penalties_saved,
+          yellowCards: player.yellow_cards,
+          redCards: player.red_cards,
+          bonus: player.bonus
         });
       });
 
@@ -464,7 +509,88 @@ import Nav from "../components/Nav.astro";
     return Array.from(ownership.values());
   }
 
-  function showOwnershipModal(playerName, position, teamName, ownedByList) {
+  function showPlayerModal(playerId) {
+    const player = playerCache.get(playerId);
+    if (!player) return;
+
+    const teamInfo = teamCache.get(player.team) || { short: "???", full: "???" };
+
+    let html = `
+      <div class="player-modal-header">
+        <div class="player-modal-info">
+          <h2 class="player-modal-name">${player.name}</h2>
+          <div class="player-modal-meta">
+            <span class="player-modal-team">${teamInfo.short}</span>
+            <span class="player-modal-pos">${player.position}</span>
+          </div>
+        </div>
+        <div class="player-modal-points">
+          <span class="player-modal-total">${player.totalPoints ?? '—'}</span>
+          <span class="player-modal-pts-label">pts</span>
+        </div>
+      </div>
+
+      <div class="player-modal-breakdown">
+        <h3 class="player-modal-section-title">Season Stats</h3>
+        <div class="breakdown-list">
+          <div class="breakdown-row">
+            <span class="breakdown-label">Goals</span>
+            <span class="breakdown-value">${player.goalsScored ?? 0}</span>
+            <span class="breakdown-points"></span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Assists</span>
+            <span class="breakdown-value">${player.assists ?? 0}</span>
+            <span class="breakdown-points"></span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Clean Sheets</span>
+            <span class="breakdown-value">${player.cleanSheets ?? 0}</span>
+            <span class="breakdown-points"></span>
+          </div>
+          <div class="breakdown-row">
+            <span class="breakdown-label">Bonus</span>
+            <span class="breakdown-value">${player.bonus ?? 0}</span>
+            <span class="breakdown-points"></span>
+          </div>
+          ${(player.penaltiesSaved ?? 0) > 0 ? `
+          <div class="breakdown-row">
+            <span class="breakdown-label">Pen Saved</span>
+            <span class="breakdown-value">${player.penaltiesSaved}</span>
+            <span class="breakdown-points"></span>
+          </div>` : ''}
+          ${(player.yellowCards ?? 0) > 0 ? `
+          <div class="breakdown-row">
+            <span class="breakdown-label">Yellow Cards</span>
+            <span class="breakdown-value">${player.yellowCards}</span>
+            <span class="breakdown-points points-negative">-${player.yellowCards}</span>
+          </div>` : ''}
+          ${(player.redCards ?? 0) > 0 ? `
+          <div class="breakdown-row">
+            <span class="breakdown-label">Red Cards</span>
+            <span class="breakdown-value">${player.redCards}</span>
+            <span class="breakdown-points points-negative">-${player.redCards * 3}</span>
+          </div>` : ''}
+          <div class="breakdown-row">
+            <span class="breakdown-label">Selected by</span>
+            <span class="breakdown-value">${player.selectedByPercent ?? '—'}%</span>
+            <span class="breakdown-points"></span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    playerModalContent.innerHTML = html;
+    const playerNameEl = playerModalContent.querySelector('.player-modal-name');
+    if (playerNameEl && gwPointsModal) {
+      const teamMap = new Map();
+      teamCache.forEach((v, k) => teamMap.set(k, { name: v.full, shortName: v.short }));
+      makePlayerNameClickable(playerNameEl, playerId, player.name, gwPointsModal, teamMap);
+    }
+    playerModal.classList.add("is-open");
+  }
+
+  function showOwnershipModal(playerName, position, teamName, ownedByList, playerId) {
     const totalManagers = allManagers.length;
     const notOwnedBy = allManagers.filter(m => !ownedByList.includes(m.id)).sort((a, b) => a.name.localeCompare(b.name));
     const ownedBySorted = allManagers.filter(m => ownedByList.includes(m.id)).sort((a, b) => a.name.localeCompare(b.name));
@@ -484,7 +610,7 @@ import Nav from "../components/Nav.astro";
 
     let html = `
       <h2 class="modal-title" style="padding-right:40px;">
-        ${playerName}
+        <button type="button" class="player-name-modal-btn" data-player-id="${playerId}">${playerName}</button>
       </h2>
       <p class="text-muted" style="margin-bottom:var(--space-4);">
         ${position} · ${teamName} · <span class="text-success font-bold">${ownershipPct}%</span> ownership
@@ -544,6 +670,14 @@ import Nav from "../components/Nav.astro";
 
     ownershipModalContent.innerHTML = html;
     ownershipModal.classList.add("is-open");
+
+    const playerNameBtn = ownershipModalContent.querySelector('.player-name-modal-btn');
+    if (playerNameBtn) {
+      playerNameBtn.addEventListener('click', () => {
+        const pid = parseInt((playerNameBtn as HTMLElement).dataset.playerId || '0');
+        if (pid) showPlayerModal(pid);
+      });
+    }
   }
 
   function makeOwnershipTable(ownership, positionFilterValue = "", teamFilterValue = "") {
@@ -596,6 +730,7 @@ import Nav from "../components/Nav.astro";
               data-position="${player.position}"
               data-team="${player.teamName}"
               data-owned="${ownedByJson}"
+              data-player-id="${player.playerId}"
             >
               <span class="player-name">${player.playerName}</span>
               <span class="player-count">${player.count} of ${totalManagers}</span>
@@ -626,7 +761,8 @@ import Nav from "../components/Nav.astro";
         const position = button.dataset.position;
         const teamName = button.dataset.team;
         const ownedBy = JSON.parse(button.dataset.owned);
-        showOwnershipModal(playerName, position, teamName, ownedBy);
+        const playerId = parseInt(button.dataset.playerId || '0');
+        showOwnershipModal(playerName, position, teamName, ownedBy, playerId);
       });
     });
   }
