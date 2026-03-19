@@ -3,26 +3,19 @@
  *
  * For each GW:
  *   - Captain picks within the analysed group (element, name, count, %)
- *   - Consensus % (most-picked captain's share)
- *   - Differential rate (% of managers captaining someone other than the consensus)
- *   - Average GW points returned by the captain pick (from snapshots — proxy via total gw_points)
+ *   - Group Consensus % (most-picked captain's share within the group)
+ *   - Global Consensus (the overall most_captained player from FPL API)
+ *   - Differential rate (% of managers captaining someone other than group consensus)
  *
  * Per-manager:
  *   - All captain choices across the season
- *   - How often they followed group consensus vs. went differential
+ *   - Risk Profile 1: How often they followed GROUP consensus vs. went differential
+ *   - Risk Profile 2: How often they followed GLOBAL consensus vs. went differential
  *
- * Note: GW points in lab_manager_gw_snapshots are the manager's *total* GW score
- * (captain multiplier already included in FPL scoring).  True captain-only return
- * is not directly available without live fixture data, so we report manager GW score
- * as a proxy and flag this clearly in the output.
- *
- * Reads from: lab_manager_gw_picks, lab_manager_gw_snapshots
+ * Reads from: lab_manager_gw_picks, lab_manager_gw_snapshots, bootstrap-static
  *
  * Usage:
  *   npx tsx src/lab/analysis/captaincy.ts
- *
- * Required env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, LAB_ANALYSIS_USER_ID
- * Output: private/lab/captaincy.json
  */
 
 import * as fs from 'node:fs'
@@ -51,9 +44,11 @@ interface SnapshotRow {
 interface GwCaptaincy {
   gw:               number
   managers_in_gw:   number
-  consensus_element: number
-  consensus_name:   string
-  consensus_pct:    number
+  group_consensus_element: number
+  group_consensus_name:   string
+  group_consensus_pct:    number
+  global_consensus_element: number | null
+  global_consensus_name:    string | null
   differential_rate_pct: number
   captain_breakdown: Array<{
     element:   number
@@ -67,9 +62,12 @@ interface GwCaptaincy {
 interface ManagerCaptaincy {
   entry_id:             number
   season_captaincies:   Array<{ gw: number; element: number; name: string; manager_gw_pts: number }>
-  consensus_count:      number
-  differential_count:   number
-  differential_rate_pct: number
+  group_consensus_count:      number
+  group_differential_count:   number
+  group_differential_rate_pct: number
+  global_consensus_count:     number
+  global_differential_count:  number
+  global_differential_rate_pct: number
 }
 
 async function run(): Promise<void> {
@@ -80,9 +78,16 @@ async function run(): Promise<void> {
   const supabase   = createServiceClient()
   const managerIds = await loadLabManagerIds()
 
-  console.log('Fetching bootstrap-static for element names…')
+  console.log('Fetching bootstrap-static for element names and global stats…')
   const bootstrap  = await fetchBootstrap()
   const elementMap = new Map(bootstrap.elements.map(e => [e.id, e]))
+  
+  // Map GW to the global most_captained element ID
+  const globalCaptainMap = new Map<number, number | null>()
+  for (const ev of bootstrap.events) {
+    // most_captained is provided by the FPL API for completed/current GWs
+    globalCaptainMap.set(ev.id, ev.most_captained ?? null)
+  }
 
   // Load captain picks
   const { data: picks, error: pickErr } = await supabase
@@ -127,23 +132,24 @@ async function run(): Promise<void> {
       countMap.set(c.element, (countMap.get(c.element) ?? 0) + 1)
     }
 
-    // Find consensus (most-picked)
-    let consensusEl = 0
-    let consensusCount = 0
+    // Find group consensus (most-picked within your lab group)
+    let groupConsensusEl = 0
+    let groupConsensusCount = 0
     for (const [el, cnt] of countMap.entries()) {
-      if (cnt > consensusCount) {
-        consensusCount = cnt
-        consensusEl   = el
+      if (cnt > groupConsensusCount) {
+        groupConsensusCount = cnt
+        groupConsensusEl   = el
       }
     }
 
-    const consensusPct = Math.round((consensusCount / n) * 1000) / 10
-    const differentialCount = n - consensusCount
-    const differentialRate  = Math.round((differentialCount / n) * 1000) / 10
+    const groupConsensusPct = Math.round((groupConsensusCount / n) * 1000) / 10
+    const groupDifferentialCount = n - groupConsensusCount
+    const groupDifferentialRate  = Math.round((groupDifferentialCount / n) * 1000) / 10
+
+    const globalCapEl = globalCaptainMap.get(gw) ?? null
 
     const breakdown = [...countMap.entries()]
       .map(([el, cnt]) => {
-        // Average GW points for managers who captained this element
         const managerPts = gwCaps
           .filter(c => c.element === el)
           .map(c => snapMap.get(c.entry_id)?.get(gw) ?? null)
@@ -163,16 +169,18 @@ async function run(): Promise<void> {
 
     gwResults.push({
       gw,
-      managers_in_gw:        n,
-      consensus_element:     consensusEl,
-      consensus_name:        elementMap.get(consensusEl)?.web_name ?? `#${consensusEl}`,
-      consensus_pct:         consensusPct,
-      differential_rate_pct: differentialRate,
-      captain_breakdown:     breakdown,
+      managers_in_gw:           n,
+      group_consensus_element:  groupConsensusEl,
+      group_consensus_name:     elementMap.get(groupConsensusEl)?.web_name ?? `#${groupConsensusEl}`,
+      group_consensus_pct:      groupConsensusPct,
+      global_consensus_element: globalCapEl,
+      global_consensus_name:    globalCapEl ? (elementMap.get(globalCapEl)?.web_name ?? `#${globalCapEl}`) : null,
+      differential_rate_pct:    groupDifferentialRate,
+      captain_breakdown:        breakdown,
     })
   }
 
-  // Per-manager analysis
+  // Per-manager analysis (Risk Profiles)
   const managerResults: ManagerCaptaincy[] = managerIds.map(entryId => {
     const myCaps = captainPicks.filter(p => p.entry_id === entryId)
 
@@ -183,24 +191,38 @@ async function run(): Promise<void> {
       manager_gw_pts: snapMap.get(entryId)?.get(c.gw) ?? 0,
     }))
 
-    let consensusCount    = 0
-    let differentialCount = 0
+    let groupConsensusCount    = 0
+    let groupDifferentialCount = 0
+    let globalConsensusCount   = 0
+    let globalDifferentialCount = 0
 
     for (const c of myCaps) {
       const gwRes = gwResults.find(r => r.gw === c.gw)
       if (!gwRes) continue
-      if (c.element === gwRes.consensus_element) consensusCount++
-      else differentialCount++
+      
+      // Group Risk Profile
+      if (c.element === gwRes.group_consensus_element) groupConsensusCount++
+      else groupDifferentialCount++
+      
+      // Global Risk Profile
+      if (gwRes.global_consensus_element !== null) {
+        if (c.element === gwRes.global_consensus_element) globalConsensusCount++
+        else globalDifferentialCount++
+      }
     }
 
-    const total = consensusCount + differentialCount
+    const totalGroup = groupConsensusCount + groupDifferentialCount
+    const totalGlobal = globalConsensusCount + globalDifferentialCount
 
     return {
       entry_id:              entryId,
       season_captaincies:    seasonCaptaincies.sort((a, b) => a.gw - b.gw),
-      consensus_count:       consensusCount,
-      differential_count:    differentialCount,
-      differential_rate_pct: total > 0 ? Math.round((differentialCount / total) * 1000) / 10 : 0,
+      group_consensus_count:       groupConsensusCount,
+      group_differential_count:    groupDifferentialCount,
+      group_differential_rate_pct: totalGroup > 0 ? Math.round((groupDifferentialCount / totalGroup) * 1000) / 10 : 0,
+      global_consensus_count:      globalConsensusCount,
+      global_differential_count:   globalDifferentialCount,
+      global_differential_rate_pct: totalGlobal > 0 ? Math.round((globalDifferentialCount / totalGlobal) * 1000) / 10 : 0,
     }
   })
 
@@ -208,7 +230,7 @@ async function run(): Promise<void> {
     generated_at:  new Date().toISOString(),
     manager_count: managerIds.length,
     gws_analysed:  gwSet.length,
-    note:          'avg_manager_gw_pts is the captain manager\'s full GW score (captain multiplier included); not a raw captain element return.',
+    note:          'Global consensus is the overall most_captained player globally. Group consensus is the most captained player in the lab group.',
     gw_results:    gwResults,
     manager_results: managerResults,
   }
