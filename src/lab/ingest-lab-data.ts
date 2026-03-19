@@ -111,6 +111,14 @@ async function ingestEntry(
   await politeDelay(DELAY_MS)
 
   if (transfers.length > 0) {
+    // IMPORTANT:
+    // Postgres upsert can throw:
+    //   "ON CONFLICT DO UPDATE command cannot affect row a second time"
+    // if the same conflict key appears more than once in the *same* batch.
+    // The FPL API can occasionally return duplicate transfers (esp. during WC/FH activity).
+    // So we dedupe by our onConflict key before upserting.
+    const nowIso = new Date().toISOString()
+
     const transferRows = transfers.map(t => ({
       entry_id:         entryId,
       gw:               t.event,
@@ -119,15 +127,23 @@ async function ingestEntry(
       element_in_cost:  t.element_in_cost,
       element_out_cost: t.element_out_cost,
       transfer_time:    t.time,
-      ingested_at:      new Date().toISOString(),
+      ingested_at:      nowIso,
     }))
+
+    const uniqueByConflictKey = new Map<string, (typeof transferRows)[number]>()
+    for (const row of transferRows) {
+      const k = `${row.entry_id}|${row.gw}|${row.element_in}|${row.element_out}`
+      // If duplicates exist, keep the last one (they should be identical anyway)
+      uniqueByConflictKey.set(k, row)
+    }
+    const dedupedRows = [...uniqueByConflictKey.values()]
 
     const { error: xferErr } = await supabase
       .from('lab_manager_transfers')
-      .upsert(transferRows, { onConflict: 'entry_id,gw,element_in,element_out' })
+      .upsert(dedupedRows, { onConflict: 'entry_id,gw,element_in,element_out' })
+
     if (xferErr) throw new Error(`transfers upsert for entry ${entryId}: ${xferErr.message}`)
   }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
