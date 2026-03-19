@@ -319,14 +319,25 @@ function generateCaptaincyReports(data: CaptaincyJson) {
 
   const managerSummaryRows = data.manager_results.map(m => ({
     entry_id: m.entry_id,
-    consensus_count: m.consensus_count,
-    differential_count: m.differential_count,
-    differential_rate_pct: m.differential_rate_pct,
+    group_consensus_count: m.group_consensus_count,
+    group_differential_count: m.group_differential_count,
+    group_differential_rate_pct: m.group_differential_rate_pct,
+    global_consensus_count: m.global_consensus_count,
+    global_differential_count: m.global_differential_count,
+    global_differential_rate_pct: m.global_differential_rate_pct,
   }))
 
   writeCsv(
     path.join(REPORTS_DIR, 'captaincy-manager-summary.csv'),
-    ['entry_id', 'consensus_count', 'differential_count', 'differential_rate_pct'],
+    [
+      'entry_id', 
+      'group_consensus_count', 
+      'group_differential_count', 
+      'group_differential_rate_pct',
+      'global_consensus_count',
+      'global_differential_count',
+      'global_differential_rate_pct'
+    ],
     managerSummaryRows,
   )
 
