@@ -481,6 +481,129 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
 }
 
 /**
+ * Computes the speculative LtP auto-sub adjustment for a manager's team.
+ *
+ * For each starting slot that is guaranteed to be unfilled — either a confirmed
+ * DNP (fixture finished with 0 minutes) or a blank-GW starter (team has no
+ * fixture in fixturesCache) — the next eligible bench player is counted
+ * speculatively (+1 to LtP) provided their team has a fixture yet to play.
+ *
+ * Formation constraints (min 3 DEF, 2 MID, 1 FWD) are respected and bench
+ * order is honoured.  Bench Boost (BB) has no auto-subs so returns 0.
+ *
+ * This function is the single source of truth for speculative-sub LtP and is
+ * used by both the Live page and the Leagues page so that both surfaces always
+ * show consistent values.
+ *
+ * @param finalTeam   - Picks array after applyAutoSubsAndMultipliers; each
+ *                      entry must have: position, multiplier, autoSubStatus,
+ *                      playingPosition, teamId, minutes.
+ *                      availabilityStatus (optional) – players with value "s"
+ *                      (suspended) are skipped.
+ * @param chipCode    - Active chip ("BB", "TC", "WC", "FH", or "None").
+ * @param fixturesCache - GW fixtures (used to detect blank-GW teams).
+ * @returns The number of speculative subs to add to the base LtP sum.
+ */
+export function computeSpeculativeLtpSubs(
+  finalTeam: any[],
+  chipCode: string,
+  fixturesCache: FixtureInfo[]
+): number {
+  // Bench Boost: all 15 players active, no auto-subs apply.
+  if (chipCode === 'BB') return 0;
+
+  const ltpSorted = [...finalTeam].sort((a, b) => a.position - b.position);
+  const ltpBench = ltpSorted.slice(11);
+
+  // Helper: does the team have any fixture in the current GW?
+  const hasFixture = (teamId: number): boolean =>
+    fixturesCache.some(f => f.team_h === teamId || f.team_a === teamId);
+
+  // Active outfield: starters / confirmed subs with multiplier > 0 whose team
+  // has a fixture this GW.  Blank-GW starters are deliberately excluded because
+  // their team has no fixture and they are guaranteed not to play.
+  let activeOutfield = ltpSorted.filter(p =>
+    (p.multiplier ?? 0) > 0 &&
+    p.playingPosition !== 'GK' &&
+    hasFixture(p.teamId)
+  );
+
+  const outfieldBench = ltpBench.filter(
+    p => p.playingPosition !== 'GK' && p.autoSubStatus !== 'IN'
+  );
+  const gkBench = ltpBench.filter(p => p.playingPosition === 'GK');
+
+  // A GK slot is considered "active" only when the GK's team has a fixture.
+  // This ensures blank-GW GK starters are not counted as covering the slot.
+  const gkActive = ltpSorted.find(
+    p => (p.multiplier ?? 0) > 0 && p.playingPosition === 'GK' && hasFixture(p.teamId)
+  );
+
+  // A GK starter slot is DNP when:
+  //   (a) confirmed DNP via autoSubStatus === 'OUT' (fixture finished, 0 min), or
+  //   (b) team has no fixture this GW (blank GW → guaranteed non-playing).
+  const gkStarterDnp = ltpSorted.find(
+    p =>
+      p.position <= 11 &&
+      p.playingPosition === 'GK' &&
+      (p.autoSubStatus === 'OUT' || !hasFixture(p.teamId))
+  );
+
+  let adjustment = 0;
+
+  // Speculative GK sub: blank-GW or confirmed-DNP GK starter with no active replacement.
+  if (gkStarterDnp && !gkActive) {
+    for (const gk of gkBench) {
+      if (gk.autoSubStatus === 'IN') continue;
+      if (gk.availabilityStatus === 's') continue;
+      if (computePlayerLtpContribution(gk.teamId, gk.minutes, 1, fixturesCache) === 0) continue;
+      adjustment += 1;
+      break;
+    }
+  }
+
+  // Speculative outfield subs: for each empty outfield slot, find the next
+  // eligible bench player (bench order, formation-valid).
+  for (const cand of outfieldBench) {
+    if (activeOutfield.length >= 10) break;
+    if (cand.availabilityStatus === 's') continue;
+    // DGW-aware: bench player who played in F1 but has F2 upcoming is still eligible.
+    if (computePlayerLtpContribution(cand.teamId, cand.minutes, 1, fixturesCache) === 0) continue;
+
+    const testOutfield = [...activeOutfield, cand];
+    const defCount = testOutfield.filter(p => p.playingPosition === 'DEF').length;
+    const midCount = testOutfield.filter(p => p.playingPosition === 'MID').length;
+    const fwdCount = testOutfield.filter(p => p.playingPosition === 'FWD').length;
+    const spotsLeft = 10 - testOutfield.length;
+
+    let canSub = false;
+    if (spotsLeft === 0) {
+      canSub = defCount >= 3 && midCount >= 2 && fwdCount >= 1;
+    } else {
+      const needDef = Math.max(0, 3 - defCount);
+      const needMid = Math.max(0, 2 - midCount);
+      const needFwd = Math.max(0, 1 - fwdCount);
+      const candidateIndex = outfieldBench.indexOf(cand);
+      const remainingCandidates = outfieldBench.slice(candidateIndex + 1).filter(b => {
+        if (b.availabilityStatus === 's') return false;
+        return computePlayerLtpContribution(b.teamId, b.minutes, 1, fixturesCache) > 0;
+      });
+      canSub =
+        remainingCandidates.filter(p => p.playingPosition === 'DEF').length >= needDef &&
+        remainingCandidates.filter(p => p.playingPosition === 'MID').length >= needMid &&
+        remainingCandidates.filter(p => p.playingPosition === 'FWD').length >= needFwd;
+    }
+
+    if (canSub) {
+      activeOutfield = testOutfield;
+      adjustment += 1;
+    }
+  }
+
+  return adjustment;
+}
+
+/**
  * Computes a player's Left-to-Play (LtP) contribution for the current GW,
  * correctly handling Double Gameweeks (DGWs) by evaluating each fixture
  * individually rather than relying on aggregate team status.

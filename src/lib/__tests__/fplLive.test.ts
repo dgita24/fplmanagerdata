@@ -1162,3 +1162,254 @@ describe('computePlayerLtpContribution', () => {
     expect(computePlayerLtpContribution(TEAM, 0, 1, fx)).toBe(1);
   });
 });
+
+// ============================================================
+// computeSpeculativeLtpSubs – blank-GW autosub LtP fix
+// ============================================================
+
+import { computeSpeculativeLtpSubs } from '../fplLive';
+
+/**
+ * Build a finalTeam pick (output of applyAutoSubsAndMultipliers) for
+ * computeSpeculativeLtpSubs tests.  Position 1-11 = starter, 12-15 = bench.
+ */
+function makeTeamPick(opts: {
+  playerId: number;
+  position: number;
+  playingPosition: 'GK' | 'DEF' | 'MID' | 'FWD';
+  teamId: number;
+  minutes: number;
+  status: 'Fin' | 'Live' | 'NS';
+  multiplier?: number;
+  autoSubStatus?: string | null;
+  is_captain?: boolean;
+  is_vice_captain?: boolean;
+}) {
+  return {
+    playerId: opts.playerId,
+    position: opts.position,
+    playingPosition: opts.playingPosition,
+    teamId: opts.teamId,
+    minutes: opts.minutes,
+    status: opts.status,
+    multiplier: opts.multiplier ?? (opts.position <= 11 ? 1 : 0),
+    autoSubStatus: opts.autoSubStatus ?? null,
+    is_captain: !!opts.is_captain,
+    is_vice_captain: !!opts.is_vice_captain,
+  };
+}
+
+describe('computeSpeculativeLtpSubs – blank-GW autosub LtP fix', () => {
+  /**
+   * Team IDs used across tests:
+   *   BLANK_TEAM_1, BLANK_TEAM_2, BLANK_TEAM_3 – teams with no GW fixture
+   *   NS_TEAM_10 … NS_TEAM_25            – teams with a not-yet-started fixture
+   */
+  const BLANK = 1;  // Arsenal proxy  (no fixture)
+  const BLANK2 = 2; // Man City proxy  (no fixture)
+
+  /** GW fixtures: only teams 10-25 have a fixture this week. */
+  function makeNsFixtures(teamIds: number[]): FixtureInfo[] {
+    return teamIds.map((tid, i) =>
+      makeFixture({ id: 100 + i, team_h: tid, team_a: 99, started: false })
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // (d) Control: no blank-GW starters – speculative adjustment = 0
+  // ──────────────────────────────────────────────────────────────
+  it('returns 0 when all starters have fixtures (no blank-GW starters)', () => {
+    const fixtures = makeNsFixtures([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+    const team = [
+      makeTeamPick({ playerId: 1,  position: 1,  playingPosition: 'GK',  teamId: 10, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 2,  position: 2,  playingPosition: 'DEF', teamId: 11, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 3,  position: 3,  playingPosition: 'DEF', teamId: 12, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 4,  position: 4,  playingPosition: 'DEF', teamId: 13, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 5,  position: 5,  playingPosition: 'MID', teamId: 14, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 6,  position: 6,  playingPosition: 'MID', teamId: 15, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 7,  position: 7,  playingPosition: 'MID', teamId: 16, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 8,  position: 8,  playingPosition: 'MID', teamId: 17, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 9,  position: 9,  playingPosition: 'FWD', teamId: 18, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 10, position: 10, playingPosition: 'FWD', teamId: 19, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 11, position: 11, playingPosition: 'FWD', teamId: 20, minutes: 0, status: 'NS' }),
+      // Bench
+      makeTeamPick({ playerId: 12, position: 12, playingPosition: 'GK',  teamId: 21, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 13, position: 13, playingPosition: 'DEF', teamId: 22, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 14, position: 14, playingPosition: 'MID', teamId: 23, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 15, position: 15, playingPosition: 'FWD', teamId: 24, minutes: 0, status: 'NS' }),
+    ];
+    const fixtures2 = makeNsFixtures([10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]);
+    expect(computeSpeculativeLtpSubs(team, 'None', fixtures2)).toBe(0);
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // (a) Harry Daniels scenario: GK (blank) + DEF (blank) + FWD (blank)
+  //     3 bench players with fixtures should sub in speculatively.
+  //     Mirrors the reported GW31 bug where LtP was incorrectly shown as 8.
+  // ──────────────────────────────────────────────────────────────
+  it('(Harry Daniels GW31) blank GK + blank DEF + blank FWD → speculative adjustment = 3', () => {
+    // Teams 10-24 have NS fixtures; BLANK (1) and BLANK2 (2) have no fixture.
+    const fixtures = makeNsFixtures([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]);
+
+    // Formation 3-4-3.  Starters with no fixture: GK(BLANK), DEF(BLANK), FWD(BLANK2).
+    // applyAutoSubsAndMultipliers gives blank starters multiplier=1 (it cannot detect blank GW).
+    const team = [
+      // Blank starters – guaranteed non-playing (no fixture)
+      makeTeamPick({ playerId: 1,  position: 1,  playingPosition: 'GK',  teamId: BLANK,  minutes: 0, status: 'NS' }), // Raya
+      makeTeamPick({ playerId: 2,  position: 2,  playingPosition: 'DEF', teamId: BLANK,  minutes: 0, status: 'NS' }), // Gabriel
+      // Normal starters (have fixtures)
+      makeTeamPick({ playerId: 3,  position: 3,  playingPosition: 'DEF', teamId: 10,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 4,  position: 4,  playingPosition: 'DEF', teamId: 11,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 5,  position: 5,  playingPosition: 'MID', teamId: 12,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 6,  position: 6,  playingPosition: 'MID', teamId: 13,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 7,  position: 7,  playingPosition: 'MID', teamId: 14,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 8,  position: 8,  playingPosition: 'MID', teamId: 15,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 9,  position: 9,  playingPosition: 'FWD', teamId: 16,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 10, position: 10, playingPosition: 'FWD', teamId: 17,     minutes: 0, status: 'NS' }),
+      // Blank starter – guaranteed non-playing (no fixture)
+      makeTeamPick({ playerId: 11, position: 11, playingPosition: 'FWD', teamId: BLANK2, minutes: 0, status: 'NS' }), // Haaland
+      // Bench (all have fixtures)
+      makeTeamPick({ playerId: 12, position: 12, playingPosition: 'GK',  teamId: 18,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 13, position: 13, playingPosition: 'DEF', teamId: 19,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 14, position: 14, playingPosition: 'MID', teamId: 20,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 15, position: 15, playingPosition: 'FWD', teamId: 21,     minutes: 0, status: 'NS' }),
+    ];
+
+    // Speculative subs: bench GK replaces Raya (+1), bench DEF replaces Gabriel (+1),
+    // bench MID or FWD fills Haaland's slot (+1) → total = 3.
+    expect(computeSpeculativeLtpSubs(team, 'None', fixtures)).toBe(3);
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // (c) Combined LtP = base + speculative matches expected total
+  // ──────────────────────────────────────────────────────────────
+  it('combined base-LtP + speculative matches expected total for blank-GW scenario', () => {
+    const fixtures = makeNsFixtures([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]);
+
+    // Same team as Harry Daniels test above
+    const team = [
+      makeTeamPick({ playerId: 1,  position: 1,  playingPosition: 'GK',  teamId: BLANK,  minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 2,  position: 2,  playingPosition: 'DEF', teamId: BLANK,  minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 3,  position: 3,  playingPosition: 'DEF', teamId: 10,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 4,  position: 4,  playingPosition: 'DEF', teamId: 11,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 5,  position: 5,  playingPosition: 'MID', teamId: 12,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 6,  position: 6,  playingPosition: 'MID', teamId: 13,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 7,  position: 7,  playingPosition: 'MID', teamId: 14,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 8,  position: 8,  playingPosition: 'MID', teamId: 15,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 9,  position: 9,  playingPosition: 'FWD', teamId: 16,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 10, position: 10, playingPosition: 'FWD', teamId: 17,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 11, position: 11, playingPosition: 'FWD', teamId: BLANK2, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 12, position: 12, playingPosition: 'GK',  teamId: 18,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 13, position: 13, playingPosition: 'DEF', teamId: 19,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 14, position: 14, playingPosition: 'MID', teamId: 20,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 15, position: 15, playingPosition: 'FWD', teamId: 21,     minutes: 0, status: 'NS' }),
+    ];
+
+    // Base LtP: only effective (multiplier > 0) players with fixtures contribute.
+    // Starters p1 (GK,BLANK), p2 (DEF,BLANK), p11 (FWD,BLANK2) return 0; bench returns 0.
+    // The remaining 8 normal starters each return 1.
+    const baseLtp = team.reduce(
+      (sum, p) => sum + computePlayerLtpContribution(p.teamId, p.minutes, p.multiplier, fixtures),
+      0
+    );
+    expect(baseLtp).toBe(8); // 8 normal starters × multiplier 1
+
+    const speculative = computeSpeculativeLtpSubs(team, 'None', fixtures);
+    expect(speculative).toBe(3);
+
+    // After the fix, total LtP = 11 (was incorrectly 8 before the fix).
+    expect(baseLtp + speculative).toBe(11);
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // (b) Multiple blank starters: blank GK + 2 blank DEF starters
+  //     Formation: 5-3-2 → extra DEF means one bench DEF needed
+  // ──────────────────────────────────────────────────────────────
+  it('blank GK + two blank DEF starters → bench covers both DEF slots + GK slot', () => {
+    const fixtures = makeNsFixtures([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+
+    // Formation: GK + 5 DEF + 3 MID + 2 FWD (5-3-2)
+    // 3 blanks: GK, DEF×2
+    const team = [
+      makeTeamPick({ playerId: 1,  position: 1,  playingPosition: 'GK',  teamId: BLANK,  minutes: 0, status: 'NS' }), // blank GK
+      makeTeamPick({ playerId: 2,  position: 2,  playingPosition: 'DEF', teamId: BLANK,  minutes: 0, status: 'NS' }), // blank DEF
+      makeTeamPick({ playerId: 3,  position: 3,  playingPosition: 'DEF', teamId: BLANK2, minutes: 0, status: 'NS' }), // blank DEF
+      makeTeamPick({ playerId: 4,  position: 4,  playingPosition: 'DEF', teamId: 10,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 5,  position: 5,  playingPosition: 'DEF', teamId: 11,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 6,  position: 6,  playingPosition: 'DEF', teamId: 12,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 7,  position: 7,  playingPosition: 'MID', teamId: 13,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 8,  position: 8,  playingPosition: 'MID', teamId: 14,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 9,  position: 9,  playingPosition: 'MID', teamId: 15,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 10, position: 10, playingPosition: 'FWD', teamId: 16,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 11, position: 11, playingPosition: 'FWD', teamId: 17,     minutes: 0, status: 'NS' }),
+      // Bench
+      makeTeamPick({ playerId: 12, position: 12, playingPosition: 'GK',  teamId: 18,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 13, position: 13, playingPosition: 'DEF', teamId: 19,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 14, position: 14, playingPosition: 'DEF', teamId: 20,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 15, position: 15, playingPosition: 'MID', teamId: 21,     minutes: 0, status: 'NS' }),
+    ];
+
+    // Expected: blank GK → bench GK (+1); blank DEF×2 → bench DEF×2 (+2) = 3 total.
+    expect(computeSpeculativeLtpSubs(team, 'None', fixtures)).toBe(3);
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // Bench Boost chip: no auto-subs → always 0
+  // ──────────────────────────────────────────────────────────────
+  it('returns 0 under Bench Boost chip regardless of blank starters', () => {
+    const fixtures = makeNsFixtures([10, 11, 12, 13, 14, 15, 16, 17]);
+
+    const team = [
+      makeTeamPick({ playerId: 1,  position: 1,  playingPosition: 'GK',  teamId: BLANK,  minutes: 0, status: 'NS' }), // blank GK
+      makeTeamPick({ playerId: 2,  position: 2,  playingPosition: 'DEF', teamId: 10,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 3,  position: 3,  playingPosition: 'DEF', teamId: 11,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 4,  position: 4,  playingPosition: 'DEF', teamId: 12,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 5,  position: 5,  playingPosition: 'MID', teamId: 13,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 6,  position: 6,  playingPosition: 'MID', teamId: 14,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 7,  position: 7,  playingPosition: 'MID', teamId: 15,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 8,  position: 8,  playingPosition: 'MID', teamId: 16,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 9,  position: 9,  playingPosition: 'FWD', teamId: 17,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 10, position: 10, playingPosition: 'FWD', teamId: 10,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 11, position: 11, playingPosition: 'FWD', teamId: BLANK,  minutes: 0, status: 'NS' }), // blank FWD
+      makeTeamPick({ playerId: 12, position: 12, playingPosition: 'GK',  teamId: 11,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 13, position: 13, playingPosition: 'DEF', teamId: 12,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 14, position: 14, playingPosition: 'MID', teamId: 13,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 15, position: 15, playingPosition: 'FWD', teamId: 14,     minutes: 0, status: 'NS' }),
+    ];
+
+    expect(computeSpeculativeLtpSubs(team, 'BB', fixtures)).toBe(0);
+  });
+
+  // ──────────────────────────────────────────────────────────────
+  // Blank bench player has no fixture → not counted as eligible sub
+  // ──────────────────────────────────────────────────────────────
+  it('blank-GW bench player is ineligible and is skipped when looking for speculative subs', () => {
+    // Only team 10 has a fixture. Bench GK (BLANK) is ineligible; no eligible GK sub.
+    const fixtures = makeNsFixtures([10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+
+    const team = [
+      makeTeamPick({ playerId: 1,  position: 1,  playingPosition: 'GK',  teamId: BLANK,  minutes: 0, status: 'NS' }), // blank GK starter
+      makeTeamPick({ playerId: 2,  position: 2,  playingPosition: 'DEF', teamId: 10,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 3,  position: 3,  playingPosition: 'DEF', teamId: 11,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 4,  position: 4,  playingPosition: 'DEF', teamId: 12,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 5,  position: 5,  playingPosition: 'MID', teamId: 13,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 6,  position: 6,  playingPosition: 'MID', teamId: 14,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 7,  position: 7,  playingPosition: 'MID', teamId: 15,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 8,  position: 8,  playingPosition: 'MID', teamId: 16,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 9,  position: 9,  playingPosition: 'FWD', teamId: 17,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 10, position: 10, playingPosition: 'FWD', teamId: 18,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 11, position: 11, playingPosition: 'FWD', teamId: 19,     minutes: 0, status: 'NS' }),
+      // Bench GK also blank → not eligible
+      makeTeamPick({ playerId: 12, position: 12, playingPosition: 'GK',  teamId: BLANK2, minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 13, position: 13, playingPosition: 'DEF', teamId: 20,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 14, position: 14, playingPosition: 'MID', teamId: 21,     minutes: 0, status: 'NS' }),
+      makeTeamPick({ playerId: 15, position: 15, playingPosition: 'FWD', teamId: 22,     minutes: 0, status: 'NS' }),
+    ];
+
+    const fixtures2 = makeNsFixtures([10,11,12,13,14,15,16,17,18,19,20,21,22]);
+    // GK slot is DNP but bench GK is also blank → no GK speculative sub (+0).
+    // All 10 outfield starters have fixtures → no outfield subs needed.
+    expect(computeSpeculativeLtpSubs(team, 'None', fixtures2)).toBe(0);
+  });
+});
+
