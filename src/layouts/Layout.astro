@@ -1715,6 +1715,50 @@ const { title = "FPL Manager Data" } = Astro.props;
 
 
   /* ========================================
+     CAPTAINS & VICE TABLE - Live Table modal
+   ======================================== */
+  .cap-section {
+    margin-bottom: var(--space-4);
+  }
+
+  .cap-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .cap-section-heading {
+    font-size: var(--text-sm);
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--space-2);
+  }
+
+  .split-cap-table {
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  /* Equal 50/50 column split */
+  .split-cap-table th:nth-child(1),
+  .split-cap-table td:nth-child(1) { width: 50%; }
+
+  .split-cap-table th:nth-child(2),
+  .split-cap-table td:nth-child(2) { width: 50%; }
+
+  /* Ellipsis on overflow — max-width:0 is the standard trick for table cells */
+  .split-cap-table td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 0;
+  }
+
+  .split-cap-table th {
+    white-space: nowrap;
+  }
+
+  /* ========================================
      TRANSFERS TABLE - Balanced columns
    ======================================== */
   .transfers-table {

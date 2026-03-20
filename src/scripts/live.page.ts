@@ -390,7 +390,10 @@ const managerDataCache = new Map<string, any>();
 
   captainsBtn?.addEventListener("click", () => {
     if (!captainsModal || !captainsModalContent) return;
-    captainsModalContent.innerHTML = makeCaptainVcTable(liveData);
+    const dataForCaptains = showFavouritesOnly
+      ? liveData.filter(m => favouriteIds.has(m.entryId))
+      : liveData;
+    captainsModalContent.innerHTML = makeCaptainVcTable(dataForCaptains);
     captainsModal.classList.add("is-open");
   });
 
@@ -1485,33 +1488,63 @@ function buildBreakdownRows(
 
     const sorted = [...data].sort((a, b) => a.managerName.localeCompare(b.managerName));
 
-    let html = `
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const captainRows = sorted.map(m => {
+      const manager = esc(m.managerName);
+      const captain = esc(m.captainName || '—');
+      return `
+      <tr>
+        <td title="${manager}">${manager}</td>
+        <td title="${captain}">${captain}</td>
+      </tr>
+    `;
+    }).join('');
+
+    const vcRows = sorted.map(m => {
+      const manager = esc(m.managerName);
+      const vc = esc(m.vcName || '—');
+      return `
+      <tr>
+        <td title="${manager}">${manager}</td>
+        <td title="${vc}">${vc}</td>
+      </tr>
+    `;
+    }).join('');
+
+    return `
       <h2 class="modal-title" style="padding-right:40px;">👑 Captains &amp; Vice-Captains</h2>
-      <div class="table-container">
-        <div class="table-scroll">
-          <table class="data-table">
+
+      <div class="cap-section">
+        <h3 class="cap-section-heading">👑 Captains</h3>
+        <div class="table-container">
+          <table class="data-table split-cap-table">
             <thead>
               <tr>
                 <th>Manager</th>
                 <th>Captain</th>
-                <th>Vice</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody>${captainRows}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="cap-section">
+        <h3 class="cap-section-heading">🔵 Vice-Captains</h3>
+        <div class="table-container">
+          <table class="data-table split-cap-table">
+            <thead>
+              <tr>
+                <th>Manager</th>
+                <th>Vice-Captain</th>
+              </tr>
+            </thead>
+            <tbody>${vcRows}</tbody>
+          </table>
+        </div>
+      </div>
     `;
-
-    for (const m of sorted) {
-      html += `
-        <tr>
-          <td>${m.managerName}</td>
-          <td>${m.captainName || '—'}</td>
-          <td>${m.vcName || '—'}</td>
-        </tr>
-      `;
-    }
-
-    html += `</tbody></table></div></div>`;
-    return html;
   }
 
   function attachManagerButtons() {
