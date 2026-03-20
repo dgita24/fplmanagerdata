@@ -1492,7 +1492,7 @@ function buildBreakdownRows(
       <h2 class="modal-title" style="padding-right:40px;">👑 Captains &amp; Vice-Captains</h2>
       <div class="table-container">
         <div class="table-scroll">
-          <table class="data-table">
+          <table class="data-table captains-vc-table">
             <thead>
               <tr>
                 <th>Manager</th>
