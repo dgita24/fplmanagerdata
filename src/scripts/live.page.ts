@@ -390,7 +390,10 @@ const managerDataCache = new Map<string, any>();
 
   captainsBtn?.addEventListener("click", () => {
     if (!captainsModal || !captainsModalContent) return;
-    captainsModalContent.innerHTML = makeCaptainVcTable(liveData);
+    const dataForCaptains = showFavouritesOnly
+      ? liveData.filter(m => favouriteIds.has(m.entryId))
+      : liveData;
+    captainsModalContent.innerHTML = makeCaptainVcTable(dataForCaptains);
     captainsModal.classList.add("is-open");
   });
 
