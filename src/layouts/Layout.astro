@@ -36,6 +36,27 @@ const { title = "FPL Manager Data" } = Astro.props;
   })();
 </script>
 
+<script is:inline>
+  // Register the PWA service worker (production-safe: NetworkFirst for pages,
+  // CacheFirst for static assets, NetworkOnly for /api/* routes).
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .then(function (registration) {
+          // Check for updates every time a page loads.  The new SW uses
+          // skipWaiting() so it activates immediately; users will pick up the
+          // update naturally on their next page navigation without a
+          // disruptive force-reload here.
+          registration.update();
+        })
+        .catch(function (err) {
+          // SW registration failed – app continues to work normally without it.
+          console.warn('Service worker registration failed:', err);
+        });
+    });
+  }
+</script>
+
 </html>
 
 <style is:global>

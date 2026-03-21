@@ -82,6 +82,47 @@ See [`docs/player-history-pipeline.md`](./docs/player-history-pipeline.md) for t
 
 ---
 
+## Progressive Web App (PWA)
+
+The site is installable as a PWA on desktop and mobile browsers.
+
+### How it is configured
+
+| File | Purpose |
+|---|---|
+| `public/site.webmanifest` | App identity: name, icons, theme colour, `start_url`, `scope`, `id` |
+| `public/sw.js` | Service worker – registers on first page load |
+| `src/layouts/Layout.astro` | Inline script that registers `/sw.js` and handles automatic updates |
+
+**Caching strategy (conservative — live data is never cached):**
+
+| Request type | Strategy | Rationale |
+|---|---|---|
+| `/api/*` | NetworkOnly | FPL data must always be live |
+| Navigation (HTML pages) | NetworkFirst → cached fallback | Fresh page on every visit; offline shows cached version |
+| Static assets (JS/CSS/images/fonts) | CacheFirst | Build-time content-hashing makes stale assets impossible |
+
+### Testing the install flow locally
+
+```bash
+npm run build
+npm run preview
+```
+
+Open the preview URL in Chrome or Edge, open DevTools → **Application → Service Workers** and verify the SW is registered. The install button (⊕) should appear in the address bar after a few seconds.
+
+> **Note:** Service workers require HTTPS or `localhost`. The local preview server runs on `http://localhost:4321` which is treated as a secure origin by browsers, so install/SW testing works fully there.
+
+### Rollback / disabling PWA
+
+To disable PWA support quickly without a redeploy:
+
+1. Remove the second `<script is:inline>` block from `src/layouts/Layout.astro` (the one that calls `navigator.serviceWorker.register`).
+2. Delete or empty `public/sw.js`.
+3. Existing users can manually clear the SW in DevTools → **Application → Service Workers → Unregister**.
+
+---
+
 ## Documentation
 
 - [docs/player-history-pipeline.md](./docs/player-history-pipeline.md) - Player history pipeline: architecture, CLI options, Supabase + D1 + Turso setup

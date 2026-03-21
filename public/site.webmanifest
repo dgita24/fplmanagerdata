@@ -1,6 +1,10 @@
 {
+  "id": "/",
   "name": "FPL Manager Watch",
   "short_name": "FPL Watch",
+  "description": "Fantasy Premier League manager data tracker and analytics tool.",
+  "start_url": "/",
+  "scope": "/",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
@@ -17,5 +21,6 @@
   ],
   "theme_color": "#0f172a",
   "background_color": "#0f172a",
-  "display": "standalone"
+  "display": "standalone",
+  "orientation": "portrait-primary"
 }
