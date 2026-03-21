@@ -269,6 +269,7 @@ import Nav from "../components/Nav.astro";
   }
 
   import { supabase } from '../lib/supabase.ts'
+  import { awaitAuthReady } from '../lib/authBootstrap.ts'
   import { aggregateTransferSummary } from '../lib/transferSummary.ts'
 
   let managerIds = [];
@@ -276,7 +277,7 @@ import Nav from "../components/Nav.astro";
   let showFavouritesOnly = false;
 
   async function loadManagerIdsFromSupabase() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { user } = await awaitAuthReady()
 
     if (!user) {
       window.location.replace('/login')
@@ -301,8 +302,10 @@ import Nav from "../components/Nav.astro";
         favouriteManagerIds: data?.favourite_manager_ids || []
       }
     } catch (e) {
+      // User is authenticated (confirmed above); this is a data-fetch failure,
+      // not an auth failure. Preserve auth state and return empty data.
       console.error('Error:', e)
-      return { authenticated: false, managerIds: [] }
+      return { authenticated: true, managerIds: [] }
     }
   }
 

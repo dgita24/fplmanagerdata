@@ -11,6 +11,7 @@ import {
   type TeamStatus,
 } from '../lib/fplLive.ts';
 import { supabase } from '../lib/supabase.ts';
+import { awaitAuthReady } from '../lib/authBootstrap.ts';
 
 // ==============================
 // Constants
@@ -1069,7 +1070,7 @@ async function loadSavedEntryId(): Promise<number | null> {
 // ==============================
 
 async function checkAuth() {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await awaitAuthReady();
   leaguesLoadingEl.style.display = 'none';
   if (user) {
     currentUser = user;
