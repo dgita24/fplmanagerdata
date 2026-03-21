@@ -1,5 +1,5 @@
 // Service Worker for FPL Manager Watch PWA
-const STATIC_CACHE = 'fpl-static-v1';
+const STATIC_CACHE = 'fpl-static-v2';
 
 // Asset types that are safe to cache (content-hashed by the build)
 const STATIC_DESTINATIONS = new Set(['script', 'style', 'image', 'font']);
@@ -14,15 +14,16 @@ self.addEventListener('install', (event) => {
 // ── Activate ─────────────────────────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== STATIC_CACHE)
-          .map((key) => caches.delete(key))
+    caches.keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key !== STATIC_CACHE)
+            .map((key) => caches.delete(key))
+        )
       )
-    )
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
