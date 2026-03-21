@@ -1,26 +1,26 @@
 {
+  "id": "/",
   "name": "FPL Manager Watch",
   "short_name": "FPL Watch",
-  "description": "Track and compare FPL managers in real time",
-  "id": "/",
+  "description": "Fantasy Premier League manager data tracker and analytics tool.",
   "start_url": "/",
   "scope": "/",
-  "orientation": "portrait",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "maskable"
     },
     {
       "src": "/web-app-manifest-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "maskable"
     }
   ],
   "theme_color": "#0f172a",
   "background_color": "#0f172a",
-  "display": "standalone"
+  "display": "standalone",
+  "orientation": "portrait-primary"
 }

@@ -1,71 +1,180 @@
-// Service Worker for FPL Manager Watch PWA
-const STATIC_CACHE = 'fpl-static-v1';
+/**
+ * FPL Manager Watch – Service Worker
+ *
+ * Strategy rationale
+ * ------------------
+ * This is a production app serving live FPL data.  Aggressive caching would
+ * cause users to see stale data, so we use the most conservative approach
+ * that still gives a meaningful installed-app experience:
+ *
+ *  • /api/*            → NetworkOnly   (never cache; always live data)
+ *  • navigation (HTML) → NetworkFirst  (try network first; serve cache only
+ *                                       when offline so the page loads)
+ *  • static assets     → CacheFirst    (JS/CSS/fonts/images are content-
+ *                                       hashed so stale is never an issue)
+ *
+ * Rollback: remove the <script> block that registers this SW from
+ * src/layouts/Layout.astro and delete this file.
+ */
 
-// Asset types that are safe to cache (content-hashed by the build)
-const STATIC_DESTINATIONS = new Set(['script', 'style', 'image', 'font']);
+const CACHE_VERSION = 'v3';
+const STATIC_CACHE  = `fpl-static-${CACHE_VERSION}`;
+const NAV_CACHE     = `fpl-nav-${CACHE_VERSION}`;
 
-// ── Install ──────────────────────────────────────────────────────────────────
+// request.destination values that represent cacheable static assets.
+// Using destination is more robust than extension-matching (handles
+// query-strings, extensionless paths, etc.)
+const STATIC_DESTINATIONS = new Set([
+  'script', 'style', 'font', 'image', 'manifest', 'worker',
+]);
+
+// ─── Install ─────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
-  // Take control immediately so updates apply without waiting for all tabs to close.
-  // This is especially important in PWA standalone mode where tabs may never close.
-  self.skipWaiting();
+  // Do NOT call skipWaiting() here.
+  //
+  // skipWaiting() forces the new SW to activate immediately, even while an
+  // existing page load is in progress.  Combined with clients.claim() this
+  // can cause a race where the SW takes control mid-load and the new fetch
+  // handler starts intercepting requests the page has already sent —
+  // resulting in those requests hanging (seen on mobile Brave and some
+  // Android WebViews).
+  //
+  // Normal lifecycle without skipWaiting():
+  //   • First install (no previous SW): activates immediately ✓
+  //   • SW update: waits for all controlled pages to close, then
+  //     takes over on the next fresh page load ✓
 });
 
-// ── Activate ─────────────────────────────────────────────────────────────────
+// ─── Activate ────────────────────────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
+  // Remove caches from older SW versions then claim clients.
+  // clients.claim() is safe here because — without skipWaiting() — the SW
+  // only activates once every tab using the *old* SW is closed.  There is
+  // no in-progress page load to race against.
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((key) => key !== STATIC_CACHE)
+          .filter((key) => key !== STATIC_CACHE && key !== NAV_CACHE)
           .map((key) => caches.delete(key))
       )
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-// ── Fetch ─────────────────────────────────────────────────────────────────────
+// ─── Fetch ────────────────────────────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // CRITICAL: Never intercept cross-origin requests (especially Supabase auth).
-  // Let the browser handle these natively to preserve Authorization headers.
+  // Cross-origin requests (e.g. Supabase API at fnehvaoqqmkrhxcqslta.supabase.co)
+  // must be passed through explicitly.  A bare `return` here triggers the same
+  // mobile-browser hang bug as the /api/* case documented below — Brave on
+  // Android and some Android WebViews will hang the request indefinitely instead
+  // of falling through to the native network path.
   if (url.origin !== self.location.origin) {
-    return; // Do NOT call event.respondWith() — browser handles it natively
-  }
-
-  // API routes → never cache, pass through to network
-  if (url.pathname.startsWith('/api/')) {
-    return; // Let browser handle natively
-  }
-
-  // Static assets → CacheFirst (they are content-hashed by the build)
-  if (STATIC_DESTINATIONS.has(request.destination)) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(fetch(request.clone()));
     return;
   }
 
-  // Navigation and all other requests → pass through to network.
-  // Do NOT cache HTML pages — they depend on auth state and caching
-  // them causes stale auth UI to be served after session changes.
+  // API routes → always go to the network; never cache.
+  //
+  // IMPORTANT: we call event.respondWith(fetch(...)) explicitly rather than
+  // simply `return`-ing.  Some mobile browsers (Brave on Android/iOS and
+  // certain Android WebViews) have a bug where a SW fetch handler that
+  // returns without calling event.respondWith() causes the request to hang
+  // indefinitely instead of falling through to the native network path.
+  // Being explicit avoids this entirely.
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request.clone()));
+    return;
+  }
+
+  // Static assets → CacheFirst (they are content-hashed by the build).
+  if (STATIC_DESTINATIONS.has(request.destination)) {
+    event.respondWith(cacheFirst(request, STATIC_CACHE));
+    return;
+  }
+
+  // Navigation / HTML → NetworkFirst with offline cache fallback.
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirstNav(request));
+    return;
+  }
+
+  // All other same-origin requests (e.g. JS fetch() calls to /data/* files,
+  // inline XHR, etc.) — pass through explicitly for the same reason as
+  // the /api/* case above.
+  event.respondWith(fetch(request.clone()));
 });
 
-// ── Cache helpers ─────────────────────────────────────────────────────────────
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * CacheFirst: return cached response if available, otherwise fetch and cache.
+ */
+async function cacheFirst(request, cacheName) {
+  const cache    = await caches.open(cacheName);
+  const cached   = await cache.match(request);
   if (cached) return cached;
 
   try {
     const response = await fetch(request);
     if (response.ok) {
-      const cache = await caches.open(STATIC_CACHE);
       cache.put(request, response.clone());
     }
     return response;
-  } catch (err) {
-    // Network failed and nothing cached — let it propagate as a network error
-    throw new Error(`Network request failed for ${request.url}: ${err.message || err}`);
+  } catch (_err) {
+    // Static asset unavailable offline – nothing useful to return.
+    console.warn('[SW] Static asset unavailable offline:', request.url, _err);
+    return new Response('', { status: 503, statusText: 'Service Unavailable' });
+  }
+}
+
+/**
+ * NetworkFirst for navigation: always try the network; fall back to a cached
+ * version of the same URL (from a previous online visit) when offline.
+ */
+async function networkFirstNav(request) {
+  const cache = await caches.open(NAV_CACHE);
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch (_err) {
+    // Network unavailable – try the navigation cache for this URL.
+    console.warn('[SW] Navigation network fetch failed, trying cache:', request.url, _err);
+    const cached = await cache.match(request);
+    if (cached) return cached;
+
+    // Last resort: minimal offline notice (not a full page, but better than
+    // a browser error).  Users on a live connection will never see this.
+    return new Response(
+      `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f172a">
+  <title>FPL Manager Watch – Offline</title>
+  <style>
+    body { background:#0f172a; color:#f1f5f9; font-family:sans-serif;
+           display:flex; align-items:center; justify-content:center;
+           min-height:100vh; margin:0; text-align:center; padding:1rem; }
+    h1 { font-size:1.5rem; margin-bottom:.5rem; }
+    p  { color:#94a3b8; }
+  </style>
+</head>
+<body>
+  <div>
+    <h1>You're offline</h1>
+    <p>Please check your internet connection and try again.</p>
+  </div>
+</body>
+</html>`,
+      { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+    );
   }
 }

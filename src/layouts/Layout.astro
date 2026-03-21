@@ -28,19 +28,54 @@ const { title = "FPL Manager Data" } = Astro.props;
   </body>
 
 <script is:inline>
+  // Migrate orphaned sessions from the old custom storageKey ('fpl-auth') back
+  // to the Supabase default key so users who logged in under the broken config
+  // don't lose their session again.
+  // NOTE: This script is is:inline so it cannot import modules. The default
+  // Supabase key is derived from the project ref already public in supabase.ts.
+  (function() {
+    try {
+      var oldKey = 'fpl-auth';
+      var defaultKey = 'sb-fnehvaoqqmkrhxcqslta-auth-token';
+      var old = localStorage.getItem(oldKey);
+      if (old && !localStorage.getItem(defaultKey)) {
+        localStorage.setItem(defaultKey, old);
+      }
+      if (old) {
+        localStorage.removeItem(oldKey);
+      }
+    } catch(e) {
+      console.warn('[fpl] session migration failed:', e);
+    }
+  })();
+</script>
+
+<script is:inline>
   // Initialize theme immediately to prevent flash
   (function() {
     const stored = localStorage.getItem('theme');
     const theme = stored || 'dark';
     document.documentElement.setAttribute('data-theme', theme);
   })();
+</script>
 
-  // Register service worker for PWA support
+<script is:inline>
+  // Register the PWA service worker (production-safe: NetworkFirst for pages,
+  // CacheFirst for static assets, NetworkOnly for /api/* routes).
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
-      navigator.serviceWorker.register('/sw.js').catch(function(err) {
-        console.warn('Service worker registration failed:', err);
-      });
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .then(function (registration) {
+          // Check for updates every time a page loads.  The SW does NOT call
+          // skipWaiting(), so updates take effect after the user closes all
+          // tabs and reopens the app — avoiding any disruptive mid-load
+          // takeover.
+          registration.update();
+        })
+        .catch(function (err) {
+          // SW registration failed – app continues to work normally without it.
+          console.warn('Service worker registration failed:', err);
+        });
     });
   }
 </script>

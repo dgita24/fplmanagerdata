@@ -82,6 +82,44 @@ See [`docs/player-history-pipeline.md`](./docs/player-history-pipeline.md) for t
 
 ---
 
+## Progressive Web App (PWA)
+
+FPL Manager Watch ships as an installable PWA. Users on Chrome/Edge/Safari can add it to their home screen and use it in standalone mode.
+
+### Configuration
+
+| File | Purpose |
+|------|---------|
+| [`public/site.webmanifest`](./public/site.webmanifest) | App manifest (name, icons, theme colour, display mode) |
+| [`public/sw.js`](./public/sw.js) | Service worker (caching strategies + offline support) |
+| [`src/layouts/Layout.astro`](./src/layouts/Layout.astro) | SW registration script + session migration script |
+
+### Caching strategy
+
+| Request type | Strategy | Rationale |
+|---|---|---|
+| `/api/*` | NetworkOnly | Live FPL data — never cache |
+| Navigation (HTML) | NetworkFirst + offline fallback | Always try network; serve cached page when offline |
+| Static assets (JS/CSS/fonts/images) | CacheFirst | Content-hashed by build — stale cache is never an issue |
+| Cross-origin (Supabase, etc.) | Pass-through (`fetch()`) | Avoids mobile browser hang bug in Brave/Android WebViews |
+
+### Testing
+
+1. Run `npm run build && npm run preview`
+2. Open Chrome DevTools → Application → Service Workers to confirm registration
+3. Toggle "Offline" in DevTools Network tab — navigation should fall back to the cached page or the offline notice
+
+### Rollback / Disabling
+
+To disable the PWA service worker:
+
+1. Remove the SW registration `<script is:inline>` block from `src/layouts/Layout.astro`
+2. Delete `public/sw.js`
+
+The app will continue to work normally without the service worker.
+
+---
+
 ## Documentation
 
 - [docs/player-history-pipeline.md](./docs/player-history-pipeline.md) - Player history pipeline: architecture, CLI options, Supabase + D1 + Turso setup

@@ -1675,7 +1675,15 @@ function buildBreakdownRows(
     await fetchBootstrapData();
 
     const { authenticated, managerIds: ids, favouriteManagerIds: favIds } = await loadManagerIdsFromSupabase();
-    if (!authenticated) return;
+    if (!authenticated) {
+      // loadManagerIdsFromSupabase() already calls window.location.replace('/login')
+      // when there is no session, so this branch covers the redirect case (brief
+      // loading state during navigation) AND the rare error case where Supabase
+      // threw an exception without redirecting.  Clear the stuck loading text so
+      // the user is not permanently shown "Loading player data...".
+      loadingStatus.textContent = "";
+      return;
+    }
 
     managerIds = ids;
     favouriteIds = new Set(favIds.map(Number));
