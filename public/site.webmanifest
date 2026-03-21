@@ -1,6 +1,8 @@
 {
   "name": "FPL Manager Watch",
   "short_name": "FPL Watch",
+  "start_url": "/",
+  "scope": "/",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",

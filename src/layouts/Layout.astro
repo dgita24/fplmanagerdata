@@ -36,6 +36,17 @@ const { title = "FPL Manager Data" } = Astro.props;
   })();
 </script>
 
+<script is:inline>
+  // Register service worker for PWA support
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('/sw.js').catch(function(err) {
+        console.warn('Service worker registration failed:', err);
+      });
+    });
+  }
+</script>
+
 </html>
 
 <style is:global>
