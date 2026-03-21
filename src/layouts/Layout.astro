@@ -28,6 +28,29 @@ const { title = "FPL Manager Data" } = Astro.props;
   </body>
 
 <script is:inline>
+  // Migrate orphaned sessions from the old custom storageKey ('fpl-auth') back
+  // to the Supabase default key so users who logged in under the broken config
+  // don't lose their session again.
+  // NOTE: This script is is:inline so it cannot import modules. The default
+  // Supabase key is derived from the project ref already public in supabase.ts.
+  (function() {
+    try {
+      var oldKey = 'fpl-auth';
+      var defaultKey = 'sb-fnehvaoqqmkrhxcqslta-auth-token';
+      var old = localStorage.getItem(oldKey);
+      if (old && !localStorage.getItem(defaultKey)) {
+        localStorage.setItem(defaultKey, old);
+      }
+      if (old) {
+        localStorage.removeItem(oldKey);
+      }
+    } catch(e) {
+      console.warn('[fpl] session migration failed:', e);
+    }
+  })();
+</script>
+
+<script is:inline>
   // Initialize theme immediately to prevent flash
   (function() {
     const stored = localStorage.getItem('theme');
