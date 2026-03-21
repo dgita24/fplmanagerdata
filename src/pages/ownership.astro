@@ -23,7 +23,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
       <select id="club-filter" class="badge badge-wide club-filter-select">
         <option value="">⚽ All Clubs</option>
       </select>
-      <a href="/players?from=ownership" class="badge badge-wide">📋 All FPL Players</a>
+      <button id="manager-count" class="badge badge-wide badge-toggle" type="button">⭐ Toggle Favourites</button>
     </div>
 
     <div class="controls-inline">
@@ -81,6 +81,24 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     justify-content: center;
     padding: var(--space-2) var(--space-3);
     text-align: center;
+  }
+
+  .badge-toggle {
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    border: 1px solid var(--color-border);
+  }
+
+  .badge-toggle:hover {
+    background: var(--color-surface-alt);
+  }
+
+  .badge-toggle--active {
+    background: rgb(245 158 11 / 0.15) !important;
+    border-color: rgb(245 158 11 / 0.4) !important;
+    color: var(--color-warning) !important;
   }
 
   .club-filter-select {
@@ -195,25 +213,29 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
 
     if (!user) {
       window.location.replace('/login')
-      return { authenticated: false, managerIds: [] }
+      return { authenticated: false, managerIds: [], favouriteManagerIds: [] }
     }
 
     try {
       const { data, error } = await supabase
         .from('user_manager_lists')
-        .select('manager_ids')
+        .select('manager_ids, favourite_manager_ids')
         .eq('user_id', user.id)
         .single()
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error loading manager IDs:', error)
-        return { authenticated: true, managerIds: [] }
+        return { authenticated: true, managerIds: [], favouriteManagerIds: [] }
       }
 
-      return { authenticated: true, managerIds: data?.manager_ids || [] }
+      return {
+        authenticated: true,
+        managerIds: data?.manager_ids || [],
+        favouriteManagerIds: data?.favourite_manager_ids || [],
+      }
     } catch (e) {
       console.error('Error:', e)
-      return { authenticated: false, managerIds: [] }
+      return { authenticated: false, managerIds: [], favouriteManagerIds: [] }
     }
   }
 
@@ -241,6 +263,9 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
   let allManagers = [];
   // IDs of managers who played Free Hit in the currently selected GW.
   let freeHitManagers = new Set();
+  let showFavouritesOnly = false;
+  let favouriteIds = new Set<number>();
+  const managerCountEl = document.getElementById("manager-count");
   
   // Load token for cancellation
   let currentLoadToken = 0;
@@ -299,6 +324,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
         gwFilter: gwFilterSelect.value || "",
         positionFilter: positionFilter.value || "",
         clubFilter: clubFilter.value || "",
+        showFavouritesOnly,
       },
     };
 
@@ -312,13 +338,34 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
   function renderOwnershipFromState() {
     const posFilter = positionFilter.value;
     const teamFilter = clubFilter.value;
-    out.innerHTML = makeOwnershipTable(ownershipData, posFilter, teamFilter);
+
+    if (showFavouritesOnly) {
+      if (favouriteIds.size === 0) {
+        out.innerHTML = "<p class='status status--warning'>No favourites set yet. Add favourites on the Live page (⭐) then come back here.</p>";
+        return;
+      }
+
+      const managersForDisplay = allManagers.filter(m => favouriteIds.has(m.id));
+      const totalFavManagers = managersForDisplay.length;
+
+      const filteredOwnershipData = ownershipData.map(player => {
+        const favOwnedBy = player.ownedBy.filter(id => favouriteIds.has(id));
+        return { ...player, ownedBy: favOwnedBy, count: favOwnedBy.length };
+      }).filter(player => player.count > 0);
+
+      out.innerHTML = makeOwnershipTable(filteredOwnershipData, posFilter, teamFilter, totalFavManagers);
+    } else {
+      out.innerHTML = makeOwnershipTable(ownershipData, posFilter, teamFilter);
+    }
     attachPlayerButtons();
   }
 
   function populateClubFilter() {
     const current = clubFilter.value;
-    const teams = [...new Set(ownershipData.map(p => p.teamName).filter(Boolean))].sort();
+    const dataForClubs = showFavouritesOnly && favouriteIds.size > 0
+      ? ownershipData.filter(p => p.ownedBy.some(id => favouriteIds.has(id)))
+      : ownershipData;
+    const teams = [...new Set(dataForClubs.map(p => p.teamName).filter(Boolean))].sort();
     clubFilter.innerHTML = '<option value="">⚽ All Clubs</option>';
     teams.forEach(team => {
       const opt = document.createElement('option');
@@ -338,6 +385,49 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
 
   closePlayerModal.addEventListener("click", () => {
     playerModal.classList.remove("is-open");
+  });
+
+  function updateManagerCountButton() {
+    if (!managerCountEl) return;
+    managerCountEl.textContent = `⭐ Toggle Favourites`;
+    if (showFavouritesOnly) {
+      managerCountEl.classList.add('badge-toggle--active');
+    } else {
+      managerCountEl.classList.remove('badge-toggle--active');
+    }
+  }
+
+  async function saveFavouritesToSupabase(ids: number[]) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { error } = await supabase
+        .from('user_manager_lists')
+        .update({ favourite_manager_ids: ids, updated_at: new Date().toISOString() })
+        .eq('user_id', user.id);
+      if (error) console.error('Error saving favourites:', error);
+    } catch (e) {
+      console.error('Error saving favourites:', e);
+    }
+  }
+
+  async function toggleFavourite(entryId: number) {
+    if (favouriteIds.has(entryId)) {
+      favouriteIds.delete(entryId);
+    } else {
+      favouriteIds.add(entryId);
+    }
+    updateManagerCountButton();
+    renderOwnershipFromState();
+    await saveFavouritesToSupabase([...favouriteIds]);
+  }
+
+  managerCountEl?.addEventListener("click", () => {
+    showFavouritesOnly = !showFavouritesOnly;
+    updateManagerCountButton();
+    populateClubFilter();
+    renderOwnershipFromState();
+    saveOwnershipSnapshot(parseInt(gwFilterSelect.value) || latestGW);
   });
 
   const gwPointsModal = initGWPointsModal('gw-points-modal');
@@ -668,13 +758,15 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
   }
 
   function showOwnershipModal(playerName: string, position: string, teamName: string, ownedByList: number[], playerId: number) {
-    const totalManagers = allManagers.length;
-    const notOwnedBy = allManagers.filter(m => !ownedByList.includes(m.id)).sort((a, b) => a.name.localeCompare(b.name));
-    const ownedBySorted = allManagers.filter(m => ownedByList.includes(m.id)).sort((a, b) => a.name.localeCompare(b.name));
-    const ownershipPct = ((ownedByList.length / totalManagers) * 100).toFixed(0);
+    const managersForModal = showFavouritesOnly ? allManagers.filter(m => favouriteIds.has(m.id)) : allManagers;
+    const filteredOwnedByList = showFavouritesOnly ? ownedByList.filter(id => favouriteIds.has(id)) : ownedByList;
+    const totalManagers = managersForModal.length;
+    const notOwnedBy = managersForModal.filter(m => !filteredOwnedByList.includes(m.id)).sort((a, b) => a.name.localeCompare(b.name));
+    const ownedBySorted = managersForModal.filter(m => filteredOwnedByList.includes(m.id)).sort((a, b) => a.name.localeCompare(b.name));
+    const ownershipPct = ((filteredOwnedByList.length / totalManagers) * 100).toFixed(0);
 
-    const allOwn = ownedByList.length === totalManagers;
-    const noneOwn = ownedByList.length === 0;
+    const allOwn = filteredOwnedByList.length === totalManagers;
+    const noneOwn = filteredOwnedByList.length === 0;
     const fhCount = freeHitManagers.size;
 
 
@@ -757,7 +849,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     }
   }
 
-  function makeOwnershipTable(ownership, positionFilterValue = "", teamFilterValue = "") {
+  function makeOwnershipTable(ownership, positionFilterValue = "", teamFilterValue = "", totalManagersOverride?: number) {
     let filtered = ownership;
 
     if (positionFilterValue) {
@@ -773,7 +865,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
       return a.playerName.localeCompare(b.playerName);
     });
 
-    const totalManagers = allManagers.length;
+    const totalManagers = totalManagersOverride !== undefined ? totalManagersOverride : allManagers.length;
 
     let html = `
       <div class="meta-row" style="margin-bottom:8px;">
@@ -900,10 +992,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     ownershipData = calculateOwnership(managerSquads);
     if (ownershipData.length > 0) {
       populateClubFilter();
-      const posFilter = positionFilter.value;
-      const teamFilter = clubFilter.value;
-      out.innerHTML = makeOwnershipTable(ownershipData, posFilter, teamFilter);
-      attachPlayerButtons();
+      renderOwnershipFromState();
     }
 
     loadingStatus.innerHTML = `<span class='text-success font-bold'>✅ Loaded ${managerSquads.length} managers</span>`;
@@ -917,10 +1006,11 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
   async function init() {
     loadingStatus.textContent = "Loading...";
 
-    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    const { authenticated, managerIds: ids, favouriteManagerIds: favIds } = await loadManagerIdsFromSupabase();
     if (!authenticated) return;
 
     managerIds = ids;
+    favouriteIds = new Set((favIds || []).map(Number));
 
     if (managerIds.length === 0) {
       out.innerHTML = "<p class='status status--error'>No manager IDs configured. <a href='/managers'>Add managers here</a>.</p>";
@@ -939,6 +1029,11 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
       allManagers = snap.allManagers || [];
       freeHitManagers = new Set(snap.freeHitManagers || []);
       latestGW = snap.latestGW || latestGW;
+
+      if (typeof snap.ui?.showFavouritesOnly === "boolean") {
+        showFavouritesOnly = snap.ui.showFavouritesOnly;
+      }
+      updateManagerCountButton();
 
       populateGWSelector(latestGW);
 
@@ -964,6 +1059,8 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
       }
       return;
     }
+
+    updateManagerCountButton();
 
     // 2) No snapshot -> do one normal load (NOT forced)
     loadingStatus.textContent = "Loading player data...";
@@ -1010,10 +1107,12 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
   
   refreshBtn?.addEventListener("click", async () => {
     localStorage.removeItem(OWNERSHIP_SNAPSHOT_KEY);
-    const { authenticated, managerIds: ids } = await loadManagerIdsFromSupabase();
+    const { authenticated, managerIds: ids, favouriteManagerIds: favIds } = await loadManagerIdsFromSupabase();
     if (!authenticated) return;
 
     managerIds = ids;
+    favouriteIds = new Set((favIds || []).map(Number));
+    updateManagerCountButton();
 
     // Force fresh bootstrap + ownership reload
     const bust = Date.now().toString();
