@@ -17,7 +17,7 @@
  * src/layouts/Layout.astro and delete this file.
  */
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const STATIC_CACHE  = `fpl-static-${CACHE_VERSION}`;
 const NAV_CACHE     = `fpl-nav-${CACHE_VERSION}`;
 
@@ -67,8 +67,15 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Only handle same-origin requests.
-  if (url.origin !== self.location.origin) return;
+  // Cross-origin requests (e.g. Supabase API at fnehvaoqqmkrhxcqslta.supabase.co)
+  // must be passed through explicitly.  A bare `return` here triggers the same
+  // mobile-browser hang bug as the /api/* case documented below — Brave on
+  // Android and some Android WebViews will hang the request indefinitely instead
+  // of falling through to the native network path.
+  if (url.origin !== self.location.origin) {
+    event.respondWith(fetch(request.clone()));
+    return;
+  }
 
   // API routes → always go to the network; never cache.
   //
