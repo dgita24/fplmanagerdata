@@ -17,7 +17,7 @@
  * src/layouts/Layout.astro and delete this file.
  */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const STATIC_CACHE  = `fpl-static-${CACHE_VERSION}`;
 const NAV_CACHE     = `fpl-nav-${CACHE_VERSION}`;
 
@@ -30,15 +30,27 @@ const STATIC_DESTINATIONS = new Set([
 
 // ─── Install ─────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
-  // Skip waiting so the new SW activates immediately after install.
-  // Users are NOT force-reloaded; the new SW takes over on the next
-  // page navigation they initiate themselves.
-  self.skipWaiting();
+  // Do NOT call skipWaiting() here.
+  //
+  // skipWaiting() forces the new SW to activate immediately, even while an
+  // existing page load is in progress.  Combined with clients.claim() this
+  // can cause a race where the SW takes control mid-load and the new fetch
+  // handler starts intercepting requests the page has already sent —
+  // resulting in those requests hanging (seen on mobile Brave and some
+  // Android WebViews).
+  //
+  // Normal lifecycle without skipWaiting():
+  //   • First install (no previous SW): activates immediately ✓
+  //   • SW update: waits for all controlled pages to close, then
+  //     takes over on the next fresh page load ✓
 });
 
 // ─── Activate ────────────────────────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
-  // Remove caches from older SW versions.
+  // Remove caches from older SW versions then claim clients.
+  // clients.claim() is safe here because — without skipWaiting() — the SW
+  // only activates once every tab using the *old* SW is closed.  There is
+  // no in-progress page load to race against.
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
@@ -59,8 +71,16 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   // API routes → always go to the network; never cache.
+  //
+  // IMPORTANT: we call event.respondWith(fetch(...)) explicitly rather than
+  // simply `return`-ing.  Some mobile browsers (Brave on Android/iOS and
+  // certain Android WebViews) have a bug where a SW fetch handler that
+  // returns without calling event.respondWith() causes the request to hang
+  // indefinitely instead of falling through to the native network path.
+  // Being explicit avoids this entirely.
   if (url.pathname.startsWith('/api/')) {
-    return; // fall through to default browser fetch
+    event.respondWith(fetch(request.clone()));
+    return;
   }
 
   // Static assets → CacheFirst (they are content-hashed by the build).
@@ -74,6 +94,11 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(networkFirstNav(request));
     return;
   }
+
+  // All other same-origin requests (e.g. JS fetch() calls to /data/* files,
+  // inline XHR, etc.) — pass through explicitly for the same reason as
+  // the /api/* case above.
+  event.respondWith(fetch(request.clone()));
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -93,7 +118,8 @@ async function cacheFirst(request, cacheName) {
     }
     return response;
   } catch (_err) {
-    // Nothing useful to return for a missing static asset when offline.
+    // Static asset unavailable offline – nothing useful to return.
+    console.warn('[SW] Static asset unavailable offline:', request.url, _err);
     return new Response('', { status: 503, statusText: 'Service Unavailable' });
   }
 }
@@ -111,6 +137,8 @@ async function networkFirstNav(request) {
     }
     return response;
   } catch (_err) {
+    // Network unavailable – try the navigation cache for this URL.
+    console.warn('[SW] Navigation network fetch failed, trying cache:', request.url, _err);
     const cached = await cache.match(request);
     if (cached) return cached;
 
