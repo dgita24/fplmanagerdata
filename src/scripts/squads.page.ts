@@ -1,4 +1,5 @@
  import { supabase } from '../lib/supabase.ts'
+  import { awaitAuthReady } from '../lib/authBootstrap.ts'
   import { fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive'
   import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
   import {
@@ -13,7 +14,7 @@
 
 
   async function loadManagerIdsFromSupabase() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { user } = await awaitAuthReady()
 
     if (!user) {
       window.location.replace('/login')
@@ -38,8 +39,10 @@
         favouriteManagerIds: data?.favourite_manager_ids || []
       }
     } catch (e) {
+      // User is authenticated (confirmed above); this is a data-fetch failure,
+      // not an auth failure. Preserve auth state and return empty data.
       console.error('Error:', e)
-      return { authenticated: false, managerIds: [] }
+      return { authenticated: true, managerIds: [] }
     }
   }
 

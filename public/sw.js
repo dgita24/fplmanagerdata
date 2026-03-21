@@ -20,9 +20,8 @@ self.addEventListener('activate', (event) => {
           .filter((key) => key !== STATIC_CACHE)
           .map((key) => caches.delete(key))
       )
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────

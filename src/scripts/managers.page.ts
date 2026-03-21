@@ -1,4 +1,5 @@
   import { supabase } from '../lib/supabase.ts'
+  import { awaitAuthReady } from '../lib/authBootstrap.ts'
   import { featuredManagers } from '../data/featuredManagers'
   import { setupManagerLeagueImport } from '../scripts/manager-leagues'
 
@@ -21,7 +22,7 @@
   let isEditing = false
 
   async function checkAuth() {
-    const { data: { user } } = await supabase.auth.getUser()
+    const { user } = await awaitAuthReady()
 
     if (user) {
       currentUser = user
