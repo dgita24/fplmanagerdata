@@ -1,6 +1,11 @@
 {
   "name": "FPL Manager Watch",
   "short_name": "FPL Watch",
+  "description": "Track and compare FPL managers in real time",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
