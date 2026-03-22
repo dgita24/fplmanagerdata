@@ -2,6 +2,7 @@ import {
   applyAutoSubsAndMultipliers,
   computePlayerLtpContribution,
   computeSpeculativeLtpSubs,
+  computeSpeculativePointsAdjustment,
   fetchFixtures,
   fetchLiveGW,
   getPlayerLiveComputed,
@@ -59,7 +60,7 @@ function positionLabel(elementType: number): string {
 // Caches
 // ==============================
 
-interface PlayerInfo { name: string; position: number; team: number; }
+interface PlayerInfo { name: string; position: number; team: number; chanceOfPlayingThisRound?: number | null; }
 interface TeamInfo { name: string; shortName: string; }
 
 let playerCache = new Map<number, PlayerInfo>();
@@ -81,7 +82,12 @@ async function fetchBootstrapData() {
     const data = await res.json();
 
     data.elements.forEach((p: any) => {
-      playerCache.set(p.id, { name: p.web_name, position: p.element_type, team: p.team });
+      playerCache.set(p.id, {
+        name: p.web_name,
+        position: p.element_type,
+        team: p.team,
+        chanceOfPlayingThisRound: p.chance_of_playing_this_round ?? null
+      });
     });
     data.teams.forEach((t: any) => {
       teamCache.set(t.id, { name: t.name, shortName: t.short_name });
@@ -181,6 +187,7 @@ async function fetchManagerLive(entryId: number, gw: number): Promise<{
         web_name: player.name || '',
         teamId,
         playingPosition: positionLabel(player.position),
+        chanceOfPlayingThisRound: player.chanceOfPlayingThisRound ?? null,
         minutes: computed.minutes,
         status: computed.status,
         lockedPoints: computed.locked,
@@ -199,7 +206,7 @@ async function fetchManagerLive(entryId: number, gw: number): Promise<{
 
     const livePointsBeforeHits = finalTeam.reduce(
       (sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0
-    );
+    ) + computeSpeculativePointsAdjustment(finalTeam, chipCode, fixturesCache);
 
     const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
     const transferCost =
