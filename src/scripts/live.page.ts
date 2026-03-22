@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase.ts'
-  import { applyAutoSubsAndMultipliers, bonusFromBpsRows, computePlayerLtpContribution, computeSpeculativeLtpSubs, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { applyAutoSubsAndMultipliers, bonusFromBpsRows, computePlayerLtpContribution, computeSpeculativeLtpSubs, computeSpeculativePointsAdjustment, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
   import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
 
   let managerIds: number[] = []
@@ -213,6 +213,7 @@ const managerDataCache = new Map<string, any>();
     position: number;
     team: number;
     availabilityStatus?: string;
+    chanceOfPlayingThisRound?: number | null;
   }
 
   interface TeamInfo {
@@ -478,7 +479,8 @@ const managerDataCache = new Map<string, any>();
           name: player.web_name,
           position: player.element_type,
           team: player.team,
-          availabilityStatus: player.status
+          availabilityStatus: player.status,
+          chanceOfPlayingThisRound: player.chance_of_playing_this_round ?? null
         });
       });
 
@@ -563,6 +565,7 @@ const managerDataCache = new Map<string, any>();
           teamId,
           playingPosition: positionLabel(player.position),
           availabilityStatus: player.availabilityStatus || "a",
+          chanceOfPlayingThisRound: player.chanceOfPlayingThisRound ?? null,
 
           minutes: computed.minutes,
           status: computed.status,
@@ -584,7 +587,8 @@ const managerDataCache = new Map<string, any>();
       });
 
 
-      const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0);
+      const livePointsBeforeHits = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0)
+        + computeSpeculativePointsAdjustment(finalTeam, chipCode, fixturesCache);
 
       const historyRows = Array.isArray(historyData.current) ? historyData.current : [];
       const transferCost =
@@ -1129,7 +1133,9 @@ function buildBreakdownRows(
           is_vice_captain: !!(p.is_vice_captain ?? p.isvicecaptain),
           web_name: player.name || "Unknown",
           teamShort: teamInfo.shortName,
+          teamId,
           playingPosition: positionLabel(player.position),
+          chanceOfPlayingThisRound: player.chanceOfPlayingThisRound ?? null,
           minutes: computed.minutes,
           status: computed.status,
           liveTotal: computed.liveTotal
@@ -1188,7 +1194,7 @@ function buildBreakdownRows(
           </button>
         </div>
         <p class="text-muted" style="margin-bottom:var(--space-3);">
-          ${teamName} · GW${gw} · <span class="text-success font-bold">${finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0)} pts</span>
+          ${teamName} · GW${gw} · <span class="text-success font-bold">${finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0) + computeSpeculativePointsAdjustment(finalTeam, chipCode, fixturesCache)} pts</span>
         </p>
 
         <div class="squad-modal-section">

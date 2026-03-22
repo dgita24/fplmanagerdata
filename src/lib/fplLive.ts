@@ -500,6 +500,10 @@ export function applyAutoSubsAndMultipliers(teamPicks: any[], chipCode: string) 
  *                      playingPosition, teamId, minutes.
  *                      availabilityStatus (optional) – players with value "s"
  *                      (suspended) are skipped.
+ *                      chanceOfPlayingThisRound (optional) – FPL percentage
+ *                      (0-100 or null); value of 0 with minutes===0 is treated
+ *                      as soft non-play (automatic fallback: ignored if player
+ *                      later registers minutes > 0).
  * @param chipCode    - Active chip ("BB", "TC", "WC", "FH", or "None").
  * @param fixturesCache - GW fixtures (used to detect blank-GW teams).
  * @returns The number of speculative subs to add to the base LtP sum.
@@ -519,13 +523,22 @@ export function computeSpeculativeLtpSubs(
   const hasFixture = (teamId: number): boolean =>
     fixturesCache.some(f => f.team_h === teamId || f.team_a === teamId);
 
-  // Active outfield: starters / confirmed subs with multiplier > 0 whose team
-  // has a fixture this GW.  Blank-GW starters are deliberately excluded because
-  // their team has no fixture and they are guaranteed not to play.
+  // Helper: is a starter speculatively non-playing?
+  // Hard condition: team has no fixture this GW (blank GW → guaranteed non-playing).
+  // Soft condition: 0% chance-of-playing metadata with automatic fallback —
+  //   if the player later registers minutes > 0 the condition is no longer met
+  //   and the speculation is automatically withdrawn on the next poll.
+  const isSpeculativeNonPlaying = (p: any): boolean => {
+    if (!hasFixture(p.teamId)) return true;
+    return p.chanceOfPlayingThisRound === 0 && (p.minutes ?? 0) === 0;
+  };
+
+  // Active outfield: starters / confirmed subs with multiplier > 0 who are
+  // expected to play.  Blank-GW and 0%-chance starters are excluded.
   let activeOutfield = ltpSorted.filter(p =>
     (p.multiplier ?? 0) > 0 &&
     p.playingPosition !== 'GK' &&
-    hasFixture(p.teamId)
+    !isSpeculativeNonPlaying(p)
   );
 
   const outfieldBench = ltpBench.filter(
@@ -533,20 +546,20 @@ export function computeSpeculativeLtpSubs(
   );
   const gkBench = ltpBench.filter(p => p.playingPosition === 'GK');
 
-  // A GK slot is considered "active" only when the GK's team has a fixture.
-  // This ensures blank-GW GK starters are not counted as covering the slot.
+  // A GK slot is considered "active" only when the GK is expected to play.
   const gkActive = ltpSorted.find(
-    p => (p.multiplier ?? 0) > 0 && p.playingPosition === 'GK' && hasFixture(p.teamId)
+    p => (p.multiplier ?? 0) > 0 && p.playingPosition === 'GK' && !isSpeculativeNonPlaying(p)
   );
 
   // A GK starter slot is DNP when:
-  //   (a) confirmed DNP via autoSubStatus === 'OUT' (fixture finished, 0 min), or
-  //   (b) team has no fixture this GW (blank GW → guaranteed non-playing).
+  //   (a) confirmed DNP via autoSubStatus === 'OUT' (fixture finished, 0 min),
+  //   (b) team has no fixture this GW (blank GW → guaranteed non-playing), or
+  //   (c) 0% chance-of-playing with minutes === 0 (soft non-play with fallback).
   const gkStarterDnp = ltpSorted.find(
     p =>
       p.position <= 11 &&
       p.playingPosition === 'GK' &&
-      (p.autoSubStatus === 'OUT' || !hasFixture(p.teamId))
+      (p.autoSubStatus === 'OUT' || isSpeculativeNonPlaying(p))
   );
 
   let adjustment = 0;
@@ -597,6 +610,130 @@ export function computeSpeculativeLtpSubs(
     if (canSub) {
       activeOutfield = testOutfield;
       adjustment += 1;
+    }
+  }
+
+  return adjustment;
+}
+
+/**
+ * Computes the speculative points adjustment for blank-GW and 0%-chance
+ * non-playing starters, adding each eligible bench replacement's current
+ * liveTotal to the team's projected/live score.
+ *
+ * This mirrors the logic of computeSpeculativeLtpSubs but returns the sum of
+ * bench players' live point totals rather than a count.  Apply the result to
+ * livePointsBeforeHits so that the displayed GW score reflects bench players
+ * who are guaranteed to replace non-playing starters.
+ *
+ * Speculative non-play conditions (same as computeSpeculativeLtpSubs):
+ *   Hard: starter's team has no fixture this GW (blank GW).
+ *   Soft: chanceOfPlayingThisRound === 0 AND minutes === 0 (automatic fallback:
+ *         if the player later registers any minutes the condition is no longer
+ *         met and the speculation is withdrawn on the next data poll).
+ *
+ * Formation constraints and bench order are respected.  Bench Boost returns 0.
+ *
+ * @param finalTeam   - Picks after applyAutoSubsAndMultipliers; each entry must
+ *                      have: position, multiplier, autoSubStatus, playingPosition,
+ *                      teamId, minutes, liveTotal.
+ *                      chanceOfPlayingThisRound (optional, number|null).
+ *                      availabilityStatus (optional) – "s" = suspended, skip.
+ * @param chipCode    - Active chip ("BB", "TC", "WC", "FH", or "None").
+ * @param fixturesCache - GW fixtures array.
+ * @returns Points adjustment to add to livePointsBeforeHits.
+ */
+export function computeSpeculativePointsAdjustment(
+  finalTeam: any[],
+  chipCode: string,
+  fixturesCache: FixtureInfo[]
+): number {
+  // Bench Boost: all 15 players contribute, no auto-subs possible.
+  if (chipCode === 'BB') return 0;
+
+  const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
+  const bench = sorted.slice(11);
+
+  const hasFixture = (teamId: number): boolean =>
+    fixturesCache.some(f => f.team_h === teamId || f.team_a === teamId);
+
+  // Speculative non-play: hard (blank GW) or soft (0% chance, minutes still 0).
+  const isSpeculativeNonPlaying = (p: any): boolean => {
+    if (!hasFixture(p.teamId)) return true;
+    return p.chanceOfPlayingThisRound === 0 && (p.minutes ?? 0) === 0;
+  };
+
+  // Active outfield contributors (starters / confirmed subs who are expected to play).
+  let activeOutfield = sorted.filter(p =>
+    (p.multiplier ?? 0) > 0 &&
+    p.playingPosition !== 'GK' &&
+    !isSpeculativeNonPlaying(p)
+  );
+
+  const outfieldBench = bench.filter(
+    p => p.playingPosition !== 'GK' && p.autoSubStatus !== 'IN'
+  );
+  const gkBench = bench.filter(p => p.playingPosition === 'GK');
+
+  const gkActive = sorted.find(
+    p => (p.multiplier ?? 0) > 0 && p.playingPosition === 'GK' && !isSpeculativeNonPlaying(p)
+  );
+
+  const gkStarterDnp = sorted.find(
+    p =>
+      p.position <= 11 &&
+      p.playingPosition === 'GK' &&
+      (p.autoSubStatus === 'OUT' || isSpeculativeNonPlaying(p))
+  );
+
+  let adjustment = 0;
+
+  // Speculative GK sub: add the bench GK's liveTotal when the GK slot is vacated.
+  if (gkStarterDnp && !gkActive) {
+    for (const gk of gkBench) {
+      if (gk.autoSubStatus === 'IN') continue;
+      if (gk.availabilityStatus === 's') continue;
+      // Bench GK must have a fixture in this GW to be eligible.
+      if (!hasFixture(gk.teamId)) continue;
+      adjustment += (gk.liveTotal ?? 0);
+      break;
+    }
+  }
+
+  // Speculative outfield subs: add each eligible bench player's liveTotal.
+  for (const cand of outfieldBench) {
+    if (activeOutfield.length >= 10) break;
+    if (cand.availabilityStatus === 's') continue;
+    // Bench player must have a fixture to be eligible for speculative sub.
+    if (!hasFixture(cand.teamId)) continue;
+
+    const testOutfield = [...activeOutfield, cand];
+    const defCount = testOutfield.filter(p => p.playingPosition === 'DEF').length;
+    const midCount = testOutfield.filter(p => p.playingPosition === 'MID').length;
+    const fwdCount = testOutfield.filter(p => p.playingPosition === 'FWD').length;
+    const spotsLeft = 10 - testOutfield.length;
+
+    let canSub = false;
+    if (spotsLeft === 0) {
+      canSub = defCount >= 3 && midCount >= 2 && fwdCount >= 1;
+    } else {
+      const needDef = Math.max(0, 3 - defCount);
+      const needMid = Math.max(0, 2 - midCount);
+      const needFwd = Math.max(0, 1 - fwdCount);
+      const candidateIndex = outfieldBench.indexOf(cand);
+      const remainingCandidates = outfieldBench.slice(candidateIndex + 1).filter(b => {
+        if (b.availabilityStatus === 's') return false;
+        return hasFixture(b.teamId);
+      });
+      canSub =
+        remainingCandidates.filter(p => p.playingPosition === 'DEF').length >= needDef &&
+        remainingCandidates.filter(p => p.playingPosition === 'MID').length >= needMid &&
+        remainingCandidates.filter(p => p.playingPosition === 'FWD').length >= needFwd;
+    }
+
+    if (canSub) {
+      activeOutfield = testOutfield;
+      adjustment += (cand.liveTotal ?? 0);
     }
   }
 
