@@ -474,11 +474,15 @@ import Nav from "../components/Nav.astro";
 
   /* Chips Overview Modal */
   .modal-panel--chips-overview {
-    max-width: 580px;
+    max-width: 480px;
+  }
+
+  :global(.chips-overview-fav-toggle) {
+    margin-bottom: var(--space-3);
   }
 
   :global(.chips-overview-wrap) {
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: auto;
     max-height: 60vh;
     -webkit-overflow-scrolling: touch;
@@ -490,16 +494,15 @@ import Nav from "../components/Nav.astro";
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
-    min-width: 280px;
+    table-layout: fixed;
   }
 
   :global(.chips-overview-table th) {
-    padding: var(--space-2) var(--space-1);
-    font-size: 11px;
+    padding: var(--space-1) 2px;
+    font-size: 10px;
     font-weight: 700;
     color: var(--color-text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
     text-align: center;
     background: var(--color-surface-alt);
     position: sticky;
@@ -515,7 +518,7 @@ import Nav from "../components/Nav.astro";
   }
 
   :global(.chips-overview-table td) {
-    padding: var(--space-2) var(--space-1);
+    padding: var(--space-1) 2px;
     border-bottom: 1px solid var(--color-border);
     text-align: center;
     vertical-align: middle;
@@ -525,13 +528,10 @@ import Nav from "../components/Nav.astro";
     text-align: left;
     padding-left: var(--space-2);
     font-weight: 600;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--color-text);
-    min-width: 90px;
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    word-break: break-word;
   }
 
   :global(.chips-overview-table tr:last-child td) {
@@ -544,9 +544,9 @@ import Nav from "../components/Nav.astro";
 
   :global(.chip-ov) {
     display: inline-block;
-    padding: 2px 5px;
+    padding: 1px 3px;
     border-radius: var(--radius-sm);
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     line-height: 1.4;
     white-space: nowrap;
@@ -566,24 +566,8 @@ import Nav from "../components/Nav.astro";
   :global(.chips-overview-wc) {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
     align-items: center;
-  }
-
-  :global(.chips-overview-legend) {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    margin-bottom: var(--space-3);
-    font-size: 12px;
-    color: var(--color-text-muted);
-    flex-wrap: wrap;
-  }
-
-  :global(.chips-overview-legend-item) {
-    display: flex;
-    align-items: center;
-    gap: 4px;
   }</style>
 
 <script>
@@ -2222,39 +2206,26 @@ import Nav from "../components/Nav.astro";
     return `<span class="chip-ov chip-ov--remaining">—</span>`;
   }
 
-  function showChipsOverviewModal() {
-    if (allManagerData.length === 0) {
-      chipsOverviewModalContent.innerHTML =
-        '<p class="text-muted" style="padding:var(--space-3);">No data loaded yet. Please wait for the page to finish loading.</p>';
-      chipsOverviewModal.classList.add("is-open");
-      return;
-    }
+  let chipsOverviewFavsOnly = false;
 
-    const sorted = [...allManagerData].sort((a, b) =>
-      a.managerName.localeCompare(b.managerName)
-    );
-
+  function renderChipsOverviewTable(managers: typeof allManagerData) {
     let html = `
-      <h2 class="modal-title">🎮 Chips Overview</h2>
-      <div class="chips-overview-legend">
-        <span class="chips-overview-legend-item"><span class="chip-ov chip-ov--used">GW#</span> = used</span>
-        <span class="chips-overview-legend-item"><span class="chip-ov chip-ov--remaining" style="opacity:1;">—</span> = remaining</span>
-      </div>
+      <button type="button" class="badge badge-wide badge-toggle chips-overview-fav-toggle${chipsOverviewFavsOnly ? ' badge-toggle--active' : ''}" id="chips-overview-fav-toggle">⭐ Toggle Favourites</button>
       <div class="chips-overview-wrap">
         <table class="chips-overview-table" aria-label="Chips overview">
           <thead>
             <tr>
               <th class="col-manager">Manager</th>
-              <th title="Wildcard (×2 per season)">🃏 WC</th>
-              <th title="Bench Boost">🪑 BB</th>
-              <th title="Triple Captain">👑 TC</th>
-              <th title="Free Hit">🎯 FH</th>
+              <th title="Wildcard (×2 per season)">🃏</th>
+              <th title="Bench Boost">🪑</th>
+              <th title="Triple Captain">👑</th>
+              <th title="Free Hit">🎯</th>
             </tr>
           </thead>
           <tbody>
     `;
 
-    for (const m of sorted) {
+    for (const m of managers) {
       const chips: ChipEntry[] = Array.isArray(m.historyData?.chips)
         ? m.historyData.chips
         : [];
@@ -2284,8 +2255,42 @@ import Nav from "../components/Nav.astro";
     }
 
     html += `</tbody></table></div>`;
-    chipsOverviewModalContent.innerHTML = html;
+    return html;
+  }
+
+  function showChipsOverviewModal() {
+    if (allManagerData.length === 0) {
+      chipsOverviewModalContent.innerHTML =
+        '<p class="text-muted" style="padding:var(--space-3);">No data loaded yet. Please wait for the page to finish loading.</p>';
+      chipsOverviewModal.classList.add("is-open");
+      return;
+    }
+
+    chipsOverviewFavsOnly = false;
+
+    const sorted = [...allManagerData].sort((a, b) =>
+      a.managerName.localeCompare(b.managerName)
+    );
+
+    chipsOverviewModalContent.innerHTML = renderChipsOverviewTable(sorted);
     chipsOverviewModal.classList.add("is-open");
+
+    if (!(chipsOverviewModalContent as any).__chipsFavToggleAttached) {
+      (chipsOverviewModalContent as any).__chipsFavToggleAttached = true;
+      chipsOverviewModalContent.addEventListener("click", (e) => {
+        if ((e.target as HTMLElement)?.id === "chips-overview-fav-toggle") {
+          chipsOverviewFavsOnly = !chipsOverviewFavsOnly;
+          const current = chipsOverviewFavsOnly
+            ? [...allManagerData]
+                .sort((a, b) => a.managerName.localeCompare(b.managerName))
+                .filter((m) => favouriteIds.has(m.entryId))
+            : [...allManagerData].sort((a, b) =>
+                a.managerName.localeCompare(b.managerName)
+              );
+          chipsOverviewModalContent.innerHTML = renderChipsOverviewTable(current);
+        }
+      });
+    }
   }
 
   function attachManagerButtons() {
