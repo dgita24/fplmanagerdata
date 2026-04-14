@@ -19,7 +19,7 @@ import Nav from "../components/Nav.astro";
 
     <div class="meta-row-wide">
       <button id="manager-count" class="badge badge-wide badge-toggle" type="button">⭐ Toggle Favourites</button>
-      <button id="chips-overview-btn" class="badge badge-wide badge-toggle" type="button">🎮 Chips</button>
+      <button id="chips-overview-btn" class="badge badge-wide badge-toggle" type="button">🪙 Chips</button>
     </div>
 
     <div class="controls-inline">
@@ -483,10 +483,16 @@ import Nav from "../components/Nav.astro";
     margin-bottom: var(--space-3);
   }
 
+  :global(.chips-overview-fav-toggle.badge-toggle--active) {
+    background: rgb(245 158 11 / 0.15) !important;
+    border-color: rgb(245 158 11 / 0.4) !important;
+    color: var(--color-warning) !important;
+  }
+
   :global(.chips-overview-wrap) {
     overflow-x: hidden;
     overflow-y: auto;
-    max-height: 60vh;
+    max-height: 75vh;
     -webkit-overflow-scrolling: touch;
     border-radius: var(--radius-md);
     border: 1px solid var(--color-border);
@@ -2251,9 +2257,9 @@ import Nav from "../components/Nav.astro";
             <tr>
               <th class="col-manager">Manager</th>
               <th title="Wildcard (×2 per season)">WC</th>
-              <th title="Bench Boost">BB</th>
-              <th title="Triple Captain">TC</th>
-              <th title="Free Hit">FH</th>
+              <th title="Bench Boost (×2 per season)">BB</th>
+              <th title="Triple Captain (×2 per season)">TC</th>
+              <th title="Free Hit (×2 per season)">FH</th>
             </tr>
           </thead>
           <tbody>
@@ -2273,23 +2279,37 @@ import Nav from "../components/Nav.astro";
       const wcUsages = chips
         .filter((c) => c.name === "wildcard")
         .sort((a, b) => a.event - b.event);
-
-      const bb = chips.find((c) => c.name === "bboost") ?? null;
-      const tc = chips.find((c) => c.name === "3xc") ?? null;
-      const fh = chips.find((c) => c.name === "freehit") ?? null;
+      const bbUsages = chips
+        .filter((c) => c.name === "bboost")
+        .sort((a, b) => a.event - b.event);
+      const tcUsages = chips
+        .filter((c) => c.name === "3xc")
+        .sort((a, b) => a.event - b.event);
+      const fhUsages = chips
+        .filter((c) => c.name === "freehit")
+        .sort((a, b) => a.event - b.event);
 
       const wc1 = wcUsages[0] ?? null;
       const wc2 = wcUsages[1] ?? null;
+      const bb1 = bbUsages[0] ?? null;
+      const bb2 = bbUsages[1] ?? null;
+      const tc1 = tcUsages[0] ?? null;
+      const tc2 = tcUsages[1] ?? null;
+      const fh1 = fhUsages[0] ?? null;
+      const fh2 = fhUsages[1] ?? null;
 
       const wcHtml = `<div class="chips-overview-wc">${renderChipOvLink(wc1 ? wc1.event : null, m.entryId, m.managerName, "WC", wc1 ? getGwPts(wc1.event) : 0)}${renderChipOvLink(wc2 ? wc2.event : null, m.entryId, m.managerName, "WC", wc2 ? getGwPts(wc2.event) : 0)}</div>`;
+      const bbHtml = `<div class="chips-overview-wc">${renderChipOvLink(bb1 ? bb1.event : null, m.entryId, m.managerName, "BB", bb1 ? getGwPts(bb1.event) : 0)}${renderChipOvLink(bb2 ? bb2.event : null, m.entryId, m.managerName, "BB", bb2 ? getGwPts(bb2.event) : 0)}</div>`;
+      const tcHtml = `<div class="chips-overview-wc">${renderChipOvLink(tc1 ? tc1.event : null, m.entryId, m.managerName, "TC", tc1 ? getGwPts(tc1.event) : 0)}${renderChipOvLink(tc2 ? tc2.event : null, m.entryId, m.managerName, "TC", tc2 ? getGwPts(tc2.event) : 0)}</div>`;
+      const fhHtml = `<div class="chips-overview-wc">${renderChipOvLink(fh1 ? fh1.event : null, m.entryId, m.managerName, "FH", fh1 ? getGwPts(fh1.event) : 0)}${renderChipOvLink(fh2 ? fh2.event : null, m.entryId, m.managerName, "FH", fh2 ? getGwPts(fh2.event) : 0)}</div>`;
 
       html += `
         <tr>
           <td class="col-manager">${escHtml(m.managerName)}</td>
           <td>${wcHtml}</td>
-          <td>${renderChipOvLink(bb ? bb.event : null, m.entryId, m.managerName, "BB", bb ? getGwPts(bb.event) : 0)}</td>
-          <td>${renderChipOvLink(tc ? tc.event : null, m.entryId, m.managerName, "TC", tc ? getGwPts(tc.event) : 0)}</td>
-          <td>${renderChipOvLink(fh ? fh.event : null, m.entryId, m.managerName, "FH", fh ? getGwPts(fh.event) : 0)}</td>
+          <td>${bbHtml}</td>
+          <td>${tcHtml}</td>
+          <td>${fhHtml}</td>
         </tr>
       `;
     }
