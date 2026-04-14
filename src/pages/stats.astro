@@ -19,7 +19,7 @@ import Nav from "../components/Nav.astro";
 
     <div class="meta-row-wide">
       <button id="manager-count" class="badge badge-wide badge-toggle" type="button">⭐ Toggle Favourites</button>
-      <button id="chips-overview-btn" class="badge badge-wide badge-toggle" type="button">🎮 Chips</button>
+      <button id="chips-overview-btn" class="badge badge-wide badge-toggle" type="button">🪙 Chips</button>
     </div>
 
     <div class="controls-inline">
@@ -483,10 +483,16 @@ import Nav from "../components/Nav.astro";
     margin-bottom: var(--space-3);
   }
 
+  :global(.chips-overview-fav-toggle.badge-toggle--active) {
+    background: rgb(245 158 11 / 0.15) !important;
+    border-color: rgb(245 158 11 / 0.4) !important;
+    color: var(--color-warning) !important;
+  }
+
   :global(.chips-overview-wrap) {
     overflow-x: hidden;
     overflow-y: auto;
-    max-height: 60vh;
+    max-height: 75vh;
     -webkit-overflow-scrolling: touch;
     border-radius: var(--radius-md);
     border: 1px solid var(--color-border);
