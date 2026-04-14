@@ -490,6 +490,7 @@ import Nav from "../components/Nav.astro";
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
+    min-width: 280px;
   }
 
   :global(.chips-overview-table th) {
@@ -523,7 +524,14 @@ import Nav from "../components/Nav.astro";
   :global(.chips-overview-table td.col-manager) {
     text-align: left;
     padding-left: var(--space-2);
-    min-width: 110px;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--color-text);
+    min-width: 90px;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   :global(.chips-overview-table tr:last-child td) {
@@ -2227,11 +2235,10 @@ import Nav from "../components/Nav.astro";
     );
 
     let html = `
-      <h2 class="modal-title" style="padding-right:40px;">🎮 Chips Overview</h2>
+      <h2 class="modal-title">🎮 Chips Overview</h2>
       <div class="chips-overview-legend">
         <span class="chips-overview-legend-item"><span class="chip-ov chip-ov--used">GW#</span> = used</span>
         <span class="chips-overview-legend-item"><span class="chip-ov chip-ov--remaining" style="opacity:1;">—</span> = remaining</span>
-        <span class="chips-overview-legend-item" style="color:var(--color-text-muted);">WC can be used twice</span>
       </div>
       <div class="chips-overview-wrap">
         <table class="chips-overview-table" aria-label="Chips overview">
@@ -2267,9 +2274,7 @@ import Nav from "../components/Nav.astro";
 
       html += `
         <tr>
-          <td class="col-manager">
-            <button type="button" class="manager-btn" data-entry-id="${m.entryId}">${m.managerName}</button>
-          </td>
+          <td class="col-manager">${m.managerName}</td>
           <td>${wcHtml}</td>
           <td>${renderChipOv(bb ? bb.event : null)}</td>
           <td>${renderChipOv(tc ? tc.event : null)}</td>
@@ -2281,17 +2286,6 @@ import Nav from "../components/Nav.astro";
     html += `</tbody></table></div>`;
     chipsOverviewModalContent.innerHTML = html;
     chipsOverviewModal.classList.add("is-open");
-
-    // Clicking a manager name closes this modal and opens their stats modal
-    chipsOverviewModalContent.querySelectorAll(".manager-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = parseInt((btn as HTMLElement).dataset.entryId || "0", 10);
-        if (id) {
-          chipsOverviewModal.classList.remove("is-open");
-          showManagerModal(id);
-        }
-      });
-    });
   }
 
   function attachManagerButtons() {
