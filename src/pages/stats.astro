@@ -474,11 +474,17 @@ import Nav from "../components/Nav.astro";
 
   /* Chips Overview Modal */
   .modal-panel--chips-overview {
-    max-width: 580px;
+    max-width: 480px;
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+  }
+
+  :global(.chips-overview-fav-toggle) {
+    margin-bottom: var(--space-3);
   }
 
   :global(.chips-overview-wrap) {
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: auto;
     max-height: 60vh;
     -webkit-overflow-scrolling: touch;
@@ -490,16 +496,15 @@ import Nav from "../components/Nav.astro";
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
-    min-width: 280px;
+    table-layout: fixed;
   }
 
   :global(.chips-overview-table th) {
-    padding: var(--space-2) var(--space-1);
-    font-size: 11px;
+    padding: var(--space-1) 2px;
+    font-size: 10px;
     font-weight: 700;
     color: var(--color-text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
     text-align: center;
     background: var(--color-surface-alt);
     position: sticky;
@@ -512,10 +517,11 @@ import Nav from "../components/Nav.astro";
   :global(.chips-overview-table th.col-manager) {
     text-align: left;
     padding-left: var(--space-2);
+    width: 45%;
   }
 
   :global(.chips-overview-table td) {
-    padding: var(--space-2) var(--space-1);
+    padding: var(--space-1) 2px;
     border-bottom: 1px solid var(--color-border);
     text-align: center;
     vertical-align: middle;
@@ -525,13 +531,10 @@ import Nav from "../components/Nav.astro";
     text-align: left;
     padding-left: var(--space-2);
     font-weight: 600;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--color-text);
-    min-width: 90px;
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    word-break: break-word;
   }
 
   :global(.chips-overview-table tr:last-child td) {
@@ -544,18 +547,33 @@ import Nav from "../components/Nav.astro";
 
   :global(.chip-ov) {
     display: inline-block;
-    padding: 2px 5px;
+    padding: 1px 3px;
     border-radius: var(--radius-sm);
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     line-height: 1.4;
     white-space: nowrap;
   }
 
   :global(.chip-ov--used) {
-    background: rgb(245 158 11 / 0.15);
     color: var(--color-warning);
-    border: 1px solid rgb(245 158 11 / 0.3);
+  }
+
+  :global(.chip-ov-link) {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-warning);
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+    line-height: 1.4;
+  }
+
+  :global(.chip-ov-link:hover) {
+    text-decoration: underline;
   }
 
   :global(.chip-ov--remaining) {
@@ -566,24 +584,8 @@ import Nav from "../components/Nav.astro";
   :global(.chips-overview-wc) {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
     align-items: center;
-  }
-
-  :global(.chips-overview-legend) {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    margin-bottom: var(--space-3);
-    font-size: 12px;
-    color: var(--color-text-muted);
-    flex-wrap: wrap;
-  }
-
-  :global(.chips-overview-legend-item) {
-    display: flex;
-    align-items: center;
-    gap: 4px;
   }</style>
 
 <script>
@@ -2222,42 +2224,51 @@ import Nav from "../components/Nav.astro";
     return `<span class="chip-ov chip-ov--remaining">—</span>`;
   }
 
-  function showChipsOverviewModal() {
-    if (allManagerData.length === 0) {
-      chipsOverviewModalContent.innerHTML =
-        '<p class="text-muted" style="padding:var(--space-3);">No data loaded yet. Please wait for the page to finish loading.</p>';
-      chipsOverviewModal.classList.add("is-open");
-      return;
+  function escHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function renderChipOvLink(event: number | null, entryId: number, managerName: string, chipShortName: string, points: number): string {
+    if (event !== null) {
+      return `<button class="chip-ov-link" data-entry-id="${entryId}" data-manager-name="${escHtml(managerName)}" data-chip="${chipShortName}" data-gw="${event}" data-points="${points}">GW${event}</button>`;
     }
+    return `<span class="chip-ov chip-ov--remaining">—</span>`;
+  }
 
-    const sorted = [...allManagerData].sort((a, b) =>
-      a.managerName.localeCompare(b.managerName)
-    );
+  let chipsOverviewFavsOnly = false;
 
+  function renderChipsOverviewTable(managers: typeof allManagerData) {
     let html = `
-      <h2 class="modal-title">🎮 Chips Overview</h2>
-      <div class="chips-overview-legend">
-        <span class="chips-overview-legend-item"><span class="chip-ov chip-ov--used">GW#</span> = used</span>
-        <span class="chips-overview-legend-item"><span class="chip-ov chip-ov--remaining" style="opacity:1;">—</span> = remaining</span>
-      </div>
+      <button type="button" class="badge badge-wide badge-toggle chips-overview-fav-toggle${chipsOverviewFavsOnly ? ' badge-toggle--active' : ''}" id="chips-overview-fav-toggle">⭐ Toggle Favourites</button>
       <div class="chips-overview-wrap">
         <table class="chips-overview-table" aria-label="Chips overview">
           <thead>
             <tr>
               <th class="col-manager">Manager</th>
-              <th title="Wildcard (×2 per season)">🃏 WC</th>
-              <th title="Bench Boost">🪑 BB</th>
-              <th title="Triple Captain">👑 TC</th>
-              <th title="Free Hit">🎯 FH</th>
+              <th title="Wildcard (×2 per season)">WC</th>
+              <th title="Bench Boost">BB</th>
+              <th title="Triple Captain">TC</th>
+              <th title="Free Hit">FH</th>
             </tr>
           </thead>
           <tbody>
     `;
 
-    for (const m of sorted) {
+    for (const m of managers) {
       const chips: ChipEntry[] = Array.isArray(m.historyData?.chips)
         ? m.historyData.chips
         : [];
+      const history: HistoryRow[] = Array.isArray(m.historyData?.current)
+        ? m.historyData.current
+        : [];
+
+      const getGwPts = (gw: number) =>
+        history.find((r) => r.event === gw)?.points ?? 0;
 
       const wcUsages = chips
         .filter((c) => c.name === "wildcard")
@@ -2270,22 +2281,70 @@ import Nav from "../components/Nav.astro";
       const wc1 = wcUsages[0] ?? null;
       const wc2 = wcUsages[1] ?? null;
 
-      const wcHtml = `<div class="chips-overview-wc">${renderChipOv(wc1 ? wc1.event : null)}${renderChipOv(wc2 ? wc2.event : null)}</div>`;
+      const wcHtml = `<div class="chips-overview-wc">${renderChipOvLink(wc1 ? wc1.event : null, m.entryId, m.managerName, "WC", wc1 ? getGwPts(wc1.event) : 0)}${renderChipOvLink(wc2 ? wc2.event : null, m.entryId, m.managerName, "WC", wc2 ? getGwPts(wc2.event) : 0)}</div>`;
 
       html += `
         <tr>
-          <td class="col-manager">${m.managerName}</td>
+          <td class="col-manager">${escHtml(m.managerName)}</td>
           <td>${wcHtml}</td>
-          <td>${renderChipOv(bb ? bb.event : null)}</td>
-          <td>${renderChipOv(tc ? tc.event : null)}</td>
-          <td>${renderChipOv(fh ? fh.event : null)}</td>
+          <td>${renderChipOvLink(bb ? bb.event : null, m.entryId, m.managerName, "BB", bb ? getGwPts(bb.event) : 0)}</td>
+          <td>${renderChipOvLink(tc ? tc.event : null, m.entryId, m.managerName, "TC", tc ? getGwPts(tc.event) : 0)}</td>
+          <td>${renderChipOvLink(fh ? fh.event : null, m.entryId, m.managerName, "FH", fh ? getGwPts(fh.event) : 0)}</td>
         </tr>
       `;
     }
 
     html += `</tbody></table></div>`;
-    chipsOverviewModalContent.innerHTML = html;
+    return html;
+  }
+
+  function showChipsOverviewModal() {
+    if (allManagerData.length === 0) {
+      chipsOverviewModalContent.innerHTML =
+        '<p class="text-muted" style="padding:var(--space-3);">No data loaded yet. Please wait for the page to finish loading.</p>';
+      chipsOverviewModal.classList.add("is-open");
+      return;
+    }
+
+    chipsOverviewFavsOnly = false;
+
+    const sorted = [...allManagerData].sort((a, b) =>
+      a.managerName.localeCompare(b.managerName)
+    );
+
+    chipsOverviewModalContent.innerHTML = renderChipsOverviewTable(sorted);
     chipsOverviewModal.classList.add("is-open");
+
+    if (!(chipsOverviewModalContent as any).__chipsFavToggleAttached) {
+      (chipsOverviewModalContent as any).__chipsFavToggleAttached = true;
+      chipsOverviewModalContent.addEventListener("click", (e) => {
+        const target = e.target as HTMLElement;
+
+        if (target?.id === "chips-overview-fav-toggle") {
+          chipsOverviewFavsOnly = !chipsOverviewFavsOnly;
+          const current = chipsOverviewFavsOnly
+            ? [...allManagerData]
+                .sort((a, b) => a.managerName.localeCompare(b.managerName))
+                .filter((m) => favouriteIds.has(m.entryId))
+            : [...allManagerData].sort((a, b) =>
+                a.managerName.localeCompare(b.managerName)
+              );
+          chipsOverviewModalContent.innerHTML = renderChipsOverviewTable(current);
+          return;
+        }
+
+        if (target?.classList.contains("chip-ov-link")) {
+          const entryId = parseInt(target.dataset.entryId || "0");
+          const managerName = target.dataset.managerName || "";
+          const chipName = target.dataset.chip || "";
+          const gw = parseInt(target.dataset.gw || "0");
+          const points = parseInt(target.dataset.points || "0");
+          if (entryId && chipName && gw) {
+            showChipSquad(entryId, managerName, chipName, gw, points);
+          }
+        }
+      });
+    }
   }
 
   function attachManagerButtons() {
