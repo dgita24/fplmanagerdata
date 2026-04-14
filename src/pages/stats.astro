@@ -515,6 +515,7 @@ import Nav from "../components/Nav.astro";
   :global(.chips-overview-table th.col-manager) {
     text-align: left;
     padding-left: var(--space-2);
+    width: 45%;
   }
 
   :global(.chips-overview-table td) {
@@ -553,9 +554,24 @@ import Nav from "../components/Nav.astro";
   }
 
   :global(.chip-ov--used) {
-    background: rgb(245 158 11 / 0.15);
     color: var(--color-warning);
-    border: 1px solid rgb(245 158 11 / 0.3);
+  }
+
+  :global(.chip-ov-link) {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-warning);
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+    line-height: 1.4;
+  }
+
+  :global(.chip-ov-link:hover) {
+    text-decoration: underline;
   }
 
   :global(.chip-ov--remaining) {
@@ -2206,6 +2222,22 @@ import Nav from "../components/Nav.astro";
     return `<span class="chip-ov chip-ov--remaining">—</span>`;
   }
 
+  function escHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function renderChipOvLink(event: number | null, entryId: number, managerName: string, chipShortName: string, points: number): string {
+    if (event !== null) {
+      return `<button class="chip-ov-link" data-entry-id="${entryId}" data-manager-name="${escHtml(managerName)}" data-chip="${chipShortName}" data-gw="${event}" data-points="${points}">GW${event}</button>`;
+    }
+    return `<span class="chip-ov chip-ov--remaining">—</span>`;
+  }
+
   let chipsOverviewFavsOnly = false;
 
   function renderChipsOverviewTable(managers: typeof allManagerData) {
@@ -2229,6 +2261,12 @@ import Nav from "../components/Nav.astro";
       const chips: ChipEntry[] = Array.isArray(m.historyData?.chips)
         ? m.historyData.chips
         : [];
+      const history: HistoryRow[] = Array.isArray(m.historyData?.current)
+        ? m.historyData.current
+        : [];
+
+      const getGwPts = (gw: number) =>
+        history.find((r) => r.event === gw)?.points ?? 0;
 
       const wcUsages = chips
         .filter((c) => c.name === "wildcard")
@@ -2241,15 +2279,15 @@ import Nav from "../components/Nav.astro";
       const wc1 = wcUsages[0] ?? null;
       const wc2 = wcUsages[1] ?? null;
 
-      const wcHtml = `<div class="chips-overview-wc">${renderChipOv(wc1 ? wc1.event : null)}${renderChipOv(wc2 ? wc2.event : null)}</div>`;
+      const wcHtml = `<div class="chips-overview-wc">${renderChipOvLink(wc1 ? wc1.event : null, m.entryId, m.managerName, "WC", wc1 ? getGwPts(wc1.event) : 0)}${renderChipOvLink(wc2 ? wc2.event : null, m.entryId, m.managerName, "WC", wc2 ? getGwPts(wc2.event) : 0)}</div>`;
 
       html += `
         <tr>
-          <td class="col-manager">${m.managerName}</td>
+          <td class="col-manager">${escHtml(m.managerName)}</td>
           <td>${wcHtml}</td>
-          <td>${renderChipOv(bb ? bb.event : null)}</td>
-          <td>${renderChipOv(tc ? tc.event : null)}</td>
-          <td>${renderChipOv(fh ? fh.event : null)}</td>
+          <td>${renderChipOvLink(bb ? bb.event : null, m.entryId, m.managerName, "BB", bb ? getGwPts(bb.event) : 0)}</td>
+          <td>${renderChipOvLink(tc ? tc.event : null, m.entryId, m.managerName, "TC", tc ? getGwPts(tc.event) : 0)}</td>
+          <td>${renderChipOvLink(fh ? fh.event : null, m.entryId, m.managerName, "FH", fh ? getGwPts(fh.event) : 0)}</td>
         </tr>
       `;
     }
@@ -2278,7 +2316,9 @@ import Nav from "../components/Nav.astro";
     if (!(chipsOverviewModalContent as any).__chipsFavToggleAttached) {
       (chipsOverviewModalContent as any).__chipsFavToggleAttached = true;
       chipsOverviewModalContent.addEventListener("click", (e) => {
-        if ((e.target as HTMLElement)?.id === "chips-overview-fav-toggle") {
+        const target = e.target as HTMLElement;
+
+        if (target?.id === "chips-overview-fav-toggle") {
           chipsOverviewFavsOnly = !chipsOverviewFavsOnly;
           const current = chipsOverviewFavsOnly
             ? [...allManagerData]
@@ -2288,6 +2328,18 @@ import Nav from "../components/Nav.astro";
                 a.managerName.localeCompare(b.managerName)
               );
           chipsOverviewModalContent.innerHTML = renderChipsOverviewTable(current);
+          return;
+        }
+
+        if (target?.classList.contains("chip-ov-link")) {
+          const entryId = parseInt(target.dataset.entryId || "0");
+          const managerName = target.dataset.managerName || "";
+          const chipName = target.dataset.chip || "";
+          const gw = parseInt(target.dataset.gw || "0");
+          const points = parseInt(target.dataset.points || "0");
+          if (entryId && chipName && gw) {
+            showChipSquad(entryId, managerName, chipName, gw, points);
+          }
         }
       });
     }
