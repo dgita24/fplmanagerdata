@@ -474,8 +474,8 @@ const managerDataCache = new Map<string, any>();
       if (!res.ok) {
         if (res.status === 503) {
           const body = await res.json().catch(() => ({}));
-          if (body && body.fplUpdating && typeof window !== 'undefined' && typeof (window as any).showFplUpdatingBanner === 'function') {
-            (window as any).showFplUpdatingBanner();
+          if (body && body.fplUpdating && typeof window.showFplUpdatingBanner === 'function') {
+            window.showFplUpdatingBanner();
           }
         }
         throw new Error("Failed to fetch bootstrap data");
