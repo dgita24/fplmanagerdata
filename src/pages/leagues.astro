@@ -100,39 +100,52 @@ import "../styles/pages/leagues.css";
         </div>
       </div>
 
-      <!-- Leagues list -->
-      <div class="card" id="leagues-list-card">
-        <!-- Collapsed summary bar (shown when a league is open) -->
-        <div class="leagues-list-summary" id="leagues-list-summary">
-          <span class="leagues-list-summary__text">📋 Leagues · <strong id="leagues-list-summary-name">—</strong></span>
-          <button id="leagues-list-expand-btn" class="btn btn--neutral leagues-list-summary__btn" type="button">All Leagues</button>
-        </div>
-        <!-- Full list (shown by default) -->
-        <div class="card-body" id="leagues-list-card-body">
-          <div class="card-title">📋 Your Leagues</div>
-          <div id="leagues-list" class="leagues-list"></div>
-        </div>
-      </div>
+      <!-- Wrapper for leagues list + standings with loading overlay -->
+      <div id="leagues-tables-wrapper" style="position: relative;">
 
-      <!-- Standings view (shown when a league is selected) -->
-      <div id="standings-section" class="card" style="display:none;">
-        <div class="card-body">
-          <div class="standings-header">
-            <div>
-              <div id="standings-title" class="standings-title"></div>
-              <div id="standings-subtitle" class="standings-subtitle"></div>
-            </div>
-            <div class="standings-nav">
-              <button id="standings-top-btn" class="standings-nav-btn standings-nav-btn--primary" type="button">Top</button>
-              <button id="standings-me-btn" class="standings-nav-btn" type="button">Me</button>
-              <button id="standings-prev-btn" class="standings-nav-btn" type="button" disabled>◀ Prev</button>
-              <button id="standings-next-btn" class="standings-nav-btn" type="button" disabled>Next ▶</button>
-              <button id="standings-close-btn" class="standings-nav-btn standings-nav-btn--close" type="button" aria-label="Close standings">✕</button>
-            </div>
+        <!-- Loading overlay: shown while Overall badge live data is being fetched -->
+        <div id="leagues-tables-overlay" style="display: none;" role="status" aria-label="League tables updating">
+          <div class="leagues-tables-overlay__inner">
+            <div class="leagues-tables-overlay__spinner" aria-hidden="true"></div>
+            <p class="leagues-tables-overlay__msg">League tables updating, please wait...</p>
           </div>
-          <div id="standings-status" class="standings-status" aria-live="polite" style="margin-top:var(--space-2);"></div>
-          <div id="standings-output" style="margin-top:var(--space-3);"></div>
         </div>
+
+        <!-- Leagues list -->
+        <div class="card" id="leagues-list-card">
+          <!-- Collapsed summary bar (shown when a league is open) -->
+          <div class="leagues-list-summary" id="leagues-list-summary">
+            <span class="leagues-list-summary__text">📋 Leagues · <strong id="leagues-list-summary-name">—</strong></span>
+            <button id="leagues-list-expand-btn" class="btn btn--neutral leagues-list-summary__btn" type="button">All Leagues</button>
+          </div>
+          <!-- Full list (shown by default) -->
+          <div class="card-body" id="leagues-list-card-body">
+            <div class="card-title">📋 Your Leagues</div>
+            <div id="leagues-list" class="leagues-list"></div>
+          </div>
+        </div>
+
+        <!-- Standings view (shown when a league is selected) -->
+        <div id="standings-section" class="card" style="display:none;">
+          <div class="card-body">
+            <div class="standings-header">
+              <div>
+                <div id="standings-title" class="standings-title"></div>
+                <div id="standings-subtitle" class="standings-subtitle"></div>
+              </div>
+              <div class="standings-nav">
+                <button id="standings-top-btn" class="standings-nav-btn standings-nav-btn--primary" type="button">Top</button>
+                <button id="standings-me-btn" class="standings-nav-btn" type="button">Me</button>
+                <button id="standings-prev-btn" class="standings-nav-btn" type="button" disabled>◀ Prev</button>
+                <button id="standings-next-btn" class="standings-nav-btn" type="button" disabled>Next ▶</button>
+                <button id="standings-close-btn" class="standings-nav-btn standings-nav-btn--close" type="button" aria-label="Close standings">✕</button>
+              </div>
+            </div>
+            <div id="standings-status" class="standings-status" aria-live="polite" style="margin-top:var(--space-2);"></div>
+            <div id="standings-output" style="margin-top:var(--space-3);"></div>
+          </div>
+        </div>
+
       </div>
     </div>
     </div> <!-- /#leagues-auth-content -->
