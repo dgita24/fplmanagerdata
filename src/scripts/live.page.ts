@@ -168,6 +168,26 @@ const managerDataCache = new Map<string, any>();
   const captainsModal = document.getElementById("captains-modal");
   const captainsModalContent = document.getElementById("captains-modal-content");
   const closeCaptainsModal = document.getElementById("close-captains-modal");
+  const captainsFavToggle = document.getElementById("captains-fav-toggle") as HTMLButtonElement | null;
+
+  let captainsShowFavouritesOnly = false;
+
+  function renderCaptainsModal() {
+    if (!captainsModalContent) return;
+    const data = captainsShowFavouritesOnly
+      ? liveData.filter(m => favouriteIds.has(m.entryId))
+      : liveData;
+    captainsModalContent.innerHTML = makeCaptainVcTable(data);
+  }
+
+  function updateCaptainsFavToggle() {
+    if (!captainsFavToggle) return;
+    if (captainsShowFavouritesOnly) {
+      captainsFavToggle.classList.add('badge-toggle--active');
+    } else {
+      captainsFavToggle.classList.remove('badge-toggle--active');
+    }
+  }
 
   async function saveFavouritesToSupabase(ids: number[]) {
     try {
@@ -391,11 +411,16 @@ const managerDataCache = new Map<string, any>();
 
   captainsBtn?.addEventListener("click", () => {
     if (!captainsModal || !captainsModalContent) return;
-    const dataForCaptains = showFavouritesOnly
-      ? liveData.filter(m => favouriteIds.has(m.entryId))
-      : liveData;
-    captainsModalContent.innerHTML = makeCaptainVcTable(dataForCaptains);
+    captainsShowFavouritesOnly = showFavouritesOnly;
+    updateCaptainsFavToggle();
+    renderCaptainsModal();
     captainsModal.classList.add("is-open");
+  });
+
+  captainsFavToggle?.addEventListener("click", () => {
+    captainsShowFavouritesOnly = !captainsShowFavouritesOnly;
+    updateCaptainsFavToggle();
+    renderCaptainsModal();
   });
 
   // Initialize GW Points Modal
@@ -471,7 +496,15 @@ const managerDataCache = new Map<string, any>();
     try {
       const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to fetch bootstrap data");
+      if (!res.ok) {
+        if (res.status === 503) {
+          const body = await res.json().catch(() => ({}));
+          if (body && body.fplUpdating && typeof window.showFplUpdatingBanner === 'function') {
+            window.showFplUpdatingBanner();
+          }
+        }
+        throw new Error("Failed to fetch bootstrap data");
+      }
       const data = await res.json();
 
       data.elements.forEach((player: any) => {

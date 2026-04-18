@@ -78,7 +78,15 @@ async function fetchBootstrapData() {
   if (bootstrapLoaded) return;
   try {
     const res = await fetch(`/api/fpl/bootstrap-static?v=${Date.now()}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('bootstrap failed');
+    if (!res.ok) {
+      if (res.status === 503) {
+        const body = await res.json().catch(() => ({}));
+        if (body && body.fplUpdating && typeof window.showFplUpdatingBanner === 'function') {
+          window.showFplUpdatingBanner();
+        }
+      }
+      throw new Error('bootstrap failed');
+    }
     const data = await res.json();
 
     data.elements.forEach((p: any) => {
