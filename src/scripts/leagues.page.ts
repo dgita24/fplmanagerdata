@@ -479,6 +479,7 @@ const leaguesOutput = document.getElementById('leagues-output') as HTMLElement;
 const overallRankEl = document.getElementById('overall-rank-value') as HTMLElement;
 const overallLivePtsEl = document.getElementById('overall-live-pts-value') as HTMLElement;
 const overallLtpEl = document.getElementById('overall-ltp-value') as HTMLElement;
+const leaguesTablesOverlay = document.getElementById('leagues-tables-overlay') as HTMLElement;
 const leaguesListEl = document.getElementById('leagues-list') as HTMLElement;
 const leaguesListCard = document.getElementById('leagues-list-card') as HTMLElement;
 const leaguesListSummaryNameEl = document.getElementById('leagues-list-summary-name') as HTMLElement;
@@ -955,6 +956,7 @@ async function loadEntry(opts: { silentRefresh?: boolean } = {}) {
 
     // Phase 2: Bootstrap + live data — runs in background, does not block league list rendering
     void (async () => {
+      leaguesTablesOverlay.style.display = '';
       try {
         await fetchBootstrapData();
         const gw = latestGW;
@@ -976,6 +978,8 @@ async function loadEntry(opts: { silentRefresh?: boolean } = {}) {
         }
       } catch (e) {
         console.error('Live data refresh error', e);
+      } finally {
+        leaguesTablesOverlay.style.display = 'none';
       }
     })();
 
