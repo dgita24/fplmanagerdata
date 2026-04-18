@@ -956,7 +956,7 @@ async function loadEntry(opts: { silentRefresh?: boolean } = {}) {
 
     // Phase 2: Bootstrap + live data — runs in background, does not block league list rendering
     void (async () => {
-      leaguesTablesOverlay.style.display = '';
+      leaguesTablesOverlay.style.display = 'flex';
       try {
         await fetchBootstrapData();
         const gw = latestGW;
