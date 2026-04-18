@@ -471,7 +471,15 @@ const managerDataCache = new Map<string, any>();
     try {
       const v = cacheBuster || Date.now().toString();
       const res = await fetch(`/api/fpl/bootstrap-static?v=${v}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to fetch bootstrap data");
+      if (!res.ok) {
+        if (res.status === 503) {
+          const body = await res.json().catch(() => ({}));
+          if (body && body.fplUpdating && typeof window !== 'undefined' && typeof (window as any).showFplUpdatingBanner === 'function') {
+            (window as any).showFplUpdatingBanner();
+          }
+        }
+        throw new Error("Failed to fetch bootstrap data");
+      }
       const data = await res.json();
 
       data.elements.forEach((player: any) => {

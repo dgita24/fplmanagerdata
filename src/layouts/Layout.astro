@@ -22,6 +22,9 @@ const { title = "FPL Manager Data" } = Astro.props;
   </head>
 
   <body>
+    <div id="fpl-updating-banner" style="display:none;" role="alert" aria-live="polite">
+      <span>⏳ The Gameweek deadline has passed. The game is updating and will be available soon.</span>
+    </div>
     <div class="app">
       <slot />
     </div>
@@ -43,6 +46,57 @@ const { title = "FPL Manager Data" } = Astro.props;
       });
     });
   }
+
+  // FPL updating banner: poll bootstrap-static and show/hide banner
+  (function() {
+    var POLL_INTERVAL = 60000;
+    var pollTimer = null;
+
+    function showBanner() {
+      var banner = document.getElementById('fpl-updating-banner');
+      if (banner) banner.style.display = 'flex';
+    }
+
+    function hideBanner() {
+      var banner = document.getElementById('fpl-updating-banner');
+      if (banner) banner.style.display = 'none';
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+
+    function startPolling() {
+      if (pollTimer) return;
+      pollTimer = setInterval(checkFplStatus, POLL_INTERVAL);
+    }
+
+    function checkFplStatus() {
+      fetch('/api/fpl/bootstrap-static?v=' + Date.now(), { cache: 'no-store' })
+        .then(function(res) {
+          if (res.ok) {
+            hideBanner();
+          } else if (res.status === 503) {
+            return res.json().then(function(data) {
+              if (data && data.fplUpdating) {
+                showBanner();
+                startPolling();
+              }
+            });
+          }
+        })
+        .catch(function() {
+          // Network error — don't show banner for generic connectivity issues
+        });
+    }
+
+    window.showFplUpdatingBanner = function() {
+      showBanner();
+      startPolling();
+    };
+
+    window.addEventListener('load', checkFplStatus);
+  })();
 </script>
 
 </html>
@@ -166,6 +220,22 @@ const { title = "FPL Manager Data" } = Astro.props;
   /* ========================================
      APP SHELL
      ======================================== */
+  #fpl-updating-banner {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: #37003c;
+    color: #00ff85;
+    padding: var(--space-3) var(--space-4);
+    text-align: center;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    border-bottom: 2px solid #00ff85;
+  }
+
   .app {
     min-height: 100dvh;
     display: flex;

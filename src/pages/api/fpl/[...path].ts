@@ -9,6 +9,7 @@ import {
 export const prerender = false;
 
 const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
+const FPL_UPDATING_STATUS = new Set([502, 503]);
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -74,14 +75,28 @@ export async function GET(ctx: any) {
   const useCache = isPathAllowedForCache(fplPath);
 
   const fetcher = async (): Promise<Response> => {
-    const res = await fetchWithRetry(target, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json",
-      },
-    });
+    let res: Response;
+    try {
+      res = await fetchWithRetry(target, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "application/json",
+        },
+      });
+    } catch {
+      return new Response(
+        JSON.stringify({ fplUpdating: true, error: "FPL API is currently updating" }),
+        { status: 503, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
     if (!res.ok) {
+      if (FPL_UPDATING_STATUS.has(res.status)) {
+        return new Response(
+          JSON.stringify({ fplUpdating: true, error: "FPL API is currently updating" }),
+          { status: 503, headers: { "Content-Type": "application/json" } }
+        );
+      }
       return new Response(
         JSON.stringify({ error: `FPL API error: ${res.status}` }),
         { status: res.status, headers: { "Content-Type": "application/json" } }
