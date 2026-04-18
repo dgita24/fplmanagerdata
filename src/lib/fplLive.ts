@@ -177,7 +177,7 @@ export async function fetchFixtures({
       upsertTeam(fx.team_h, fx.started, fx.finished, finishedProvisional);
       upsertTeam(fx.team_a, fx.started, fx.finished, finishedProvisional);
 
-      if (!fx.started || fx.finished) continue;
+      if (!fx.started) continue;
 
       const stats = (fx as any).stats;
       if (!Array.isArray(stats)) continue;
@@ -317,9 +317,16 @@ export function getPlayerLiveComputed({
     );
 
   if (bonusConfirmed) {
-    // Once confirmed, use official total as-is.
-    liveTotal = officialTotal;
-    projBonusUsed = 0;
+    if (confirmedBonus === 0 && projBonus > 0) {
+      // Race condition: FPL set finished=true but hasn't updated total_points with bonus yet.
+      // Fall back to projected bonus from BPS data.
+      liveTotal = officialTotal + projBonus;
+      projBonusUsed = projBonus;
+    } else {
+      // Once confirmed, use official total as-is.
+      liveTotal = officialTotal;
+      projBonusUsed = 0;
+    }
   } else if (shouldUseProjectedBonus) {
     // Before confirmation, replace any embedded/partial bonus with projected bonus.
     liveTotal = officialTotal - confirmedBonus + projBonus;

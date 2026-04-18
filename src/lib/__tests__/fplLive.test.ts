@@ -207,6 +207,42 @@ describe('fplLive - getPlayerLiveComputed', () => {
   });
 
   /**
+   * Test: Race condition — finished=true but bonus not yet in total_points
+   * FPL sets finished=true before baking bonus into total_points.
+   * confirmedBonus (live.bonus) is still 0, but BPS data shows projected bonus.
+   * Expected: fall back to officialTotal + projBonus.
+   */
+  it('should add projected bonus when finished=true but confirmedBonus is 0 (race condition)', () => {
+    const livePointsCache = new Map<number, LiveStatLine>([
+      [100, { points: 5, bonus: 0, minutes: 90 }], // bonus not yet baked into total_points
+    ]);
+    const projectedBonusCache = new Map<string, number>([
+      ['10:100', 3], // BPS data shows player earned 3 bonus
+    ]);
+    const teamStatusCache = new Map<string, TeamStatus>([
+      ['10:1', { started: true, finished: true, finishedProvisional: false }],
+    ]);
+
+    const result = getPlayerLiveComputed({
+      playerId: 100,
+      teamId: 1,
+      gw: 10,
+      livePointsCache,
+      projectedBonusCache,
+      teamStatusCache,
+      bonusConfirmedOnProvisional: false,
+      projectedBonusDuringLive: true,
+      projectedBonusDuringProvisional: true,
+    });
+
+    expect(result.liveTotal).toBe(8); // 5 base + 3 projected bonus
+    expect(result.projBonus).toBe(3);
+    expect(result.locked).toBe(5);
+    expect(result.status).toBe('Fin');
+    expect(result.confirmedBonus).toBe(0); // live.bonus is still 0 during race window
+  });
+
+  /**
    * Test: Player in live match with projected bonus
    * Should show base points + projected bonus
    */
