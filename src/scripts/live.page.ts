@@ -1552,7 +1552,6 @@ function buildBreakdownRows(
     }).join('');
 
     return `
-      <h2 class="modal-title" style="padding-right:40px;">👑 Captains &amp; Vice-Captains</h2>
 
       <div class="cap-section">
         <h3 class="cap-section-heading">👑 Captains</h3>
