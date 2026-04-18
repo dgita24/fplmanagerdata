@@ -785,14 +785,6 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
         ${position} · ${teamName} · <span class="text-success font-bold">${ownershipPct}%</span> ownership
       </p>
     `;
-    
-    if (fhCount > 0) {
-      html += `
-        <p class="text-muted" style="margin-top:-12px; margin-bottom:var(--space-4);">
-          🎯 FH indicates the manager played Free Hit in GW${gwFilterSelect.value}.
-        </p>
-      `;
-    }
 
 
     if (allOwn) {
