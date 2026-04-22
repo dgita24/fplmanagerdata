@@ -1078,7 +1078,7 @@ function buildBreakdownRows(
           <div class="breakdown-row breakdown-row--projected">
             <span class="breakdown-label">Proj. Bonus</span>
             <span class="breakdown-value">—</span>
-            <span class="breakdown-points points-projected">+${projBonus}</span>
+            <span class="breakdown-points points-projected">+${fixtureProjBonus}</span>
           </div>
         `;
       }
