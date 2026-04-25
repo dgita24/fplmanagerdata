@@ -590,7 +590,8 @@ function makeLiveTable(
   sorted.forEach((m, idx) => {
     const isMe = myEntryId !== null && m.entryId === myEntryId;
     const rowClass = isMe ? 'row-highlight' : '';
-    const name = escapeHtml(m.managerName || m.teamName || `Entry ${m.entryId}`);
+    const rawName = m.managerName || m.teamName || `Entry ${m.entryId}`;
+    const name = escapeHtml(rawName);
     const chip = m.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${escapeHtml(m.chipPlayed)}</span>` : '';
     const rankDisplay = rankOffset + idx + 1;
 
@@ -600,7 +601,7 @@ function makeLiveTable(
         <td class="col-manager">
           <button type="button" class="manager-btn"
             data-entry-id="${m.entryId}"
-            data-manager-name="${name}"
+            data-manager-name="${escapeHtml(rawName)}"
             data-team-name="${escapeHtml(m.teamName || '')}"
             data-chip="${escapeHtml(m.chipPlayed || '')}"
             aria-label="View ${name}'s squad"
@@ -615,7 +616,8 @@ function makeLiveTable(
   // Pinned "Me" row — appended when user is not on the current page
   if (pinnedMe) {
     const pm = pinnedMe.manager;
-    const name = escapeHtml(pm.managerName || pm.teamName || `Entry ${pm.entryId}`);
+    const rawName = pm.managerName || pm.teamName || `Entry ${pm.entryId}`;
+    const name = escapeHtml(rawName);
     const chip = pm.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${escapeHtml(pm.chipPlayed)}</span>` : '';
     html += `
       <tr class="me-separator-row">
@@ -625,7 +627,7 @@ function makeLiveTable(
         <td class="col-rank">${pinnedMe.leagueRank > 0 ? pinnedMe.leagueRank : '—'}</td>
         <td class="col-manager">📍 <button type="button" class="manager-btn"
             data-entry-id="${pm.entryId}"
-            data-manager-name="${name}"
+            data-manager-name="${escapeHtml(rawName)}"
             data-team-name="${escapeHtml(pm.teamName || '')}"
             data-chip="${escapeHtml(pm.chipPlayed || '')}"
             aria-label="View ${name}'s squad"
