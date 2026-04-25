@@ -101,6 +101,7 @@ import { supabase } from '../lib/supabase.ts'
 
   out.innerHTML = makeLiveTable(dataToRender, compareId);
   attachManagerButtons();
+  attachRankFavButtons();
   attachLiveSortHandlers();
 }
 
@@ -1489,9 +1490,18 @@ function buildBreakdownRows(
       const rowClass = isMe ? 'row-highlight' : '';
       const hitClass = m.transferCost > 0 ? 'hit-highlight' : '';
 
+      const isFav = favouriteIds.has(m.entryId);
       html += `
         <tr class="${rowClass}">
-          <td class="rank-col">${rank}</td>
+          <td class="rank-col">
+            <button type="button"
+              class="rank-fav-btn${isFav ? ' rank-fav-btn--active' : ''}"
+              data-entry-id="${m.entryId}"
+              title="Click to toggle favourite"
+              aria-label="Toggle favourite for ${m.managerName}"
+              aria-pressed="${isFav}"
+            >${rank}</button>
+          </td>
           <td class="manager-col">
             <button type="button" class="manager-btn" 
               data-entry-id="${m.entryId}"
@@ -1595,6 +1605,17 @@ function buildBreakdownRows(
         const chipPlayed = button.dataset.chip || '';
         const livePoints = parseInt(button.dataset.livePoints || '0');
         showSquadModal(entryId, managerName, teamName, chipPlayed, livePoints);
+      });
+    });
+  }
+
+  function attachRankFavButtons() {
+    document.querySelectorAll('.rank-fav-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const button = e.currentTarget as HTMLElement;
+        const entryId = parseInt(button.dataset.entryId || '0');
+        if (entryId) toggleFavourite(entryId);
       });
     });
   }
