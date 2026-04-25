@@ -301,6 +301,34 @@
     vertical-align: middle;
   }
 
+  /* Rank number as clickable favourite toggle on live table */
+  .rank-fav-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    border-radius: var(--radius-sm, 3px);
+    min-width: 1.5em;
+    text-align: center;
+    line-height: 1;
+    transition: color var(--transition-fast, 0.15s);
+  }
+
+  .rank-fav-btn:hover,
+  .rank-fav-btn:focus-visible {
+    color: var(--color-warning, rgb(245 158 11));
+    outline: 2px solid var(--color-warning, rgb(245 158 11));
+    outline-offset: 2px;
+  }
+
+  .rank-fav-btn--active {
+    color: var(--color-warning, rgb(245 158 11));
+    font-weight: 700;
+  }
+
   /* Star toggle button in squad modal */
   .fav-toggle-btn {
     background: none;
