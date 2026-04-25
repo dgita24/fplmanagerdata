@@ -402,6 +402,30 @@
     white-space: nowrap;
   }
 
+  .leagues-live-table .manager-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-weight: 600;
+    color: var(--color-primary);
+    cursor: pointer;
+    text-align: left;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .leagues-live-table .manager-btn:hover {
+    color: var(--color-primary-hover);
+    text-decoration: underline;
+  }
+
+  .leagues-live-table .row-highlight .manager-btn {
+    font-weight: 700;
+  }
+
   .leagues-live-table tbody tr:hover {
     background: var(--color-surface-alt);
   }

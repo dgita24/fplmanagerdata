@@ -291,6 +291,270 @@ async function mapWithConcurrency<T, R>(
 }
 
 // ==============================
+// Squad modal
+// ==============================
+
+async function showSquadModal(entryId: number, managerName: string, teamName: string, chipPlayed: string) {
+  const gw = latestGW;
+
+  squadModalContent.innerHTML = `<p class="text-muted">Loading squad...</p>`;
+  squadModal.classList.add('is-open');
+
+  try {
+    await ensureLiveCaches(gw);
+
+    const cacheKey = `${entryId}:${gw}`;
+    let picksData = managerPicksCache.get(cacheKey)?.picksData;
+
+    if (!picksData) {
+      const picksRes = await fetch(`/api/fpl/entry/${entryId}/event/${gw}/picks?v=${Date.now()}`, { cache: 'no-store' });
+      if (!picksRes.ok) throw new Error('Failed to fetch picks');
+      picksData = await picksRes.json();
+    }
+
+    const rawPicks = Array.isArray(picksData.picks) ? picksData.picks : [];
+    const rawAutoSubs = Array.isArray((picksData as any).automatic_subs)
+      ? (picksData as any).automatic_subs : [];
+
+    const subInIds = new Set<number>(rawAutoSubs.map((s: any) => Number(s.element_in)).filter(Boolean));
+    const subOutIds = new Set<number>(rawAutoSubs.map((s: any) => Number(s.element_out)).filter(Boolean));
+
+    const chipCode = chipPlayed || 'None';
+
+    const picks = rawPicks.map((p: any) => {
+      const player = playerCache.get(p.element) || { name: 'Unknown', position: 4, team: 0 };
+      const teamId = Number(player.team) || 0;
+      const teamInfo = teamCache.get(teamId) || { name: '', shortName: '???' };
+      const computed = getPlayerLiveComputedLocal(p.element, teamId, gw);
+      return {
+        playerId: Number(p.element),
+        position: Number(p.position),
+        is_captain: !!(p.is_captain ?? p.iscaptain) || Number(p.multiplier) >= 2,
+        is_vice_captain: !!(p.is_vice_captain ?? p.isvicecaptain),
+        web_name: player.name || 'Unknown',
+        teamShort: (teamInfo as any).shortName || '???',
+        teamId,
+        playingPosition: positionLabel(player.position),
+        chanceOfPlayingThisRound: player.chanceOfPlayingThisRound ?? null,
+        minutes: computed.minutes,
+        status: computed.status,
+        liveTotal: computed.liveTotal,
+      };
+    });
+
+    const computedTeam = applyAutoSubsAndMultipliers(picks, chipCode);
+
+    const finalTeam = computedTeam.map(p => ({
+      ...p,
+      autoSubStatus: subOutIds.has(p.playerId) ? 'OUT' : subInIds.has(p.playerId) ? 'IN' : null,
+    }));
+
+    const sorted = [...finalTeam].sort((a, b) => a.position - b.position);
+
+    let starters: any[];
+    let bench: any[];
+    if (chipCode === 'BB') {
+      starters = sorted.slice(0, 11);
+      bench = sorted.slice(11);
+    } else {
+      starters = sorted.filter(p => (p.multiplier ?? 0) > 0);
+      bench = sorted.filter(p => (p.multiplier ?? 0) === 0);
+      if (starters.length !== 11) {
+        starters = sorted.slice(0, 11);
+        bench = sorted.slice(11);
+      }
+    }
+
+    const totalPts = finalTeam.reduce((sum, p) => sum + (p.liveTotal * (p.multiplier || 0)), 0)
+      + computeSpeculativePointsAdjustment(finalTeam, chipCode, fixturesCache);
+
+    const chipEmoji = chipPlayed === 'WC' ? '🃏' :
+                      chipPlayed === 'BB' ? '🪑' :
+                      chipPlayed === 'TC' ? '👑' :
+                      chipPlayed === 'FH' ? '🎯' : '';
+
+    const isConfirmedDnp = (x: any) => x.status === 'Fin' && x.minutes === 0;
+
+    const renderCapBadges = (player: any) => {
+      const dnp = isConfirmedDnp(player);
+      const vcInheritedCaptaincy = player.is_vice_captain && (player.multiplier ?? 0) > 1;
+      let h = '';
+      if (player.is_captain && !vcInheritedCaptaincy) {
+        h += `<span class="cap-badge cap-c${dnp ? ' cap-x' : ''}">C</span>`;
+      }
+      if (player.is_vice_captain) {
+        h += `<span class="cap-badge cap-v${(dnp || vcInheritedCaptaincy) ? ' cap-x' : ''}">V</span>`;
+        if (vcInheritedCaptaincy) h += `<span class="cap-badge cap-c">C</span>`;
+      }
+      if (dnp && (player.is_captain || player.is_vice_captain) && !player.autoSubStatus) {
+        h += `<span class="status-badge status-dnp">DNP</span>`;
+      }
+      return h;
+    };
+
+    let html = `
+      <div style="padding-right:40px;">
+        <h2 class="modal-title">
+          ${escapeHtml(managerName)}
+          ${chipPlayed ? `<span class="badge" style="margin-left:8px;">${chipEmoji} ${escapeHtml(chipPlayed)}</span>` : ''}
+          <div class="squad-modal-entryid">ID ${entryId}</div>
+        </h2>
+      </div>
+      <p class="text-muted" style="margin-bottom:var(--space-3);">
+        ${escapeHtml(teamName)} · GW${gw} · <span class="text-success font-bold">${totalPts} pts</span>
+      </p>
+      <div class="squad-modal-section">
+        <h3 class="squad-modal-heading">Starting XI</h3>
+        <table class="squad-modal-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th class="col-team">Team</th>
+              <th class="col-pts">Pts</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    for (const p of starters) {
+      const capLabel = renderCapBadges(p);
+      const isSubbedOut = p.autoSubStatus === 'OUT';
+      const isAutoSubIn = p.autoSubStatus === 'IN' || (Number(p.position) > 11 && (p.multiplier ?? 0) > 0);
+      const effMult = p.multiplier ?? 0;
+      const displayPts = (isSubbedOut || effMult === 0) ? 0 : Math.round(p.liveTotal * effMult);
+      const ptsText = effMult > 1 ? `${p.liveTotal}×${effMult}` : String(displayPts);
+
+      let rowClass = '';
+      let statusBadge = '';
+      if (isSubbedOut) {
+        rowClass = 'sub-off-row';
+        statusBadge = `<span class="status-badge status-dnp">DNP</span>`;
+      } else if (isAutoSubIn) {
+        statusBadge = `<span class="status-badge status-on">ON</span>`;
+      } else if (p.status === 'NS') {
+        rowClass = 'not-started-row';
+      } else if (p.status === 'Live') {
+        rowClass = 'match-live-row';
+      } else if (p.status === 'Fin') {
+        rowClass = 'match-finished-row';
+      }
+
+      html += `
+        <tr class="${rowClass}">
+          <td class="player-cell">
+            <span class="player-pos">${p.playingPosition}</span>
+            <button type="button" class="player-name-btn ${isSubbedOut ? 'player-dnp' : ''}" data-player-id="${p.playerId}">${escapeHtml(p.web_name)}</button>
+            ${capLabel}
+            ${statusBadge}
+          </td>
+          <td class="col-team">${escapeHtml(p.teamShort)}</td>
+          <td class="col-pts ${isSubbedOut ? 'text-muted' : ''}">${ptsText}</td>
+        </tr>
+      `;
+    }
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+      <div class="squad-modal-section">
+        <h3 class="squad-modal-heading">Bench</h3>
+        <table class="squad-modal-table bench-table">
+          <tbody>
+    `;
+
+    for (const p of bench) {
+      if (p.autoSubStatus === 'IN') continue;
+      const isDnp = p.minutes === 0 && p.status === 'Fin';
+      let rowClass = chipCode === 'BB' ? '' : (isDnp ? 'dnp-row' : 'bench-inactive');
+      if (chipCode !== 'BB' && !isDnp) {
+        if (p.status === 'NS') rowClass += ' not-started-row';
+        else if (p.status === 'Live') rowClass += ' match-live-row';
+        else if (p.status === 'Fin') rowClass += ' match-finished-row';
+      }
+      const statusBadge = isDnp ? `<span class="status-badge status-dnp">DNP</span>` : '';
+
+      html += `
+        <tr class="${rowClass}">
+          <td class="player-cell">
+            <span class="player-pos">${p.playingPosition}</span>
+            <button type="button" class="player-name-btn" data-player-id="${p.playerId}">${escapeHtml(p.web_name)}</button>
+            ${renderCapBadges(p)}
+            ${statusBadge}
+          </td>
+          <td class="col-team">${escapeHtml(p.teamShort)}</td>
+          <td class="col-pts">${
+            (p.multiplier || 0) === 0
+              ? `<span class="text-muted">${Math.round(p.liveTotal)}</span>`
+              : ((p.multiplier || 1) > 1
+                  ? `${p.liveTotal}×${p.multiplier}`
+                  : `${Math.round(p.liveTotal * (p.multiplier || 1))}`)
+          }</td>
+        </tr>
+      `;
+    }
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    squadModalContent.innerHTML = html;
+
+    squadModalContent.querySelectorAll<HTMLElement>('.player-name-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const playerId = parseInt(btn.dataset.playerId || '0');
+        if (playerId) showPlayerModal(playerId);
+      });
+    });
+
+  } catch (error) {
+    console.error('Error loading squad:', error);
+    squadModalContent.innerHTML = "<p class='status status--error'>Error loading squad data.</p>";
+  }
+}
+
+async function showPlayerModal(playerId: number) {
+  const player = playerCache.get(playerId);
+  if (!player) {
+    playerModalContent.innerHTML = "<p class='status status--error'>Player not found.</p>";
+    playerModal.classList.add('is-open');
+    return;
+  }
+  const gw = latestGW;
+  const computed = getPlayerLiveComputedLocal(playerId, player.team, gw);
+  const teamInfo = teamCache.get(player.team);
+
+  playerModalContent.innerHTML = `
+    <h2 class="modal-title">${escapeHtml(player.name)}</h2>
+    <p class="text-muted">${escapeHtml(teamInfo?.name || '')} · ${positionLabel(player.position)} · GW${gw}</p>
+    <p style="margin-top:var(--space-3);">
+      <span class="text-success font-bold">${computed.liveTotal} pts</span>
+      · ${computed.minutes} mins
+      ${computed.status ? ` · <span class="text-muted">${escapeHtml(computed.status)}</span>` : ''}
+    </p>
+  `;
+  playerModal.classList.add('is-open');
+}
+
+// ==============================
+// Attach manager buttons (standings table)
+// ==============================
+
+function attachManagerButtons() {
+  standingsOutputEl.querySelectorAll<HTMLElement>('.manager-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const entryId = parseInt(btn.dataset.entryId || '0');
+      const managerName = btn.dataset.managerName || '';
+      const teamName = btn.dataset.teamName || '';
+      const chipPlayed = btn.dataset.chip || '';
+      if (entryId) showSquadModal(entryId, managerName, teamName, chipPlayed);
+    });
+  });
+}
+
+// ==============================
 // Live table HTML rendering
 // ==============================
 
@@ -326,14 +590,23 @@ function makeLiveTable(
   sorted.forEach((m, idx) => {
     const isMe = myEntryId !== null && m.entryId === myEntryId;
     const rowClass = isMe ? 'row-highlight' : '';
-    const name = escapeHtml(m.managerName || m.teamName || `Entry ${m.entryId}`);
+    const rawName = m.managerName || m.teamName || `Entry ${m.entryId}`;
+    const name = escapeHtml(rawName);
     const chip = m.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${escapeHtml(m.chipPlayed)}</span>` : '';
     const rankDisplay = rankOffset + idx + 1;
 
     html += `
       <tr class="${rowClass}"${isMe ? ' id="standings-me-row"' : ''}>
         <td class="col-rank">${rankDisplay}</td>
-        <td class="col-manager" title="${name}">${name}${chip}</td>
+        <td class="col-manager">
+          <button type="button" class="manager-btn"
+            data-entry-id="${m.entryId}"
+            data-manager-name="${escapeHtml(rawName)}"
+            data-team-name="${escapeHtml(m.teamName || '')}"
+            data-chip="${escapeHtml(m.chipPlayed || '')}"
+            aria-label="View ${name}'s squad"
+          >${name}</button>${chip}
+        </td>
         <td class="col-gw">${m.livePointsBeforeHits}</td>
         <td class="col-total">${m.totalPoints.toLocaleString()}</td>
       </tr>
@@ -343,7 +616,8 @@ function makeLiveTable(
   // Pinned "Me" row — appended when user is not on the current page
   if (pinnedMe) {
     const pm = pinnedMe.manager;
-    const name = escapeHtml(pm.managerName || pm.teamName || `Entry ${pm.entryId}`);
+    const rawName = pm.managerName || pm.teamName || `Entry ${pm.entryId}`;
+    const name = escapeHtml(rawName);
     const chip = pm.chipPlayed ? `<span class="badge" style="margin-left:4px;font-size:10px;padding:1px 4px;">${escapeHtml(pm.chipPlayed)}</span>` : '';
     html += `
       <tr class="me-separator-row">
@@ -351,7 +625,14 @@ function makeLiveTable(
       </tr>
       <tr class="row-highlight me-pinned-row" id="standings-me-row">
         <td class="col-rank">${pinnedMe.leagueRank > 0 ? pinnedMe.leagueRank : '—'}</td>
-        <td class="col-manager" title="${name}">📍 ${name}${chip}</td>
+        <td class="col-manager">📍 <button type="button" class="manager-btn"
+            data-entry-id="${pm.entryId}"
+            data-manager-name="${escapeHtml(rawName)}"
+            data-team-name="${escapeHtml(pm.teamName || '')}"
+            data-chip="${escapeHtml(pm.chipPlayed || '')}"
+            aria-label="View ${name}'s squad"
+          >${name}</button>${chip}
+        </td>
         <td class="col-gw">${pm.livePointsBeforeHits}</td>
         <td class="col-total">${pm.totalPoints.toLocaleString()}</td>
       </tr>
@@ -494,6 +775,25 @@ const meBtn = document.getElementById('standings-me-btn') as HTMLButtonElement;
 const prevBtn = document.getElementById('standings-prev-btn') as HTMLButtonElement;
 const nextBtn = document.getElementById('standings-next-btn') as HTMLButtonElement;
 const closeBtn = document.getElementById('standings-close-btn') as HTMLButtonElement;
+
+// ==============================
+// Squad / Player modal DOM refs
+// ==============================
+
+const squadModal = document.getElementById('squad-modal') as HTMLElement;
+const squadModalContent = document.getElementById('squad-modal-content') as HTMLElement;
+const closeSquadModalBtn = document.getElementById('close-squad-modal') as HTMLButtonElement;
+const playerModal = document.getElementById('player-modal') as HTMLElement;
+const playerModalContent = document.getElementById('player-modal-content') as HTMLElement;
+const closePlayerModalBtn = document.getElementById('close-player-modal') as HTMLButtonElement;
+
+closeSquadModalBtn.addEventListener('click', () => {
+  squadModal.classList.remove('is-open');
+});
+
+closePlayerModalBtn.addEventListener('click', () => {
+  playerModal.classList.remove('is-open');
+});
 
 // ==============================
 // Close standings panel
@@ -833,6 +1133,7 @@ async function loadStandingsPage(page: number) {
     standingsSubtitleEl.textContent = buildSubtitle(currentPage);
 
     standingsOutputEl.innerHTML = makeLiveTable(managers, currentEntryId, (currentPage - 1) * STANDINGS_PAGE_SIZE, pinnedMe);
+    attachManagerButtons();
 
     standingsStatusEl.innerHTML = `<span class="text-success font-bold">✅ Loaded ${managers.length} entries</span>`;
 

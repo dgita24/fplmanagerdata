@@ -1,6 +1,8 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
+import SquadModal from "../components/modals/SquadModal.astro";
+import PlayerModal from "../components/modals/PlayerModal.astro";
 import "../styles/pages/leagues.css";
 ---
 <Layout title="My Leagues - FPL Manager Watch">
@@ -150,6 +152,9 @@ import "../styles/pages/leagues.css";
     </div>
     </div> <!-- /#leagues-auth-content -->
   </main>
+
+  <SquadModal />
+  <PlayerModal />
 </Layout>
 
 <script>
