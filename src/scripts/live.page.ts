@@ -925,6 +925,93 @@ function buildBreakdownRows(
     `;
   }
 
+  function computeRawDefcon(stats: LiveStats, position: number): number {
+    if (position === 1) return 0;
+    const cbit = stats.clearances_blocks_interceptions + stats.tackles;
+    if (position === 2) return cbit;
+    return cbit + stats.recoveries;
+  }
+
+  function buildDefconRows(teamId: number): BpsEntry[] {
+    const entries: BpsEntry[] = [];
+    for (const [playerId, stats] of livePointsCache) {
+      const player = playerCache.get(playerId);
+      if (!player || player.team !== teamId || player.position === 1) continue;
+      const value = computeRawDefcon(stats, player.position);
+      if (value === 0) continue;
+      entries.push({ name: player.name, value });
+    }
+    entries.sort((a, b) => b.value - a.value);
+    return entries.slice(0, BPS_LIMIT);
+  }
+
+  function renderFixtureDefconTable(fixture: FixtureInfo | null) {
+    const title = `<h3 class="player-modal-section-title">Live DEFCONs</h3>`;
+
+    if (!fixture) {
+      return `
+        <div class="player-modal-bps-table">
+          ${title}
+          <div class="bps-table-empty">Fixture data unavailable.</div>
+        </div>
+      `;
+    }
+
+    if (!fixture.started) {
+      return `
+        <div class="player-modal-bps-table">
+          ${title}
+          <div class="bps-table-empty">DEFCON updates available when the match starts.</div>
+        </div>
+      `;
+    }
+
+    const home = buildDefconRows(fixture.team_h);
+    const away = buildDefconRows(fixture.team_a);
+
+    if (home.length === 0 && away.length === 0) {
+      return `
+        <div class="player-modal-bps-table">
+          ${title}
+          <div class="bps-table-empty">No live DEFCON data yet.</div>
+        </div>
+      `;
+    }
+
+    const homeTeam = teamCache.get(fixture.team_h)?.shortName || "Home";
+    const awayTeam = teamCache.get(fixture.team_a)?.shortName || "Away";
+    const maxRows = Math.max(home.length, away.length);
+
+    let rows = "";
+    for (let i = 0; i < maxRows; i++) {
+      rows += `
+        <tr>
+          <td><div class="bps-cell">${renderBpsCell(home[i])}</div></td>
+          <td><div class="bps-cell">${renderBpsCell(away[i])}</div></td>
+        </tr>
+      `;
+    }
+
+    return `
+      <div class="player-modal-bps-table">
+        ${title}
+        <div class="bps-table-wrapper">
+          <table class="bps-table">
+            <thead>
+              <tr>
+                <th>${homeTeam}</th>
+                <th>${awayTeam}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
   async function showPlayerModal(playerId: number) {
     const gw = parseInt(gwFilterSelect.value) || latestGW;
 
@@ -1089,6 +1176,7 @@ function buildBreakdownRows(
         </div>
 
         ${renderFixtureBpsTable(fx)}
+        ${renderFixtureDefconTable(fx)}
       `;
     }
 
