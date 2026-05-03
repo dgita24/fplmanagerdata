@@ -538,9 +538,9 @@ const managerDataCache = new Map<string, any>();
       }
 
       const hs = fixture.team_h_score ?? 0;
-      const as_ = fixture.team_a_score ?? 0;
+      const awayScore = fixture.team_a_score ?? 0;
       const scoreText =
-        fixture.started || fixture.finished ? `${hs} - ${as_}` : "vs";
+        fixture.started || fixture.finished ? `${hs} - ${awayScore}` : "vs";
 
       const statSections: Array<{ key: string; label: string }> = [
         { key: "goals_scored", label: "Goals Scored" },
@@ -642,8 +642,8 @@ const managerDataCache = new Map<string, any>();
         let scoreHtml: string;
         if (f.started || f.finished) {
           const hs = f.team_h_score ?? 0;
-          const as_ = f.team_a_score ?? 0;
-          scoreHtml = `<span class="fixture-score">${hs} - ${as_}</span>`;
+          const awayScore = f.team_a_score ?? 0;
+          scoreHtml = `<span class="fixture-score">${hs} - ${awayScore}</span>`;
         } else {
           const time = f.kickoff_time
             ? new Date(f.kickoff_time).toLocaleTimeString("en-GB", {
