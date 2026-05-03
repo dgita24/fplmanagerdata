@@ -4,6 +4,8 @@ import Nav from "../components/Nav.astro";
 import SquadModal from "../components/modals/SquadModal.astro";
 import PlayerModal from "../components/modals/PlayerModal.astro";
 import GWPointsModal from "../components/modals/GWPointsModal.astro";
+import FixturesModal from "../components/modals/FixturesModal.astro";
+import MatchDetailModal from "../components/modals/MatchDetailModal.astro";
 import "../styles/pages/live.css";
 ---
 <Layout title="Live League Standings - FPL Manager Data">
@@ -18,7 +20,9 @@ import "../styles/pages/live.css";
         <a class="page-title-emoji" href="/ownership" aria-label="Go to Ownership">👥</a>
         <a class="page-title-emoji" href="/players" aria-label="Go to Players">👕</a>
       </div>
-      <p class="page-subtitle">Real-time league table with live points, projected bonus & auto subs.</p>
+      <div class="fixtures-header-row">
+        <button id="fixtures-btn" class="badge badge-wide" type="button">📅 Fixtures</button>
+      </div>
     </header>
 
     <div class="meta-row-wide">
@@ -60,6 +64,8 @@ import "../styles/pages/live.css";
   <SquadModal /> 
   <PlayerModal />
   <GWPointsModal />
+  <FixturesModal />
+  <MatchDetailModal />
 
   <!-- Captains & Vice Modal -->
   <div id="captains-modal" class="modal modal--nested">

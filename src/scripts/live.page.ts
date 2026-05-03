@@ -171,6 +171,11 @@ const managerDataCache = new Map<string, any>();
   const closeCaptainsModal = document.getElementById("close-captains-modal");
   const captainsFavToggle = document.getElementById("captains-fav-toggle") as HTMLButtonElement | null;
 
+  const fixturesModal = document.getElementById("fixtures-modal");
+  const fixturesModalContent = document.getElementById("fixtures-modal-content");
+  const matchDetailModal = document.getElementById("match-detail-modal");
+  const matchDetailContent = document.getElementById("match-detail-content");
+
   let captainsShowFavouritesOnly = false;
 
   function renderCaptainsModal() {
@@ -422,6 +427,306 @@ const managerDataCache = new Map<string, any>();
     captainsShowFavouritesOnly = !captainsShowFavouritesOnly;
     updateCaptainsFavToggle();
     renderCaptainsModal();
+  });
+
+  // ==============================
+  // Fixtures Modal
+  // ==============================
+
+  interface FixtureRaw {
+    id: number;
+    team_h: number;
+    team_a: number;
+    team_h_score: number | null;
+    team_a_score: number | null;
+    started: boolean;
+    finished: boolean;
+    finished_provisional: boolean;
+    kickoff_time?: string;
+  }
+
+  interface LivePlayerEntry {
+    id: number;
+    stats: Record<string, number>;
+    explain: Array<{
+      fixture: number;
+      stats: Array<{ identifier: string; points: number; value: number }>;
+    }>;
+  }
+
+  function closeMatchDetailModal() {
+    matchDetailModal?.classList.remove("is-open");
+  }
+
+  function closeFixturesModal() {
+    fixturesModal?.classList.remove("is-open");
+    closeMatchDetailModal();
+  }
+
+  async function openMatchDetail(fixture: FixtureRaw, gw: number) {
+    if (!matchDetailModal || !matchDetailContent) return;
+
+    matchDetailContent.innerHTML = `<div class="fixtures-loading">Loading match details…</div>`;
+    matchDetailModal.classList.add("is-open");
+
+    try {
+      const res = await fetch(`/api/fpl/event/${gw}/live?v=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to fetch live data");
+      const data = await res.json();
+      const elements: LivePlayerEntry[] = data.elements || [];
+
+      const homeTeamName = teamCache.get(fixture.team_h)?.name || `Team ${fixture.team_h}`;
+      const awayTeamName = teamCache.get(fixture.team_a)?.name || `Team ${fixture.team_a}`;
+      const homeTeamShort = teamCache.get(fixture.team_h)?.shortName || homeTeamName;
+      const awayTeamShort = teamCache.get(fixture.team_a)?.shortName || awayTeamName;
+
+      interface SideRecord { name: string; value: number; extra?: string; highlight?: boolean }
+      const homeStats: Record<string, SideRecord[]> = {};
+      const awayStats: Record<string, SideRecord[]> = {};
+
+      const addStat = (
+        side: Record<string, SideRecord[]>,
+        key: string,
+        name: string,
+        value: number,
+        extra?: string,
+        highlight?: boolean
+      ) => {
+        if (value > 0) {
+          if (!side[key]) side[key] = [];
+          side[key].push({ name, value, extra, highlight });
+        }
+      };
+
+      for (const el of elements) {
+        const fixtureExplain = (el.explain || []).find(
+          (e) => e.fixture === fixture.id
+        );
+        if (!fixtureExplain) continue;
+
+        const playerInfo = playerCache.get(el.id);
+        if (!playerInfo) continue;
+
+        const isHome = playerInfo.team === fixture.team_h;
+        const isAway = playerInfo.team === fixture.team_a;
+        if (!isHome && !isAway) continue;
+
+        const side = isHome ? homeStats : awayStats;
+        const name = playerInfo.name;
+
+        // Build a stats map from this fixture's explain entry
+        const statsMap: Record<string, number> = {};
+        for (const s of fixtureExplain.stats) {
+          statsMap[s.identifier] = Number(s.value ?? 0);
+        }
+        // BPS lives in el.stats (not in explain)
+        const bps = Number(el.stats?.bps ?? 0);
+
+        addStat(side, "goals_scored", name, statsMap.goals_scored ?? 0);
+        addStat(side, "assists", name, statsMap.assists ?? 0);
+        addStat(side, "yellow_cards", name, statsMap.yellow_cards ?? 0);
+        addStat(side, "red_cards", name, statsMap.red_cards ?? 0);
+        addStat(side, "saves", name, statsMap.saves ?? 0);
+        addStat(side, "bps", name, bps);
+
+        // DEFCON: non-GK players only
+        // Defensive stats (like BPS) live in el.stats, not in the per-fixture explain
+        const pos = playerInfo.position;
+        if (pos !== 1) {
+          const cbi = Number(el.stats?.clearances_blocks_interceptions ?? 0);
+          const tack = Number(el.stats?.tackles ?? 0);
+          const rec = Number(el.stats?.recoveries ?? 0);
+          const rawDc = pos === 2 ? (cbi + tack) : (cbi + tack + rec);
+          const threshold = pos === 2 ? 10 : 12;
+          if (rawDc > 0) {
+            const achieved = rawDc >= threshold;
+            addStat(side, "defcon", name, rawDc, `${rawDc}/${threshold}`, achieved);
+          }
+        }
+      }
+
+      const hs = fixture.team_h_score ?? 0;
+      const awayScore = fixture.team_a_score ?? 0;
+      const scoreText =
+        fixture.started || fixture.finished ? `${hs} - ${awayScore}` : "vs";
+
+      const statSections: Array<{ key: string; label: string }> = [
+        { key: "goals_scored", label: "Goals Scored" },
+        { key: "assists", label: "Assists" },
+        { key: "yellow_cards", label: "Yellow Cards" },
+        { key: "red_cards", label: "Red Cards" },
+        { key: "saves", label: "Saves" },
+        { key: "bps", label: "Bonus Points System" },
+        { key: "defcon", label: "DEFCON" },
+      ];
+
+      const esc = (s: string) =>
+        s
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+
+      let html = `
+        <div class="match-detail-header">
+          <span>${esc(homeTeamName)}</span>
+          <span class="match-detail-score-badge">${scoreText}</span>
+          <span>${esc(awayTeamName)}</span>
+        </div>
+        <div class="match-detail-scroll">
+      `;
+
+      for (const { key, label } of statSections) {
+        const homePlayers = homeStats[key] || [];
+        const awayPlayers = awayStats[key] || [];
+        if (homePlayers.length === 0 && awayPlayers.length === 0) continue;
+
+        html += `
+          <div class="player-modal-bps-table">
+            <h3 class="player-modal-section-title">${esc(label)}</h3>
+            <div class="bps-table-wrapper">
+              <table class="bps-table">
+                <thead>
+                  <tr>
+                    <th>${esc(homeTeamShort)}</th>
+                    <th>${esc(awayTeamShort)}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(() => {
+                    const maxRows = Math.max(homePlayers.length, awayPlayers.length);
+                    const homeSorted = [...homePlayers].sort((a, b) => b.value - a.value);
+                    const awaySorted = [...awayPlayers].sort((a, b) => b.value - a.value);
+
+                    // For BPS: top 3 + ties across the entire match (both teams combined)
+                    const isBps = key === "bps";
+                    let bpsThreshold = Infinity;
+                    if (isBps) {
+                      const allBps = [...homeSorted, ...awaySorted].sort((a, b) => b.value - a.value);
+                      if (allBps.length > 0) {
+                        bpsThreshold = allBps[Math.min(2, allBps.length - 1)].value;
+                      }
+                    }
+
+                    let rows = "";
+                    for (let i = 0; i < maxRows; i++) {
+                      const h = homeSorted[i];
+                      const a = awaySorted[i];
+                      const hGreen = h ? (isBps ? h.value >= bpsThreshold : !!h.highlight) : false;
+                      const aGreen = a ? (isBps ? a.value >= bpsThreshold : !!a.highlight) : false;
+                      rows += `<tr>
+                        <td><div class="bps-cell">${h ? `<span class="bps-player${hGreen ? " bps-player--green" : ""}">${esc(h.name)}</span><span class="bps-score${hGreen ? " bps-score--green" : ""}">${esc(h.extra ?? String(h.value))}</span>` : ""}</div></td>
+                        <td><div class="bps-cell">${a ? `<span class="bps-player${aGreen ? " bps-player--green" : ""}">${esc(a.name)}</span><span class="bps-score${aGreen ? " bps-score--green" : ""}">${esc(a.extra ?? String(a.value))}</span>` : ""}</div></td>
+                      </tr>`;
+                    }
+                    return rows;
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      html += `</div>`;
+      matchDetailContent.innerHTML = html;
+    } catch {
+      matchDetailContent.innerHTML = `<div class="fixtures-error">Error loading match details.</div>`;
+    }
+  }
+
+  async function openFixturesModal() {
+    if (!fixturesModal || !fixturesModalContent) return;
+
+    const gw = parseInt(
+      (document.getElementById("gw-filter") as HTMLSelectElement)?.value
+    );
+
+    if (!gw) {
+      fixturesModalContent.innerHTML = `<div class="fixtures-error">Please select a gameweek first.</div>`;
+      fixturesModal.classList.add("is-open");
+      return;
+    }
+
+    fixturesModalContent.innerHTML = `<div class="fixtures-loading">Loading fixtures…</div>`;
+    fixturesModal.classList.add("is-open");
+
+    try {
+      const res = await fetch(
+        `/api/fpl/fixtures?event=${gw}&v=${Date.now()}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) throw new Error("Failed to fetch fixtures");
+      const fixtures: FixtureRaw[] = await res.json();
+
+      if (!fixtures || fixtures.length === 0) {
+        fixturesModalContent.innerHTML = `<div class="fixtures-empty">No fixtures found for GW${gw}.</div>`;
+        return;
+      }
+
+      const esc = (s: string) =>
+        s
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+
+      let html = `<div class="fixtures-gw-title">GW ${gw} Fixtures</div><div class="fixtures-list">`;
+
+      for (const f of fixtures) {
+        const homeTeam = esc(teamCache.get(f.team_h)?.name || `Team ${f.team_h}`);
+        const awayTeam = esc(teamCache.get(f.team_a)?.name || `Team ${f.team_a}`);
+
+        let scoreHtml: string;
+        if (f.started || f.finished) {
+          const hs = f.team_h_score ?? 0;
+          const awayScore = f.team_a_score ?? 0;
+          scoreHtml = `<span class="fixture-score">${hs} - ${awayScore}</span>`;
+        } else {
+          const time = f.kickoff_time
+            ? new Date(f.kickoff_time).toLocaleTimeString("en-GB", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "TBC";
+          scoreHtml = `<span class="fixture-score fixture-score--upcoming">${time}</span>`;
+        }
+
+        html += `
+          <button class="fixture-row" data-fixture-id="${f.id}" type="button">
+            <span class="fixture-team fixture-team--home">${homeTeam}</span>
+            ${scoreHtml}
+            <span class="fixture-team fixture-team--away">${awayTeam}</span>
+          </button>
+        `;
+      }
+
+      html += `</div>`;
+      fixturesModalContent.innerHTML = html;
+
+      // Attach click handlers to fixture rows
+      fixturesModalContent.querySelectorAll(".fixture-row").forEach((row) => {
+        row.addEventListener("click", () => {
+          const fixtureId = parseInt(
+            (row as HTMLElement).dataset.fixtureId || "0"
+          );
+          const fixture = fixtures.find((f) => f.id === fixtureId);
+          if (fixture) openMatchDetail(fixture, gw);
+        });
+      });
+    } catch {
+      fixturesModalContent.innerHTML = `<div class="fixtures-error">Error loading fixtures.</div>`;
+    }
+  }
+
+  document.getElementById("fixtures-btn")?.addEventListener("click", () => openFixturesModal());
+  document.getElementById("close-fixtures-modal")?.addEventListener("click", closeFixturesModal);
+  document.getElementById("close-match-detail-modal")?.addEventListener("click", closeMatchDetailModal);
+
+  // Close fixtures modals on backdrop click
+  fixturesModal?.addEventListener("click", (e) => {
+    if (e.target === fixturesModal) closeFixturesModal();
+  });
+  matchDetailModal?.addEventListener("click", (e) => {
+    if (e.target === matchDetailModal) closeMatchDetailModal();
   });
 
   // Initialize GW Points Modal
