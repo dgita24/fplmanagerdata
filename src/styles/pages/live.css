@@ -453,6 +453,15 @@
     padding-bottom: var(--space-3);
   }
 
+  /* Content wrapper must be a flex column so inner scroll works */
+  #match-detail-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   /* Fixture rows in fixtures list modal */
   .fixtures-list {
     display: flex;
@@ -564,4 +573,14 @@
 
   .fixtures-error {
     color: var(--color-danger);
+  }
+
+  /* Force equal 50/50 column split in match detail section tables */
+  .match-detail-scroll .bps-table {
+    table-layout: fixed;
+  }
+
+  .match-detail-scroll .bps-table th,
+  .match-detail-scroll .bps-table td {
+    width: 50%;
   }
