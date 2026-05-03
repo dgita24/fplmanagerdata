@@ -427,6 +427,18 @@
      FIXTURES MODAL
      ======================================== */
 
+  /* Full-width Fixtures button in the page header */
+  .fixtures-header-row {
+    margin-top: var(--space-2);
+    width: 100%;
+  }
+
+  .fixtures-header-row .badge-wide {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
   /* Match Detail Modal – floats above the fixtures list modal */
   .modal--match-detail {
     z-index: 10003;
@@ -436,6 +448,9 @@
     max-width: 520px;
     max-height: 90vh;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: var(--space-3);
   }
 
   /* Fixture rows in fixtures list modal */
@@ -517,6 +532,7 @@
     margin-bottom: var(--space-3);
     font-weight: 700;
     font-size: 15px;
+    flex-shrink: 0;
   }
 
   .match-detail-score-badge {
@@ -529,61 +545,12 @@
   }
 
   .match-detail-scroll {
-    max-height: 70vh;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-  }
-
-  .match-stat-section {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-  }
-
-  .match-stat-title {
-    background: var(--color-surface-alt);
-    padding: var(--space-2) var(--space-3);
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--color-text-secondary);
-    text-align: center;
-    border-bottom: 1px solid var(--color-border);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .match-stat-body {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-3);
-  }
-
-  .match-stat-col {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .match-stat-col--home {
-    text-align: right;
-  }
-
-  .match-stat-col--away {
-    text-align: left;
-  }
-
-  .match-stat-player {
-    font-size: 12px;
-    color: var(--color-text);
-  }
-
-  .match-stat-player span {
-    color: var(--color-text-secondary);
-    font-size: 11px;
   }
 
   /* Loading / error / empty states for fixture modals */
@@ -598,7 +565,3 @@
   .fixtures-error {
     color: var(--color-danger);
   }
-
-
-
-  

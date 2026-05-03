@@ -454,11 +454,6 @@ const managerDataCache = new Map<string, any>();
     }>;
   }
 
-  interface PlayerStatRecord {
-    name: string;
-    value: number;
-  }
-
   function closeMatchDetailModal() {
     matchDetailModal?.classList.remove("is-open");
   }
@@ -482,19 +477,23 @@ const managerDataCache = new Map<string, any>();
 
       const homeTeamName = teamCache.get(fixture.team_h)?.name || `Team ${fixture.team_h}`;
       const awayTeamName = teamCache.get(fixture.team_a)?.name || `Team ${fixture.team_a}`;
+      const homeTeamShort = teamCache.get(fixture.team_h)?.shortName || homeTeamName;
+      const awayTeamShort = teamCache.get(fixture.team_a)?.shortName || awayTeamName;
 
-      const homeStats: Record<string, PlayerStatRecord[]> = {};
-      const awayStats: Record<string, PlayerStatRecord[]> = {};
+      interface SideRecord { name: string; value: number; extra?: string }
+      const homeStats: Record<string, SideRecord[]> = {};
+      const awayStats: Record<string, SideRecord[]> = {};
 
       const addStat = (
-        side: Record<string, PlayerStatRecord[]>,
+        side: Record<string, SideRecord[]>,
         key: string,
         name: string,
-        value: number
+        value: number,
+        extra?: string
       ) => {
         if (value > 0) {
           if (!side[key]) side[key] = [];
-          side[key].push({ name, value });
+          side[key].push({ name, value, extra });
         }
       };
 
@@ -527,14 +526,21 @@ const managerDataCache = new Map<string, any>();
         addStat(side, "yellow_cards", name, statsMap.yellow_cards ?? 0);
         addStat(side, "red_cards", name, statsMap.red_cards ?? 0);
         addStat(side, "saves", name, statsMap.saves ?? 0);
-        addStat(side, "bonus", name, statsMap.bonus ?? 0);
         addStat(side, "bps", name, bps);
-        addStat(
-          side,
-          "clearances_blocks_interceptions",
-          name,
-          statsMap.clearances_blocks_interceptions ?? 0
-        );
+
+        // DEFCON: non-GK players only
+        const pos = playerInfo.position;
+        if (pos !== 1) {
+          const cbi = statsMap.clearances_blocks_interceptions ?? 0;
+          const tack = statsMap.tackles ?? 0;
+          const rec = statsMap.recoveries ?? 0;
+          const rawDc = pos === 2 ? (cbi + tack) : (cbi + tack + rec);
+          const threshold = pos === 2 ? 10 : 12;
+          if (rawDc > 0) {
+            const achieved = rawDc >= threshold;
+            addStat(side, "defcon", name, rawDc, `${rawDc}/${threshold}${achieved ? " ✓" : ""}`);
+          }
+        }
       }
 
       const hs = fixture.team_h_score ?? 0;
@@ -548,9 +554,8 @@ const managerDataCache = new Map<string, any>();
         { key: "yellow_cards", label: "Yellow Cards" },
         { key: "red_cards", label: "Red Cards" },
         { key: "saves", label: "Saves" },
-        { key: "bonus", label: "Bonus" },
         { key: "bps", label: "Bonus Points System" },
-        { key: "clearances_blocks_interceptions", label: "Defensive Contribution" },
+        { key: "defcon", label: "DEFCONs" },
       ];
 
       const esc = (s: string) =>
@@ -558,9 +563,6 @@ const managerDataCache = new Map<string, any>();
           .replace(/&/g, "&amp;")
           .replace(/</g, "&lt;")
           .replace(/>/g, "&gt;");
-
-      const renderPlayer = (p: PlayerStatRecord) =>
-        `<div class="match-stat-player">${esc(p.name)} <span>(${p.value})</span></div>`;
 
       let html = `
         <div class="match-detail-header">
@@ -572,20 +574,39 @@ const managerDataCache = new Map<string, any>();
       `;
 
       for (const { key, label } of statSections) {
-        const homePlayers = (homeStats[key] || []).sort((a, b) => b.value - a.value);
-        const awayPlayers = (awayStats[key] || []).sort((a, b) => b.value - a.value);
+        const homePlayers = homeStats[key] || [];
+        const awayPlayers = awayStats[key] || [];
         if (homePlayers.length === 0 && awayPlayers.length === 0) continue;
 
         html += `
-          <div class="match-stat-section">
-            <div class="match-stat-title">${esc(label)}</div>
-            <div class="match-stat-body">
-              <div class="match-stat-col match-stat-col--home">
-                ${homePlayers.map(renderPlayer).join("")}
-              </div>
-              <div class="match-stat-col match-stat-col--away">
-                ${awayPlayers.map(renderPlayer).join("")}
-              </div>
+          <div class="player-modal-bps-table">
+            <h3 class="player-modal-section-title">${esc(label)}</h3>
+            <div class="bps-table-wrapper">
+              <table class="bps-table">
+                <thead>
+                  <tr>
+                    <th>${esc(homeTeamShort)}</th>
+                    <th>${esc(awayTeamShort)}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(() => {
+                    const maxRows = Math.max(homePlayers.length, awayPlayers.length);
+                    const homeSorted = [...homePlayers].sort((a, b) => b.value - a.value);
+                    const awaySorted = [...awayPlayers].sort((a, b) => b.value - a.value);
+                    let rows = "";
+                    for (let i = 0; i < maxRows; i++) {
+                      const h = homeSorted[i];
+                      const a = awaySorted[i];
+                      rows += `<tr>
+                        <td><div class="bps-cell">${h ? `<span class="bps-player">${esc(h.name)}</span><span class="bps-score">${esc(h.extra ?? String(h.value))}</span>` : ""}</div></td>
+                        <td><div class="bps-cell">${a ? `<span class="bps-player">${esc(a.name)}</span><span class="bps-score">${esc(a.extra ?? String(a.value))}</span>` : ""}</div></td>
+                      </tr>`;
+                    }
+                    return rows;
+                  })()}
+                </tbody>
+              </table>
             </div>
           </div>
         `;
