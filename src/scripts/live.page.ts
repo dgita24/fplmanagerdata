@@ -555,7 +555,7 @@ const managerDataCache = new Map<string, any>();
         { key: "red_cards", label: "Red Cards" },
         { key: "saves", label: "Saves" },
         { key: "bps", label: "Bonus Points System" },
-        { key: "defcon", label: "DEFCONs" },
+        { key: "defcon", label: "DEFCON" },
       ];
 
       const esc = (s: string) =>
