@@ -480,7 +480,7 @@ const managerDataCache = new Map<string, any>();
       const homeTeamShort = teamCache.get(fixture.team_h)?.shortName || homeTeamName;
       const awayTeamShort = teamCache.get(fixture.team_a)?.shortName || awayTeamName;
 
-      interface SideRecord { name: string; value: number; extra?: string }
+      interface SideRecord { name: string; value: number; extra?: string; highlight?: boolean }
       const homeStats: Record<string, SideRecord[]> = {};
       const awayStats: Record<string, SideRecord[]> = {};
 
@@ -489,11 +489,12 @@ const managerDataCache = new Map<string, any>();
         key: string,
         name: string,
         value: number,
-        extra?: string
+        extra?: string,
+        highlight?: boolean
       ) => {
         if (value > 0) {
           if (!side[key]) side[key] = [];
-          side[key].push({ name, value, extra });
+          side[key].push({ name, value, extra, highlight });
         }
       };
 
@@ -539,7 +540,7 @@ const managerDataCache = new Map<string, any>();
           const threshold = pos === 2 ? 10 : 12;
           if (rawDc > 0) {
             const achieved = rawDc >= threshold;
-            addStat(side, "defcon", name, rawDc, `${rawDc}/${threshold}${achieved ? " ✓" : ""}`);
+            addStat(side, "defcon", name, rawDc, `${rawDc}/${threshold}`, achieved);
           }
         }
       }
@@ -595,13 +596,25 @@ const managerDataCache = new Map<string, any>();
                     const maxRows = Math.max(homePlayers.length, awayPlayers.length);
                     const homeSorted = [...homePlayers].sort((a, b) => b.value - a.value);
                     const awaySorted = [...awayPlayers].sort((a, b) => b.value - a.value);
+
+                    // For BPS: top 3 + ties per side turn green
+                    const isBps = key === "bps";
+                    const homeBpsThreshold = isBps && homeSorted.length > 0
+                      ? homeSorted[Math.min(2, homeSorted.length - 1)].value
+                      : Infinity;
+                    const awayBpsThreshold = isBps && awaySorted.length > 0
+                      ? awaySorted[Math.min(2, awaySorted.length - 1)].value
+                      : Infinity;
+
                     let rows = "";
                     for (let i = 0; i < maxRows; i++) {
                       const h = homeSorted[i];
                       const a = awaySorted[i];
+                      const hGreen = h ? (isBps ? h.value >= homeBpsThreshold : !!h.highlight) : false;
+                      const aGreen = a ? (isBps ? a.value >= awayBpsThreshold : !!a.highlight) : false;
                       rows += `<tr>
-                        <td><div class="bps-cell">${h ? `<span class="bps-player">${esc(h.name)}</span><span class="bps-score">${esc(h.extra ?? String(h.value))}</span>` : ""}</div></td>
-                        <td><div class="bps-cell">${a ? `<span class="bps-player">${esc(a.name)}</span><span class="bps-score">${esc(a.extra ?? String(a.value))}</span>` : ""}</div></td>
+                        <td><div class="bps-cell">${h ? `<span class="bps-player${hGreen ? " bps-player--green" : ""}">${esc(h.name)}</span><span class="bps-score${hGreen ? " bps-score--green" : ""}">${esc(h.extra ?? String(h.value))}</span>` : ""}</div></td>
+                        <td><div class="bps-cell">${a ? `<span class="bps-player${aGreen ? " bps-player--green" : ""}">${esc(a.name)}</span><span class="bps-score${aGreen ? " bps-score--green" : ""}">${esc(a.extra ?? String(a.value))}</span>` : ""}</div></td>
                       </tr>`;
                     }
                     return rows;
