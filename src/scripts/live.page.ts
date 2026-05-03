@@ -171,6 +171,11 @@ const managerDataCache = new Map<string, any>();
   const closeCaptainsModal = document.getElementById("close-captains-modal");
   const captainsFavToggle = document.getElementById("captains-fav-toggle") as HTMLButtonElement | null;
 
+  const fixturesModal = document.getElementById("fixtures-modal");
+  const fixturesModalContent = document.getElementById("fixtures-modal-content");
+  const matchDetailModal = document.getElementById("match-detail-modal");
+  const matchDetailContent = document.getElementById("match-detail-content");
+
   let captainsShowFavouritesOnly = false;
 
   function renderCaptainsModal() {
@@ -422,6 +427,270 @@ const managerDataCache = new Map<string, any>();
     captainsShowFavouritesOnly = !captainsShowFavouritesOnly;
     updateCaptainsFavToggle();
     renderCaptainsModal();
+  });
+
+  // ==============================
+  // Fixtures Modal
+  // ==============================
+
+  interface FixtureRaw {
+    id: number;
+    team_h: number;
+    team_a: number;
+    team_h_score: number | null;
+    team_a_score: number | null;
+    started: boolean;
+    finished: boolean;
+    finished_provisional: boolean;
+    kickoff_time?: string;
+  }
+
+  interface LivePlayerEntry {
+    id: number;
+    stats: Record<string, number>;
+    explain: Array<{
+      fixture: number;
+      stats: Array<{ identifier: string; points: number; value: number }>;
+    }>;
+  }
+
+  interface PlayerStatRecord {
+    name: string;
+    value: number;
+  }
+
+  function closeMatchDetailModal() {
+    matchDetailModal?.classList.remove("is-open");
+  }
+
+  function closeFixturesModal() {
+    fixturesModal?.classList.remove("is-open");
+    closeMatchDetailModal();
+  }
+
+  async function openMatchDetail(fixture: FixtureRaw, gw: number) {
+    if (!matchDetailModal || !matchDetailContent) return;
+
+    matchDetailContent.innerHTML = `<div class="fixtures-loading">Loading match details…</div>`;
+    matchDetailModal.classList.add("is-open");
+
+    try {
+      const res = await fetch(`/api/fpl/event/${gw}/live?v=${Date.now()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to fetch live data");
+      const data = await res.json();
+      const elements: LivePlayerEntry[] = data.elements || [];
+
+      const homeTeamName = teamCache.get(fixture.team_h)?.name || `Team ${fixture.team_h}`;
+      const awayTeamName = teamCache.get(fixture.team_a)?.name || `Team ${fixture.team_a}`;
+
+      const homeStats: Record<string, PlayerStatRecord[]> = {};
+      const awayStats: Record<string, PlayerStatRecord[]> = {};
+
+      const addStat = (
+        side: Record<string, PlayerStatRecord[]>,
+        key: string,
+        name: string,
+        value: number
+      ) => {
+        if (value > 0) {
+          if (!side[key]) side[key] = [];
+          side[key].push({ name, value });
+        }
+      };
+
+      for (const el of elements) {
+        const fixtureExplain = (el.explain || []).find(
+          (e) => e.fixture === fixture.id
+        );
+        if (!fixtureExplain) continue;
+
+        const playerInfo = playerCache.get(el.id);
+        if (!playerInfo) continue;
+
+        const isHome = playerInfo.team === fixture.team_h;
+        const isAway = playerInfo.team === fixture.team_a;
+        if (!isHome && !isAway) continue;
+
+        const side = isHome ? homeStats : awayStats;
+        const name = playerInfo.name;
+
+        // Build a stats map from this fixture's explain entry
+        const statsMap: Record<string, number> = {};
+        for (const s of fixtureExplain.stats) {
+          statsMap[s.identifier] = Number(s.value ?? 0);
+        }
+        // BPS lives in el.stats (not in explain)
+        const bps = Number(el.stats?.bps ?? 0);
+
+        addStat(side, "goals_scored", name, statsMap.goals_scored ?? 0);
+        addStat(side, "assists", name, statsMap.assists ?? 0);
+        addStat(side, "yellow_cards", name, statsMap.yellow_cards ?? 0);
+        addStat(side, "red_cards", name, statsMap.red_cards ?? 0);
+        addStat(side, "saves", name, statsMap.saves ?? 0);
+        addStat(side, "bonus", name, statsMap.bonus ?? 0);
+        addStat(side, "bps", name, bps);
+        addStat(
+          side,
+          "clearances_blocks_interceptions",
+          name,
+          statsMap.clearances_blocks_interceptions ?? 0
+        );
+      }
+
+      const hs = fixture.team_h_score ?? 0;
+      const as_ = fixture.team_a_score ?? 0;
+      const scoreText =
+        fixture.started || fixture.finished ? `${hs} - ${as_}` : "vs";
+
+      const statSections: Array<{ key: string; label: string }> = [
+        { key: "goals_scored", label: "Goals Scored" },
+        { key: "assists", label: "Assists" },
+        { key: "yellow_cards", label: "Yellow Cards" },
+        { key: "red_cards", label: "Red Cards" },
+        { key: "saves", label: "Saves" },
+        { key: "bonus", label: "Bonus" },
+        { key: "bps", label: "Bonus Points System" },
+        { key: "clearances_blocks_interceptions", label: "Defensive Contribution" },
+      ];
+
+      const esc = (s: string) =>
+        s
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+
+      const renderPlayer = (p: PlayerStatRecord) =>
+        `<div class="match-stat-player">${esc(p.name)} <span>(${p.value})</span></div>`;
+
+      let html = `
+        <div class="match-detail-header">
+          <span>${esc(homeTeamName)}</span>
+          <span class="match-detail-score-badge">${scoreText}</span>
+          <span>${esc(awayTeamName)}</span>
+        </div>
+        <div class="match-detail-scroll">
+      `;
+
+      for (const { key, label } of statSections) {
+        const homePlayers = (homeStats[key] || []).sort((a, b) => b.value - a.value);
+        const awayPlayers = (awayStats[key] || []).sort((a, b) => b.value - a.value);
+        if (homePlayers.length === 0 && awayPlayers.length === 0) continue;
+
+        html += `
+          <div class="match-stat-section">
+            <div class="match-stat-title">${esc(label)}</div>
+            <div class="match-stat-body">
+              <div class="match-stat-col match-stat-col--home">
+                ${homePlayers.map(renderPlayer).join("")}
+              </div>
+              <div class="match-stat-col match-stat-col--away">
+                ${awayPlayers.map(renderPlayer).join("")}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      html += `</div>`;
+      matchDetailContent.innerHTML = html;
+    } catch {
+      matchDetailContent.innerHTML = `<div class="fixtures-error">Error loading match details.</div>`;
+    }
+  }
+
+  async function openFixturesModal() {
+    if (!fixturesModal || !fixturesModalContent) return;
+
+    const gw = parseInt(
+      (document.getElementById("gw-filter") as HTMLSelectElement)?.value
+    );
+
+    if (!gw) {
+      fixturesModalContent.innerHTML = `<div class="fixtures-error">Please select a gameweek first.</div>`;
+      fixturesModal.classList.add("is-open");
+      return;
+    }
+
+    fixturesModalContent.innerHTML = `<div class="fixtures-loading">Loading fixtures…</div>`;
+    fixturesModal.classList.add("is-open");
+
+    try {
+      const res = await fetch(
+        `/api/fpl/fixtures?event=${gw}&v=${Date.now()}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) throw new Error("Failed to fetch fixtures");
+      const fixtures: FixtureRaw[] = await res.json();
+
+      if (!fixtures || fixtures.length === 0) {
+        fixturesModalContent.innerHTML = `<div class="fixtures-empty">No fixtures found for GW${gw}.</div>`;
+        return;
+      }
+
+      const esc = (s: string) =>
+        s
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+
+      let html = `<div class="fixtures-gw-title">GW ${gw} Fixtures</div><div class="fixtures-list">`;
+
+      for (const f of fixtures) {
+        const homeTeam = esc(teamCache.get(f.team_h)?.name || `Team ${f.team_h}`);
+        const awayTeam = esc(teamCache.get(f.team_a)?.name || `Team ${f.team_a}`);
+
+        let scoreHtml: string;
+        if (f.started || f.finished) {
+          const hs = f.team_h_score ?? 0;
+          const as_ = f.team_a_score ?? 0;
+          scoreHtml = `<span class="fixture-score">${hs} - ${as_}</span>`;
+        } else {
+          const time = f.kickoff_time
+            ? new Date(f.kickoff_time).toLocaleTimeString("en-GB", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "TBC";
+          scoreHtml = `<span class="fixture-score fixture-score--upcoming">${time}</span>`;
+        }
+
+        html += `
+          <button class="fixture-row" data-fixture-id="${f.id}" type="button">
+            <span class="fixture-team fixture-team--home">${homeTeam}</span>
+            ${scoreHtml}
+            <span class="fixture-team fixture-team--away">${awayTeam}</span>
+          </button>
+        `;
+      }
+
+      html += `</div>`;
+      fixturesModalContent.innerHTML = html;
+
+      // Attach click handlers to fixture rows
+      fixturesModalContent.querySelectorAll(".fixture-row").forEach((row) => {
+        row.addEventListener("click", () => {
+          const fixtureId = parseInt(
+            (row as HTMLElement).dataset.fixtureId || "0"
+          );
+          const fixture = fixtures.find((f) => f.id === fixtureId);
+          if (fixture) openMatchDetail(fixture, gw);
+        });
+      });
+    } catch {
+      fixturesModalContent.innerHTML = `<div class="fixtures-error">Error loading fixtures.</div>`;
+    }
+  }
+
+  document.getElementById("fixtures-btn")?.addEventListener("click", () => openFixturesModal());
+  document.getElementById("close-fixtures-modal")?.addEventListener("click", closeFixturesModal);
+  document.getElementById("close-match-detail-modal")?.addEventListener("click", closeMatchDetailModal);
+
+  // Close fixtures modals on backdrop click
+  fixturesModal?.addEventListener("click", (e) => {
+    if (e.target === fixturesModal) closeFixturesModal();
+  });
+  matchDetailModal?.addEventListener("click", (e) => {
+    if (e.target === matchDetailModal) closeMatchDetailModal();
   });
 
   // Initialize GW Points Modal
