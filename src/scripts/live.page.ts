@@ -529,11 +529,12 @@ const managerDataCache = new Map<string, any>();
         addStat(side, "bps", name, bps);
 
         // DEFCON: non-GK players only
+        // Defensive stats (like BPS) live in el.stats, not in the per-fixture explain
         const pos = playerInfo.position;
         if (pos !== 1) {
-          const cbi = statsMap.clearances_blocks_interceptions ?? 0;
-          const tack = statsMap.tackles ?? 0;
-          const rec = statsMap.recoveries ?? 0;
+          const cbi = Number(el.stats?.clearances_blocks_interceptions ?? 0);
+          const tack = Number(el.stats?.tackles ?? 0);
+          const rec = Number(el.stats?.recoveries ?? 0);
           const rawDc = pos === 2 ? (cbi + tack) : (cbi + tack + rec);
           const threshold = pos === 2 ? 10 : 12;
           if (rawDc > 0) {
