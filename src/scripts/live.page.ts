@@ -597,21 +597,22 @@ const managerDataCache = new Map<string, any>();
                     const homeSorted = [...homePlayers].sort((a, b) => b.value - a.value);
                     const awaySorted = [...awayPlayers].sort((a, b) => b.value - a.value);
 
-                    // For BPS: top 3 + ties per side turn green
+                    // For BPS: top 3 + ties across the entire match (both teams combined)
                     const isBps = key === "bps";
-                    const homeBpsThreshold = isBps && homeSorted.length > 0
-                      ? homeSorted[Math.min(2, homeSorted.length - 1)].value
-                      : Infinity;
-                    const awayBpsThreshold = isBps && awaySorted.length > 0
-                      ? awaySorted[Math.min(2, awaySorted.length - 1)].value
-                      : Infinity;
+                    let bpsThreshold = Infinity;
+                    if (isBps) {
+                      const allBps = [...homeSorted, ...awaySorted].sort((a, b) => b.value - a.value);
+                      if (allBps.length > 0) {
+                        bpsThreshold = allBps[Math.min(2, allBps.length - 1)].value;
+                      }
+                    }
 
                     let rows = "";
                     for (let i = 0; i < maxRows; i++) {
                       const h = homeSorted[i];
                       const a = awaySorted[i];
-                      const hGreen = h ? (isBps ? h.value >= homeBpsThreshold : !!h.highlight) : false;
-                      const aGreen = a ? (isBps ? a.value >= awayBpsThreshold : !!a.highlight) : false;
+                      const hGreen = h ? (isBps ? h.value >= bpsThreshold : !!h.highlight) : false;
+                      const aGreen = a ? (isBps ? a.value >= bpsThreshold : !!a.highlight) : false;
                       rows += `<tr>
                         <td><div class="bps-cell">${h ? `<span class="bps-player${hGreen ? " bps-player--green" : ""}">${esc(h.name)}</span><span class="bps-score${hGreen ? " bps-score--green" : ""}">${esc(h.extra ?? String(h.value))}</span>` : ""}</div></td>
                         <td><div class="bps-cell">${a ? `<span class="bps-player${aGreen ? " bps-player--green" : ""}">${esc(a.name)}</span><span class="bps-score${aGreen ? " bps-score--green" : ""}">${esc(a.extra ?? String(a.value))}</span>` : ""}</div></td>
