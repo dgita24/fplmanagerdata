@@ -271,6 +271,8 @@ const managerDataCache = new Map<string, any>();
   };
 
   const BPS_LIMIT = 6;
+  // Max concurrent element-summary requests when computing per-fixture DEFCON
+  const DEFCON_SUMMARY_CONCURRENCY = 3;
 
   let liveData: any[] = [];
   let latestGW: number = 1;
@@ -281,6 +283,9 @@ const managerDataCache = new Map<string, any>();
   let projectedBonusCache = new Map<string, number>();
   let teamStatusCache = new Map<string, TeamStatus>();
   let fixturesCache: FixtureInfo[] = [];
+  // Cache: "teamId:prevFixtureIds" → Map<playerId, per-fixture rawDefconValue>
+  // Cleared whenever the main caches are refreshed to avoid stale data.
+  let perFixtureDefconCache = new Map<string, Map<number, number>>();
 
   // Keep track of which GW the in-memory live caches refer to
   let liveCachesGw: number | null = null;
@@ -309,6 +314,7 @@ const managerDataCache = new Map<string, any>();
     livePointsCache.clear();
     projectedBonusCache.clear();
     teamStatusCache.clear();
+    perFixtureDefconCache.clear();
 
     // Refill caches for this GW
     await Promise.all([
@@ -1237,20 +1243,102 @@ function buildBreakdownRows(
     return cbit + stats.recoveries;
   }
 
-  function buildDefconRows(teamId: number): BpsEntry[] {
+  /**
+   * For DGW teams: fetch element-summary for each non-GK player on the team
+   * and compute per-fixture DEFCON by subtracting finished prior-fixture stats
+   * from the cumulative GW totals in livePointsCache.
+   *
+   * Returns a Map<playerId, rawDefconValue> for this specific fixture, or null
+   * if there are no previous finished fixtures to subtract (non-DGW case).
+   *
+   * Results are cached in perFixtureDefconCache (cleared on cache refresh).
+   */
+  async function fetchPerFixtureDefconMap(
+    teamId: number,
+    previousFinishedFixtures: FixtureInfo[]
+  ): Promise<Map<number, number>> {
+    const cacheKey = `${teamId}:${previousFinishedFixtures.map(f => f.id).sort().join(',')}`;
+    const cached = perFixtureDefconCache.get(cacheKey);
+    if (cached) return cached;
+
+    const result = new Map<number, number>();
+
+    // Collect all non-GK players for this team
+    const teamPlayers = [...playerCache.values()].filter(
+      p => p.team === teamId && p.position !== 1
+    );
+
+    await mapWithConcurrency(teamPlayers, DEFCON_SUMMARY_CONCURRENCY, async (player) => {
+      const cumStats = livePointsCache.get(player.id);
+
+      let prevCBI = 0, prevTackles = 0, prevRecoveries = 0;
+
+      try {
+        const res = await fetch(`/api/fpl/element-summary/${player.id}/?v=${Date.now()}`);
+        if (res.ok) {
+          const summary = await res.json();
+          const historyRows = Array.isArray(summary.history) ? summary.history : [];
+          for (const prevFx of previousFinishedFixtures) {
+            const hist = historyRows.find((r: any) => Number(r.fixture) === prevFx.id);
+            if (hist) {
+              prevCBI += Number(hist.clearances_blocks_interceptions || 0);
+              prevTackles += Number(hist.tackles || 0);
+              prevRecoveries += Number(hist.recoveries || 0);
+            }
+          }
+        }
+      } catch {
+        // Fall back to 0 subtraction (cumulative used as-is)
+      }
+
+      const cumulativeCBI = cumStats ? (cumStats.clearances_blocks_interceptions || 0) : 0;
+      const cumulativeTackles = cumStats ? (cumStats.tackles || 0) : 0;
+      const cumulativeRecoveries = cumStats ? (cumStats.recoveries || 0) : 0;
+
+      const cbi = Math.max(0, cumulativeCBI - prevCBI);
+      const tackles = Math.max(0, cumulativeTackles - prevTackles);
+      const recoveries = Math.max(0, cumulativeRecoveries - prevRecoveries);
+
+      const rawDefcon = player.position === 2
+        ? (cbi + tackles)
+        : (cbi + tackles + recoveries);
+
+      result.set(player.id, rawDefcon);
+    });
+
+    perFixtureDefconCache.set(cacheKey, result);
+    return result;
+  }
+
+  function buildDefconRows(teamId: number, overrideMap?: Map<number, number>): BpsEntry[] {
     const entries: BpsEntry[] = [];
-    for (const [playerId, stats] of livePointsCache) {
-      const player = playerCache.get(playerId);
-      if (!player || player.team !== teamId || player.position === 1) continue;
-      const value = computeRawDefcon(stats, player.position);
-      if (value === 0) continue;
-      entries.push({ name: player.name, value });
+    if (overrideMap) {
+      // Per-fixture data: iterate the override map (covers all non-GK team players)
+      for (const [playerId, value] of overrideMap) {
+        const player = playerCache.get(playerId);
+        if (!player || player.team !== teamId || player.position === 1) continue;
+        if (value === 0) continue;
+        entries.push({ name: player.name, value });
+      }
+    } else {
+      // Default: cumulative GW stats from livePointsCache
+      for (const [playerId, stats] of livePointsCache) {
+        const player = playerCache.get(playerId);
+        if (!player || player.team !== teamId || player.position === 1) continue;
+        const value = computeRawDefcon(stats, player.position);
+        if (value === 0) continue;
+        entries.push({ name: player.name, value });
+      }
     }
     entries.sort((a, b) => b.value - a.value);
     return entries.slice(0, BPS_LIMIT);
   }
 
-  function renderFixtureDefconTable(fixture: FixtureInfo | null) {
+  function renderFixtureDefconTable(
+    fixture: FixtureInfo | null,
+    homeOverrideMap?: Map<number, number>,
+    awayOverrideMap?: Map<number, number>
+  ) {
     const title = `<h3 class="player-modal-section-title">Live DEFCONs</h3>`;
 
     if (!fixture) {
@@ -1271,8 +1359,8 @@ function buildBreakdownRows(
       `;
     }
 
-    const home = buildDefconRows(fixture.team_h);
-    const away = buildDefconRows(fixture.team_a);
+    const home = buildDefconRows(fixture.team_h, homeOverrideMap);
+    const away = buildDefconRows(fixture.team_a, awayOverrideMap);
 
     if (home.length === 0 && away.length === 0) {
       return `
@@ -1367,6 +1455,42 @@ function buildBreakdownRows(
       yellow_cards: 0, red_cards: 0, saves: 0,
       clearances_blocks_interceptions: 0, recoveries: 0, tackles: 0, defensive_contribution: 0
     };
+
+    // Pre-compute per-fixture DEFCON overrides for DGW teams.
+    // For each started fixture, if either team has other finished fixtures in
+    // fixturesCache (i.e. they played another game earlier this GW), subtract
+    // those prior-fixture stats from the cumulative livePointsCache values so
+    // the DEFCON table reflects this specific fixture only.
+    const defconOverrides = new Map<number, {
+      home?: Map<number, number>;
+      away?: Map<number, number>;
+    }>();
+
+    for (const fx of fixtures) {
+      if (!fx.started) continue;
+
+      const overrides: { home?: Map<number, number>; away?: Map<number, number> } = {};
+
+      for (const sideKey of ['home', 'away'] as const) {
+        const teamId = sideKey === 'home' ? fx.team_h : fx.team_a;
+
+        // Fixtures for this team in the same GW that are NOT the current fixture
+        // and have already been played (finished or provisional).
+        const prevFinished = fixturesCache.filter(f =>
+          f.id !== fx.id &&
+          (f.team_h === teamId || f.team_a === teamId) &&
+          (f.finished || f.finished_provisional)
+        );
+
+        if (prevFinished.length > 0) {
+          overrides[sideKey] = await fetchPerFixtureDefconMap(teamId, prevFinished);
+        }
+      }
+
+      if (overrides.home || overrides.away) {
+        defconOverrides.set(fx.id, overrides);
+      }
+    }
 
     const projBonus = projectedBonusCache.get(`${gw}:${playerId}`) || 0;
     let html = `
@@ -1481,7 +1605,10 @@ function buildBreakdownRows(
         </div>
 
         ${renderFixtureBpsTable(fx)}
-        ${renderFixtureDefconTable(fx)}
+        ${(() => {
+          const ov = defconOverrides.get(fx.id);
+          return renderFixtureDefconTable(fx, ov?.home, ov?.away);
+        })()}
       `;
     }
 
@@ -2052,8 +2179,7 @@ function buildBreakdownRows(
     livePointsCache.clear();
     projectedBonusCache.clear();
     teamStatusCache.clear();
-
-    // Important: only bust caches if forced (manual refresh) or when background-refreshing stale snapshot
+    perFixtureDefconCache.clear();
     const cacheBuster = force ? Date.now().toString() : undefined;
 
     try {
