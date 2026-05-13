@@ -476,9 +476,13 @@ const managerDataCache = new Map<string, any>();
     matchDetailModal.classList.add("is-open");
 
     try {
-      const res = await fetch(`/api/fpl/event/${gw}/live?v=${Date.now()}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to fetch live data");
-      const data = await res.json();
+      const [liveRes, fixturesRes] = await Promise.all([
+        fetch(`/api/fpl/event/${gw}/live?v=${Date.now()}`, { cache: "no-store" }),
+        fetch(`/api/fpl/fixtures?event=${gw}&v=${Date.now()}`, { cache: "no-store" })
+      ]);
+      if (!liveRes.ok) throw new Error("Failed to fetch live data");
+      const data = await liveRes.json();
+      const gwFixtures: FixtureRaw[] = fixturesRes.ok ? await fixturesRes.json() : [fixture];
       const elements: LivePlayerEntry[] = data.elements || [];
 
       const homeTeamName = teamCache.get(fixture.team_h)?.name || `Team ${fixture.team_h}`;
@@ -504,6 +508,34 @@ const managerDataCache = new Map<string, any>();
         }
       };
 
+      const priorFixturesByTeam = new Map<number, FixtureRaw[]>();
+      priorFixturesByTeam.set(
+        fixture.team_h,
+        getPriorFinishedFixturesForTeam(gwFixtures, fixture.team_h, fixture)
+      );
+      priorFixturesByTeam.set(
+        fixture.team_a,
+        getPriorFinishedFixturesForTeam(gwFixtures, fixture.team_a, fixture)
+      );
+
+      const elementSummaryById = new Map<number, any>();
+      async function getElementSummary(playerId: number): Promise<any> {
+        if (elementSummaryById.has(playerId)) return elementSummaryById.get(playerId);
+        try {
+          const summaryRes = await fetch(`/api/fpl/element-summary/${playerId}/?v=${Date.now()}`, { cache: "no-store" });
+          if (!summaryRes.ok) {
+            elementSummaryById.set(playerId, null);
+            return null;
+          }
+          const summary = await summaryRes.json();
+          elementSummaryById.set(playerId, summary);
+          return summary;
+        } catch {
+          elementSummaryById.set(playerId, null);
+          return null;
+        }
+      }
+
       for (const el of elements) {
         const fixtureExplain = (el.explain || []).find(
           (e) => e.fixture === fixture.id
@@ -519,6 +551,15 @@ const managerDataCache = new Map<string, any>();
 
         const side = isHome ? homeStats : awayStats;
         const name = playerInfo.name;
+        const teamId = isHome ? fixture.team_h : fixture.team_a;
+        const priorFixtures = priorFixturesByTeam.get(teamId) || [];
+        let priorHistoryRows: any[] = [];
+        if (priorFixtures.length > 0) {
+          const summary = await getElementSummary(el.id);
+          const historyRows = Array.isArray(summary?.history) ? summary.history : [];
+          const priorIds = new Set(priorFixtures.map((fx) => Number(fx.id)));
+          priorHistoryRows = historyRows.filter((r: any) => priorIds.has(Number(r.fixture)));
+        }
 
         // Build a stats map from this fixture's explain entry
         const statsMap: Record<string, number> = {};
@@ -526,7 +567,10 @@ const managerDataCache = new Map<string, any>();
           statsMap[s.identifier] = Number(s.value ?? 0);
         }
         // BPS lives in el.stats (not in explain)
-        const bps = Number(el.stats?.bps ?? 0);
+        const cumulativeBps = Number(el.stats?.bps ?? 0);
+        const bps = priorHistoryRows.length > 0
+          ? computeFixtureScopedBps(cumulativeBps, priorHistoryRows)
+          : cumulativeBps;
 
         addStat(side, "goals_scored", name, statsMap.goals_scored ?? 0);
         addStat(side, "assists", name, statsMap.assists ?? 0);
@@ -542,7 +586,9 @@ const managerDataCache = new Map<string, any>();
           const cbi = Number(el.stats?.clearances_blocks_interceptions ?? 0);
           const tack = Number(el.stats?.tackles ?? 0);
           const rec = Number(el.stats?.recoveries ?? 0);
-          const rawDc = pos === 2 ? (cbi + tack) : (cbi + tack + rec);
+          const rawDc = priorHistoryRows.length > 0
+            ? computeFixtureScopedDefconRaw(pos, cbi, tack, rec, priorHistoryRows)
+            : (pos === 2 ? (cbi + tack) : (cbi + tack + rec));
           const threshold = pos === 2 ? 10 : 12;
           if (rawDc > 0) {
             const achieved = rawDc >= threshold;
@@ -1012,6 +1058,68 @@ const managerDataCache = new Map<string, any>();
     });
 }
 
+  type FixtureLike = {
+    id: number;
+    team_h: number;
+    team_a: number;
+    finished: boolean;
+    finished_provisional: boolean;
+    kickoff_time?: string;
+  };
+
+  function getFixtureTimeMs(fixture: FixtureLike): number {
+    if (!fixture.kickoff_time) return Number.NaN;
+    const ts = new Date(fixture.kickoff_time).getTime();
+    return Number.isFinite(ts) ? ts : Number.NaN;
+  }
+
+  function getPriorFinishedFixturesForTeam<T extends FixtureLike>(
+    fixtures: T[],
+    teamId: number,
+    currentFixture: T
+  ): T[] {
+    const currentTs = getFixtureTimeMs(currentFixture);
+    return fixtures.filter((fx) => {
+      if (fx.id === currentFixture.id) return false;
+      if (!(fx.team_h === teamId || fx.team_a === teamId)) return false;
+      if (!(fx.finished || fx.finished_provisional)) return false;
+
+      const ts = getFixtureTimeMs(fx);
+      if (Number.isFinite(currentTs) && Number.isFinite(ts)) {
+        if (ts < currentTs) return true;
+        if (ts > currentTs) return false;
+      }
+      // Fallback for identical/missing kickoff times.
+      return fx.id < currentFixture.id;
+    });
+  }
+
+  function computeFixtureScopedBps(
+    cumulativeBps: number,
+    priorFixturesHistoryRows: any[]
+  ): number {
+    const priorBps = priorFixturesHistoryRows.reduce((sum, row) => sum + Number(row?.bps || 0), 0);
+    return Math.max(0, cumulativeBps - priorBps);
+  }
+
+  function computeFixtureScopedDefconRaw(
+    position: number,
+    cumulativeCbi: number,
+    cumulativeTackles: number,
+    cumulativeRecoveries: number,
+    priorFixturesHistoryRows: any[]
+  ): number {
+    if (position === 1) return 0;
+    const priorCbi = priorFixturesHistoryRows.reduce((sum, row) => sum + Number(row?.clearances_blocks_interceptions || 0), 0);
+    const priorTackles = priorFixturesHistoryRows.reduce((sum, row) => sum + Number(row?.tackles || 0), 0);
+    const priorRecoveries = priorFixturesHistoryRows.reduce((sum, row) => sum + Number(row?.recoveries || 0), 0);
+
+    const cbi = Math.max(0, cumulativeCbi - priorCbi);
+    const tackles = Math.max(0, cumulativeTackles - priorTackles);
+    const recoveries = Math.max(0, cumulativeRecoveries - priorRecoveries);
+    return position === 2 ? (cbi + tackles) : (cbi + tackles + recoveries);
+  }
+
   function calculateDefcon(position: number, defensiveContribution: number): { points: number; threshold: number } {
     if (position === 1) return { points: 0, threshold: 0 };
     const threshold = position === 2 ? 10 : 12;
@@ -1263,10 +1371,10 @@ function buildBreakdownRows(
 
     const result = new Map<number, number>();
 
-    // Collect all non-GK players for this team
-    const teamPlayers = [...playerCache.values()].filter(
-      p => p.team === teamId && p.position !== 1
-    );
+    // Collect all non-GK players for this team with IDs
+    const teamPlayers = [...playerCache.entries()]
+      .filter(([, p]) => p.team === teamId && p.position !== 1)
+      .map(([id, p]) => ({ id, position: p.position }));
 
     await mapWithConcurrency(teamPlayers, DEFCON_SUMMARY_CONCURRENCY, async (player) => {
       const cumStats = livePointsCache.get(player.id);
@@ -1474,13 +1582,7 @@ function buildBreakdownRows(
       for (const sideKey of ['home', 'away'] as const) {
         const teamId = sideKey === 'home' ? fx.team_h : fx.team_a;
 
-        // Fixtures for this team in the same GW that are NOT the current fixture
-        // and have already been played (finished or provisional).
-        const prevFinished = fixturesCache.filter(f =>
-          f.id !== fx.id &&
-          (f.team_h === teamId || f.team_a === teamId) &&
-          (f.finished || f.finished_provisional)
-        );
+        const prevFinished = getPriorFinishedFixturesForTeam(fixturesCache, teamId, fx);
 
         if (prevFinished.length > 0) {
           overrides[sideKey] = await fetchPerFixtureDefconMap(teamId, prevFinished);

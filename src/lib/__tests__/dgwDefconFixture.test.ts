@@ -38,9 +38,18 @@ function computeRawDefcon(
 }
 
 interface PriorFixtureStats {
+  bps?: number;
   clearances_blocks_interceptions: number;
   tackles: number;
   recoveries: number;
+}
+
+function computeFixtureScopedBps(
+  cumulativeBps: number,
+  priorStats: PriorFixtureStats[],
+): number {
+  const priorBps = priorStats.reduce((sum, prior) => sum + (prior.bps ?? 0), 0);
+  return Math.max(0, cumulativeBps - priorBps);
 }
 
 /**
@@ -167,6 +176,34 @@ describe('computePerFixtureRawDefcon – DGW 2nd fixture', () => {
   it('GK always returns 0 even in a DGW context', () => {
     const prior = [{ clearances_blocks_interceptions: 2, tackles: 1, recoveries: 0 }];
     expect(computePerFixtureRawDefcon(8, 4, 2, prior, 1)).toBe(0);
+  });
+});
+
+// --------------------------------------------------------------------------
+// computeFixtureScopedBps – DGW fixture-scoped BPS from cumulative values
+// --------------------------------------------------------------------------
+
+describe('computeFixtureScopedBps', () => {
+  it('returns cumulative BPS unchanged when there are no prior fixtures', () => {
+    expect(computeFixtureScopedBps(27, [])).toBe(27);
+  });
+
+  it('subtracts prior fixture BPS to get the current fixture BPS', () => {
+    const prior = [{ bps: 16, clearances_blocks_interceptions: 0, tackles: 0, recoveries: 0 }];
+    expect(computeFixtureScopedBps(29, prior)).toBe(13);
+  });
+
+  it('supports multiple prior fixtures (triple gameweek)', () => {
+    const prior = [
+      { bps: 9, clearances_blocks_interceptions: 0, tackles: 0, recoveries: 0 },
+      { bps: 7, clearances_blocks_interceptions: 0, tackles: 0, recoveries: 0 },
+    ];
+    expect(computeFixtureScopedBps(24, prior)).toBe(8);
+  });
+
+  it('clamps to 0 when prior BPS exceeds cumulative BPS', () => {
+    const prior = [{ bps: 20, clearances_blocks_interceptions: 0, tackles: 0, recoveries: 0 }];
+    expect(computeFixtureScopedBps(12, prior)).toBe(0);
   });
 });
 
