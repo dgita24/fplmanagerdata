@@ -1365,7 +1365,7 @@ function buildBreakdownRows(
     teamId: number,
     previousFinishedFixtures: FixtureInfo[]
   ): Promise<Map<number, number>> {
-    const cacheKey = `${teamId}:${previousFinishedFixtures.map(f => f.id).sort().join(',')}`;
+    const cacheKey = `${teamId}:${previousFinishedFixtures.map(f => f.id).sort((a, b) => a - b).join(',')}`;
     const cached = perFixtureDefconCache.get(cacheKey);
     if (cached) return cached;
 
