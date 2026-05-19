@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase.ts'
   import { applyAutoSubsAndMultipliers, bonusFromBpsRows, computePlayerLtpContribution, computeSpeculativeLtpSubs, computeSpeculativePointsAdjustment, fetchFixtures, fetchLiveGW, getPlayerLiveComputed, getTeamGwStatus, type FixtureInfo, type LiveStatLine, type TeamStatus } from '../lib/fplLive.ts'
+  import { getAvailableGameweeks, getGameweekNeighbors, resolveGameweekSelection } from '../lib/fixturesGameweekNavigation.ts';
   import { initGWPointsModal, makePlayerNameClickable } from '../lib/gwPointsModal.js';
 
   let managerIds: number[] = []
@@ -469,6 +470,70 @@ const managerDataCache = new Map<string, any>();
     closeMatchDetailModal();
   }
 
+  let fixturesModalRequestId = 0;
+
+  function getFixturesModalAvailableGameweeks(): number[] {
+    return getAvailableGameweeks(Array.from(gwFilterSelect.options, (option) => option.value));
+  }
+
+  function renderFixturesModalHeader(gw: number, previousGw: number | null, nextGw: number | null): string {
+    return `
+      <div class="fixtures-gw-nav">
+        <div class="fixtures-gw-nav-center">
+          <button
+            class="btn btn--neutral btn--small fixtures-gw-nav-btn"
+            type="button"
+            data-nav-gw="prev"
+            aria-label="Previous gameweek fixtures"
+            ${previousGw === null ? "disabled" : ""}
+          >
+            ←
+          </button>
+          <div class="fixtures-gw-title">GW ${gw} Fixtures</div>
+          <button
+            class="btn btn--neutral btn--small fixtures-gw-nav-btn"
+            type="button"
+            data-nav-gw="next"
+            aria-label="Next gameweek fixtures"
+            ${nextGw === null ? "disabled" : ""}
+          >
+            →
+          </button>
+        </div>
+        <button
+          class="btn btn--danger btn--small"
+          type="button"
+          data-close-fixtures="true"
+          aria-label="Close fixtures"
+        >
+          ✕
+        </button>
+      </div>
+    `;
+  }
+
+  function attachFixturesGwNavHandlers(previousGw: number | null, nextGw: number | null, requestId: number) {
+    if (requestId !== fixturesModalRequestId) return;
+
+    const prevBtn = fixturesModalContent?.querySelector('[data-nav-gw="prev"]');
+    const nextBtn = fixturesModalContent?.querySelector('[data-nav-gw="next"]');
+    const closeBtn = fixturesModalContent?.querySelector('[data-close-fixtures]');
+
+    prevBtn?.addEventListener("click", () => {
+      if (requestId !== fixturesModalRequestId) return;
+      if (previousGw === null) return;
+      closeMatchDetailModal();
+      openFixturesModal(previousGw);
+    });
+    nextBtn?.addEventListener("click", () => {
+      if (requestId !== fixturesModalRequestId) return;
+      if (nextGw === null) return;
+      closeMatchDetailModal();
+      openFixturesModal(nextGw);
+    });
+    closeBtn?.addEventListener("click", () => closeFixturesModal());
+  }
+
   async function openMatchDetail(fixture: FixtureRaw, gw: number) {
     if (!matchDetailModal || !matchDetailContent) return;
 
@@ -686,12 +751,12 @@ const managerDataCache = new Map<string, any>();
     }
   }
 
-  async function openFixturesModal() {
+  async function openFixturesModal(targetGw?: number) {
     if (!fixturesModal || !fixturesModalContent) return;
 
-    const gw = parseInt(
-      (document.getElementById("gw-filter") as HTMLSelectElement)?.value
-    );
+    const availableGameweeks = getFixturesModalAvailableGameweeks();
+    const selectedGw = targetGw !== undefined ? targetGw : parseInt(gwFilterSelect.value);
+    const gw = resolveGameweekSelection(availableGameweeks, selectedGw);
 
     if (!gw) {
       fixturesModalContent.innerHTML = `<div class="fixtures-error">Please select a gameweek first.</div>`;
@@ -699,19 +764,26 @@ const managerDataCache = new Map<string, any>();
       return;
     }
 
-    fixturesModalContent.innerHTML = `<div class="fixtures-loading">Loading fixtures…</div>`;
+    gwFilterSelect.value = String(gw);
+    const { previous: previousGw, next: nextGw } = getGameweekNeighbors(availableGameweeks, gw);
+    const requestId = ++fixturesModalRequestId;
+
+    fixturesModalContent.innerHTML = `${renderFixturesModalHeader(gw, previousGw, nextGw)}<div class="fixtures-loading">Loading fixtures…</div>`;
     fixturesModal.classList.add("is-open");
+    attachFixturesGwNavHandlers(previousGw, nextGw, requestId);
 
     try {
       const res = await fetch(
         `/api/fpl/fixtures?event=${gw}&v=${Date.now()}`,
         { cache: "no-store" }
       );
+      if (requestId !== fixturesModalRequestId) return;
       if (!res.ok) throw new Error("Failed to fetch fixtures");
       const fixtures: FixtureRaw[] = await res.json();
 
       if (!fixtures || fixtures.length === 0) {
-        fixturesModalContent.innerHTML = `<div class="fixtures-empty">No fixtures found for GW${gw}.</div>`;
+        fixturesModalContent.innerHTML = `${renderFixturesModalHeader(gw, previousGw, nextGw)}<div class="fixtures-empty">No fixtures found for GW${gw}.</div>`;
+        attachFixturesGwNavHandlers(previousGw, nextGw, requestId);
         return;
       }
 
@@ -721,7 +793,7 @@ const managerDataCache = new Map<string, any>();
           .replace(/</g, "&lt;")
           .replace(/>/g, "&gt;");
 
-      let html = `<div class="fixtures-gw-title">GW ${gw} Fixtures</div><div class="fixtures-list">`;
+      let html = `${renderFixturesModalHeader(gw, previousGw, nextGw)}<div class="fixtures-list">`;
 
       for (const f of fixtures) {
         const homeTeam = esc(teamCache.get(f.team_h)?.name || `Team ${f.team_h}`);
@@ -753,6 +825,7 @@ const managerDataCache = new Map<string, any>();
 
       html += `</div>`;
       fixturesModalContent.innerHTML = html;
+      attachFixturesGwNavHandlers(previousGw, nextGw, requestId);
 
       // Attach click handlers to fixture rows
       fixturesModalContent.querySelectorAll(".fixture-row").forEach((row) => {
@@ -765,12 +838,13 @@ const managerDataCache = new Map<string, any>();
         });
       });
     } catch {
-      fixturesModalContent.innerHTML = `<div class="fixtures-error">Error loading fixtures.</div>`;
+      if (requestId !== fixturesModalRequestId) return;
+      fixturesModalContent.innerHTML = `${renderFixturesModalHeader(gw, previousGw, nextGw)}<div class="fixtures-error">Error loading fixtures.</div>`;
+      attachFixturesGwNavHandlers(previousGw, nextGw, requestId);
     }
   }
 
   document.getElementById("fixtures-btn")?.addEventListener("click", () => openFixturesModal());
-  document.getElementById("close-fixtures-modal")?.addEventListener("click", closeFixturesModal);
   document.getElementById("close-match-detail-modal")?.addEventListener("click", closeMatchDetailModal);
 
   // Close fixtures modals on backdrop click
