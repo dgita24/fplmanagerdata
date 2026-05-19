@@ -489,23 +489,25 @@ const managerDataCache = new Map<string, any>();
           ←
         </button>
         <div class="fixtures-gw-title">GW ${gw} Fixtures</div>
-        <button
-          class="btn btn--neutral btn--small fixtures-gw-nav-btn"
-          type="button"
-          data-nav-gw="next"
-          aria-label="Next gameweek fixtures"
-          ${nextGw === null ? "disabled" : ""}
-        >
-          →
-        </button>
-        <button
-          class="btn btn--danger btn--small"
-          type="button"
-          data-close-fixtures="true"
-          aria-label="Close fixtures"
-        >
-          ✕
-        </button>
+        <div class="fixtures-gw-nav-right">
+          <button
+            class="btn btn--neutral btn--small fixtures-gw-nav-btn"
+            type="button"
+            data-nav-gw="next"
+            aria-label="Next gameweek fixtures"
+            ${nextGw === null ? "disabled" : ""}
+          >
+            →
+          </button>
+          <button
+            class="btn btn--danger btn--small"
+            type="button"
+            data-close-fixtures="true"
+            aria-label="Close fixtures"
+          >
+            ✕
+          </button>
+        </div>
       </div>
     `;
   }
