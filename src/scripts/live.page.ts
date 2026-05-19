@@ -479,17 +479,17 @@ const managerDataCache = new Map<string, any>();
   function renderFixturesModalHeader(gw: number, previousGw: number | null, nextGw: number | null): string {
     return `
       <div class="fixtures-gw-nav">
-        <button
-          class="btn btn--neutral btn--small fixtures-gw-nav-btn"
-          type="button"
-          data-nav-gw="prev"
-          aria-label="Previous gameweek fixtures"
-          ${previousGw === null ? "disabled" : ""}
-        >
-          ←
-        </button>
-        <div class="fixtures-gw-title">GW ${gw} Fixtures</div>
-        <div class="fixtures-gw-nav-right">
+        <div class="fixtures-gw-nav-center">
+          <button
+            class="btn btn--neutral btn--small fixtures-gw-nav-btn"
+            type="button"
+            data-nav-gw="prev"
+            aria-label="Previous gameweek fixtures"
+            ${previousGw === null ? "disabled" : ""}
+          >
+            ←
+          </button>
+          <div class="fixtures-gw-title">GW ${gw} Fixtures</div>
           <button
             class="btn btn--neutral btn--small fixtures-gw-nav-btn"
             type="button"
@@ -499,15 +499,15 @@ const managerDataCache = new Map<string, any>();
           >
             →
           </button>
-          <button
-            class="btn btn--danger btn--small"
-            type="button"
-            data-close-fixtures="true"
-            aria-label="Close fixtures"
-          >
-            ✕
-          </button>
         </div>
+        <button
+          class="btn btn--danger btn--small"
+          type="button"
+          data-close-fixtures="true"
+          aria-label="Close fixtures"
+        >
+          ✕
+        </button>
       </div>
     `;
   }
