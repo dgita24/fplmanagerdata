@@ -794,8 +794,23 @@ const managerDataCache = new Map<string, any>();
           .replace(/>/g, "&gt;");
 
       let html = `${renderFixturesModalHeader(gw, previousGw, nextGw)}<div class="fixtures-list">`;
+      let lastDateLabel = "";
 
       for (const f of fixtures) {
+        const dateLabel = f.kickoff_time
+          ? new Date(f.kickoff_time).toLocaleDateString("en-GB", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })
+          : "Date TBC";
+
+        if (dateLabel !== lastDateLabel) {
+          html += `<div class="fixture-date-header">${esc(dateLabel)}</div>`;
+          lastDateLabel = dateLabel;
+        }
+
         const homeTeam = esc(teamCache.get(f.team_h)?.name || `Team ${f.team_h}`);
         const awayTeam = esc(teamCache.get(f.team_a)?.name || `Team ${f.team_a}`);
 

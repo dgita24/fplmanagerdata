@@ -474,6 +474,21 @@
     gap: var(--space-1);
   }
 
+  .fixture-date-header {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: var(--space-2) var(--space-1) var(--space-1);
+    margin-top: var(--space-2);
+  }
+
+  .fixture-date-header:first-child {
+    margin-top: 0;
+    padding-top: 0;
+  }
+
   .fixtures-gw-title {
     font-size: 16px;
     font-weight: 700;
