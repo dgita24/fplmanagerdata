@@ -12,7 +12,7 @@ export function resolveGameweekSelection(
   selectedGw?: number | null
 ): number | null {
   if (availableGameweeks.length === 0) return null;
-  if (!Number.isInteger(selectedGw)) return null;
+  if (selectedGw == null || !Number.isInteger(selectedGw)) return null;
   if (availableGameweeks.includes(selectedGw)) return selectedGw;
 
   const firstGw = availableGameweeks[0];

@@ -502,16 +502,20 @@ const managerDataCache = new Map<string, any>();
     `;
   }
 
-  function attachFixturesGwNavHandlers(previousGw: number | null, nextGw: number | null) {
+  function attachFixturesGwNavHandlers(previousGw: number | null, nextGw: number | null, requestId: number) {
+    if (requestId !== fixturesModalRequestId) return;
+
     const prevBtn = fixturesModalContent?.querySelector('[data-nav-gw="prev"]');
     const nextBtn = fixturesModalContent?.querySelector('[data-nav-gw="next"]');
 
     prevBtn?.addEventListener("click", () => {
+      if (requestId !== fixturesModalRequestId) return;
       if (previousGw === null) return;
       closeMatchDetailModal();
       openFixturesModal(previousGw);
     });
     nextBtn?.addEventListener("click", () => {
+      if (requestId !== fixturesModalRequestId) return;
       if (nextGw === null) return;
       closeMatchDetailModal();
       openFixturesModal(nextGw);
@@ -739,7 +743,7 @@ const managerDataCache = new Map<string, any>();
     if (!fixturesModal || !fixturesModalContent) return;
 
     const availableGameweeks = getFixturesModalAvailableGameweeks();
-    const selectedGw = Number.isFinite(targetGw) ? Number(targetGw) : parseInt(gwFilterSelect.value);
+    const selectedGw = targetGw !== undefined ? targetGw : parseInt(gwFilterSelect.value);
     const gw = resolveGameweekSelection(availableGameweeks, selectedGw);
 
     if (!gw) {
@@ -754,7 +758,7 @@ const managerDataCache = new Map<string, any>();
 
     fixturesModalContent.innerHTML = `${renderFixturesModalHeader(gw, previousGw, nextGw)}<div class="fixtures-loading">Loading fixtures…</div>`;
     fixturesModal.classList.add("is-open");
-    attachFixturesGwNavHandlers(previousGw, nextGw);
+    attachFixturesGwNavHandlers(previousGw, nextGw, requestId);
 
     try {
       const res = await fetch(
@@ -767,7 +771,7 @@ const managerDataCache = new Map<string, any>();
 
       if (!fixtures || fixtures.length === 0) {
         fixturesModalContent.innerHTML = `${renderFixturesModalHeader(gw, previousGw, nextGw)}<div class="fixtures-empty">No fixtures found for GW${gw}.</div>`;
-        attachFixturesGwNavHandlers(previousGw, nextGw);
+        attachFixturesGwNavHandlers(previousGw, nextGw, requestId);
         return;
       }
 
@@ -809,7 +813,7 @@ const managerDataCache = new Map<string, any>();
 
       html += `</div>`;
       fixturesModalContent.innerHTML = html;
-      attachFixturesGwNavHandlers(previousGw, nextGw);
+      attachFixturesGwNavHandlers(previousGw, nextGw, requestId);
 
       // Attach click handlers to fixture rows
       fixturesModalContent.querySelectorAll(".fixture-row").forEach((row) => {
@@ -824,7 +828,7 @@ const managerDataCache = new Map<string, any>();
     } catch {
       if (requestId !== fixturesModalRequestId) return;
       fixturesModalContent.innerHTML = `${renderFixturesModalHeader(gw, previousGw, nextGw)}<div class="fixtures-error">Error loading fixtures.</div>`;
-      attachFixturesGwNavHandlers(previousGw, nextGw);
+      attachFixturesGwNavHandlers(previousGw, nextGw, requestId);
     }
   }
 
