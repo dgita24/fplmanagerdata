@@ -479,7 +479,25 @@
     font-weight: 700;
     color: var(--color-text);
     text-align: center;
+  }
+
+  .fixtures-gw-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
     margin-bottom: var(--space-3);
+  }
+
+  .fixtures-gw-nav-btn {
+    min-width: 36px;
+    padding-inline: var(--space-2);
+  }
+
+  .fixtures-gw-nav-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+    transform: none;
   }
 
   .fixture-row {
