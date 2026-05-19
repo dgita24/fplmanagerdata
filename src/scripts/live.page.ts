@@ -498,6 +498,14 @@ const managerDataCache = new Map<string, any>();
         >
           →
         </button>
+        <button
+          class="btn btn--danger btn--small"
+          type="button"
+          data-close-fixtures="true"
+          aria-label="Close fixtures"
+        >
+          ✕
+        </button>
       </div>
     `;
   }
@@ -507,6 +515,7 @@ const managerDataCache = new Map<string, any>();
 
     const prevBtn = fixturesModalContent?.querySelector('[data-nav-gw="prev"]');
     const nextBtn = fixturesModalContent?.querySelector('[data-nav-gw="next"]');
+    const closeBtn = fixturesModalContent?.querySelector('[data-close-fixtures]');
 
     prevBtn?.addEventListener("click", () => {
       if (requestId !== fixturesModalRequestId) return;
@@ -520,6 +529,7 @@ const managerDataCache = new Map<string, any>();
       closeMatchDetailModal();
       openFixturesModal(nextGw);
     });
+    closeBtn?.addEventListener("click", () => closeFixturesModal());
   }
 
   async function openMatchDetail(fixture: FixtureRaw, gw: number) {
@@ -833,7 +843,6 @@ const managerDataCache = new Map<string, any>();
   }
 
   document.getElementById("fixtures-btn")?.addEventListener("click", () => openFixturesModal());
-  document.getElementById("close-fixtures-modal")?.addEventListener("click", closeFixturesModal);
   document.getElementById("close-match-detail-modal")?.addEventListener("click", closeMatchDetailModal);
 
   // Close fixtures modals on backdrop click
