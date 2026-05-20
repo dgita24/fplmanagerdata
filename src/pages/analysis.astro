@@ -1,0 +1,82 @@
+---
+import Layout from '../layouts/Layout.astro'
+---
+<Layout title="Private Analysis Lab - FPL Manager Watch">
+  <main class="page" style="max-width: 1100px; margin: 0 auto; padding: var(--space-4);">
+    <div id="analysis-loading" class="card">
+      <div class="card-body text-center">
+        <p class="text-muted">Checking authentication and access...</p>
+      </div>
+    </div>
+
+    <div id="analysis-require-login" class="card" style="display: none;">
+      <div class="card-body text-center">
+        <h2 class="card-title">Login Required</h2>
+        <p class="text-muted">You need to be logged in to access this page.</p>
+        <a href="/login" class="btn btn--primary" style="margin-top: var(--space-3);">Go to Login</a>
+      </div>
+    </div>
+
+    <div id="analysis-no-access" class="card" style="display: none;">
+      <div class="card-body text-center">
+        <h2 class="card-title">Not authorised</h2>
+        <p class="text-muted">Your account does not have access to the private analysis lab.</p>
+      </div>
+    </div>
+
+    <div id="analysis-app" style="display: none;">
+      <section class="card">
+        <div class="card-body">
+          <h1 class="card-title">🔒 Private Analysis Lab</h1>
+          <p class="text-muted" style="margin-bottom: var(--space-4);">
+            Owner-only analysis workspace. This page is access-controlled by <code>analysis_lab_access</code>.
+          </p>
+
+          <form id="analysis-form" class="auth-form" style="display: grid; gap: var(--space-3);">
+            <div class="control">
+              <label class="label" for="analysis-group">Manager Group</label>
+              <select id="analysis-group" class="input" required></select>
+            </div>
+
+            <div style="display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+              <div class="control">
+                <label class="label" for="analysis-start-gw">Start GW</label>
+                <input id="analysis-start-gw" class="input" type="number" min="1" max="38" value="1" required />
+              </div>
+              <div class="control">
+                <label class="label" for="analysis-end-gw">End GW</label>
+                <input id="analysis-end-gw" class="input" type="number" min="1" max="38" value="38" required />
+              </div>
+            </div>
+
+            <fieldset style="border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-3);">
+              <legend class="label" style="padding: 0 var(--space-2);">Metrics</legend>
+              <div style="display: grid; gap: var(--space-2); grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+                <label><input type="checkbox" name="metric" value="rankHistory" checked /> Rank history</label>
+                <label><input type="checkbox" name="metric" value="transfers" checked /> Transfers</label>
+                <label><input type="checkbox" name="metric" value="captaincy" checked /> Captaincy</label>
+                <label><input type="checkbox" name="metric" value="chipTiming" checked /> Chip timing</label>
+              </div>
+            </fieldset>
+
+            <div style="display: flex; gap: var(--space-2); align-items: center;">
+              <button id="analysis-run" type="submit" class="btn btn--primary">Run analysis</button>
+              <span id="analysis-status" class="text-muted" aria-live="polite"></span>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="card" style="margin-top: var(--space-4);">
+        <div class="card-body">
+          <h2 class="card-title">Results</h2>
+          <div id="analysis-results" class="text-muted">Run an analysis to view results.</div>
+        </div>
+      </section>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  import '../scripts/analysis.page.ts'
+</script>
