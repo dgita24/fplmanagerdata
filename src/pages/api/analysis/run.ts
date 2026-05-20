@@ -40,6 +40,10 @@ interface EntryTransferResponseItem {
 }
 
 const RETRY_STATUS = new Set([429, 500, 502, 503, 504])
+const MAX_GAMEWEEK = 38
+const MAX_MANAGERS_PER_ANALYSIS = 50
+const RETRY_BASE_DELAY_MS = 400
+const RETRY_JITTER_MAX_MS = 200
 
 function pickEnv(ctx: any) {
   const candidates: Array<{ name: string; env: any }> = [
@@ -89,8 +93,9 @@ async function fetchJsonWithRetry(url: string): Promise<any> {
       throw new Error(`Upstream FPL API error: ${res.status}`)
     }
 
-    const jitter = Math.floor(Math.random() * 200)
-    const delay = 400 * Math.pow(2, attempt) + jitter
+    // Exponential backoff with jitter reduces synchronized retry spikes.
+    const jitter = Math.floor(Math.random() * RETRY_JITTER_MAX_MS)
+    const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt) + jitter
     await sleep(delay)
     attempt++
   }
@@ -108,8 +113,8 @@ function normalizeChipName(chip: string): string {
 
 function parseBody(raw: AnalysisRequestBody) {
   const groupId = String(raw.groupId || '').trim()
-  const startGw = Math.max(1, Math.min(38, Number(raw.startGw) || 1))
-  const endGw = Math.max(1, Math.min(38, Number(raw.endGw) || 38))
+  const startGw = Math.max(1, Math.min(MAX_GAMEWEEK, Number(raw.startGw) || 1))
+  const endGw = Math.max(1, Math.min(MAX_GAMEWEEK, Number(raw.endGw) || MAX_GAMEWEEK))
 
   const metrics = {
     rankHistory: Boolean(raw.metrics?.rankHistory),
@@ -191,12 +196,15 @@ function toSortedRows<T>(map: Map<number, T>, startGw: number, endGw: number, bu
 
 export async function POST(ctx: any): Promise<Response> {
   const env = pickEnv(ctx)
-  const supabaseUrl = env?.SUPABASE_URL || 'https://fnehvaoqqmkrhxcqslta.supabase.co'
-  const anonKey = env?.SUPABASE_ANON_KEY || 'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
+  const supabaseUrl = env?.SUPABASE_URL
+  const anonKey = env?.SUPABASE_ANON_KEY
   const serviceRoleKey = env?.SUPABASE_SERVICE_ROLE_KEY
 
-  if (!serviceRoleKey) {
-    return jsonResponse({ error: 'Server misconfiguration: missing SUPABASE_SERVICE_ROLE_KEY' }, 500)
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    return jsonResponse(
+      { error: 'Server misconfiguration: missing SUPABASE_URL, SUPABASE_ANON_KEY, or SUPABASE_SERVICE_ROLE_KEY' },
+      500
+    )
   }
 
   const authHeader = String(ctx.request.headers.get('authorization') || '')
@@ -259,7 +267,7 @@ export async function POST(ctx: any): Promise<Response> {
   const managerIds = (Array.isArray(group.manager_ids) ? group.manager_ids : [])
     .map((id: unknown) => Number(id))
     .filter((id: number) => Number.isInteger(id) && id > 0)
-    .slice(0, 50)
+    .slice(0, MAX_MANAGERS_PER_ANALYSIS)
 
   if (!managerIds.length) {
     return jsonResponse({
@@ -338,8 +346,8 @@ export async function POST(ctx: any): Promise<Response> {
 
       const eventTransfersFromHistory = Number(history?.event_transfers)
       const eventTransfersFromTransfers = bundle.transferCountByGw.get(gw)
-      const eventTransfers = Number.isFinite(Number(eventTransfersFromTransfers))
-        ? Number(eventTransfersFromTransfers)
+      const eventTransfers = Number.isFinite(eventTransfersFromTransfers)
+        ? eventTransfersFromTransfers
         : eventTransfersFromHistory
       if (Number.isFinite(eventTransfers) && eventTransfers >= 0) {
         agg.transferValues.push(Number(eventTransfers))

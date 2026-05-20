@@ -42,6 +42,8 @@ interface AnalysisResponse {
   rows: AnalysisRow[]
 }
 
+const MAX_GAMEWEEK = 38
+
 const loadingEl = document.getElementById('analysis-loading') as HTMLElement
 const requireLoginEl = document.getElementById('analysis-require-login') as HTMLElement
 const noAccessEl = document.getElementById('analysis-no-access') as HTMLElement
@@ -109,6 +111,31 @@ function formatPct(value: number | null): string {
   return `${value.toFixed(1)}%`
 }
 
+function renderMetricBars(
+  rows: AnalysisRow[],
+  getValue: (row: AnalysisRow) => number,
+  colorCssVar: string,
+  formatter: (value: number) => string
+): string {
+  const maxValue = Math.max(...rows.map((r) => getValue(r)), 0)
+  return rows
+    .map((r) => {
+      const val = getValue(r)
+      const width = maxValue > 0 ? (val / maxValue) * 100 : 0
+      const barHtml = `<div style="height:10px; width:${width.toFixed(1)}%; background: var(${colorCssVar}); border-radius: 4px;"></div>`
+      return `
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="width:36px;">GW${r.gw}</span>
+          <div style="flex:1; background: var(--color-bg-soft, #f2f2f2); border-radius: 4px;">
+            ${barHtml}
+          </div>
+          <span style="width:52px; text-align:right;">${formatter(val)}</span>
+        </div>
+      `
+    })
+    .join('')
+}
+
 function renderResults(payload: AnalysisResponse) {
   if (!payload.rows.length) {
     resultsEl.innerHTML = `<p class="text-muted">No rows for GW ${payload.range.startGw} to ${payload.range.endGw}.</p>`
@@ -153,27 +180,11 @@ function renderResults(payload: AnalysisResponse) {
     .join('')
 
   const tableHead = headers.map((h) => `<th>${h}</th>`).join('')
-  const maxAvgTransfers = Math.max(...payload.rows.map((r) => r.avgEventTransfers ?? 0), 0)
-  const maxHitRate = Math.max(...payload.rows.map((r) => r.hitRatePct ?? 0), 0)
-
   const transferBars = showTransfers
-    ? payload.rows
-        .map((r) => {
-          const val = r.avgEventTransfers ?? 0
-          const width = maxAvgTransfers > 0 ? (val / maxAvgTransfers) * 100 : 0
-          return `<div style="display:flex; align-items:center; gap:8px;"><span style="width:36px;">GW${r.gw}</span><div style="flex:1; background: var(--color-bg-soft, #f2f2f2); border-radius: 4px;"><div style="height:10px; width:${width.toFixed(1)}%; background: var(--color-primary, #3b82f6); border-radius: 4px;"></div></div><span style="width:52px; text-align:right;">${val.toFixed(1)}</span></div>`
-        })
-        .join('')
+    ? renderMetricBars(payload.rows, (r) => r.avgEventTransfers ?? 0, '--color-primary, #3b82f6', (v) => v.toFixed(1))
     : ''
-
   const hitRateBars = showTransfers
-    ? payload.rows
-        .map((r) => {
-          const val = r.hitRatePct ?? 0
-          const width = maxHitRate > 0 ? (val / maxHitRate) * 100 : 0
-          return `<div style="display:flex; align-items:center; gap:8px;"><span style="width:36px;">GW${r.gw}</span><div style="flex:1; background: var(--color-bg-soft, #f2f2f2); border-radius: 4px;"><div style="height:10px; width:${width.toFixed(1)}%; background: var(--color-warning, #f59e0b); border-radius: 4px;"></div></div><span style="width:52px; text-align:right;">${val.toFixed(1)}%</span></div>`
-        })
-        .join('')
+    ? renderMetricBars(payload.rows, (r) => r.hitRatePct ?? 0, '--color-warning, #f59e0b', (v) => `${v.toFixed(1)}%`)
     : ''
 
   resultsEl.innerHTML = `
@@ -231,8 +242,8 @@ async function runAnalysis(evt: SubmitEvent) {
 
   if (!groupSelectEl.value) return
 
-  const startGw = Math.max(1, Math.min(38, Number(startGwEl.value) || 1))
-  const endGw = Math.max(1, Math.min(38, Number(endGwEl.value) || 38))
+  const startGw = Math.max(1, Math.min(MAX_GAMEWEEK, Number(startGwEl.value) || 1))
+  const endGw = Math.max(1, Math.min(MAX_GAMEWEEK, Number(endGwEl.value) || MAX_GAMEWEEK))
 
   if (startGw > endGw) {
     statusEl.textContent = 'Start GW must be less than or equal to End GW.'
