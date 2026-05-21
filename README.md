@@ -59,6 +59,11 @@ A private API endpoint is available for exporting chip-usage gameweeks for the m
 
 This endpoint is protected by Supabase auth **and** allowlist access via the `analysis_lab_access` table.
 
+Required runtime environment variables for this private endpoint:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+
 To grant access to another user:
 
 ```sql

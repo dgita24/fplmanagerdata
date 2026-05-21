@@ -6,8 +6,42 @@ import {
 
 export const prerender = false
 
-const SUPABASE_URL = 'https://fnehvaoqqmkrhxcqslta.supabase.co'
-const SUPABASE_ANON_KEY = 'sb_publishable_MWe6etLwK0ONF0hbSJX4fA_pqxUcXLK'
+type SupabaseConfig = {
+  url: string
+  anonKey: string
+}
+
+type RuntimeEnv = {
+  SUPABASE_URL?: string
+  SUPABASE_ANON_KEY?: string
+}
+
+type RouteContext = {
+  request: Request
+  url: URL
+  locals?: {
+    runtime?: { env?: RuntimeEnv }
+    env?: RuntimeEnv
+  }
+  platform?: {
+    env?: RuntimeEnv
+  }
+}
+
+type SupabaseUser = {
+  id: string
+  email?: string
+}
+
+type AnalysisLabAccessRow = {
+  user_id: string
+}
+
+type UserManagerListRow = {
+  manager_ids: number[] | null
+}
+
+const FETCH_CONCURRENCY = 5
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -25,10 +59,28 @@ function getBearerToken(request: Request): string | null {
   return auth.slice(7).trim() || null
 }
 
-async function getSupabaseUser(token: string): Promise<{ id: string; email?: string } | null> {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+function pickEnv(ctx: RouteContext): RuntimeEnv | null {
+  return (
+    ctx?.locals?.runtime?.env ||
+    ctx?.platform?.env ||
+    ctx?.locals?.env ||
+    null
+  )
+}
+
+function getSupabaseConfig(ctx: RouteContext): SupabaseConfig | null {
+  const runtimeEnv = pickEnv(ctx)
+  const url = runtimeEnv?.SUPABASE_URL || process.env.SUPABASE_URL || import.meta.env.SUPABASE_URL
+  const anonKey = runtimeEnv?.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || import.meta.env.SUPABASE_ANON_KEY
+
+  if (!url || !anonKey) return null
+  return { url, anonKey }
+}
+
+async function getSupabaseUser(token: string, config: SupabaseConfig): Promise<SupabaseUser | null> {
+  const res = await fetch(`${config.url}/auth/v1/user`, {
     headers: {
-      apikey: SUPABASE_ANON_KEY,
+      apikey: config.anonKey,
       Authorization: `Bearer ${token}`,
     },
   })
@@ -39,10 +91,10 @@ async function getSupabaseUser(token: string): Promise<{ id: string; email?: str
   return { id: data.id, email: data.email }
 }
 
-async function supabaseRestGet(path: string, token: string): Promise<any[]> {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+async function supabaseRestGet<T>(path: string, token: string, config: SupabaseConfig): Promise<T[]> {
+  const res = await fetch(`${config.url}/rest/v1/${path}`, {
     headers: {
-      apikey: SUPABASE_ANON_KEY,
+      apikey: config.anonKey,
       Authorization: `Bearer ${token}`,
       Accept: 'application/json',
     },
@@ -52,7 +104,7 @@ async function supabaseRestGet(path: string, token: string): Promise<any[]> {
     throw new Error(`Supabase REST error ${res.status}`)
   }
 
-  return (await res.json()) as any[]
+  return (await res.json()) as T[]
 }
 
 async function fetchManagerChipGameweeks(origin: string, entryId: number): Promise<ChipGameweekExportRow | null> {
@@ -89,38 +141,68 @@ async function fetchManagerChipGameweeks(origin: string, entryId: number): Promi
   }
 }
 
-export async function GET({ request, url }: { request: Request; url: URL }) {
+async function mapWithConcurrency<TIn, TOut>(
+  items: TIn[],
+  concurrency: number,
+  worker: (item: TIn) => Promise<TOut>
+): Promise<TOut[]> {
+  if (items.length === 0) return []
+  const limit = Math.max(1, Math.min(concurrency, items.length))
+  const results = new Array<TOut>(items.length)
+  let nextIndex = 0
+
+  const runners = Array.from({ length: limit }, async () => {
+    while (true) {
+      const index = nextIndex++
+      if (index >= items.length) return
+      results[index] = await worker(items[index])
+    }
+  })
+
+  await Promise.all(runners)
+  return results
+}
+
+export async function GET(ctx: RouteContext) {
+  const { request, url } = ctx
+  const config = getSupabaseConfig(ctx)
+  if (!config) {
+    return json({ error: 'Server misconfigured: missing SUPABASE_URL or SUPABASE_ANON_KEY' }, 500)
+  }
+
   const token = getBearerToken(request)
   if (!token) {
     return json({ error: 'Missing bearer token' }, 401)
   }
 
-  const user = await getSupabaseUser(token)
+  const user = await getSupabaseUser(token, config)
   if (!user) {
     return json({ error: 'Unauthorized' }, 401)
   }
 
   try {
-    const accessRows = await supabaseRestGet(
+    const accessRows = await supabaseRestGet<AnalysisLabAccessRow>(
       `analysis_lab_access?select=user_id&user_id=eq.${encodeURIComponent(user.id)}&limit=1`,
-      token
+      token,
+      config
     )
 
     if (!Array.isArray(accessRows) || accessRows.length === 0) {
       return json({ error: 'Access denied' }, 403)
     }
 
-    const managerRows = await supabaseRestGet(
+    const managerRows = await supabaseRestGet<UserManagerListRow>(
       `user_manager_lists?select=manager_ids&user_id=eq.${encodeURIComponent(user.id)}&limit=1`,
-      token
+      token,
+      config
     )
 
     const managerIds = Array.isArray(managerRows?.[0]?.manager_ids)
       ? managerRows[0].manager_ids.map((id: unknown) => Number(id)).filter((id: number) => Number.isInteger(id) && id > 0)
       : []
 
-    const origin = new URL(request.url).origin
-    const rows = (await Promise.all(managerIds.map((entryId: number) => fetchManagerChipGameweeks(origin, entryId))))
+    const origin = url.origin
+    const rows = (await mapWithConcurrency(managerIds, FETCH_CONCURRENCY, (entryId) => fetchManagerChipGameweeks(origin, entryId)))
       .filter((row): row is ChipGameweekExportRow => row !== null)
       .sort((a, b) => a.managerName.localeCompare(b.managerName))
 
@@ -142,7 +224,8 @@ export async function GET({ request, url }: { request: Request; url: URL }) {
       managerCount: rows.length,
       managers: rows,
     })
-  } catch {
+  } catch (error) {
+    console.error('[chips-gameweeks] request failed', error)
     return json({ error: 'Failed to load chip gameweek export' }, 500)
   }
 }

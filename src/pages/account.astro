@@ -210,7 +210,28 @@ import Layout from "../layouts/Layout.astro";
   const chipsExportStatus = document.getElementById('chips-export-status') as HTMLElement
   const chipsExportPreview = document.getElementById('chips-export-preview') as HTMLElement
 
-  let chipExportPayload: any = null
+  type ChipExportManager = {
+    entryId: number
+    managerName: string
+    teamName: string
+    allChipGws: number[]
+    wildcardGws: number[]
+    benchBoostGws: number[]
+    tripleCaptainGws: number[]
+    freeHitGws: number[]
+    assistantManagerGws: number[]
+  }
+
+  type ChipExportResponse = {
+    season: string
+    generatedAt: string
+    managerCount: number
+    managers: ChipExportManager[]
+  }
+
+  const PREVIEW_MANAGER_COUNT = 12
+
+  let chipExportPayload: ChipExportResponse | null = null
 
   function setChipExportStatus(message: string, type: 'success' | 'error' | 'warning') {
     if (!chipsExportStatus) return
@@ -259,11 +280,12 @@ import Layout from "../layouts/Layout.astro";
       chipExportPayload = await res.json()
       privateChipTools.style.display = 'block'
       const previewRows = Array.isArray(chipExportPayload?.managers)
-        ? chipExportPayload.managers.slice(0, 12)
+        ? chipExportPayload.managers.slice(0, PREVIEW_MANAGER_COUNT)
         : []
       chipsExportPreview.textContent = JSON.stringify(previewRows, null, 2)
       setChipExportStatus(`Loaded ${chipExportPayload?.managerCount ?? previewRows.length} managers.`, 'success')
-    } catch {
+    } catch (error) {
+      console.error('[account] private chip export load failed', error)
       setChipExportStatus('Could not load private chip export.', 'error')
       privateChipTools.style.display = 'block'
     }
@@ -374,7 +396,8 @@ import Layout from "../layouts/Layout.astro";
       link.remove()
       URL.revokeObjectURL(objectUrl)
       setChipExportStatus('CSV download started.', 'success')
-    } catch {
+    } catch (error) {
+      console.error('[account] chip CSV export failed', error)
       setChipExportStatus('Failed to generate CSV export.', 'error')
     }
   })
@@ -387,7 +410,8 @@ import Layout from "../layouts/Layout.astro";
     try {
       await navigator.clipboard.writeText(JSON.stringify(chipExportPayload, null, 2))
       setChipExportStatus('Copied JSON export to clipboard.', 'success')
-    } catch {
+    } catch (error) {
+      console.error('[account] chip export clipboard copy failed', error)
       setChipExportStatus('Failed to copy JSON export.', 'error')
     }
   })
