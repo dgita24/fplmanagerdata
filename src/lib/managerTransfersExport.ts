@@ -12,6 +12,12 @@ export type ManagerTransferRow = {
   element_in_name: string
   element_out_name: string
   element_in_prev_gw_points: number | null
+  element_out_prev_gw_points: number | null
+  element_out_gws_held: number | null
+  element_in_pts_above5_last6: number | null
+  element_out_pts_above5_last6: number | null
+  element_in_avg_pts_last6: number | null
+  element_out_avg_pts_last6: number | null
 }
 
 type FplLiveElement = {
@@ -37,6 +43,22 @@ function csvCell(value: string | number | null): string {
   return `"${str.replace(/"/g, '""')}"`
 }
 
+function formStats(
+  elementId: number,
+  transferGw: number,
+  gwLiveMap: Map<number, Map<number, number>>
+): { above5: number | null; avg: number | null } {
+  const pts: number[] = []
+  for (let g = Math.max(1, transferGw - 6); g < transferGw; g++) {
+    const p = gwLiveMap.get(g)?.get(elementId)
+    if (p !== undefined) pts.push(p)
+  }
+  if (pts.length === 0) return { above5: null, avg: null }
+  const above5 = pts.filter((p) => p > 5).length
+  const avg = Math.round((pts.reduce((s, p) => s + p, 0) / pts.length) * 10) / 10
+  return { above5, avg }
+}
+
 export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
   const header = [
     'season',
@@ -52,6 +74,12 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
     'element_in_name',
     'element_out_name',
     'element_in_prev_gw_points',
+    'element_out_prev_gw_points',
+    'element_out_gws_held',
+    'element_in_pts_above5_last6',
+    'element_out_pts_above5_last6',
+    'element_in_avg_pts_last6',
+    'element_out_avg_pts_last6',
   ]
 
   const lines = rows.map((row) =>
@@ -69,6 +97,12 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
       row.element_in_name,
       row.element_out_name,
       row.element_in_prev_gw_points,
+      row.element_out_prev_gw_points,
+      row.element_out_gws_held,
+      row.element_in_pts_above5_last6,
+      row.element_out_pts_above5_last6,
+      row.element_in_avg_pts_last6,
+      row.element_out_avg_pts_last6,
     ].map(csvCell).join(',')
   )
 
@@ -108,11 +142,14 @@ export async function fetchManagerTransfersRows(
 
     const transfers = Array.isArray(transfersData) ? transfersData as FplTransferRow[] : []
 
-    // Collect unique prev GWs (gw - 1) for all transfers where gw > 1
+    // Collect unique GWs needed for live data (gw-6 to gw-1) for all transfers
     const prevGwSet = new Set<number>()
     for (const row of transfers) {
       const gw = Number(row?.event)
-      if (Number.isInteger(gw) && gw > 1) prevGwSet.add(gw - 1)
+      if (!Number.isInteger(gw) || gw <= 1) continue
+      for (let g = Math.max(1, gw - 6); g < gw; g++) {
+        prevGwSet.add(g)
+      }
     }
 
     // Fetch live data for each unique prev GW in parallel
@@ -138,7 +175,17 @@ export async function fetchManagerTransfersRows(
       })
     )
 
-    return transfers
+    // Track when each element was last bought by this manager (for gws_held calculation)
+    // Pre-sort transfers chronologically so lastBoughtGwByElement is populated in the right order
+    const sortedTransfers = [...transfers].sort((a, b) => {
+      const gwA = Number(a?.event) || 0
+      const gwB = Number(b?.event) || 0
+      if (gwA !== gwB) return gwA - gwB
+      return String(a?.time || '').localeCompare(String(b?.time || ''))
+    })
+    const lastBoughtGwByElement = new Map<number, number>()
+
+    return sortedTransfers
       .map((row) => {
         const gw = Number(row?.event)
         const elementIn = Number(row?.element_in)
@@ -147,7 +194,13 @@ export async function fetchManagerTransfersRows(
         if (!Number.isInteger(elementIn) || elementIn <= 0) return null
         if (!Number.isInteger(elementOut) || elementOut <= 0) return null
 
-        return {
+        const priorBuyGw = lastBoughtGwByElement.get(elementOut) ?? null
+        const element_out_gws_held = priorBuyGw !== null ? gw - priorBuyGw : null
+
+        const inForm = formStats(elementIn, gw, gwLiveMap)
+        const outForm = formStats(elementOut, gw, gwLiveMap)
+
+        const result = {
           season,
           gw,
           entry_id: entryId,
@@ -161,7 +214,19 @@ export async function fetchManagerTransfersRows(
           element_in_name: playerNameMap.get(elementIn) || `Player ${elementIn}`,
           element_out_name: playerNameMap.get(elementOut) || `Player ${elementOut}`,
           element_in_prev_gw_points: gw > 1 ? (gwLiveMap.get(gw - 1)?.get(elementIn) ?? null) : null,
+          element_out_prev_gw_points: gw > 1 ? (gwLiveMap.get(gw - 1)?.get(elementOut) ?? null) : null,
+          element_out_gws_held,
+          element_in_pts_above5_last6: inForm.above5,
+          element_out_pts_above5_last6: outForm.above5,
+          element_in_avg_pts_last6: inForm.avg,
+          element_out_avg_pts_last6: outForm.avg,
         }
+
+        // Update tracking AFTER reading priorBuyGw (so element_out lookup is unaffected if
+        // elementIn happens to equal a previously sold element_out for a different transfer)
+        lastBoughtGwByElement.set(elementIn, gw)
+
+        return result
       })
       .filter((row): row is ManagerTransferRow => row !== null)
       .sort((a, b) => {
