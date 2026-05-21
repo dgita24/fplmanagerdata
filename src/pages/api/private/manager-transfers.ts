@@ -47,9 +47,13 @@ export async function GET(ctx: RouteContext) {
     )
     const rows = groupedRows
       .flat()
-      .sort((a: ManagerTransferRow, b: ManagerTransferRow) =>
-        a.player_name.localeCompare(b.player_name) || a.gw - b.gw || a.time.localeCompare(b.time)
-      )
+      .sort((a: ManagerTransferRow, b: ManagerTransferRow) => {
+        const managerCompare = a.player_name.localeCompare(b.player_name)
+        if (managerCompare !== 0) return managerCompare
+        const gwDelta = a.gw - b.gw
+        if (gwDelta !== 0) return gwDelta
+        return a.time.localeCompare(b.time)
+      })
 
     if (url.searchParams.get('format') === 'csv') {
       const csv = buildManagerTransfersCsv(rows)

@@ -75,36 +75,40 @@ function deriveFreeTransfersByGw(rows: FreeTransfersInputRow[]): Map<number, num
   const out = new Map<number, number>()
   if (rows.length === 0) return out
 
+  // Preserve existing FT derivation behavior from transfers.astro (calculateFTs):
+  // GW16 is treated as the first GW after the five-FT reset.
+  const FIVE_FREE_TRANSFERS_RESET_GW = 16
+  const MAX_FREE_TRANSFERS = 5
+
   const byGW = new Map<number, FreeTransfersInputRow>()
   rows.forEach((row) => byGW.set(row.gw, row))
 
   for (const row of rows) {
-    const E = Number(row.gw)
-    const M = Number(row.transfers)
-    let Q = 1
-    const prevRow = byGW.get(E - 1)
-    const S = prevRow ? 1 : 0
+    const currentGw = Number(row.gw)
+    let freeTransfersForGw = 1
+    const previousGwRow = byGW.get(currentGw - 1)
 
-    if (E === 16) {
-      Q = 5
-    } else if (E === 1) {
-      Q = 0
-    } else if (S === 0) {
-      Q = 1
-    } else if (!prevRow) {
-      Q = 1
+    if (currentGw === FIVE_FREE_TRANSFERS_RESET_GW) {
+      freeTransfersForGw = MAX_FREE_TRANSFERS
+    } else if (currentGw === 1) {
+      freeTransfersForGw = 0
+    } else if (!previousGwRow) {
+      freeTransfersForGw = 1
     } else {
-      const prevChip = prevRow.chipPlayed || ''
-      const prevFTs = Number(out.get(E - 1) ?? 1)
-      const prevTransfers = Number(prevRow.transfers)
+      const previousChip = previousGwRow.chipPlayed || ''
+      const previousFreeTransfers = Number(out.get(currentGw - 1) ?? 1)
+      const previousTransfersMade = Number(previousGwRow.transfers)
 
-      if (prevChip === 'WC' || prevChip === 'FH') {
-        Q = Math.max(1, prevFTs - prevTransfers)
+      if (previousChip === 'WC' || previousChip === 'FH') {
+        freeTransfersForGw = Math.max(1, previousFreeTransfers - previousTransfersMade)
       } else {
-        Q = Math.min(Math.max(1, prevFTs - prevTransfers + 1), 5)
+        freeTransfersForGw = Math.min(
+          Math.max(1, previousFreeTransfers - previousTransfersMade + 1),
+          MAX_FREE_TRANSFERS
+        )
       }
     }
-    out.set(E, Q)
+    out.set(currentGw, freeTransfersForGw)
   }
 
   return out

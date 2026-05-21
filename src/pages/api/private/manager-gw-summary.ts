@@ -48,9 +48,11 @@ export async function GET(ctx: RouteContext) {
 
     const rows = groupedRows
       .flat()
-      .sort((a: ManagerGwSummaryRow, b: ManagerGwSummaryRow) =>
-        a.player_name.localeCompare(b.player_name) || a.gw - b.gw
-      )
+      .sort((a: ManagerGwSummaryRow, b: ManagerGwSummaryRow) => {
+        const managerCompare = a.player_name.localeCompare(b.player_name)
+        if (managerCompare !== 0) return managerCompare
+        return a.gw - b.gw
+      })
 
     if (url.searchParams.get('format') === 'csv') {
       const csv = buildManagerGwSummaryCsv(rows)

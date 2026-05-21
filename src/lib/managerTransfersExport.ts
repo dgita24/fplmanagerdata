@@ -121,7 +121,11 @@ export async function fetchManagerTransfersRows(
         }
       })
       .filter((row): row is ManagerTransferRow => row !== null)
-      .sort((a, b) => a.gw - b.gw || a.time.localeCompare(b.time))
+      .sort((a, b) => {
+        const gwDelta = a.gw - b.gw
+        if (gwDelta !== 0) return gwDelta
+        return a.time.localeCompare(b.time)
+      })
   } catch {
     return []
   }
