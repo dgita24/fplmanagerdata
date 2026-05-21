@@ -47,6 +47,8 @@ export type ManagerGwSummaryRow = {
   assistant_manager: boolean
   captain_element: number | null
   vice_captain_element: number | null
+  captain_name: string | null
+  vice_captain_name: string | null
 }
 
 type FreeTransfersInputRow = {
@@ -145,6 +147,8 @@ export function buildManagerGwSummaryCsv(rows: ManagerGwSummaryRow[]): string {
     'assistant_manager',
     'captain_element',
     'vice_captain_element',
+    'captain_name',
+    'vice_captain_name',
   ]
 
   const lines = rows.map((row) =>
@@ -171,6 +175,8 @@ export function buildManagerGwSummaryCsv(rows: ManagerGwSummaryRow[]): string {
       row.assistant_manager,
       row.captain_element,
       row.vice_captain_element,
+      row.captain_name,
+      row.vice_captain_name,
     ].map(csvCell).join(',')
   )
 
@@ -183,16 +189,25 @@ export async function fetchManagerGwSummaryRows(
   season = 'current'
 ): Promise<ManagerGwSummaryRow[]> {
   try {
-    const [entryRes, historyRes] = await Promise.all([
+    const [entryRes, historyRes, bootstrapRes] = await Promise.all([
       fetch(`${origin}/api/fpl/entry/${entryId}`, { cache: 'no-store' }),
       fetch(`${origin}/api/fpl/entry/${entryId}/history`, { cache: 'no-store' }),
+      fetch(`${origin}/api/fpl/bootstrap-static`, { cache: 'no-store' }),
     ])
-    if (!entryRes.ok || !historyRes.ok) return []
+    if (!entryRes.ok || !historyRes.ok || !bootstrapRes.ok) return []
 
-    const [entryData, historyData] = await Promise.all([entryRes.json(), historyRes.json()])
+    const [entryData, historyData, bootstrapData] = await Promise.all([entryRes.json(), historyRes.json(), bootstrapRes.json()])
 
     const entry_name = String(entryData?.name || '')
     const player_name = `${entryData?.player_first_name || ''} ${entryData?.player_last_name || ''}`.trim() || `Manager ${entryId}`
+
+    const bootstrapElements = Array.isArray(bootstrapData?.elements) ? bootstrapData.elements : []
+    const elementNameMap = new Map<number, string>()
+    for (const el of bootstrapElements) {
+      const id = Number(el?.id)
+      if (!Number.isInteger(id) || id <= 0) continue
+      elementNameMap.set(id, String(el?.web_name || `Player ${id}`))
+    }
 
     const currentRows = Array.isArray(historyData?.current) ? historyData.current as FplHistoryCurrentRow[] : []
     const chips = Array.isArray(historyData?.chips) ? historyData.chips as FplHistoryChip[] : []
@@ -289,6 +304,8 @@ export async function fetchManagerGwSummaryRows(
         assistant_manager: chipSet.has('AM'),
         captain_element: capVice.captain,
         vice_captain_element: capVice.vice,
+        captain_name: capVice.captain !== null ? elementNameMap.get(capVice.captain) ?? null : null,
+        vice_captain_name: capVice.vice !== null ? elementNameMap.get(capVice.vice) ?? null : null,
       }
     })
   } catch {
