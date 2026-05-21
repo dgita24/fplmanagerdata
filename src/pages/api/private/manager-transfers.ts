@@ -1,6 +1,7 @@
 import {
   buildManagerTransfersCsv,
   fetchManagerTransfersRows,
+  type FetchManagerTransfersOptions,
   type ManagerTransferRow,
 } from '../../../lib/managerTransfersExport'
 import {
@@ -42,8 +43,16 @@ export async function GET(ctx: RouteContext) {
     }
 
     const origin = url.origin
+    const bootstrapRes = await fetch(`${origin}/api/fpl/bootstrap-static`, { cache: 'no-store' })
+    if (!bootstrapRes.ok) {
+      console.error('[manager-transfers] Failed to fetch bootstrap-static:', bootstrapRes.status)
+      return json({ error: `Failed to fetch FPL bootstrap data (status: ${bootstrapRes.status})` }, 502)
+    }
+    const bootstrapData = await bootstrapRes.json()
+    const sharedGwLivePromises: NonNullable<FetchManagerTransfersOptions['sharedGwLivePromises']> = new Map()
+
     const groupedRows = await mapWithConcurrency(managerIds, FETCH_CONCURRENCY, (entryId) =>
-      fetchManagerTransfersRows(origin, entryId)
+      fetchManagerTransfersRows(origin, entryId, 'current', { bootstrapData, sharedGwLivePromises })
     )
     const rows = groupedRows
       .flat()

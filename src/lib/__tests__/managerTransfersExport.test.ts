@@ -127,4 +127,97 @@ describe('fetchManagerTransfersRows', () => {
     expect(rows[1]?.element_out_name).toBe('Transfer In Player')
     expect(rows[1]?.element_out_gws_held).toBe(0)
   })
+
+  it('reuses provided bootstrap data and shared GW live promises across managers', async () => {
+    const origin = 'https://example.com'
+    const managerA = 123
+    const managerB = 456
+    const liveFetchCount = new Map<number, number>()
+
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input)
+      const entryMatch = url.match(new RegExp(`${origin}/api/fpl/entry/(\\d+)$`))
+      if (entryMatch) {
+        const entryId = Number(entryMatch[1])
+        return {
+          ok: true,
+          json: async () => ({
+            name: `Team ${entryId}`,
+            player_first_name: 'First',
+            player_last_name: String(entryId),
+          }),
+        }
+      }
+      const transfersMatch = url.match(new RegExp(`${origin}/api/fpl/entry/(\\d+)/transfers$`))
+      if (transfersMatch) {
+        return {
+          ok: true,
+          json: async () => ([
+            {
+              event: 3,
+              time: '2026-09-10T10:00:00Z',
+              element_in: 99,
+              element_out: 42,
+              element_in_cost: 80,
+              element_out_cost: 75,
+            },
+          ]),
+        }
+      }
+      const historyMatch = url.match(new RegExp(`${origin}/api/fpl/entry/(\\d+)/history$`))
+      if (historyMatch) {
+        return {
+          ok: true,
+          json: async () => ({ chips: [] }),
+        }
+      }
+      const gw1PicksMatch = url.match(new RegExp(`${origin}/api/fpl/entry/(\\d+)/event/1/picks$`))
+      if (gw1PicksMatch) {
+        return {
+          ok: true,
+          json: async () => ({ picks: [{ element: 42 }] }),
+        }
+      }
+      const liveMatch = url.match(/\/api\/fpl\/event\/(\d+)\/live$/)
+      if (liveMatch) {
+        const gw = Number(liveMatch[1])
+        liveFetchCount.set(gw, (liveFetchCount.get(gw) ?? 0) + 1)
+        return {
+          ok: true,
+          json: async () => ({
+            elements: [
+              { id: 42, stats: { total_points: 2 } },
+              { id: 99, stats: { total_points: 6 } },
+            ],
+          }),
+        }
+      }
+      if (url === `${origin}/api/fpl/bootstrap-static`) {
+        throw new Error('bootstrap-static should not be fetched when bootstrapData option is provided')
+      }
+
+      throw new Error(`Unexpected fetch URL in test: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+    const sharedGwLivePromises = new Map<number, Promise<Map<number, number>>>()
+    const bootstrapData = {
+      elements: [
+        { id: 42, web_name: 'Original Squad Player' },
+        { id: 99, web_name: 'Transfer In Player' },
+      ],
+    }
+
+    const [rowsA, rowsB] = await Promise.all([
+      fetchManagerTransfersRows(origin, managerA, 'current', { bootstrapData, sharedGwLivePromises }),
+      fetchManagerTransfersRows(origin, managerB, 'current', { bootstrapData, sharedGwLivePromises }),
+    ])
+
+    expect(rowsA).toHaveLength(1)
+    expect(rowsB).toHaveLength(1)
+    expect(liveFetchCount.get(1)).toBe(1)
+    expect(liveFetchCount.get(2)).toBe(1)
+    expect(rowsA[0]?.element_in_prev_gw_points).toBe(6)
+    expect(rowsA[0]?.element_out_prev_gw_points).toBe(2)
+  })
 })
