@@ -80,6 +80,33 @@ import Layout from "../layouts/Layout.astro";
         <pre id="chips-export-preview" class="chips-export-preview"></pre>
       </section>
 
+      <hr class="auth-divider-line" />
+
+      <section id="private-analysis-tools" style="display: none;">
+        <h2 class="section-title">Private Analysis Exports (Owner/Allowlist)</h2>
+        <p class="auth-hint" style="margin-bottom: var(--space-3);">
+          Export analysis-friendly manager datasets for your saved manager list.
+        </p>
+        <div class="private-export-grid">
+          <div class="private-export-card">
+            <h3 class="private-export-title">Manager GW Summary</h3>
+            <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+              <button type="button" id="summary-export-download" class="btn btn--primary">Download CSV</button>
+              <button type="button" id="summary-export-copy" class="btn btn--neutral">Copy JSON</button>
+            </div>
+            <div id="summary-export-status" class="status" style="display: none; margin-top: var(--space-2);"></div>
+          </div>
+          <div class="private-export-card">
+            <h3 class="private-export-title">Manager Transfers</h3>
+            <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+              <button type="button" id="transfers-export-download" class="btn btn--primary">Download CSV</button>
+              <button type="button" id="transfers-export-copy" class="btn btn--neutral">Copy JSON</button>
+            </div>
+            <div id="transfers-export-status" class="status" style="display: none; margin-top: var(--space-2);"></div>
+          </div>
+        </div>
+      </section>
+
       <div class="auth-links">
         <a href="/" class="text-muted">← Back to Home</a>
       </div>
@@ -196,6 +223,24 @@ import Layout from "../layouts/Layout.astro";
     line-height: 1.5;
     color: var(--color-text-secondary);
   }
+
+  .private-export-grid {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .private-export-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    background: var(--color-surface-alt);
+  }
+
+  .private-export-title {
+    margin: 0 0 var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--color-text);
+  }
 </style>
 
 <script>
@@ -205,10 +250,17 @@ import Layout from "../layouts/Layout.astro";
   const loggedIn = document.getElementById('logged-in') as HTMLElement
   const currentEmailEl = document.getElementById('current-email') as HTMLElement
   const privateChipTools = document.getElementById('private-chips-tools') as HTMLElement
+  const privateAnalysisTools = document.getElementById('private-analysis-tools') as HTMLElement
   const chipsExportDownloadBtn = document.getElementById('chips-export-download') as HTMLButtonElement
   const chipsExportCopyBtn = document.getElementById('chips-export-copy') as HTMLButtonElement
   const chipsExportStatus = document.getElementById('chips-export-status') as HTMLElement
   const chipsExportPreview = document.getElementById('chips-export-preview') as HTMLElement
+  const summaryExportDownloadBtn = document.getElementById('summary-export-download') as HTMLButtonElement
+  const summaryExportCopyBtn = document.getElementById('summary-export-copy') as HTMLButtonElement
+  const summaryExportStatus = document.getElementById('summary-export-status') as HTMLElement
+  const transfersExportDownloadBtn = document.getElementById('transfers-export-download') as HTMLButtonElement
+  const transfersExportCopyBtn = document.getElementById('transfers-export-copy') as HTMLButtonElement
+  const transfersExportStatus = document.getElementById('transfers-export-status') as HTMLElement
 
   type ChipExportManager = {
     entryId: number
@@ -229,6 +281,10 @@ import Layout from "../layouts/Layout.astro";
     managers: ChipExportManager[]
   }
 
+  type PrivateRowsResponse = {
+    rows?: unknown[]
+  }
+
   const PREVIEW_MANAGER_COUNT = 12
 
   let chipExportPayload: ChipExportResponse | null = null
@@ -246,15 +302,26 @@ import Layout from "../layouts/Layout.astro";
   }
 
   async function fetchPrivateChipExport(format: 'json' | 'csv' = 'json'): Promise<Response> {
+    return fetchPrivateExport('/api/private/chips-gameweeks', format)
+  }
+
+  async function fetchPrivateExport(path: string, format: 'json' | 'csv' = 'json'): Promise<Response> {
     const token = await getSessionToken()
     if (!token) throw new Error('No session token')
 
     const suffix = format === 'csv' ? '?format=csv' : ''
-    return fetch(`/api/private/chips-gameweeks${suffix}`, {
+    return fetch(`${path}${suffix}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
     })
+  }
+
+  function setExportStatus(el: HTMLElement | null, message: string, type: 'success' | 'error' | 'warning') {
+    if (!el) return
+    el.className = `status status--${type}`
+    el.textContent = message
+    el.style.display = 'block'
   }
 
   async function init() {
@@ -274,11 +341,13 @@ import Layout from "../layouts/Layout.astro";
       if (!res.ok) {
         setChipExportStatus('Could not load private chip export.', 'error')
         privateChipTools.style.display = 'block'
+        privateAnalysisTools.style.display = 'block'
         return
       }
 
       chipExportPayload = await res.json()
       privateChipTools.style.display = 'block'
+      privateAnalysisTools.style.display = 'block'
       const previewRows = Array.isArray(chipExportPayload?.managers)
         ? chipExportPayload.managers.slice(0, PREVIEW_MANAGER_COUNT)
         : []
@@ -288,6 +357,7 @@ import Layout from "../layouts/Layout.astro";
       console.error('[account] private chip export load failed', error)
       setChipExportStatus('Could not load private chip export.', 'error')
       privateChipTools.style.display = 'block'
+      privateAnalysisTools.style.display = 'block'
     }
   }
 
@@ -414,5 +484,87 @@ import Layout from "../layouts/Layout.astro";
       console.error('[account] chip export clipboard copy failed', error)
       setChipExportStatus('Failed to copy JSON export.', 'error')
     }
+  })
+
+  async function downloadPrivateCsv(path: string, filename: string, statusEl: HTMLElement, loadingText: string) {
+    try {
+      setExportStatus(statusEl, loadingText, 'warning')
+      const res = await fetchPrivateExport(path, 'csv')
+      if (!res.ok) {
+        setExportStatus(statusEl, 'Failed to generate CSV export.', 'error')
+        return
+      }
+
+      const csv = await res.text()
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+      setExportStatus(statusEl, 'CSV download started.', 'success')
+    } catch (error) {
+      console.error('[account] CSV export failed', error)
+      setExportStatus(statusEl, 'Failed to generate CSV export.', 'error')
+    }
+  }
+
+  async function copyPrivateJson(path: string, statusEl: HTMLElement, emptyText: string) {
+    try {
+      setExportStatus(statusEl, 'Loading JSON export...', 'warning')
+      const res = await fetchPrivateExport(path, 'json')
+      if (!res.ok) {
+        setExportStatus(statusEl, 'Failed to load JSON export.', 'error')
+        return
+      }
+      const payload = await res.json() as PrivateRowsResponse
+      const rows = Array.isArray(payload?.rows) ? payload.rows : []
+      if (rows.length === 0) {
+        setExportStatus(statusEl, emptyText, 'warning')
+        return
+      }
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+      setExportStatus(statusEl, `Copied JSON export (${rows.length} rows).`, 'success')
+    } catch (error) {
+      console.error('[account] JSON export copy failed', error)
+      setExportStatus(statusEl, 'Failed to copy JSON export.', 'error')
+    }
+  }
+
+  summaryExportDownloadBtn?.addEventListener('click', async () => {
+    await downloadPrivateCsv(
+      '/api/private/manager-gw-summary',
+      'manager-gw-summary-current-season.csv',
+      summaryExportStatus,
+      'Preparing manager GW summary CSV...'
+    )
+  })
+
+  summaryExportCopyBtn?.addEventListener('click', async () => {
+    await copyPrivateJson(
+      '/api/private/manager-gw-summary',
+      summaryExportStatus,
+      'No manager GW summary rows found.'
+    )
+  })
+
+  transfersExportDownloadBtn?.addEventListener('click', async () => {
+    await downloadPrivateCsv(
+      '/api/private/manager-transfers',
+      'manager-transfers-current-season.csv',
+      transfersExportStatus,
+      'Preparing manager transfers CSV...'
+    )
+  })
+
+  transfersExportCopyBtn?.addEventListener('click', async () => {
+    await copyPrivateJson(
+      '/api/private/manager-transfers',
+      transfersExportStatus,
+      'No manager transfer rows found.'
+    )
   })
 </script>
