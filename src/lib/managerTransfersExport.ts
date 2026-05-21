@@ -21,6 +21,11 @@ export type ManagerTransferRow = {
   element_out_avg_pts_last6: number | null
 }
 
+export type FetchManagerTransfersOptions = {
+  bootstrapData?: unknown
+  sharedGwLivePromises?: Map<number, Promise<Map<number, number>>>
+}
+
 type FplLiveElement = {
   id?: number
   stats?: {
@@ -127,23 +132,29 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
 export async function fetchManagerTransfersRows(
   origin: string,
   entryId: number,
-  season = 'current'
+  season = 'current',
+  options?: FetchManagerTransfersOptions
 ): Promise<ManagerTransferRow[]> {
   try {
-    const [entryRes, transfersRes, bootstrapRes, historyRes, gw1PicksRes] = await Promise.all([
+    const [entryRes, transfersRes, historyRes, gw1PicksRes] = await Promise.all([
       fetch(`${origin}/api/fpl/entry/${entryId}`, { cache: 'no-store' }),
       fetch(`${origin}/api/fpl/entry/${entryId}/transfers`, { cache: 'no-store' }),
-      fetch(`${origin}/api/fpl/bootstrap-static`, { cache: 'no-store' }),
       fetch(`${origin}/api/fpl/entry/${entryId}/history`, { cache: 'no-store' }),
       fetch(`${origin}/api/fpl/entry/${entryId}/event/1/picks`, { cache: 'no-store' }),
     ])
 
-    if (!entryRes.ok || !transfersRes.ok || !bootstrapRes.ok) return []
+    let bootstrapData: unknown = options?.bootstrapData ?? null
+    if (!bootstrapData) {
+      const bootstrapRes = await fetch(`${origin}/api/fpl/bootstrap-static`, { cache: 'no-store' })
+      if (!bootstrapRes.ok) return []
+      bootstrapData = await bootstrapRes.json()
+    }
 
-    const [entryData, transfersData, bootstrapData, historyData] = await Promise.all([
+    if (!entryRes.ok || !transfersRes.ok) return []
+
+    const [entryData, transfersData, historyData] = await Promise.all([
       entryRes.json(),
       transfersRes.json(),
-      bootstrapRes.json(),
       historyRes.ok ? historyRes.json() : Promise.resolve(null),
     ])
 
@@ -179,23 +190,36 @@ export async function fetchManagerTransfersRows(
       }
     }
 
-    // Fetch live data for each unique prev GW in parallel
     const gwLiveMap = new Map<number, Map<number, number>>()
+    const sharedGwLivePromises = options?.sharedGwLivePromises
     await Promise.all(
       Array.from(prevGwSet).map(async (prevGw) => {
         try {
-          const liveRes = await fetch(`${origin}/api/fpl/event/${prevGw}/live`, { cache: 'no-store' })
-          if (!liveRes.ok) return
-          const liveData = await liveRes.json()
-          const elements = Array.isArray(liveData?.elements) ? liveData.elements as FplLiveElement[] : []
-          const elementPointsMap = new Map<number, number>()
-          for (const el of elements) {
-            const id = Number(el?.id)
-            if (!Number.isInteger(id) || id <= 0) continue
-            const pts = Number(el?.stats?.total_points)
-            if (Number.isInteger(pts)) elementPointsMap.set(id, pts)
+          let promise: Promise<Map<number, number>>
+          if (sharedGwLivePromises?.has(prevGw)) {
+            promise = sharedGwLivePromises.get(prevGw)!
+          } else {
+            promise = fetch(`${origin}/api/fpl/event/${prevGw}/live`, { cache: 'no-store' })
+              .then(async (liveRes) => {
+                if (!liveRes.ok) return new Map<number, number>()
+                const liveData = await liveRes.json()
+                const elements = Array.isArray(liveData?.elements) ? liveData.elements as FplLiveElement[] : []
+                const elementPointsMap = new Map<number, number>()
+                for (const el of elements) {
+                  const id = Number(el?.id)
+                  if (!Number.isInteger(id) || id <= 0) continue
+                  const pts = Number(el?.stats?.total_points)
+                  if (Number.isInteger(pts)) elementPointsMap.set(id, pts)
+                }
+                return elementPointsMap
+              })
+              .catch(() => new Map<number, number>())
+            if (sharedGwLivePromises) {
+              sharedGwLivePromises.set(prevGw, promise)
+            }
           }
-          gwLiveMap.set(prevGw, elementPointsMap)
+          const elementPointsMap = await promise
+          if (elementPointsMap.size > 0) gwLiveMap.set(prevGw, elementPointsMap)
         } catch {
           // leave entry absent — will resolve to null
         }
