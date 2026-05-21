@@ -1,6 +1,54 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildManagerTransfersCsv, fetchManagerTransfersRows, type ManagerTransferRow } from '../managerTransfersExport'
 
+// ---------------------------------------------------------------------------
+// Helper: build a minimal but complete fetch mock from a URL→response map.
+// Pattern matching rules (applied in order):
+//   - pattern contains '*' → treat as a regex with \d+ replacing ALL '*'
+//     (other regex special chars are escaped so only '*' is wildcarded)
+//   - pattern starts with '/' → url must end with that path
+//   - otherwise → exact URL match
+// Any unrecognised URL throws so tests fail loudly instead of silently.
+// ---------------------------------------------------------------------------
+function makeFetchMock(responses: Record<string, unknown>) {
+  return vi.fn(async (input: string | URL) => {
+    const url = String(input)
+    for (const [pattern, body] of Object.entries(responses)) {
+      let matched: boolean
+      if (pattern.includes('*')) {
+        // Escape all regex special chars except '*', then replace each '*' with '\d+'
+        const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '\\d+')
+        matched = new RegExp(escaped).test(url)
+      } else if (pattern.startsWith('/')) {
+        matched = url.endsWith(pattern)
+      } else {
+        matched = url === pattern
+      }
+      if (matched) {
+        if (body === null) return { ok: false, status: 404, json: async () => ({}) }
+        return { ok: true, json: async () => body }
+      }
+    }
+    throw new Error(`Unexpected fetch URL in test: ${url}`)
+  })
+}
+
+const BASE = 'https://example.com'
+const ENTRY_ID = 123
+
+const ENTRY_BODY = { name: 'Team A', player_first_name: 'First', player_last_name: 'Last' }
+const BOOTSTRAP_BODY = {
+  elements: [
+    { id: 16, web_name: 'Initial Player' },
+    { id: 42, web_name: 'Original Squad Player' },
+    { id: 99, web_name: 'Transfer In Player' },
+    { id: 100, web_name: 'Second Transfer In Player' },
+    { id: 200, web_name: 'Multi GW Player' },
+  ],
+}
+const EMPTY_HISTORY = { chips: [] }
+const EMPTY_LIVE = { elements: [] }
+
 describe('buildManagerTransfersCsv', () => {
   it('includes chip_played immediately after element_in_name in header and row output', () => {
     const rows: ManagerTransferRow[] = [
@@ -40,12 +88,9 @@ describe('fetchManagerTransfersRows', () => {
   })
 
   it('seeds GW1 picks for element_out_gws_held and maps WC/FH chips per GW', async () => {
-    const entryId = 123
-    const origin = 'https://example.com'
-
     const fetchMock = vi.fn(async (input: string | URL) => {
       const url = String(input)
-      if (url === `${origin}/api/fpl/entry/${entryId}`) {
+      if (url === `${BASE}/api/fpl/entry/${ENTRY_ID}`) {
         return {
           ok: true,
           json: async () => ({
@@ -55,7 +100,7 @@ describe('fetchManagerTransfersRows', () => {
           }),
         }
       }
-      if (url === `${origin}/api/fpl/entry/${entryId}/transfers`) {
+      if (url === `${BASE}/api/fpl/entry/${ENTRY_ID}/transfers`) {
         return {
           ok: true,
           json: async () => ([
@@ -78,7 +123,7 @@ describe('fetchManagerTransfersRows', () => {
           ]),
         }
       }
-      if (url === `${origin}/api/fpl/bootstrap-static`) {
+      if (url === `${BASE}/api/fpl/bootstrap-static`) {
         return {
           ok: true,
           json: async () => ({
@@ -90,7 +135,7 @@ describe('fetchManagerTransfersRows', () => {
           }),
         }
       }
-      if (url === `${origin}/api/fpl/entry/${entryId}/history`) {
+      if (url === `${BASE}/api/fpl/entry/${ENTRY_ID}/history`) {
         return {
           ok: true,
           json: async () => ({
@@ -98,7 +143,7 @@ describe('fetchManagerTransfersRows', () => {
           }),
         }
       }
-      if (url === `${origin}/api/fpl/entry/${entryId}/event/1/picks`) {
+      if (url === `${BASE}/api/fpl/entry/${ENTRY_ID}/event/1/picks`) {
         return {
           ok: true,
           json: async () => ({
@@ -117,7 +162,7 @@ describe('fetchManagerTransfersRows', () => {
     })
 
     vi.stubGlobal('fetch', fetchMock)
-    const rows = await fetchManagerTransfersRows(origin, entryId, 'current')
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
 
     expect(rows).toHaveLength(2)
     expect(rows[0]?.chip_played).toBe('WC')
@@ -128,15 +173,199 @@ describe('fetchManagerTransfersRows', () => {
     expect(rows[1]?.element_out_gws_held).toBe(0)
   })
 
+  // ---------------------------------------------------------------------------
+  // New test: same-GW same-timestamp transfers in REVERSED API order
+  //
+  // Scenario: WC session in GW6 where:
+  //   Transfer A: Buy P99, Sell P16 (P16 was in GW1 squad)
+  //   Transfer B: Buy P100, Sell P99 (P99 was just bought in Transfer A)
+  //
+  // The FPL API returns them in reversed order [B, A] — same timestamp on both.
+  // Without the topological sort, processing B first makes P99's sell see
+  // lastBoughtGwByElement[P99]=undefined and emit null (blank).
+  // With the topological sort, A is always processed before B.
+  // ---------------------------------------------------------------------------
+  it('topological sort: same-GW same-timestamp reversed API order still gives correct gws_held', async () => {
+    const SAME_TIME = '2024-10-15T10:00:00Z'
+
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // API returns B first (the sell), then A (the buy) — same timestamp
+        { event: 6, time: SAME_TIME, element_in: 100, element_out: 99, element_in_cost: 80, element_out_cost: 79 },
+        { event: 6, time: SAME_TIME, element_in: 99,  element_out: 16, element_in_cost: 75, element_out_cost: 74 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 16 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+
+    expect(rows).toHaveLength(2)
+
+    // Row for (Buy P99, Sell P16): P16 was in GW1 squad → gws_held = 6 - 1 = 5
+    const sellP16 = rows.find((r) => r.element_out === 16)
+    expect(sellP16?.element_out_gws_held).toBe(5)
+
+    // Row for (Buy P100, Sell P99): P99 was bought in the same GW → gws_held = 0
+    const sellP99 = rows.find((r) => r.element_out === 99)
+    expect(sellP99?.element_out_gws_held).toBe(0)
+  })
+
+  // ---------------------------------------------------------------------------
+  // New test: normal multi-GW hold returns a positive integer
+  //
+  // Player 200 is in the initial GW1 squad (seeded at GW1).
+  // Sold for the first time in GW5.
+  // Expected: gws_held = 5 - 1 = 4.
+  // ---------------------------------------------------------------------------
+  it('normal multi-GW hold returns correct positive gws_held', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 5, time: '2024-10-08T09:00:00Z', element_in: 99, element_out: 200, element_in_cost: 80, element_out_cost: 85 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 200 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.element_out).toBe(200)
+    expect(rows[0]?.element_out_gws_held).toBe(4) // 5 - 1 = 4
+  })
+
+  // ---------------------------------------------------------------------------
+  // New test: player bought mid-season then sold several GWs later
+  //
+  // Player 99 not in initial squad; bought in GW2, sold in GW7.
+  // Expected: gws_held = 7 - 2 = 5.
+  // ---------------------------------------------------------------------------
+  it('mid-season buy then sell later returns correct gws_held', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 2, time: '2024-08-27T14:00:00Z', element_in: 99,  element_out: 42, element_in_cost: 70, element_out_cost: 68 },
+        { event: 7, time: '2024-10-22T11:00:00Z', element_in: 100, element_out: 99, element_in_cost: 75, element_out_cost: 73 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+
+    expect(rows).toHaveLength(2)
+    const sellP99 = rows.find((r) => r.element_out === 99)
+    expect(sellP99?.element_out_gws_held).toBe(5) // 7 - 2 = 5
+  })
+
+  // ---------------------------------------------------------------------------
+  // New test: unknown provenance → null
+  //
+  // Player 42 is sold, but:
+  //   - GW1 picks endpoint returns 404 (not ok)
+  //   - Player 42 was never an element_in in the transfers data
+  //
+  // Per rule 4: "If no provenance exists at all, output blank (null)."
+  // ---------------------------------------------------------------------------
+  it('unknown provenance (GW1 picks fail, never bought) returns null gws_held', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 4, time: '2024-09-17T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 70, element_out_cost: 68 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      // GW1 picks endpoint returns 404 → not ok → no seeding
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: null,
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+
+    expect(rows).toHaveLength(1)
+    // P42 has no provenance (GW1 picks failed, never bought) → null
+    expect(rows[0]?.element_out).toBe(42)
+    expect(rows[0]?.element_out_gws_held).toBeNull()
+    // P99 was bought in this transfer so it IS tracked, but it's the element_in here (not sold)
+  })
+
+  // ---------------------------------------------------------------------------
+  // New test: GW1 picks fail, but player WAS bought via transfer → still non-null
+  //
+  // Even if GW1 picks fail, a player who was explicitly bought via transfer has
+  // known provenance and should produce a valid (non-null) gws_held.
+  // ---------------------------------------------------------------------------
+  it('GW1 picks fail but player bought via transfer still yields non-null gws_held', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 3, time: '2024-09-10T10:00:00Z', element_in: 99, element_out: 42,  element_in_cost: 70, element_out_cost: 68 },
+        { event: 8, time: '2024-11-05T10:00:00Z', element_in: 100, element_out: 99, element_in_cost: 75, element_out_cost: 72 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      // GW1 picks endpoint 404 → no seeding of initial squad
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: null,
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+
+    expect(rows).toHaveLength(2)
+    // P42 sold in GW3 with no provenance (GW1 picks failed) → null
+    const sellP42 = rows.find((r) => r.element_out === 42)
+    expect(sellP42?.element_out_gws_held).toBeNull()
+
+    // P99 was bought in GW3 (via transfer), sold in GW8 → gws_held = 8 - 3 = 5
+    const sellP99 = rows.find((r) => r.element_out === 99)
+    expect(sellP99?.element_out_gws_held).toBe(5)
+  })
+
+  // ---------------------------------------------------------------------------
+  // New test: same-GW buy then sell in correct API order returns 0
+  //
+  // This is the "valid zero" case: buy and sell happen in the same GW.
+  // ---------------------------------------------------------------------------
+  it('same-GW buy then sell (correct API order) returns gws_held = 0', async () => {
+    const SAME_TIME = '2024-10-15T10:00:00Z'
+
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // Correct API order: buy first, then sell
+        { event: 6, time: SAME_TIME, element_in: 99,  element_out: 42, element_in_cost: 75, element_out_cost: 74 },
+        { event: 6, time: SAME_TIME, element_in: 100, element_out: 99, element_in_cost: 80, element_out_cost: 79 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'wildcard', event: 6 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+
+    expect(rows).toHaveLength(2)
+    expect(rows.find((r) => r.element_out === 42)?.element_out_gws_held).toBe(5) // 6 - 1
+    expect(rows.find((r) => r.element_out === 99)?.element_out_gws_held).toBe(0) // same GW
+    expect(rows.every((r) => r.chip_played === 'WC')).toBe(true)
+  })
+
   it('reuses provided bootstrap data and shared GW live promises across managers', async () => {
-    const origin = 'https://example.com'
     const managerA = 123
     const managerB = 456
     const liveFetchCount = new Map<number, number>()
 
     const fetchMock = vi.fn(async (input: string | URL) => {
       const url = String(input)
-      const entryMatch = url.match(new RegExp(`${origin}/api/fpl/entry/(\\d+)$`))
+      const entryMatch = url.match(new RegExp(`${BASE}/api/fpl/entry/(\\d+)$`))
       if (entryMatch) {
         const entryId = Number(entryMatch[1])
         return {
@@ -148,7 +377,7 @@ describe('fetchManagerTransfersRows', () => {
           }),
         }
       }
-      const transfersMatch = url.match(new RegExp(`${origin}/api/fpl/entry/(\\d+)/transfers$`))
+      const transfersMatch = url.match(new RegExp(`${BASE}/api/fpl/entry/(\\d+)/transfers$`))
       if (transfersMatch) {
         return {
           ok: true,
@@ -164,14 +393,14 @@ describe('fetchManagerTransfersRows', () => {
           ]),
         }
       }
-      const historyMatch = url.match(new RegExp(`${origin}/api/fpl/entry/(\\d+)/history$`))
+      const historyMatch = url.match(new RegExp(`${BASE}/api/fpl/entry/(\\d+)/history$`))
       if (historyMatch) {
         return {
           ok: true,
           json: async () => ({ chips: [] }),
         }
       }
-      const gw1PicksMatch = url.match(new RegExp(`${origin}/api/fpl/entry/(\\d+)/event/1/picks$`))
+      const gw1PicksMatch = url.match(new RegExp(`${BASE}/api/fpl/entry/(\\d+)/event/1/picks$`))
       if (gw1PicksMatch) {
         return {
           ok: true,
@@ -192,7 +421,7 @@ describe('fetchManagerTransfersRows', () => {
           }),
         }
       }
-      if (url === `${origin}/api/fpl/bootstrap-static`) {
+      if (url === `${BASE}/api/fpl/bootstrap-static`) {
         throw new Error('bootstrap-static should not be fetched when bootstrapData option is provided')
       }
 
@@ -209,8 +438,8 @@ describe('fetchManagerTransfersRows', () => {
     }
 
     const [rowsA, rowsB] = await Promise.all([
-      fetchManagerTransfersRows(origin, managerA, 'current', { bootstrapData, sharedGwLivePromises }),
-      fetchManagerTransfersRows(origin, managerB, 'current', { bootstrapData, sharedGwLivePromises }),
+      fetchManagerTransfersRows(BASE, managerA, 'current', { bootstrapData, sharedGwLivePromises }),
+      fetchManagerTransfersRows(BASE, managerB, 'current', { bootstrapData, sharedGwLivePromises }),
     ])
 
     expect(rowsA).toHaveLength(1)
