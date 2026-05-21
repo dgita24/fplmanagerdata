@@ -46,7 +46,7 @@ export async function GET(ctx: RouteContext) {
     const bootstrapRes = await fetch(`${origin}/api/fpl/bootstrap-static`, { cache: 'no-store' })
     if (!bootstrapRes.ok) {
       console.error('[manager-transfers] Failed to fetch bootstrap-static:', bootstrapRes.status)
-      return json({ error: 'Failed to fetch FPL bootstrap data' }, 502)
+      return json({ error: `Failed to fetch FPL bootstrap data (status: ${bootstrapRes.status})` }, 502)
     }
     const bootstrapData = await bootstrapRes.json()
     const sharedGwLivePromises: NonNullable<FetchManagerTransfersOptions['sharedGwLivePromises']> = new Map()
