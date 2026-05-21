@@ -10,6 +10,7 @@ export type ManagerTransferRow = {
   purchase_price: number
   selling_price: number
   element_in_name: string
+  chip_played: string | null
   element_out_name: string
   element_in_prev_gw_points: number | null
   element_out_prev_gw_points: number | null
@@ -34,6 +35,18 @@ type FplTransferRow = {
   element_out?: number
   element_in_cost?: number
   element_out_cost?: number
+}
+
+type FplChipRow = {
+  name?: string | null
+  event?: number
+}
+
+function normalizeChipCode(value: string | null | undefined): string | null {
+  if (!value) return null
+  if (value === 'wildcard') return 'WC'
+  if (value === 'freehit') return 'FH'
+  return null
 }
 
 function csvCell(value: string | number | null): string {
@@ -72,6 +85,7 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
     'purchase_price',
     'selling_price',
     'element_in_name',
+    'chip_played',
     'element_out_name',
     'element_in_prev_gw_points',
     'element_out_prev_gw_points',
@@ -95,6 +109,7 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
       row.purchase_price,
       row.selling_price,
       row.element_in_name,
+      row.chip_played,
       row.element_out_name,
       row.element_in_prev_gw_points,
       row.element_out_prev_gw_points,
@@ -115,18 +130,21 @@ export async function fetchManagerTransfersRows(
   season = 'current'
 ): Promise<ManagerTransferRow[]> {
   try {
-    const [entryRes, transfersRes, bootstrapRes] = await Promise.all([
+    const [entryRes, transfersRes, bootstrapRes, historyRes, gw1PicksRes] = await Promise.all([
       fetch(`${origin}/api/fpl/entry/${entryId}`, { cache: 'no-store' }),
       fetch(`${origin}/api/fpl/entry/${entryId}/transfers`, { cache: 'no-store' }),
       fetch(`${origin}/api/fpl/bootstrap-static`, { cache: 'no-store' }),
+      fetch(`${origin}/api/fpl/entry/${entryId}/history`, { cache: 'no-store' }),
+      fetch(`${origin}/api/fpl/entry/${entryId}/event/1/picks`, { cache: 'no-store' }),
     ])
 
     if (!entryRes.ok || !transfersRes.ok || !bootstrapRes.ok) return []
 
-    const [entryData, transfersData, bootstrapData] = await Promise.all([
+    const [entryData, transfersData, bootstrapData, historyData] = await Promise.all([
       entryRes.json(),
       transfersRes.json(),
       bootstrapRes.json(),
+      historyRes.ok ? historyRes.json() : Promise.resolve(null),
     ])
 
     const entry_name = String(entryData?.name || '')
@@ -141,6 +159,15 @@ export async function fetchManagerTransfersRows(
     }
 
     const transfers = Array.isArray(transfersData) ? transfersData as FplTransferRow[] : []
+    const chipByGw = new Map<number, string>()
+    const chips = Array.isArray(historyData?.chips) ? historyData.chips as FplChipRow[] : []
+    for (const chip of chips) {
+      const gw = Number(chip?.event)
+      const normalized = normalizeChipCode(chip?.name ?? null)
+      if (!Number.isInteger(gw) || gw <= 0) continue
+      if (!normalized) continue
+      chipByGw.set(gw, normalized)
+    }
 
     // Collect unique GWs needed for live data (gw-6 to gw-1) for all transfers
     const prevGwSet = new Set<number>()
@@ -184,6 +211,19 @@ export async function fetchManagerTransfersRows(
       return String(a?.time || '').localeCompare(String(b?.time || ''))
     })
     const lastBoughtGwByElement = new Map<number, number>()
+    if (gw1PicksRes.ok) {
+      try {
+        const gw1PicksData = await gw1PicksRes.json()
+        const picks = Array.isArray(gw1PicksData?.picks) ? gw1PicksData.picks : []
+        for (const pick of picks) {
+          const elementId = Number(pick?.element)
+          if (!Number.isInteger(elementId) || elementId <= 0) continue
+          lastBoughtGwByElement.set(elementId, 1)
+        }
+      } catch {
+        // Graceful fallback when GW1 picks are unavailable (e.g., season not started)
+      }
+    }
 
     return sortedTransfers
       .map((row) => {
@@ -212,6 +252,7 @@ export async function fetchManagerTransfersRows(
           purchase_price: Number(row?.element_in_cost) || 0,
           selling_price: Number(row?.element_out_cost) || 0,
           element_in_name: playerNameMap.get(elementIn) || `Player ${elementIn}`,
+          chip_played: chipByGw.get(gw) ?? null,
           element_out_name: playerNameMap.get(elementOut) || `Player ${elementOut}`,
           element_in_prev_gw_points: gw > 1 ? (gwLiveMap.get(gw - 1)?.get(elementIn) ?? null) : null,
           element_out_prev_gw_points: gw > 1 ? (gwLiveMap.get(gw - 1)?.get(elementOut) ?? null) : null,
