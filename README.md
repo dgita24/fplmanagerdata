@@ -50,16 +50,20 @@ This project includes a server-side caching infrastructure for FPL API responses
 
 See [REFACTOR_PLAN.md](./REFACTOR_PLAN.md) for the phased rollout strategy.
 
-## Private chip gameweek export (owner/allowlist only)
+## Private analysis exports (owner/allowlist only)
 
-A private API endpoint is available for exporting chip-usage gameweeks for the managers in your saved list for the **current season**:
+Private API endpoints are available for exporting manager analysis datasets for the managers in your saved list for the **current season**:
 
 - `GET /api/private/chips-gameweeks` → JSON
 - `GET /api/private/chips-gameweeks?format=csv` → CSV download
+- `GET /api/private/manager-gw-summary` → JSON
+- `GET /api/private/manager-gw-summary?format=csv` → CSV download
+- `GET /api/private/manager-transfers` → JSON
+- `GET /api/private/manager-transfers?format=csv` → CSV download
 
-This endpoint is protected by Supabase auth **and** allowlist access via the `analysis_lab_access` table.
+All of these endpoints are protected by Supabase auth **and** allowlist access via the `analysis_lab_access` table.
 
-Required runtime environment variables for this private endpoint:
+Required runtime environment variables for these private endpoints:
 
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
