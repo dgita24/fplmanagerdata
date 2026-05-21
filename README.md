@@ -50,6 +50,35 @@ This project includes a server-side caching infrastructure for FPL API responses
 
 See [REFACTOR_PLAN.md](./REFACTOR_PLAN.md) for the phased rollout strategy.
 
+## Private chip gameweek export (owner/allowlist only)
+
+A private API endpoint is available for exporting chip-usage gameweeks for the managers in your saved list for the **current season**:
+
+- `GET /api/private/chips-gameweeks` → JSON
+- `GET /api/private/chips-gameweeks?format=csv` → CSV download
+
+This endpoint is protected by Supabase auth **and** allowlist access via the `analysis_lab_access` table.
+
+Required runtime environment variables for this private endpoint:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+
+To grant access to another user:
+
+```sql
+insert into analysis_lab_access (user_id)
+values ('<supabase-auth-user-uuid>')
+on conflict (user_id) do nothing;
+```
+
+Remove access:
+
+```sql
+delete from analysis_lab_access
+where user_id = '<supabase-auth-user-uuid>';
+```
+
 ## Player History Pipeline
 
 An off-peak ingestion pipeline that fetches per-player per-match FPL stats (xG, xA, xGC, defensive stats, etc.) and stores them as a static NDJSON snapshot. Here is where every related file lives:

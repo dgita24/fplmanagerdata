@@ -65,6 +65,21 @@ import Layout from "../layouts/Layout.astro";
         </form>
       </section>
 
+      <hr class="auth-divider-line" />
+
+      <section id="private-chips-tools" style="display: none;">
+        <h2 class="section-title">Private Chip GW Export (Owner/Allowlist)</h2>
+        <p class="auth-hint" style="margin-bottom: var(--space-3);">
+          Export the gameweeks where managers in your list used chips this season.
+        </p>
+        <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+          <button type="button" id="chips-export-download" class="btn btn--primary">Download CSV</button>
+          <button type="button" id="chips-export-copy" class="btn btn--neutral">Copy JSON</button>
+        </div>
+        <div id="chips-export-status" class="status" style="display: none; margin-top: var(--space-3);"></div>
+        <pre id="chips-export-preview" class="chips-export-preview"></pre>
+      </section>
+
       <div class="auth-links">
         <a href="/" class="text-muted">← Back to Home</a>
       </div>
@@ -168,6 +183,19 @@ import Layout from "../layouts/Layout.astro";
     font-size: 16px;
     padding: 0;
   }
+
+  .chips-export-preview {
+    margin-top: var(--space-3);
+    max-height: 220px;
+    overflow: auto;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+  }
 </style>
 
 <script>
@@ -176,6 +204,58 @@ import Layout from "../layouts/Layout.astro";
   const notLoggedIn = document.getElementById('not-logged-in') as HTMLElement
   const loggedIn = document.getElementById('logged-in') as HTMLElement
   const currentEmailEl = document.getElementById('current-email') as HTMLElement
+  const privateChipTools = document.getElementById('private-chips-tools') as HTMLElement
+  const chipsExportDownloadBtn = document.getElementById('chips-export-download') as HTMLButtonElement
+  const chipsExportCopyBtn = document.getElementById('chips-export-copy') as HTMLButtonElement
+  const chipsExportStatus = document.getElementById('chips-export-status') as HTMLElement
+  const chipsExportPreview = document.getElementById('chips-export-preview') as HTMLElement
+
+  type ChipExportManager = {
+    entryId: number
+    managerName: string
+    teamName: string
+    allChipGws: number[]
+    wildcardGws: number[]
+    benchBoostGws: number[]
+    tripleCaptainGws: number[]
+    freeHitGws: number[]
+    assistantManagerGws: number[]
+  }
+
+  type ChipExportResponse = {
+    season: string
+    generatedAt: string
+    managerCount: number
+    managers: ChipExportManager[]
+  }
+
+  const PREVIEW_MANAGER_COUNT = 12
+
+  let chipExportPayload: ChipExportResponse | null = null
+
+  function setChipExportStatus(message: string, type: 'success' | 'error' | 'warning') {
+    if (!chipsExportStatus) return
+    chipsExportStatus.className = `status status--${type}`
+    chipsExportStatus.textContent = message
+    chipsExportStatus.style.display = 'block'
+  }
+
+  async function getSessionToken(): Promise<string | null> {
+    const { data: { session } } = await supabase.auth.getSession()
+    return session?.access_token || null
+  }
+
+  async function fetchPrivateChipExport(format: 'json' | 'csv' = 'json'): Promise<Response> {
+    const token = await getSessionToken()
+    if (!token) throw new Error('No session token')
+
+    const suffix = format === 'csv' ? '?format=csv' : ''
+    return fetch(`/api/private/chips-gameweeks${suffix}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+  }
 
   async function init() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -187,6 +267,28 @@ import Layout from "../layouts/Layout.astro";
 
     if (currentEmailEl) currentEmailEl.textContent = user.email ?? ''
     loggedIn.style.display = 'block'
+
+    try {
+      const res = await fetchPrivateChipExport('json')
+      if (res.status === 403 || res.status === 401) return
+      if (!res.ok) {
+        setChipExportStatus('Could not load private chip export.', 'error')
+        privateChipTools.style.display = 'block'
+        return
+      }
+
+      chipExportPayload = await res.json()
+      privateChipTools.style.display = 'block'
+      const previewRows = Array.isArray(chipExportPayload?.managers)
+        ? chipExportPayload.managers.slice(0, PREVIEW_MANAGER_COUNT)
+        : []
+      chipsExportPreview.textContent = JSON.stringify(previewRows, null, 2)
+      setChipExportStatus(`Loaded ${chipExportPayload?.managerCount ?? previewRows.length} managers.`, 'success')
+    } catch (error) {
+      console.error('[account] private chip export load failed', error)
+      setChipExportStatus('Could not load private chip export.', 'error')
+      privateChipTools.style.display = 'block'
+    }
   }
 
   init()
@@ -271,6 +373,46 @@ import Layout from "../layouts/Layout.astro";
       passwordSuccess.textContent = 'Password updated successfully!'
       passwordSuccess.style.display = 'block'
       passwordForm.reset()
+    }
+  })
+
+  chipsExportDownloadBtn?.addEventListener('click', async () => {
+    try {
+      setChipExportStatus('Preparing CSV download...', 'warning')
+      const res = await fetchPrivateChipExport('csv')
+      if (!res.ok) {
+        setChipExportStatus('Failed to generate CSV export.', 'error')
+        return
+      }
+
+      const csv = await res.text()
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = 'chip-gameweeks-current-season.csv'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+      setChipExportStatus('CSV download started.', 'success')
+    } catch (error) {
+      console.error('[account] chip CSV export failed', error)
+      setChipExportStatus('Failed to generate CSV export.', 'error')
+    }
+  })
+
+  chipsExportCopyBtn?.addEventListener('click', async () => {
+    if (!chipExportPayload) {
+      setChipExportStatus('No export data loaded yet.', 'warning')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(chipExportPayload, null, 2))
+      setChipExportStatus('Copied JSON export to clipboard.', 'success')
+    } catch (error) {
+      console.error('[account] chip export clipboard copy failed', error)
+      setChipExportStatus('Failed to copy JSON export.', 'error')
     }
   })
 </script>
