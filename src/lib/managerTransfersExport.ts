@@ -11,6 +11,14 @@ export type ManagerTransferRow = {
   selling_price: number
   element_in_name: string
   element_out_name: string
+  element_in_prev_gw_points: number | null
+}
+
+type FplLiveElement = {
+  id?: number
+  stats?: {
+    total_points?: number
+  }
 }
 
 type FplTransferRow = {
@@ -22,7 +30,8 @@ type FplTransferRow = {
   element_out_cost?: number
 }
 
-function csvCell(value: string | number): string {
+function csvCell(value: string | number | null): string {
+  if (value === null) return ''
   const str = String(value)
   if (!/[",\n]/.test(str)) return str
   return `"${str.replace(/"/g, '""')}"`
@@ -42,6 +51,7 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
     'selling_price',
     'element_in_name',
     'element_out_name',
+    'element_in_prev_gw_points',
   ]
 
   const lines = rows.map((row) =>
@@ -58,6 +68,7 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
       row.selling_price,
       row.element_in_name,
       row.element_out_name,
+      row.element_in_prev_gw_points,
     ].map(csvCell).join(',')
   )
 
@@ -96,6 +107,37 @@ export async function fetchManagerTransfersRows(
     }
 
     const transfers = Array.isArray(transfersData) ? transfersData as FplTransferRow[] : []
+
+    // Collect unique prev GWs (gw - 1) for all transfers where gw > 1
+    const prevGwSet = new Set<number>()
+    for (const row of transfers) {
+      const gw = Number(row?.event)
+      if (Number.isInteger(gw) && gw > 1) prevGwSet.add(gw - 1)
+    }
+
+    // Fetch live data for each unique prev GW in parallel
+    const gwLiveMap = new Map<number, Map<number, number>>()
+    await Promise.all(
+      Array.from(prevGwSet).map(async (prevGw) => {
+        try {
+          const liveRes = await fetch(`${origin}/api/fpl/event/${prevGw}/live`, { cache: 'no-store' })
+          if (!liveRes.ok) return
+          const liveData = await liveRes.json()
+          const elements = Array.isArray(liveData?.elements) ? liveData.elements as FplLiveElement[] : []
+          const elementPointsMap = new Map<number, number>()
+          for (const el of elements) {
+            const id = Number(el?.id)
+            if (!Number.isInteger(id) || id <= 0) continue
+            const pts = Number(el?.stats?.total_points)
+            if (Number.isInteger(pts)) elementPointsMap.set(id, pts)
+          }
+          gwLiveMap.set(prevGw, elementPointsMap)
+        } catch {
+          // leave entry absent — will resolve to null
+        }
+      })
+    )
+
     return transfers
       .map((row) => {
         const gw = Number(row?.event)
@@ -118,6 +160,7 @@ export async function fetchManagerTransfersRows(
           selling_price: Number(row?.element_out_cost) || 0,
           element_in_name: playerNameMap.get(elementIn) || `Player ${elementIn}`,
           element_out_name: playerNameMap.get(elementOut) || `Player ${elementOut}`,
+          element_in_prev_gw_points: gw > 1 ? (gwLiveMap.get(gw - 1)?.get(elementIn) ?? null) : null,
         }
       })
       .filter((row): row is ManagerTransferRow => row !== null)
