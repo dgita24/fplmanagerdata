@@ -15,6 +15,14 @@ export type ManagerTransferRow = {
   element_in_prev_gw_points: number | null
   element_out_prev_gw_points: number | null
   element_out_gws_held: number | null
+  element_out_acquired_gw: number | null
+  element_out_acquired_via: 'initial_squad' | 'transfer' | 'wildcard' | 'free_hit' | 'unknown'
+  element_out_pre_transfer_owned: boolean
+  element_in_pre_transfer_owned: boolean
+  element_in_is_new_ownership: boolean
+  transfer_group_id: string
+  transfer_group_size: number
+  transfer_group_index: number
   element_in_pts_above5_last6: number | null
   element_out_pts_above5_last6: number | null
   element_in_avg_pts_last6: number | null
@@ -51,6 +59,8 @@ type FplPicksResponse = {
   picks?: Array<{ element?: number }>
 }
 
+type AcquisitionVia = ManagerTransferRow['element_out_acquired_via']
+
 function normalizeChipCode(value: string | null | undefined): string | null {
   if (!value) return null
   if (value === 'wildcard') return 'WC'
@@ -58,7 +68,7 @@ function normalizeChipCode(value: string | null | undefined): string | null {
   return null
 }
 
-function csvCell(value: string | number | null): string {
+function csvCell(value: string | number | boolean | null): string {
   if (value === null) return ''
   const str = String(value)
   if (!/[",\n]/.test(str)) return str
@@ -104,6 +114,23 @@ function inferAcquisitionGw(
   if (knownAcquiredGw !== undefined) return knownAcquiredGw
   if (everBoughtByTransfer.has(elementId)) return null
   return startedEvent
+}
+
+function inferAcquisitionVia(
+  elementId: number,
+  everBoughtByTransfer: Set<number>,
+  acquisitionViaByElement: Map<number, AcquisitionVia>
+): AcquisitionVia {
+  const knownAcquiredVia = acquisitionViaByElement.get(elementId)
+  if (knownAcquiredVia !== undefined) return knownAcquiredVia
+  if (everBoughtByTransfer.has(elementId)) return 'unknown'
+  return 'initial_squad'
+}
+
+function acquiredViaFromChipCode(chipCode: string | null): AcquisitionVia {
+  if (chipCode === 'WC') return 'wildcard'
+  if (chipCode === 'FH') return 'free_hit'
+  return 'transfer'
 }
 
 /**
@@ -211,6 +238,14 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
     'element_in_prev_gw_points',
     'element_out_prev_gw_points',
     'element_out_gws_held',
+    'element_out_acquired_gw',
+    'element_out_acquired_via',
+    'element_out_pre_transfer_owned',
+    'element_in_pre_transfer_owned',
+    'element_in_is_new_ownership',
+    'transfer_group_id',
+    'transfer_group_size',
+    'transfer_group_index',
     'element_in_pts_above5_last6',
     'element_out_pts_above5_last6',
     'element_in_avg_pts_last6',
@@ -235,6 +270,14 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
       row.element_in_prev_gw_points,
       row.element_out_prev_gw_points,
       row.element_out_gws_held,
+      row.element_out_acquired_gw,
+      row.element_out_acquired_via,
+      row.element_out_pre_transfer_owned,
+      row.element_in_pre_transfer_owned,
+      row.element_in_is_new_ownership,
+      row.transfer_group_id,
+      row.transfer_group_size,
+      row.transfer_group_index,
       row.element_in_pts_above5_last6,
       row.element_out_pts_above5_last6,
       row.element_in_avg_pts_last6,
@@ -399,6 +442,8 @@ export async function fetchManagerTransfersRows(
 
     const lastBoughtGwByElement = new Map<number, number>()
     const acquisitionGwByElement = new Map<number, number>()
+    const acquisitionViaByElement = new Map<number, AcquisitionVia>()
+    const unknownOwnedElements = new Set<number>()
     const everBoughtByTransfer = new Set<number>()
     if (initialPicksRes.ok) {
       try {
@@ -406,6 +451,7 @@ export async function fetchManagerTransfersRows(
         for (const elementId of initialOwned) {
           lastBoughtGwByElement.set(elementId, startedEvent)
           acquisitionGwByElement.set(elementId, startedEvent)
+          acquisitionViaByElement.set(elementId, 'initial_squad')
         }
       } catch {
         // Graceful fallback when initial picks are unavailable (e.g., season not started)
@@ -436,6 +482,8 @@ export async function fetchManagerTransfersRows(
 
     const outputRows: ManagerTransferRow[] = []
     const sortedGws = Array.from(transfersByGw.keys()).sort((a, b) => a - b)
+    const isCurrentlyOwned = (elementId: number): boolean =>
+      lastBoughtGwByElement.has(elementId) || unknownOwnedElements.has(elementId)
     for (const gw of sortedGws) {
       const gwRows = transfersByGw.get(gw) ?? []
       const postGwOwned = postGwOwnedByGw.get(gw)
@@ -456,8 +504,11 @@ export async function fetchManagerTransfersRows(
         for (const elementId of Array.from(lastBoughtGwByElement.keys())) {
           if (!preGwOwned.has(elementId)) lastBoughtGwByElement.delete(elementId)
         }
+        for (const elementId of Array.from(unknownOwnedElements)) {
+          if (!preGwOwned.has(elementId)) unknownOwnedElements.delete(elementId)
+        }
         for (const elementId of preGwOwned) {
-          if (lastBoughtGwByElement.has(elementId)) continue
+          if (lastBoughtGwByElement.has(elementId) || unknownOwnedElements.has(elementId)) continue
           const inferredAcquiredGw = inferAcquisitionGw(
             elementId,
             startedEvent,
@@ -467,12 +518,21 @@ export async function fetchManagerTransfersRows(
           if (inferredAcquiredGw !== null) {
             lastBoughtGwByElement.set(elementId, inferredAcquiredGw)
             acquisitionGwByElement.set(elementId, inferredAcquiredGw)
+            acquisitionViaByElement.set(
+              elementId,
+              inferAcquisitionVia(elementId, everBoughtByTransfer, acquisitionViaByElement)
+            )
+          } else {
+            unknownOwnedElements.add(elementId)
+            acquisitionViaByElement.set(elementId, 'unknown')
           }
         }
       }
 
+      const transfer_group_id = `${entryId}:${gw}`
+      const transfer_group_size = gwRows.length
       const gwOutputRows = gwRows
-        .map((row) => {
+        .map((row, rowIndex) => {
         const gw = Number(row?.event)
         const elementIn = Number(row?.element_in)
         const elementOut = Number(row?.element_out)
@@ -480,7 +540,15 @@ export async function fetchManagerTransfersRows(
         if (!Number.isInteger(elementIn) || elementIn <= 0) return null
         if (!Number.isInteger(elementOut) || elementOut <= 0) return null
 
-        let priorBuyGw = lastBoughtGwByElement.get(elementOut) ?? null
+        const element_out_pre_transfer_owned = isCurrentlyOwned(elementOut)
+        const element_in_pre_transfer_owned = isCurrentlyOwned(elementIn)
+        const element_in_is_new_ownership = !element_in_pre_transfer_owned
+        const priorBuyGw = lastBoughtGwByElement.get(elementOut) ?? null
+        // If the player is unexpectedly not owned at sell-time, keep provenance as
+        // explicit 'unknown' for analysis/debugging instead of inferring a false source.
+        const element_out_acquired_via = element_out_pre_transfer_owned
+          ? (acquisitionViaByElement.get(elementOut) ?? 'unknown')
+          : 'unknown'
         const element_out_gws_held = priorBuyGw !== null ? gw - priorBuyGw : null
 
         const inForm = formStats(elementIn, gw, gwLiveMap)
@@ -503,6 +571,14 @@ export async function fetchManagerTransfersRows(
           element_in_prev_gw_points: gw > 1 ? (gwLiveMap.get(gw - 1)?.get(elementIn) ?? null) : null,
           element_out_prev_gw_points: gw > 1 ? (gwLiveMap.get(gw - 1)?.get(elementOut) ?? null) : null,
           element_out_gws_held,
+          element_out_acquired_gw: priorBuyGw,
+          element_out_acquired_via,
+          element_out_pre_transfer_owned,
+          element_in_pre_transfer_owned,
+          element_in_is_new_ownership,
+          transfer_group_id,
+          transfer_group_size,
+          transfer_group_index: rowIndex + 1,
           element_in_pts_above5_last6: inForm.above5,
           element_out_pts_above5_last6: outForm.above5,
           element_in_avg_pts_last6: inForm.avg,
@@ -511,9 +587,12 @@ export async function fetchManagerTransfersRows(
 
           // Update ownership state AFTER reading priorBuyGw.
           lastBoughtGwByElement.delete(elementOut)
+          unknownOwnedElements.delete(elementOut)
           lastBoughtGwByElement.set(elementIn, gw)
           acquisitionGwByElement.set(elementIn, gw)
+          acquisitionViaByElement.set(elementIn, acquiredViaFromChipCode(chipByGw.get(gw) ?? null))
           everBoughtByTransfer.add(elementIn)
+          unknownOwnedElements.delete(elementIn)
 
         return result
       })
@@ -524,7 +603,13 @@ export async function fetchManagerTransfersRows(
     return outputRows.sort((a, b) => {
       const gwDelta = a.gw - b.gw
       if (gwDelta !== 0) return gwDelta
-      return a.time.localeCompare(b.time)
+      const indexDelta = a.transfer_group_index - b.transfer_group_index
+      if (indexDelta !== 0) return indexDelta
+      const timeDelta = a.time.localeCompare(b.time)
+      if (timeDelta !== 0) return timeDelta
+      const outDelta = a.element_out - b.element_out
+      if (outDelta !== 0) return outDelta
+      return a.element_in - b.element_in
     })
   } catch {
     return []
