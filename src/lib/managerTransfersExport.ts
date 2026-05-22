@@ -22,6 +22,56 @@ export type TransferContext =
   | 'chip_reversal'
   | 'unknown_provenance'
 
+/**
+ * Why the player being sold left the squad on this transfer row.
+ *
+ *   standard_sale      – regular single-player transfer out of a durable squad
+ *   wildcard_reset     – sold as part of a wildcard squad rebuild
+ *   free_hit_temp_out  – sold as part of a temporary free-hit squad (not durable)
+ *   chip_reversal_sale – sold in a normal GW but was originally acquired via WC/FH
+ *                        (unwinding a prior chip pick)
+ *   same_gw_churn_sale – bought and sold in the same GW (net-zero churn)
+ *   unknown            – provenance gap; cannot classify with confidence
+ */
+export type ExitReason =
+  | 'standard_sale'
+  | 'wildcard_reset'
+  | 'free_hit_temp_out'
+  | 'chip_reversal_sale'
+  | 'same_gw_churn_sale'
+  | 'unknown'
+
+/**
+ * Why the player being bought entered the squad on this transfer row.
+ *
+ *   standard_buy      – regular single-player transfer into a durable squad
+ *   wildcard_add      – added as part of a wildcard squad rebuild
+ *   free_hit_temp_in  – added as part of a temporary free-hit squad (not durable)
+ *   chip_reversal_buy – bought in a normal GW to replace a chip-era pick
+ *                       (the out-player was originally acquired via WC/FH)
+ *   same_gw_churn_buy – bought and sold in the same GW (net-zero churn)
+ *   unknown           – provenance gap; cannot classify with confidence
+ */
+export type EntryReason =
+  | 'standard_buy'
+  | 'wildcard_add'
+  | 'free_hit_temp_in'
+  | 'chip_reversal_buy'
+  | 'same_gw_churn_buy'
+  | 'unknown'
+
+/**
+ * Characterises the durability of the squad ownership change this row represents.
+ *
+ *   permanent – both the exit and entry reflect durable long-term squad changes
+ *               (standard, wildcard, chip_reversal contexts)
+ *   temporary – the squad change is transient; the free-hit squad is not kept
+ *   reversal  – the exit unwinds a prior chip-era acquisition (chip_reversal context)
+ *   unknown   – cannot determine scope with confidence (same-GW churn, missing
+ *               provenance)
+ */
+export type OwnershipChangeScope = 'permanent' | 'temporary' | 'reversal' | 'unknown'
+
 export type ManagerTransferRow = {
   season: string
   gw: number
@@ -77,6 +127,36 @@ export type ManagerTransferRow = {
    * flagged when computing hold-duration statistics.
    */
   is_reliable_for_hold_analysis: boolean
+  // ── Ownership-transition / event-classification fields ────────────────────
+  /**
+   * Why the sold player left the squad. Self-describing label for downstream
+   * analysis without requiring consumers to interpret multi-field combinations.
+   * See ExitReason for full value semantics.
+   */
+  element_out_exit_reason: ExitReason
+  /**
+   * Why the bought player entered the squad. Symmetric counterpart to
+   * element_out_exit_reason; both are derived from the same transfer_context.
+   * See EntryReason for full value semantics.
+   */
+  element_in_entry_reason: EntryReason
+  /**
+   * Characterises how durable this squad change is.
+   *   permanent – durable long-term change (standard, wildcard, chip_reversal)
+   *   temporary – transient squad state (free hit)
+   *   reversal  – undoes a prior chip-era pick (chip_reversal)
+   *   unknown   – cannot determine with confidence (same-GW churn, missing provenance)
+   * See OwnershipChangeScope for full value semantics.
+   */
+  ownership_change_scope: OwnershipChangeScope
+  /**
+   * True when this row represents a durable change to the manager's long-term
+   * squad (standard, wildcard, or chip_reversal transfers). False for free-hit
+   * (temporary), same-GW churn (net-zero), or unknown-provenance rows.
+   * Use this flag to filter to rows that actually reflect lasting ownership
+   * decisions without having to inspect transfer_context manually.
+   */
+  is_permanent_squad_change: boolean
 }
 
 export type FetchManagerTransfersOptions = {
@@ -208,6 +288,66 @@ function deriveTransferContext(
 }
 
 /**
+ * Derive the exit-reason label for the sold player from the transfer context.
+ * Provides a self-describing, analyst-friendly classification that avoids the
+ * need to interpret multi-field combinations.
+ */
+function deriveExitReason(transferContext: TransferContext): ExitReason {
+  if (transferContext === 'wildcard') return 'wildcard_reset'
+  if (transferContext === 'free_hit') return 'free_hit_temp_out'
+  if (transferContext === 'chip_reversal') return 'chip_reversal_sale'
+  if (transferContext === 'same_gw_churn') return 'same_gw_churn_sale'
+  if (transferContext === 'standard') return 'standard_sale'
+  return 'unknown' // unknown_provenance
+}
+
+/**
+ * Derive the entry-reason label for the bought player from the transfer context.
+ * Symmetric counterpart to deriveExitReason.
+ */
+function deriveEntryReason(transferContext: TransferContext): EntryReason {
+  if (transferContext === 'wildcard') return 'wildcard_add'
+  if (transferContext === 'free_hit') return 'free_hit_temp_in'
+  if (transferContext === 'chip_reversal') return 'chip_reversal_buy'
+  if (transferContext === 'same_gw_churn') return 'same_gw_churn_buy'
+  if (transferContext === 'standard') return 'standard_buy'
+  return 'unknown' // unknown_provenance
+}
+
+/**
+ * Characterise how durable the squad change is.
+ *   permanent – standard, wildcard (durable rebuild), or chip_reversal (durable sale)
+ *   temporary – free_hit (squad reverts after one GW)
+ *   reversal  – chip_reversal specifically (undoing a chip-era pick)
+ *   unknown   – same-GW churn (net-zero change) or unknown provenance
+ *
+ * Note: chip_reversal is classified as 'reversal' rather than 'permanent' because
+ * it has a distinct analytical meaning (undoing a chip-era pick) even though the
+ * resulting squad change is durable.  Use is_permanent_squad_change for a simple
+ * durable/not-durable boolean without that distinction.
+ */
+function deriveOwnershipChangeScope(transferContext: TransferContext): OwnershipChangeScope {
+  if (transferContext === 'standard' || transferContext === 'wildcard') return 'permanent'
+  if (transferContext === 'free_hit') return 'temporary'
+  if (transferContext === 'chip_reversal') return 'reversal'
+  return 'unknown' // same_gw_churn or unknown_provenance
+}
+
+/**
+ * Returns true when the transfer represents a durable change to the manager's
+ * long-term squad: standard, wildcard, or chip_reversal contexts.
+ * Returns false for free-hit (temporary), same-GW churn (net-zero), or
+ * unknown-provenance rows.
+ */
+function deriveIsPermanentSquadChange(transferContext: TransferContext): boolean {
+  return (
+    transferContext === 'standard' ||
+    transferContext === 'wildcard' ||
+    transferContext === 'chip_reversal'
+  )
+}
+
+/**
  * Within a group of transfers sharing the same GW, apply a topological sort so
  * that if row A buys element X and row B sells element X, row A is always
  * processed before row B.
@@ -328,6 +468,10 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
     'is_chip_transfer',
     'is_same_gw_churn',
     'is_reliable_for_hold_analysis',
+    'element_out_exit_reason',
+    'element_in_entry_reason',
+    'ownership_change_scope',
+    'is_permanent_squad_change',
   ]
 
   const lines = rows.map((row) =>
@@ -364,6 +508,10 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
       row.is_chip_transfer,
       row.is_same_gw_churn,
       row.is_reliable_for_hold_analysis,
+      row.element_out_exit_reason,
+      row.element_in_entry_reason,
+      row.ownership_change_scope,
+      row.is_permanent_squad_change,
     ].map(csvCell).join(',')
   )
 
@@ -647,6 +795,12 @@ export async function fetchManagerTransfersRows(
         // known (gws_held is not null) AND the transfer was not a temporary FH move.
         const is_reliable_for_hold_analysis = element_out_gws_held !== null && chip_played !== 'FH'
 
+        // Ownership-transition / event-classification fields
+        const element_out_exit_reason = deriveExitReason(transfer_context)
+        const element_in_entry_reason = deriveEntryReason(transfer_context)
+        const ownership_change_scope = deriveOwnershipChangeScope(transfer_context)
+        const is_permanent_squad_change = deriveIsPermanentSquadChange(transfer_context)
+
         const inForm = formStats(elementIn, gw, gwLiveMap)
         const outForm = formStats(elementOut, gw, gwLiveMap)
 
@@ -683,6 +837,10 @@ export async function fetchManagerTransfersRows(
           is_chip_transfer,
           is_same_gw_churn,
           is_reliable_for_hold_analysis,
+          element_out_exit_reason,
+          element_in_entry_reason,
+          ownership_change_scope,
+          is_permanent_squad_change,
         }
 
           // Update ownership state AFTER reading priorBuyGw.
