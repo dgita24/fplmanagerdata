@@ -72,6 +72,14 @@ describe('buildManagerTransfersCsv', () => {
         element_in_prev_gw_points: 5,
         element_out_prev_gw_points: 2,
         element_out_gws_held: 3,
+        element_out_acquired_gw: 3,
+        element_out_acquired_via: 'transfer',
+        element_out_pre_transfer_owned: true,
+        element_in_pre_transfer_owned: false,
+        element_in_is_new_ownership: true,
+        transfer_group_id: '123:6',
+        transfer_group_size: 2,
+        transfer_group_index: 1,
         element_in_pts_above5_last6: 1,
         element_out_pts_above5_last6: 0,
         element_in_avg_pts_last6: 4.2,
@@ -81,7 +89,10 @@ describe('buildManagerTransfersCsv', () => {
 
     const [header, row] = buildManagerTransfersCsv(rows).split('\n')
     expect(header).toContain('element_in_name,chip_played,element_out_name')
+    expect(header).toContain('element_out_gws_held,element_out_acquired_gw,element_out_acquired_via')
+    expect(header).toContain('transfer_group_id,transfer_group_size,transfer_group_index')
     expect(row).toContain('Player In,WC,Player Out')
+    expect(row).toContain(',3,transfer,true,false,true,123:6,2,1,')
   })
 })
 
@@ -172,8 +183,18 @@ describe('fetchManagerTransfersRows', () => {
     expect(rows[1]?.chip_played).toBe('WC')
     expect(rows[0]?.element_out_name).toBe('Original Squad Player')
     expect(rows[0]?.element_out_gws_held).toBe(5)
+    expect(rows[0]?.element_out_acquired_gw).toBe(1)
+    expect(rows[0]?.element_out_acquired_via).toBe('initial_squad')
+    expect(rows[0]?.element_out_pre_transfer_owned).toBe(true)
+    expect(rows[0]?.element_in_pre_transfer_owned).toBe(false)
+    expect(rows[0]?.element_in_is_new_ownership).toBe(true)
     expect(rows[1]?.element_out_name).toBe('Transfer In Player')
     expect(rows[1]?.element_out_gws_held).toBe(0)
+    expect(rows[1]?.element_out_acquired_gw).toBe(6)
+    expect(rows[1]?.element_out_acquired_via).toBe('wildcard')
+    expect(rows[1]?.transfer_group_id).toBe(`${ENTRY_ID}:6`)
+    expect(rows[1]?.transfer_group_size).toBe(2)
+    expect(rows[1]?.transfer_group_index).toBe(2)
   })
 
   // ---------------------------------------------------------------------------
@@ -211,10 +232,18 @@ describe('fetchManagerTransfersRows', () => {
     // Row for (Buy P99, Sell P16): P16 was in GW1 squad → gws_held = 6 - 1 = 5
     const sellP16 = rows.find((r) => r.element_out === 16)
     expect(sellP16?.element_out_gws_held).toBe(5)
+    expect(sellP16?.transfer_group_id).toBe(`${ENTRY_ID}:6`)
+    expect(sellP16?.transfer_group_size).toBe(2)
+    expect(sellP16?.transfer_group_index).toBe(1)
+    expect(sellP16?.element_out_acquired_via).toBe('initial_squad')
 
     // Row for (Buy P100, Sell P99): P99 was bought in the same GW → gws_held = 0
     const sellP99 = rows.find((r) => r.element_out === 99)
     expect(sellP99?.element_out_gws_held).toBe(0)
+    expect(sellP99?.transfer_group_id).toBe(`${ENTRY_ID}:6`)
+    expect(sellP99?.transfer_group_size).toBe(2)
+    expect(sellP99?.transfer_group_index).toBe(2)
+    expect(sellP99?.element_out_acquired_via).toBe('transfer')
   })
 
   // ---------------------------------------------------------------------------
@@ -267,6 +296,8 @@ describe('fetchManagerTransfersRows', () => {
     expect(rows).toHaveLength(2)
     const sellP99 = rows.find((r) => r.element_out === 99)
     expect(sellP99?.element_out_gws_held).toBe(5) // 7 - 2 = 5
+    expect(sellP99?.element_out_acquired_gw).toBe(2)
+    expect(sellP99?.element_out_acquired_via).toBe('transfer')
   })
 
   // ---------------------------------------------------------------------------
@@ -299,6 +330,9 @@ describe('fetchManagerTransfersRows', () => {
     // P42 has no provenance (GW1 picks failed, never bought) → null
     expect(rows[0]?.element_out).toBe(42)
     expect(rows[0]?.element_out_gws_held).toBeNull()
+    expect(rows[0]?.element_out_acquired_gw).toBeNull()
+    expect(rows[0]?.element_out_acquired_via).toBe('unknown')
+    expect(rows[0]?.element_out_pre_transfer_owned).toBe(false)
     // P99 was bought in this transfer so it IS tracked, but it's the element_in here (not sold)
   })
 
@@ -405,6 +439,8 @@ describe('fetchManagerTransfersRows', () => {
     expect(rows.find((r) => r.gw === 2)?.chip_played).toBe('FH')
     expect(rows.find((r) => r.gw === 2)?.element_out_gws_held).toBe(1) // 2 - 1
     expect(rows.find((r) => r.gw === 3)?.element_out_gws_held).toBe(2) // 3 - 1
+    expect(rows.find((r) => r.gw === 2)?.element_out_acquired_via).toBe('initial_squad')
+    expect(rows.find((r) => r.gw === 3)?.element_out_acquired_via).toBe('initial_squad')
   })
 
   // ---------------------------------------------------------------------------
