@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { buildManagerTransfersCsv, fetchManagerTransfersRows, type ManagerTransferRow, type ExitReason, type EntryReason, type OwnershipChangeScope, type CanonicalTransferInterpretation } from '../managerTransfersExport'
+import { buildManagerTransfersCsv, fetchManagerTransfersRows, type ManagerTransferRow, type ExitReason, type EntryReason, type OwnershipChangeScope, type TransferGroupContext, type CanonicalTransferInterpretation } from '../managerTransfersExport'
 
 // ---------------------------------------------------------------------------
 // Helper: build a minimal but complete fetch mock from a URL→response map.
@@ -80,6 +80,10 @@ describe('buildManagerTransfersCsv', () => {
         transfer_group_id: '123:6',
         transfer_group_size: 2,
         transfer_group_index: 1,
+        transfer_group_context: 'wildcard',
+        transfer_group_net_spend: 5,
+        transfer_group_has_unknown_provenance: false,
+        transfer_group_permanent_change_count: 1,
         element_in_pts_above5_last6: 1,
         element_out_pts_above5_last6: 0,
         element_in_avg_pts_last6: 4.2,
@@ -100,12 +104,67 @@ describe('buildManagerTransfersCsv', () => {
     expect(header).toContain('element_in_name,chip_played,element_out_name')
     expect(header).toContain('element_out_gws_held,element_out_acquired_gw,element_out_acquired_via')
     expect(header).toContain('transfer_group_id,transfer_group_size,transfer_group_index')
+    expect(header).toContain('transfer_group_context,transfer_group_net_spend,transfer_group_has_unknown_provenance,transfer_group_permanent_change_count')
     expect(header).toContain('transfer_context,is_chip_transfer,is_same_gw_churn,is_reliable_for_hold_analysis')
     expect(header).toContain('element_out_exit_reason,element_in_entry_reason,ownership_change_scope,is_permanent_squad_change,canonical_transfer_interpretation')
     expect(row).toContain('Player In,WC,Player Out')
     expect(row).toContain(',3,transfer,true,false,true,123:6,2,1,')
+    expect(row).toContain('wildcard,5,false,1,')
     expect(row).toContain('wildcard,true,false,true')
     expect(row).toContain('wildcard_reset,wildcard_add,permanent,true,permanent_team_change')
+  })
+
+  it('prefixes the CSV with a UTF-8 BOM and preserves Unicode player names', () => {
+    const rows: ManagerTransferRow[] = [
+      {
+        season: 'current',
+        gw: 6,
+        entry_id: 123,
+        entry_name: 'Team A',
+        player_name: 'Manager A',
+        time: '2026-09-10T10:00:00Z',
+        element_in: 99,
+        element_out: 42,
+        purchase_price: 80,
+        selling_price: 75,
+        element_in_name: 'João Pedro',
+        chip_played: null,
+        element_out_name: 'Dúbravka',
+        element_in_prev_gw_points: 5,
+        element_out_prev_gw_points: 2,
+        element_out_gws_held: 3,
+        element_out_acquired_gw: 3,
+        element_out_acquired_via: 'transfer',
+        element_out_pre_transfer_owned: true,
+        element_in_pre_transfer_owned: false,
+        element_in_is_new_ownership: true,
+        transfer_group_id: '123:6',
+        transfer_group_size: 1,
+        transfer_group_index: 1,
+        transfer_group_context: 'standard',
+        transfer_group_net_spend: 5,
+        transfer_group_has_unknown_provenance: false,
+        transfer_group_permanent_change_count: 1,
+        element_in_pts_above5_last6: 1,
+        element_out_pts_above5_last6: 0,
+        element_in_avg_pts_last6: 4.2,
+        element_out_avg_pts_last6: 3.5,
+        transfer_context: 'standard',
+        is_chip_transfer: false,
+        is_same_gw_churn: false,
+        is_reliable_for_hold_analysis: true,
+        element_out_exit_reason: 'standard_sale',
+        element_in_entry_reason: 'standard_buy',
+        ownership_change_scope: 'permanent',
+        is_permanent_squad_change: true,
+      },
+    ]
+
+    const csv = buildManagerTransfersCsv(rows)
+
+    expect(csv.startsWith('\uFEFF')).toBe(true)
+    expect(csv).toContain('João Pedro')
+    expect(csv).toContain('Dúbravka')
   })
 })
 
@@ -183,6 +242,9 @@ describe('fetchManagerTransfersRows', () => {
           ok: true,
           json: async () => ({ elements: [] }),
         }
+      }
+      if (/\/api\/fpl\/entry\/\d+\/event\/\d+\/picks$/.test(url)) {
+        return { ok: false, status: 404, json: async () => ({}) }
       }
 
       throw new Error(`Unexpected fetch URL in test: ${url}`)
@@ -603,6 +665,9 @@ describe('fetchManagerTransfersRows', () => {
       if (url === `${BASE}/api/fpl/bootstrap-static`) {
         throw new Error('bootstrap-static should not be fetched when bootstrapData option is provided')
       }
+      if (/\/api\/fpl\/entry\/\d+\/event\/\d+\/picks$/.test(url)) {
+        return { ok: false, status: 404, json: async () => ({}) }
+      }
 
       throw new Error(`Unexpected fetch URL in test: ${url}`)
     })
@@ -627,6 +692,70 @@ describe('fetchManagerTransfersRows', () => {
     expect(liveFetchCount.get(2)).toBe(1)
     expect(rowsA[0]?.element_in_prev_gw_points).toBe(6)
     expect(rowsA[0]?.element_out_prev_gw_points).toBe(2)
+  })
+
+  it('retries transient manager fetch failures so export rows are not dropped', async () => {
+    const entryUrl = `${BASE}/api/fpl/entry/${ENTRY_ID}`
+    const transfersUrl = `${BASE}/api/fpl/entry/${ENTRY_ID}/transfers`
+    const attempts = new Map<string, number>()
+
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input)
+      const attempt = (attempts.get(url) ?? 0) + 1
+      attempts.set(url, attempt)
+
+      if (url === entryUrl && attempt === 1) {
+        return { ok: false, status: 503 }
+      }
+      if (url === transfersUrl && attempt === 1) {
+        throw new Error('temporary network failure')
+      }
+
+      if (url === entryUrl) {
+        return { ok: true, json: async () => ENTRY_BODY }
+      }
+      if (url === transfersUrl) {
+        return {
+          ok: true,
+          json: async () => ([
+            {
+              event: 5,
+              time: '2024-10-08T09:00:00Z',
+              element_in: 99,
+              element_out: 200,
+              element_in_cost: 80,
+              element_out_cost: 85,
+            },
+          ]),
+        }
+      }
+      if (url === `${BASE}/api/fpl/bootstrap-static`) {
+        return { ok: true, json: async () => BOOTSTRAP_BODY }
+      }
+      if (url === `${BASE}/api/fpl/entry/${ENTRY_ID}/history`) {
+        return { ok: true, json: async () => EMPTY_HISTORY }
+      }
+      if (url === `${BASE}/api/fpl/entry/${ENTRY_ID}/event/1/picks`) {
+        return { ok: true, json: async () => ({ picks: [{ element: 200 }] }) }
+      }
+      if (/\/api\/fpl\/event\/\d+\/live$/.test(url)) {
+        return { ok: true, json: async () => EMPTY_LIVE }
+      }
+      if (/\/api\/fpl\/entry\/\d+\/event\/\d+\/picks$/.test(url)) {
+        return { ok: false, status: 404, json: async () => ({}) }
+      }
+
+      throw new Error(`Unexpected fetch URL in test: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.element_out).toBe(200)
+    expect(attempts.get(entryUrl)).toBe(2)
+    expect(attempts.get(transfersUrl)).toBe(2)
   })
 
   // ============================================================================
@@ -1033,5 +1162,230 @@ describe('fetchManagerTransfersRows', () => {
       expect(row.ownership_change_scope).toBe<OwnershipChangeScope>('permanent')
       expect(row.is_permanent_squad_change).toBe(true)
     }
+  })
+
+  // ============================================================================
+  // transfer_group_context / transfer_group_net_spend /
+  // transfer_group_has_unknown_provenance / transfer_group_permanent_change_count
+  // — PR4 group-level analytics fields
+  // ============================================================================
+
+  // ---------------------------------------------------------------------------
+  // Group context: single standard transfer → group_context = 'standard'
+  // net_spend = purchase - selling, permanent_count = 1, no unknown provenance
+  // ---------------------------------------------------------------------------
+  it('single standard transfer: group_context=standard, correct net_spend, permanent_count=1', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // buy at 80, sell at 75 → net_spend = 80 - 75 = 5
+        { event: 5, time: '2024-10-08T09:00:00Z', element_in: 99, element_out: 200, element_in_cost: 80, element_out_cost: 75 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 200 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(1)
+    const row = rows[0]
+    expect(row?.transfer_group_context).toBe<TransferGroupContext>('standard')
+    expect(row?.transfer_group_net_spend).toBe(5)       // 80 - 75
+    expect(row?.transfer_group_has_unknown_provenance).toBe(false)
+    expect(row?.transfer_group_permanent_change_count).toBe(1)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Group context: wildcard week — all rows share 'wildcard', so group_context='wildcard'
+  // net_spend accumulates across all transfers in the group; all permanent
+  // ---------------------------------------------------------------------------
+  it('wildcard group: group_context=wildcard, net_spend sums all transfers, permanent_count=group_size', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // transfer 1: buy at 80, sell at 74 → delta = 6
+        { event: 6, time: '2024-10-15T10:00:00Z', element_in: 99,  element_out: 16, element_in_cost: 80, element_out_cost: 74 },
+        // transfer 2: buy at 75, sell at 70 → delta = 5
+        { event: 6, time: '2024-10-15T11:00:00Z', element_in: 100, element_out: 42, element_in_cost: 75, element_out_cost: 70 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'wildcard', event: 6 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 16 }, { element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      expect(row.transfer_group_context).toBe<TransferGroupContext>('wildcard')
+      expect(row.transfer_group_net_spend).toBe(11) // (80-74) + (75-70) = 6 + 5
+      expect(row.transfer_group_has_unknown_provenance).toBe(false)
+      expect(row.transfer_group_permanent_change_count).toBe(2)
+    }
+  })
+
+  // ---------------------------------------------------------------------------
+  // Group context: free-hit week — all rows 'free_hit', permanent_count = 0
+  // ---------------------------------------------------------------------------
+  it('free-hit group: group_context=free_hit, permanent_count=0, not reliable', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 4, time: '2024-09-24T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 78, element_out_cost: 72 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'freehit', event: 4 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(1)
+    const row = rows[0]
+    expect(row?.transfer_group_context).toBe<TransferGroupContext>('free_hit')
+    expect(row?.transfer_group_net_spend).toBe(6) // 78 - 72
+    expect(row?.transfer_group_has_unknown_provenance).toBe(false)
+    expect(row?.transfer_group_permanent_change_count).toBe(0) // FH rows are not permanent
+  })
+
+  // ---------------------------------------------------------------------------
+  // Group context: mixed — same GW has 'standard' and 'chip_reversal' rows
+  // ---------------------------------------------------------------------------
+  it('mixed group: group_context=mixed when GW contains both standard and chip_reversal rows', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // GW3 WC: sell P42, buy P99
+        { event: 3, time: '2024-09-10T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 75, element_out_cost: 74 },
+        // GW7 double: sell P99 (WC-era) → chip_reversal, and sell P200 (initial squad) → standard
+        { event: 7, time: '2024-10-22T10:00:00Z', element_in: 100, element_out: 99,  element_in_cost: 80, element_out_cost: 78 },
+        { event: 7, time: '2024-10-22T11:00:00Z', element_in: 16,  element_out: 200, element_in_cost: 70, element_out_cost: 68 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'wildcard', event: 3 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }, { element: 200 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(3)
+
+    // WC row in GW3 — uniform single context
+    const wcRow = rows.find((r) => r.gw === 3)
+    expect(wcRow?.transfer_group_context).toBe<TransferGroupContext>('wildcard')
+    expect(wcRow?.transfer_group_size).toBe(1)
+
+    // GW7 rows — group has 'chip_reversal' (P99) and 'standard' (P200) → 'mixed'
+    const gw7Rows = rows.filter((r) => r.gw === 7)
+    expect(gw7Rows).toHaveLength(2)
+    for (const row of gw7Rows) {
+      expect(row.transfer_group_context).toBe<TransferGroupContext>('mixed')
+      expect(row.transfer_group_size).toBe(2)
+      // net_spend = (80-78) + (70-68) = 2 + 2 = 4
+      expect(row.transfer_group_net_spend).toBe(4)
+      expect(row.transfer_group_has_unknown_provenance).toBe(false)
+      // both rows in GW7 are permanent squad changes
+      expect(row.transfer_group_permanent_change_count).toBe(2)
+    }
+    // Per-row contexts are still correct (group_context doesn't override transfer_context)
+    expect(gw7Rows.find((r) => r.element_out === 99)?.transfer_context).toBe('chip_reversal')
+    expect(gw7Rows.find((r) => r.element_out === 200)?.transfer_context).toBe('standard')
+  })
+
+  // ---------------------------------------------------------------------------
+  // Group context: unknown provenance flag propagates to all rows in the group
+  // ---------------------------------------------------------------------------
+  it('group with unknown_provenance row: group_has_unknown_provenance=true for all rows in group', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // P200: in GW1 squad, clean provenance → standard
+        { event: 5, time: '2024-10-08T09:00:00Z', element_in: 99,  element_out: 200, element_in_cost: 80, element_out_cost: 75 },
+        // P42: no provenance (GW1 picks only seed P200) → unknown_provenance
+        { event: 5, time: '2024-10-08T10:00:00Z', element_in: 100, element_out: 42,  element_in_cost: 70, element_out_cost: 68 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      // Only seed P200; P42 has no provenance
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 200 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(2)
+
+    // Individual row contexts are still correct
+    const standardRow = rows.find((r) => r.element_out === 200)
+    expect(standardRow?.transfer_context).toBe('standard')
+    const unknownRow = rows.find((r) => r.element_out === 42)
+    expect(unknownRow?.transfer_context).toBe('unknown_provenance')
+
+    // Both rows share the same group — unknown provenance flag propagates
+    for (const row of rows) {
+      expect(row.transfer_group_has_unknown_provenance).toBe(true)
+      expect(row.transfer_group_context).toBe<TransferGroupContext>('mixed')
+    }
+
+    // Only the standard row counts toward permanent changes
+    expect(rows[0]?.transfer_group_permanent_change_count).toBe(1)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Group context: net_spend can be negative (manager received more than spent)
+  // ---------------------------------------------------------------------------
+  it('group net_spend is negative when selling price exceeds purchase price across the group', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // sell at 90, buy at 80 → net_spend = 80 - 90 = -10
+        { event: 5, time: '2024-10-08T09:00:00Z', element_in: 99, element_out: 200, element_in_cost: 80, element_out_cost: 90 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 200 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.transfer_group_net_spend).toBe(-10) // 80 - 90
+  })
+
+  // ---------------------------------------------------------------------------
+  // Group-level fields are consistent for all rows sharing the same transfer_group_id
+  // (sanity check that the two-pass computation is correctly applied to every row)
+  // ---------------------------------------------------------------------------
+  it('all rows in the same transfer group share identical group-level field values', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 8, time: '2024-11-05T10:00:00Z', element_in: 99,  element_out: 16,  element_in_cost: 80, element_out_cost: 75 },
+        { event: 8, time: '2024-11-05T11:00:00Z', element_in: 100, element_out: 42,  element_in_cost: 70, element_out_cost: 68 },
+        { event: 8, time: '2024-11-05T12:00:00Z', element_in: 200, element_out: 99,  element_in_cost: 75, element_out_cost: 73 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 16 }, { element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(3)
+
+    // All rows share the same transfer_group_id
+    const groupIds = new Set(rows.map((r) => r.transfer_group_id))
+    expect(groupIds.size).toBe(1)
+
+    // All group-level fields must be identical across rows in the same group
+    const groupContexts = new Set(rows.map((r) => r.transfer_group_context))
+    const groupNetSpends = new Set(rows.map((r) => r.transfer_group_net_spend))
+    const groupUnknownFlags = new Set(rows.map((r) => r.transfer_group_has_unknown_provenance))
+    const groupPermCounts = new Set(rows.map((r) => r.transfer_group_permanent_change_count))
+
+    expect(groupContexts.size).toBe(1)
+    expect(groupNetSpends.size).toBe(1)
+    expect(groupUnknownFlags.size).toBe(1)
+    expect(groupPermCounts.size).toBe(1)
   })
 })

@@ -73,6 +73,15 @@ export type EntryReason =
 export type OwnershipChangeScope = 'permanent' | 'temporary' | 'reversal' | 'unknown'
 
 /**
+ * Group-level transfer context: the single TransferContext value if every row in
+ * the group shares the same context, or 'mixed' when the group contains rows of
+ * different contexts (e.g. a standard GW that has both 'standard' and
+ * 'chip_reversal' rows).  'mixed' signals that the group cannot be treated as a
+ * uniform event and individual rows must be inspected.
+ */
+export type TransferGroupContext = TransferContext | 'mixed'
+
+/**
  * Canonical analyst/AI-focused transfer interpretation that normalizes the
  * detailed transfer_context values into one high-level bucket.
  *
@@ -114,6 +123,34 @@ export type ManagerTransferRow = {
   transfer_group_id: string
   transfer_group_size: number
   transfer_group_index: number
+  // ── Group-level transfer analytics ───────────────────────────────────────
+  /**
+   * The uniform TransferContext of all rows in this transfer group, or 'mixed'
+   * when rows span more than one context (e.g. 'standard' and 'chip_reversal'
+   * in the same GW).  Use this field to classify a whole transfer window
+   * without aggregating per-row transfer_context values yourself.
+   * See TransferGroupContext for full value semantics.
+   */
+  transfer_group_context: TransferGroupContext
+  /**
+   * Net expenditure for this transfer group: total purchase_price minus total
+   * selling_price across all transfers in the group.  Positive means the
+   * manager spent more than received; negative means a net budget gain.
+   * Uses the same 0.1 M-unit scale as purchase_price and selling_price.
+   */
+  transfer_group_net_spend: number
+  /**
+   * True when one or more rows in this transfer group have
+   * transfer_context = 'unknown_provenance'.  Signals that the group's
+   * analysis may be incomplete and individual rows should be checked.
+   */
+  transfer_group_has_unknown_provenance: boolean
+  /**
+   * Count of rows in this transfer group where is_permanent_squad_change is
+   * true.  Together with transfer_group_size this gives the fraction of the
+   * window's changes that represent durable long-term squad decisions.
+   */
+  transfer_group_permanent_change_count: number
   element_in_pts_above5_last6: number | null
   element_out_pts_above5_last6: number | null
   element_in_avg_pts_last6: number | null
@@ -226,6 +263,31 @@ function csvCell(value: string | number | boolean | null): string {
   const str = String(value)
   if (!/[",\n]/.test(str)) return str
   return `"${str.replace(/"/g, '""')}"`
+}
+
+async function fetchJsonWithRetry(
+  url: string,
+  retries = 2
+): Promise<{ ok: true; data: unknown } | { ok: false }> {
+  for (let attemptIndex = 0; attemptIndex <= retries; attemptIndex++) {
+    try {
+      const res = await fetch(url, { cache: 'no-store' })
+      if (!res.ok) {
+        // 429 is transient rate limiting, so keep retrying it alongside 5xx responses.
+        if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+          return { ok: false }
+        }
+        continue
+      }
+      return { ok: true, data: await res.json() }
+    } catch (error) {
+      if (attemptIndex === retries) {
+        console.error(`[managerTransfersExport] Request failed after retries: ${url}`, error)
+      }
+    }
+  }
+
+  return { ok: false }
 }
 
 function formStats(
@@ -383,6 +445,18 @@ function deriveCanonicalTransferInterpretation(
 }
 
 /**
+ * Derive the group-level context for a set of transfer rows that share the same
+ * transfer_group_id.  Returns the single shared TransferContext value when all
+ * rows agree, or 'mixed' when the group contains more than one distinct context
+ * (e.g. a standard GW with both 'standard' and 'chip_reversal' rows).
+ */
+function deriveTransferGroupContext(contexts: TransferContext[]): TransferGroupContext {
+  if (contexts.length === 0) return 'standard'
+  const unique = new Set(contexts)
+  return unique.size === 1 ? (Array.from(unique)[0] as TransferGroupContext) : 'mixed'
+}
+
+/**
  * Within a group of transfers sharing the same GW, apply a topological sort so
  * that if row A buys element X and row B sells element X, row A is always
  * processed before row B.
@@ -495,6 +569,10 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
     'transfer_group_id',
     'transfer_group_size',
     'transfer_group_index',
+    'transfer_group_context',
+    'transfer_group_net_spend',
+    'transfer_group_has_unknown_provenance',
+    'transfer_group_permanent_change_count',
     'element_in_pts_above5_last6',
     'element_out_pts_above5_last6',
     'element_in_avg_pts_last6',
@@ -536,6 +614,10 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
       row.transfer_group_id,
       row.transfer_group_size,
       row.transfer_group_index,
+      row.transfer_group_context,
+      row.transfer_group_net_spend,
+      row.transfer_group_has_unknown_provenance,
+      row.transfer_group_permanent_change_count,
       row.element_in_pts_above5_last6,
       row.element_out_pts_above5_last6,
       row.element_in_avg_pts_last6,
@@ -552,7 +634,7 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
     ].map(csvCell).join(',')
   )
 
-  return [header.join(','), ...lines].join('\n')
+  return `\uFEFF${[header.join(','), ...lines].join('\n')}`
 }
 
 export async function fetchManagerTransfersRows(
@@ -562,27 +644,31 @@ export async function fetchManagerTransfersRows(
   options?: FetchManagerTransfersOptions
 ): Promise<ManagerTransferRow[]> {
   try {
-    const [entryRes, transfersRes, historyRes, gw1PicksRes] = await Promise.all([
-      fetch(`${origin}/api/fpl/entry/${entryId}`, { cache: 'no-store' }),
-      fetch(`${origin}/api/fpl/entry/${entryId}/transfers`, { cache: 'no-store' }),
-      fetch(`${origin}/api/fpl/entry/${entryId}/history`, { cache: 'no-store' }),
-      fetch(`${origin}/api/fpl/entry/${entryId}/event/1/picks`, { cache: 'no-store' }),
+    const [entryResult, transfersResult, historyResult, gw1PicksResult] = await Promise.all([
+      fetchJsonWithRetry(`${origin}/api/fpl/entry/${entryId}`),
+      fetchJsonWithRetry(`${origin}/api/fpl/entry/${entryId}/transfers`),
+      fetchJsonWithRetry(`${origin}/api/fpl/entry/${entryId}/history`),
+      fetchJsonWithRetry(`${origin}/api/fpl/entry/${entryId}/event/1/picks`),
     ])
 
     let bootstrapData: unknown = options?.bootstrapData ?? null
     if (!bootstrapData) {
-      const bootstrapRes = await fetch(`${origin}/api/fpl/bootstrap-static`, { cache: 'no-store' })
-      if (!bootstrapRes.ok) return []
-      bootstrapData = await bootstrapRes.json()
+      const bootstrapResult = await fetchJsonWithRetry(`${origin}/api/fpl/bootstrap-static`)
+      if (!bootstrapResult.ok) {
+        console.error('[managerTransfersExport] Failed to load bootstrap-static for manager export')
+        return []
+      }
+      bootstrapData = bootstrapResult.data
     }
 
-    if (!entryRes.ok || !transfersRes.ok) return []
+    if (!entryResult.ok || !transfersResult.ok) {
+      console.error(`[managerTransfersExport] Failed to load manager ${entryId} entry or transfers data`)
+      return []
+    }
 
-    const [entryData, transfersData, historyData] = await Promise.all([
-      entryRes.json(),
-      transfersRes.json(),
-      historyRes.ok ? historyRes.json() : Promise.resolve(null),
-    ])
+    const entryData = entryResult.data
+    const transfersData = transfersResult.data
+    const historyData = historyResult.ok ? historyResult.data : null
 
     const entry_name = String(entryData?.name || '')
     const player_name = `${entryData?.player_first_name || ''} ${entryData?.player_last_name || ''}`.trim() || `Manager ${entryId}`
@@ -625,10 +711,10 @@ export async function fetchManagerTransfersRows(
           if (sharedGwLivePromises?.has(prevGw)) {
             promise = sharedGwLivePromises.get(prevGw)!
           } else {
-            promise = fetch(`${origin}/api/fpl/event/${prevGw}/live`, { cache: 'no-store' })
-              .then(async (liveRes) => {
-                if (!liveRes.ok) return new Map<number, number>()
-                const liveData = await liveRes.json()
+            promise = fetchJsonWithRetry(`${origin}/api/fpl/event/${prevGw}/live`)
+              .then((liveResult) => {
+                if (!liveResult.ok) return new Map<number, number>()
+                const liveData = liveResult.data
                 const elements = Array.isArray(liveData?.elements) ? liveData.elements as FplLiveElement[] : []
                 const elementPointsMap = new Map<number, number>()
                 for (const el of elements) {
@@ -699,12 +785,12 @@ export async function fetchManagerTransfersRows(
     // Seed ownership from the manager's initial squad picks.  For GW-1 joiners we reuse the
     // already-fetched picks; for mid-season joiners we fetch their actual first-GW picks so
     // their initial squad players are correctly provenanced at `startedEvent` rather than 1.
-    let initialPicksRes: Response = gw1PicksRes
+    let initialPicksData: unknown = gw1PicksResult.ok ? gw1PicksResult.data : null
     if (startedEvent > 1) {
-      initialPicksRes = await fetch(
-        `${origin}/api/fpl/entry/${entryId}/event/${startedEvent}/picks`,
-        { cache: 'no-store' }
+      const startedEventPicksResult = await fetchJsonWithRetry(
+        `${origin}/api/fpl/entry/${entryId}/event/${startedEvent}/picks`
       )
+      initialPicksData = startedEventPicksResult.ok ? startedEventPicksResult.data : null
     }
 
     const lastBoughtGwByElement = new Map<number, number>()
@@ -712,9 +798,9 @@ export async function fetchManagerTransfersRows(
     const acquisitionViaByElement = new Map<number, AcquisitionVia>()
     const unknownOwnedElements = new Set<number>()
     const everBoughtByTransfer = new Set<number>()
-    if (initialPicksRes.ok) {
+    if (initialPicksData) {
       try {
-        const initialOwned = picksElementSet(await initialPicksRes.json())
+        const initialOwned = picksElementSet(initialPicksData)
         for (const elementId of initialOwned) {
           lastBoughtGwByElement.set(elementId, startedEvent)
           acquisitionGwByElement.set(elementId, startedEvent)
@@ -737,9 +823,11 @@ export async function fetchManagerTransfersRows(
     await Promise.all(
       Array.from(transfersByGw.keys()).map(async (gw) => {
         try {
-          const picksRes = await fetch(`${origin}/api/fpl/entry/${entryId}/event/${gw}/picks`, { cache: 'no-store' })
-          if (!picksRes.ok) return
-          const owned = picksElementSet(await picksRes.json())
+          const picksResult = await fetchJsonWithRetry(
+            `${origin}/api/fpl/entry/${entryId}/event/${gw}/picks`
+          )
+          if (!picksResult.ok) return
+          const owned = picksElementSet(picksResult.data)
           postGwOwnedByGw.set(gw, owned)
         } catch {
           // Keep unavailable; we will fall back to transfer replay state.
@@ -798,7 +886,8 @@ export async function fetchManagerTransfersRows(
 
       const transfer_group_id = `${entryId}:${gw}`
       const transfer_group_size = gwRows.length
-      const gwOutputRows = gwRows
+      // ── Pass 1: build per-row data (group-level fields filled with placeholders) ──
+      const gwBaseRows = gwRows
         .map((row, rowIndex) => {
         const gw = Number(row?.event)
         const elementIn = Number(row?.element_in)
@@ -867,6 +956,11 @@ export async function fetchManagerTransfersRows(
           transfer_group_id,
           transfer_group_size,
           transfer_group_index: rowIndex + 1,
+          // Group-level analytics — placeholders filled in pass 2 below
+          transfer_group_context: transfer_context as TransferGroupContext,
+          transfer_group_net_spend: 0,
+          transfer_group_has_unknown_provenance: false,
+          transfer_group_permanent_change_count: 0,
           element_in_pts_above5_last6: inForm.above5,
           element_out_pts_above5_last6: outForm.above5,
           element_in_avg_pts_last6: inForm.avg,
@@ -894,6 +988,30 @@ export async function fetchManagerTransfersRows(
         return result
       })
       .filter((row): row is ManagerTransferRow => row !== null)
+
+      // ── Pass 2: compute group-level analytics from the finalised per-row data ──
+      const transfer_group_context = deriveTransferGroupContext(
+        gwBaseRows.map((r) => r.transfer_context)
+      )
+      const transfer_group_net_spend = gwBaseRows.reduce(
+        (sum, r) => sum + r.purchase_price - r.selling_price, 0
+      )
+      const transfer_group_has_unknown_provenance = gwBaseRows.some(
+        (r) => r.transfer_context === 'unknown_provenance'
+      )
+      const transfer_group_permanent_change_count = gwBaseRows.filter(
+        (r) => r.is_permanent_squad_change
+      ).length
+
+      // Merge group-level fields into each row
+      const gwOutputRows = gwBaseRows.map((r) => ({
+        ...r,
+        transfer_group_context,
+        transfer_group_net_spend,
+        transfer_group_has_unknown_provenance,
+        transfer_group_permanent_change_count,
+      }))
+
       outputRows.push(...gwOutputRows)
     }
 
@@ -908,7 +1026,8 @@ export async function fetchManagerTransfersRows(
       if (outDelta !== 0) return outDelta
       return a.element_in - b.element_in
     })
-  } catch {
+  } catch (error) {
+    console.error(`[managerTransfersExport] Failed to fetch manager ${entryId} transfers`, error)
     return []
   }
 }
