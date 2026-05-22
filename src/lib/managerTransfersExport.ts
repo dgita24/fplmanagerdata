@@ -1,3 +1,27 @@
+/**
+ * Categorises each transfer row to help analysts distinguish real transfer
+ * decisions from chip-driven squad churn and ambiguous provenance rows.
+ *
+ * Values:
+ *   standard           – normal transfer (no chip, known ownership, gws_held > 0)
+ *   wildcard           – chip_played is WC (whole-squad rebuild week)
+ *   free_hit           – chip_played is FH (temporary squad for one GW)
+ *   same_gw_churn      – no chip, but player was bought and sold in the same GW
+ *                        (gws_held === 0); not chip-driven
+ *   chip_reversal      – no chip, but the element_out was originally acquired
+ *                        during a WC or FH week and is now being sold in a later
+ *                        standard-transfer GW (undoing a prior chip pick)
+ *   unknown_provenance – no chip AND the player's ownership cannot be confirmed
+ *                        (gws_held is null); treat these rows with caution
+ */
+export type TransferContext =
+  | 'standard'
+  | 'wildcard'
+  | 'free_hit'
+  | 'same_gw_churn'
+  | 'chip_reversal'
+  | 'unknown_provenance'
+
 export type ManagerTransferRow = {
   season: string
   gw: number
@@ -27,6 +51,32 @@ export type ManagerTransferRow = {
   element_out_pts_above5_last6: number | null
   element_in_avg_pts_last6: number | null
   element_out_avg_pts_last6: number | null
+  // ── Transfer-context / analysis-confidence fields ─────────────────────────
+  /**
+   * Authoritative transfer categorization. Use this field to separate transfer
+   * types in downstream analysis. See TransferContext for full value semantics.
+   * Note: `is_same_gw_churn` is a raw flag (gws_held === 0) that can be true
+   * even when transfer_context is 'wildcard' or 'free_hit'; use transfer_context
+   * for definitive categorization.
+   */
+  transfer_context: TransferContext
+  /** True when a chip (WC or FH) was active this GW. */
+  is_chip_transfer: boolean
+  /**
+   * True when element_out was bought and sold within the same GW (gws_held === 0).
+   * This is a raw data flag — use transfer_context for the authoritative
+   * categorization (e.g. same-GW churn inside a WC session has transfer_context
+   * 'wildcard', not 'same_gw_churn').
+   */
+  is_same_gw_churn: boolean
+  /**
+   * True when this row is analytically reliable for hold-duration and
+   * transfer-behaviour studies: the element_out's provenance is known
+   * (gws_held is not null) AND the transfer was not a temporary Free Hit move.
+   * Rows with unknown_provenance or free_hit context should be excluded or
+   * flagged when computing hold-duration statistics.
+   */
+  is_reliable_for_hold_analysis: boolean
 }
 
 export type FetchManagerTransfersOptions = {
@@ -131,6 +181,30 @@ function acquiredViaFromChipCode(chipCode: string | null): AcquisitionVia {
   if (chipCode === 'WC') return 'wildcard'
   if (chipCode === 'FH') return 'free_hit'
   return 'transfer'
+}
+
+/**
+ * Derive the transfer_context value for a single transfer row.
+ *
+ * Priority (highest → lowest):
+ *   1. Chip played this GW  → 'wildcard' or 'free_hit'
+ *   2. Player not confirmed owned at sell-time → 'unknown_provenance'
+ *   3. Bought and sold in the same GW (gws_held === 0) → 'same_gw_churn'
+ *   4. Player was originally acquired during a chip week  → 'chip_reversal'
+ *   5. Everything else → 'standard'
+ */
+function deriveTransferContext(
+  chipPlayed: string | null,
+  elementOutGwsHeld: number | null,
+  elementOutPreTransferOwned: boolean,
+  elementOutAcquiredVia: AcquisitionVia
+): TransferContext {
+  if (chipPlayed === 'WC') return 'wildcard'
+  if (chipPlayed === 'FH') return 'free_hit'
+  if (!elementOutPreTransferOwned) return 'unknown_provenance'
+  if (elementOutGwsHeld === 0) return 'same_gw_churn'
+  if (elementOutAcquiredVia === 'wildcard' || elementOutAcquiredVia === 'free_hit') return 'chip_reversal'
+  return 'standard'
 }
 
 /**
@@ -250,6 +324,10 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
     'element_out_pts_above5_last6',
     'element_in_avg_pts_last6',
     'element_out_avg_pts_last6',
+    'transfer_context',
+    'is_chip_transfer',
+    'is_same_gw_churn',
+    'is_reliable_for_hold_analysis',
   ]
 
   const lines = rows.map((row) =>
@@ -282,6 +360,10 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
       row.element_out_pts_above5_last6,
       row.element_in_avg_pts_last6,
       row.element_out_avg_pts_last6,
+      row.transfer_context,
+      row.is_chip_transfer,
+      row.is_same_gw_churn,
+      row.is_reliable_for_hold_analysis,
     ].map(csvCell).join(',')
   )
 
@@ -550,6 +632,20 @@ export async function fetchManagerTransfersRows(
           ? (acquisitionViaByElement.get(elementOut) ?? 'unknown')
           : 'unknown'
         const element_out_gws_held = priorBuyGw !== null ? gw - priorBuyGw : null
+        const chip_played = chipByGw.get(gw) ?? null
+
+        // Derived analysis-confidence fields
+        const transfer_context = deriveTransferContext(
+          chip_played,
+          element_out_gws_held,
+          element_out_pre_transfer_owned,
+          element_out_acquired_via
+        )
+        const is_chip_transfer = chip_played !== null
+        const is_same_gw_churn = element_out_gws_held === 0
+        // Reliable for hold-duration/transfer-behaviour studies when provenance is
+        // known (gws_held is not null) AND the transfer was not a temporary FH move.
+        const is_reliable_for_hold_analysis = element_out_gws_held !== null && chip_played !== 'FH'
 
         const inForm = formStats(elementIn, gw, gwLiveMap)
         const outForm = formStats(elementOut, gw, gwLiveMap)
@@ -566,7 +662,7 @@ export async function fetchManagerTransfersRows(
           purchase_price: Number(row?.element_in_cost) || 0,
           selling_price: Number(row?.element_out_cost) || 0,
           element_in_name: playerNameMap.get(elementIn) || `Player ${elementIn}`,
-          chip_played: chipByGw.get(gw) ?? null,
+          chip_played,
           element_out_name: playerNameMap.get(elementOut) || `Player ${elementOut}`,
           element_in_prev_gw_points: gw > 1 ? (gwLiveMap.get(gw - 1)?.get(elementIn) ?? null) : null,
           element_out_prev_gw_points: gw > 1 ? (gwLiveMap.get(gw - 1)?.get(elementOut) ?? null) : null,
@@ -583,6 +679,10 @@ export async function fetchManagerTransfersRows(
           element_out_pts_above5_last6: outForm.above5,
           element_in_avg_pts_last6: inForm.avg,
           element_out_avg_pts_last6: outForm.avg,
+          transfer_context,
+          is_chip_transfer,
+          is_same_gw_churn,
+          is_reliable_for_hold_analysis,
         }
 
           // Update ownership state AFTER reading priorBuyGw.
