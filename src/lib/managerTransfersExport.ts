@@ -451,7 +451,7 @@ function deriveCanonicalTransferInterpretation(
  * (e.g. a standard GW with both 'standard' and 'chip_reversal' rows).
  */
 function deriveTransferGroupContext(contexts: TransferContext[]): TransferGroupContext {
-  if (contexts.length === 0) return 'standard'
+  if (contexts.length === 0) return 'mixed'
   const unique = new Set(contexts)
   return unique.size === 1 ? (Array.from(unique)[0] as TransferGroupContext) : 'mixed'
 }
@@ -957,7 +957,7 @@ export async function fetchManagerTransfersRows(
           transfer_group_size,
           transfer_group_index: rowIndex + 1,
           // Group-level analytics — placeholders filled in pass 2 below
-          transfer_group_context: transfer_context as TransferGroupContext,
+          transfer_group_context: 'mixed',
           transfer_group_net_spend: 0,
           transfer_group_has_unknown_provenance: false,
           transfer_group_permanent_change_count: 0,
