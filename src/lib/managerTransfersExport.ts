@@ -47,6 +47,10 @@ type FplChipRow = {
   event?: number
 }
 
+type FplPicksResponse = {
+  picks?: Array<{ element?: number }>
+}
+
 function normalizeChipCode(value: string | null | undefined): string | null {
   if (!value) return null
   if (value === 'wildcard') return 'WC'
@@ -75,6 +79,31 @@ function formStats(
   const above5 = pts.filter((p) => p > 5).length
   const avg = Math.round((pts.reduce((s, p) => s + p, 0) / pts.length) * 10) / 10
   return { above5, avg }
+}
+
+function picksElementSet(data: unknown): Set<number> {
+  const picks = Array.isArray((data as FplPicksResponse | null | undefined)?.picks)
+    ? (data as FplPicksResponse).picks
+    : []
+  const result = new Set<number>()
+  for (const pick of picks) {
+    const elementId = Number(pick?.element)
+    if (!Number.isInteger(elementId) || elementId <= 0) continue
+    result.add(elementId)
+  }
+  return result
+}
+
+function inferAcquisitionGw(
+  elementId: number,
+  startedEvent: number,
+  everBoughtByTransfer: Set<number>,
+  acquisitionGwByElement: Map<number, number>
+): number | null {
+  const knownAcquiredGw = acquisitionGwByElement.get(elementId)
+  if (knownAcquiredGw !== undefined) return knownAcquiredGw
+  if (everBoughtByTransfer.has(elementId)) return null
+  return startedEvent
 }
 
 /**
@@ -369,22 +398,81 @@ export async function fetchManagerTransfersRows(
     }
 
     const lastBoughtGwByElement = new Map<number, number>()
+    const acquisitionGwByElement = new Map<number, number>()
+    const everBoughtByTransfer = new Set<number>()
     if (initialPicksRes.ok) {
       try {
-        const initialPicksData = await initialPicksRes.json()
-        const picks = Array.isArray(initialPicksData?.picks) ? initialPicksData.picks : []
-        for (const pick of picks) {
-          const elementId = Number(pick?.element)
-          if (!Number.isInteger(elementId) || elementId <= 0) continue
+        const initialOwned = picksElementSet(await initialPicksRes.json())
+        for (const elementId of initialOwned) {
           lastBoughtGwByElement.set(elementId, startedEvent)
+          acquisitionGwByElement.set(elementId, startedEvent)
         }
       } catch {
         // Graceful fallback when initial picks are unavailable (e.g., season not started)
       }
     }
 
-    return sortedTransfers
-      .map((row) => {
+    const transfersByGw = new Map<number, FplTransferRow[]>()
+    for (const row of sortedTransfers) {
+      const gw = Number(row?.event)
+      if (!Number.isInteger(gw) || gw <= 0) continue
+      if (!transfersByGw.has(gw)) transfersByGw.set(gw, [])
+      transfersByGw.get(gw)!.push(row)
+    }
+
+    const postGwOwnedByGw = new Map<number, Set<number>>()
+    await Promise.all(
+      Array.from(transfersByGw.keys()).map(async (gw) => {
+        try {
+          const picksRes = await fetch(`${origin}/api/fpl/entry/${entryId}/event/${gw}/picks`, { cache: 'no-store' })
+          if (!picksRes.ok) return
+          const owned = picksElementSet(await picksRes.json())
+          postGwOwnedByGw.set(gw, owned)
+        } catch {
+          // Keep unavailable; we will fall back to transfer replay state.
+        }
+      })
+    )
+
+    const outputRows: ManagerTransferRow[] = []
+    const sortedGws = Array.from(transfersByGw.keys()).sort((a, b) => a - b)
+    for (const gw of sortedGws) {
+      const gwRows = transfersByGw.get(gw) ?? []
+      const postGwOwned = postGwOwnedByGw.get(gw)
+      let preGwOwned: Set<number> | null = null
+      if (postGwOwned) {
+        preGwOwned = new Set(postGwOwned)
+        // Reverse replay each same-GW transfer against the post-transfer squad snapshot
+        // to reconstruct the squad that existed immediately before the GW transfer batch.
+        for (let i = gwRows.length - 1; i >= 0; i--) {
+          const row = gwRows[i]
+          const elementIn = Number(row?.element_in)
+          const elementOut = Number(row?.element_out)
+          if (Number.isInteger(elementIn) && elementIn > 0) preGwOwned.delete(elementIn)
+          if (Number.isInteger(elementOut) && elementOut > 0) preGwOwned.add(elementOut)
+        }
+
+        // Align in-memory ownership with reconstructed pre-GW ownership.
+        for (const elementId of Array.from(lastBoughtGwByElement.keys())) {
+          if (!preGwOwned.has(elementId)) lastBoughtGwByElement.delete(elementId)
+        }
+        for (const elementId of preGwOwned) {
+          if (lastBoughtGwByElement.has(elementId)) continue
+          const inferredAcquiredGw = inferAcquisitionGw(
+            elementId,
+            startedEvent,
+            everBoughtByTransfer,
+            acquisitionGwByElement
+          )
+          if (inferredAcquiredGw !== null) {
+            lastBoughtGwByElement.set(elementId, inferredAcquiredGw)
+            acquisitionGwByElement.set(elementId, inferredAcquiredGw)
+          }
+        }
+      }
+
+      const gwOutputRows = gwRows
+        .map((row) => {
         const gw = Number(row?.event)
         const elementIn = Number(row?.element_in)
         const elementOut = Number(row?.element_out)
@@ -392,7 +480,7 @@ export async function fetchManagerTransfersRows(
         if (!Number.isInteger(elementIn) || elementIn <= 0) return null
         if (!Number.isInteger(elementOut) || elementOut <= 0) return null
 
-        const priorBuyGw = lastBoughtGwByElement.get(elementOut) ?? null
+        let priorBuyGw = lastBoughtGwByElement.get(elementOut) ?? null
         const element_out_gws_held = priorBuyGw !== null ? gw - priorBuyGw : null
 
         const inForm = formStats(elementIn, gw, gwLiveMap)
@@ -421,18 +509,23 @@ export async function fetchManagerTransfersRows(
           element_out_avg_pts_last6: outForm.avg,
         }
 
-        // Update tracking AFTER reading priorBuyGw (so element_out lookup is unaffected if
-        // elementIn happens to equal a previously sold element_out for a different transfer)
-        lastBoughtGwByElement.set(elementIn, gw)
+          // Update ownership state AFTER reading priorBuyGw.
+          lastBoughtGwByElement.delete(elementOut)
+          lastBoughtGwByElement.set(elementIn, gw)
+          acquisitionGwByElement.set(elementIn, gw)
+          everBoughtByTransfer.add(elementIn)
 
         return result
       })
       .filter((row): row is ManagerTransferRow => row !== null)
-      .sort((a, b) => {
-        const gwDelta = a.gw - b.gw
-        if (gwDelta !== 0) return gwDelta
-        return a.time.localeCompare(b.time)
-      })
+      outputRows.push(...gwOutputRows)
+    }
+
+    return outputRows.sort((a, b) => {
+      const gwDelta = a.gw - b.gw
+      if (gwDelta !== 0) return gwDelta
+      return a.time.localeCompare(b.time)
+    })
   } catch {
     return []
   }

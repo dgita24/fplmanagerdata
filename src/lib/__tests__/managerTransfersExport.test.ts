@@ -29,6 +29,9 @@ function makeFetchMock(responses: Record<string, unknown>) {
         return { ok: true, json: async () => body }
       }
     }
+    if (/\/api\/fpl\/entry\/\d+\/event\/\d+\/picks$/.test(url)) {
+      return { ok: false, status: 404, json: async () => ({}) }
+    }
     throw new Error(`Unexpected fetch URL in test: ${url}`)
   })
 }
@@ -285,6 +288,8 @@ describe('fetchManagerTransfersRows', () => {
       [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
       // GW1 picks endpoint returns 404 → not ok → no seeding
       [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: null,
+      // GW4 post-transfer picks are unavailable too, so pre-GW ownership cannot be reconstructed.
+      [`/api/fpl/entry/${ENTRY_ID}/event/4/picks`]: null,
       '/api/fpl/event/*/live': EMPTY_LIVE,
     }))
 
@@ -329,6 +334,27 @@ describe('fetchManagerTransfersRows', () => {
     expect(sellP99?.element_out_gws_held).toBe(5)
   })
 
+  it('reconstructs pre-GW ownership from GW picks when initial picks are unavailable (original squad sold in GW3 => 2)', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 3, time: '2024-09-10T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 70, element_out_cost: 68 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: null,
+      // Post-GW3 squad contains element_in (99), allowing reverse replay to infer pre-GW ownership of 42.
+      [`/api/fpl/entry/${ENTRY_ID}/event/3/picks`]: { picks: [{ element: 99 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.element_out).toBe(42)
+    expect(rows[0]?.element_out_gws_held).toBe(2)
+  })
+
   // ---------------------------------------------------------------------------
   // New test: same-GW buy then sell in correct API order returns 0
   //
@@ -356,6 +382,29 @@ describe('fetchManagerTransfersRows', () => {
     expect(rows.find((r) => r.element_out === 42)?.element_out_gws_held).toBe(5) // 6 - 1
     expect(rows.find((r) => r.element_out === 99)?.element_out_gws_held).toBe(0) // same GW
     expect(rows.every((r) => r.chip_played === 'WC')).toBe(true)
+  })
+
+  it('free-hit week followed by next-GW sell uses reverted ownership timeline correctly', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 2, time: '2024-08-27T10:00:00Z', element_in: 99,  element_out: 42, element_in_cost: 75, element_out_cost: 74 },
+        { event: 3, time: '2024-09-03T10:00:00Z', element_in: 100, element_out: 42, element_in_cost: 80, element_out_cost: 79 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'freehit', event: 2 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/2/picks`]: { picks: [{ element: 99 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/3/picks`]: { picks: [{ element: 100 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+
+    expect(rows).toHaveLength(2)
+    expect(rows.find((r) => r.gw === 2)?.chip_played).toBe('FH')
+    expect(rows.find((r) => r.gw === 2)?.element_out_gws_held).toBe(1) // 2 - 1
+    expect(rows.find((r) => r.gw === 3)?.element_out_gws_held).toBe(2) // 3 - 1
   })
 
   // ---------------------------------------------------------------------------
