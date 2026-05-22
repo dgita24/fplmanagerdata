@@ -482,6 +482,8 @@ export async function fetchManagerTransfersRows(
 
     const outputRows: ManagerTransferRow[] = []
     const sortedGws = Array.from(transfersByGw.keys()).sort((a, b) => a - b)
+    const isCurrentlyOwned = (elementId: number): boolean =>
+      lastBoughtGwByElement.has(elementId) || unknownOwnedElements.has(elementId)
     for (const gw of sortedGws) {
       const gwRows = transfersByGw.get(gw) ?? []
       const postGwOwned = postGwOwnedByGw.get(gw)
@@ -529,8 +531,6 @@ export async function fetchManagerTransfersRows(
 
       const transfer_group_id = `${entryId}:${gw}`
       const transfer_group_size = gwRows.length
-      const isCurrentlyOwned = (elementId: number): boolean =>
-        lastBoughtGwByElement.has(elementId) || unknownOwnedElements.has(elementId)
       const gwOutputRows = gwRows
         .map((row, rowIndex) => {
         const gw = Number(row?.event)
@@ -544,6 +544,8 @@ export async function fetchManagerTransfersRows(
         const element_in_pre_transfer_owned = isCurrentlyOwned(elementIn)
         const element_in_is_new_ownership = !element_in_pre_transfer_owned
         const priorBuyGw = lastBoughtGwByElement.get(elementOut) ?? null
+        // If the player is unexpectedly not owned at sell-time, keep provenance as
+        // explicit 'unknown' for analysis/debugging instead of inferring a false source.
         const element_out_acquired_via = element_out_pre_transfer_owned
           ? (acquisitionViaByElement.get(elementOut) ?? 'unknown')
           : 'unknown'
