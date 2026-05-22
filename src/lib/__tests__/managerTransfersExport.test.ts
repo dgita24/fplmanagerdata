@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { buildManagerTransfersCsv, fetchManagerTransfersRows, type ManagerTransferRow } from '../managerTransfersExport'
+import { buildManagerTransfersCsv, fetchManagerTransfersRows, type ManagerTransferRow, type ExitReason, type EntryReason, type OwnershipChangeScope } from '../managerTransfersExport'
 
 // ---------------------------------------------------------------------------
 // Helper: build a minimal but complete fetch mock from a URL→response map.
@@ -88,6 +88,10 @@ describe('buildManagerTransfersCsv', () => {
         is_chip_transfer: true,
         is_same_gw_churn: false,
         is_reliable_for_hold_analysis: true,
+        element_out_exit_reason: 'wildcard_reset',
+        element_in_entry_reason: 'wildcard_add',
+        ownership_change_scope: 'permanent',
+        is_permanent_squad_change: true,
       },
     ]
 
@@ -96,9 +100,11 @@ describe('buildManagerTransfersCsv', () => {
     expect(header).toContain('element_out_gws_held,element_out_acquired_gw,element_out_acquired_via')
     expect(header).toContain('transfer_group_id,transfer_group_size,transfer_group_index')
     expect(header).toContain('transfer_context,is_chip_transfer,is_same_gw_churn,is_reliable_for_hold_analysis')
+    expect(header).toContain('element_out_exit_reason,element_in_entry_reason,ownership_change_scope,is_permanent_squad_change')
     expect(row).toContain('Player In,WC,Player Out')
     expect(row).toContain(',3,transfer,true,false,true,123:6,2,1,')
     expect(row).toContain('wildcard,true,false,true')
+    expect(row).toContain('wildcard_reset,wildcard_add,permanent,true')
   })
 })
 
@@ -818,5 +824,208 @@ describe('fetchManagerTransfersRows', () => {
     expect(sellP99?.is_same_gw_churn).toBe(true)   // raw flag: gws_held===0
     expect(sellP99?.transfer_context).toBe('wildcard') // authoritative: chip overrides churn label
     expect(sellP99?.is_chip_transfer).toBe(true)
+  })
+
+  // ============================================================================
+  // element_out_exit_reason / element_in_entry_reason / ownership_change_scope /
+  // is_permanent_squad_change — PR3 ownership-transition classification fields
+  // ============================================================================
+
+  // ---------------------------------------------------------------------------
+  // Classification: standard transfer — long-held player sold, normal replacement
+  // ---------------------------------------------------------------------------
+  it('standard transfer: correct exit/entry reasons, permanent scope, is_permanent_squad_change=true', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 5, time: '2024-10-08T09:00:00Z', element_in: 99, element_out: 200, element_in_cost: 80, element_out_cost: 85 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 200 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(1)
+    const row = rows[0]
+    expect(row?.element_out_exit_reason).toBe<ExitReason>('standard_sale')
+    expect(row?.element_in_entry_reason).toBe<EntryReason>('standard_buy')
+    expect(row?.ownership_change_scope).toBe<OwnershipChangeScope>('permanent')
+    expect(row?.is_permanent_squad_change).toBe(true)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Classification: wildcard — squad reset rows
+  // ---------------------------------------------------------------------------
+  it('wildcard: exit=wildcard_reset, entry=wildcard_add, scope=permanent, is_permanent=true', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 6, time: '2024-10-15T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 80, element_out_cost: 75 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'wildcard', event: 6 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(1)
+    const row = rows[0]
+    expect(row?.element_out_exit_reason).toBe<ExitReason>('wildcard_reset')
+    expect(row?.element_in_entry_reason).toBe<EntryReason>('wildcard_add')
+    expect(row?.ownership_change_scope).toBe<OwnershipChangeScope>('permanent')
+    expect(row?.is_permanent_squad_change).toBe(true)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Classification: free hit — temporary squad rows
+  // ---------------------------------------------------------------------------
+  it('free hit: exit=free_hit_temp_out, entry=free_hit_temp_in, scope=temporary, is_permanent=false', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 4, time: '2024-09-24T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 78, element_out_cost: 72 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'freehit', event: 4 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(1)
+    const row = rows[0]
+    expect(row?.element_out_exit_reason).toBe<ExitReason>('free_hit_temp_out')
+    expect(row?.element_in_entry_reason).toBe<EntryReason>('free_hit_temp_in')
+    expect(row?.ownership_change_scope).toBe<OwnershipChangeScope>('temporary')
+    expect(row?.is_permanent_squad_change).toBe(false)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Classification: chip reversal — selling a WC/FH-acquired player in a
+  // later standard-transfer GW
+  // ---------------------------------------------------------------------------
+  it('chip reversal: exit=chip_reversal_sale, entry=chip_reversal_buy, scope=reversal, is_permanent=true', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // GW3 WC: sell P42, buy P99
+        { event: 3, time: '2024-09-10T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 75, element_out_cost: 74 },
+        // GW7 standard: sell P99 (WC acquisition) — chip_reversal
+        { event: 7, time: '2024-10-22T10:00:00Z', element_in: 100, element_out: 99, element_in_cost: 80, element_out_cost: 78 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'wildcard', event: 3 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(2)
+    const reversalRow = rows.find((r) => r.gw === 7)
+    expect(reversalRow?.element_out_exit_reason).toBe<ExitReason>('chip_reversal_sale')
+    expect(reversalRow?.element_in_entry_reason).toBe<EntryReason>('chip_reversal_buy')
+    expect(reversalRow?.ownership_change_scope).toBe<OwnershipChangeScope>('reversal')
+    // chip_reversal is a durable squad change (the result persists), so is_permanent is true
+    expect(reversalRow?.is_permanent_squad_change).toBe(true)
+    // WC row itself: wildcard_reset / wildcard_add / permanent / true
+    const wcRow = rows.find((r) => r.gw === 3)
+    expect(wcRow?.element_out_exit_reason).toBe<ExitReason>('wildcard_reset')
+    expect(wcRow?.element_in_entry_reason).toBe<EntryReason>('wildcard_add')
+    expect(wcRow?.ownership_change_scope).toBe<OwnershipChangeScope>('permanent')
+    expect(wcRow?.is_permanent_squad_change).toBe(true)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Classification: same-GW churn — net-zero, scope=unknown, is_permanent=false
+  // ---------------------------------------------------------------------------
+  it('same-GW churn: exit=same_gw_churn_sale, entry=same_gw_churn_buy, scope=unknown, is_permanent=false', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // P42 sold (initial squad), P99 bought → then P99 immediately sold (same GW, no chip)
+        { event: 6, time: '2024-10-15T10:00:00Z', element_in: 99,  element_out: 42, element_in_cost: 75, element_out_cost: 74 },
+        { event: 6, time: '2024-10-15T11:00:00Z', element_in: 100, element_out: 99, element_in_cost: 80, element_out_cost: 79 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY, // no chip
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(2)
+
+    // The standard sell row (P42 — long-held initial-squad player)
+    const standardRow = rows.find((r) => r.element_out === 42)
+    expect(standardRow?.element_out_exit_reason).toBe<ExitReason>('standard_sale')
+    expect(standardRow?.element_in_entry_reason).toBe<EntryReason>('standard_buy')
+    expect(standardRow?.ownership_change_scope).toBe<OwnershipChangeScope>('permanent')
+    expect(standardRow?.is_permanent_squad_change).toBe(true)
+
+    // The same-GW churn row (P99 — bought then immediately re-sold in same GW)
+    const churnRow = rows.find((r) => r.element_out === 99)
+    expect(churnRow?.element_out_exit_reason).toBe<ExitReason>('same_gw_churn_sale')
+    expect(churnRow?.element_in_entry_reason).toBe<EntryReason>('same_gw_churn_buy')
+    expect(churnRow?.ownership_change_scope).toBe<OwnershipChangeScope>('unknown')
+    expect(churnRow?.is_permanent_squad_change).toBe(false)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Classification: unknown provenance — scope=unknown, is_permanent=false
+  // ---------------------------------------------------------------------------
+  it('unknown_provenance: exit=unknown, entry=unknown, scope=unknown, is_permanent=false', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 4, time: '2024-09-17T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 70, element_out_cost: 68 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      // GW1 picks 404 → no seeding; no post-GW picks either
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: null,
+      [`/api/fpl/entry/${ENTRY_ID}/event/4/picks`]: null,
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(1)
+    const row = rows[0]
+    expect(row?.transfer_context).toBe('unknown_provenance')
+    expect(row?.element_out_exit_reason).toBe<ExitReason>('unknown')
+    expect(row?.element_in_entry_reason).toBe<EntryReason>('unknown')
+    expect(row?.ownership_change_scope).toBe<OwnershipChangeScope>('unknown')
+    expect(row?.is_permanent_squad_change).toBe(false)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Classification: WC same-GW churn — chip takes priority; still classified as
+  // wildcard_reset / wildcard_add / permanent even when gws_held===0
+  // ---------------------------------------------------------------------------
+  it('WC same-GW churn: exit=wildcard_reset, entry=wildcard_add, scope=permanent (chip overrides churn)', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 6, time: '2024-10-15T10:00:00Z', element_in: 99,  element_out: 16, element_in_cost: 75, element_out_cost: 74 },
+        { event: 6, time: '2024-10-15T11:00:00Z', element_in: 100, element_out: 99, element_in_cost: 80, element_out_cost: 79 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'wildcard', event: 6 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 16 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(2)
+
+    // Both rows are in a WC GW — chip takes priority over the raw gws_held===0 flag
+    for (const row of rows) {
+      expect(row.element_out_exit_reason).toBe<ExitReason>('wildcard_reset')
+      expect(row.element_in_entry_reason).toBe<EntryReason>('wildcard_add')
+      expect(row.ownership_change_scope).toBe<OwnershipChangeScope>('permanent')
+      expect(row.is_permanent_squad_change).toBe(true)
+    }
   })
 })
