@@ -84,6 +84,10 @@ describe('buildManagerTransfersCsv', () => {
         element_out_pts_above5_last6: 0,
         element_in_avg_pts_last6: 4.2,
         element_out_avg_pts_last6: 3.5,
+        transfer_context: 'wildcard',
+        is_chip_transfer: true,
+        is_same_gw_churn: false,
+        is_reliable_for_hold_analysis: true,
       },
     ]
 
@@ -91,8 +95,10 @@ describe('buildManagerTransfersCsv', () => {
     expect(header).toContain('element_in_name,chip_played,element_out_name')
     expect(header).toContain('element_out_gws_held,element_out_acquired_gw,element_out_acquired_via')
     expect(header).toContain('transfer_group_id,transfer_group_size,transfer_group_index')
+    expect(header).toContain('transfer_context,is_chip_transfer,is_same_gw_churn,is_reliable_for_hold_analysis')
     expect(row).toContain('Player In,WC,Player Out')
     expect(row).toContain(',3,transfer,true,false,true,123:6,2,1,')
+    expect(row).toContain('wildcard,true,false,true')
   })
 })
 
@@ -614,5 +620,200 @@ describe('fetchManagerTransfersRows', () => {
     expect(liveFetchCount.get(2)).toBe(1)
     expect(rowsA[0]?.element_in_prev_gw_points).toBe(6)
     expect(rowsA[0]?.element_out_prev_gw_points).toBe(2)
+  })
+
+  // ============================================================================
+  // transfer_context + is_chip_transfer + is_same_gw_churn + is_reliable_for_hold_analysis
+  // ============================================================================
+
+  // ---------------------------------------------------------------------------
+  // Context: standard — regular transfer, no chip, positive hold, known ownership
+  // ---------------------------------------------------------------------------
+  it('transfer_context is standard for a regular transfer with positive gws_held', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 5, time: '2024-10-08T09:00:00Z', element_in: 99, element_out: 200, element_in_cost: 80, element_out_cost: 85 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 200 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.transfer_context).toBe('standard')
+    expect(rows[0]?.is_chip_transfer).toBe(false)
+    expect(rows[0]?.is_same_gw_churn).toBe(false)
+    expect(rows[0]?.is_reliable_for_hold_analysis).toBe(true)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Context: wildcard — chip_played is WC, regardless of gws_held
+  // ---------------------------------------------------------------------------
+  it('transfer_context is wildcard when WC chip is active and is_chip_transfer is true', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 6, time: '2024-10-15T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 80, element_out_cost: 75 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'wildcard', event: 6 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.transfer_context).toBe('wildcard')
+    expect(rows[0]?.is_chip_transfer).toBe(true)
+    expect(rows[0]?.is_same_gw_churn).toBe(false)
+    expect(rows[0]?.is_reliable_for_hold_analysis).toBe(true) // WC with known hold is still reliable
+  })
+
+  // ---------------------------------------------------------------------------
+  // Context: free_hit — chip_played is FH
+  // FH transfers are NOT reliable for hold analysis (squad is temporary).
+  // ---------------------------------------------------------------------------
+  it('transfer_context is free_hit and is_reliable_for_hold_analysis is false for FH rows', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 4, time: '2024-09-24T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 78, element_out_cost: 72 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'freehit', event: 4 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.transfer_context).toBe('free_hit')
+    expect(rows[0]?.is_chip_transfer).toBe(true)
+    expect(rows[0]?.is_reliable_for_hold_analysis).toBe(false)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Context: same_gw_churn — bought and sold within the same GW (no chip)
+  // ---------------------------------------------------------------------------
+  it('transfer_context is same_gw_churn when gws_held is 0 and no chip is active', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // P42 is in initial squad; P99 is bought first then immediately re-sold
+        { event: 6, time: '2024-10-15T10:00:00Z', element_in: 99,  element_out: 42, element_in_cost: 75, element_out_cost: 74 },
+        { event: 6, time: '2024-10-15T11:00:00Z', element_in: 100, element_out: 99, element_in_cost: 80, element_out_cost: 79 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY, // no chip
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(2)
+
+    const sellP42 = rows.find((r) => r.element_out === 42)
+    // P42 is from initial squad — normal sell, positive hold
+    expect(sellP42?.transfer_context).toBe('standard')
+    expect(sellP42?.is_same_gw_churn).toBe(false)
+
+    const sellP99 = rows.find((r) => r.element_out === 99)
+    // P99 was bought and sold in the same GW with no chip → same_gw_churn
+    expect(sellP99?.transfer_context).toBe('same_gw_churn')
+    expect(sellP99?.is_same_gw_churn).toBe(true)
+    expect(sellP99?.is_chip_transfer).toBe(false)
+    // Same-GW churn has gws_held = 0 which is not null, so reliable for hold study
+    expect(sellP99?.is_reliable_for_hold_analysis).toBe(true)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Context: chip_reversal — selling in a normal GW a player acquired via WC
+  // ---------------------------------------------------------------------------
+  it('transfer_context is chip_reversal when selling a player acquired via wildcard in a later GW', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // GW3 WC: sell P42, buy P99
+        { event: 3, time: '2024-09-10T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 75, element_out_cost: 74 },
+        // GW7 standard: sell P99 (originally WC acquisition) — chip_reversal
+        { event: 7, time: '2024-10-22T10:00:00Z', element_in: 100, element_out: 99, element_in_cost: 80, element_out_cost: 78 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'wildcard', event: 3 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(2)
+
+    const wcRow = rows.find((r) => r.gw === 3)
+    expect(wcRow?.transfer_context).toBe('wildcard')
+    expect(wcRow?.element_out_acquired_via).toBe('initial_squad')
+
+    const reversalRow = rows.find((r) => r.gw === 7)
+    // P99 was acquired via wildcard in GW3, now sold in a standard-transfer GW
+    expect(reversalRow?.transfer_context).toBe('chip_reversal')
+    expect(reversalRow?.is_chip_transfer).toBe(false)
+    expect(reversalRow?.is_same_gw_churn).toBe(false)
+    expect(reversalRow?.element_out_acquired_via).toBe('wildcard')
+    expect(reversalRow?.is_reliable_for_hold_analysis).toBe(true)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Context: unknown_provenance — player not confirmed owned, no chip active
+  // ---------------------------------------------------------------------------
+  it('transfer_context is unknown_provenance and is_reliable_for_hold_analysis is false when provenance is missing', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 4, time: '2024-09-17T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 70, element_out_cost: 68 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      // GW1 picks 404 → no seeding
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: null,
+      [`/api/fpl/entry/${ENTRY_ID}/event/4/picks`]: null,
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.transfer_context).toBe('unknown_provenance')
+    expect(rows[0]?.is_chip_transfer).toBe(false)
+    expect(rows[0]?.is_same_gw_churn).toBe(false)
+    expect(rows[0]?.is_reliable_for_hold_analysis).toBe(false)
+    expect(rows[0]?.element_out_gws_held).toBeNull()
+  })
+
+  // ---------------------------------------------------------------------------
+  // WC same-GW churn: context is wildcard (chip takes precedence over gws_held=0)
+  // ---------------------------------------------------------------------------
+  it('transfer_context is wildcard (not same_gw_churn) when WC chip is active even if gws_held is 0', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // WC session: buy P99 sell P16, then immediately sell P99 in same session
+        { event: 6, time: '2024-10-15T10:00:00Z', element_in: 99,  element_out: 16, element_in_cost: 75, element_out_cost: 74 },
+        { event: 6, time: '2024-10-15T11:00:00Z', element_in: 100, element_out: 99, element_in_cost: 80, element_out_cost: 79 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: { chips: [{ name: 'wildcard', event: 6 }] },
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 16 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(2)
+
+    const sellP99 = rows.find((r) => r.element_out === 99)
+    // gws_held === 0 but chip is WC, so context should be 'wildcard' not 'same_gw_churn'
+    expect(sellP99?.element_out_gws_held).toBe(0)
+    expect(sellP99?.is_same_gw_churn).toBe(true) // is_same_gw_churn is raw gws_held===0 regardless of chip
+    expect(sellP99?.transfer_context).toBe('wildcard') // chip context takes priority
+    expect(sellP99?.is_chip_transfer).toBe(true)
   })
 })
