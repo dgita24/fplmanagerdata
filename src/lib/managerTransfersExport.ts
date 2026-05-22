@@ -72,6 +72,15 @@ export type EntryReason =
  */
 export type OwnershipChangeScope = 'permanent' | 'temporary' | 'reversal' | 'unknown'
 
+/**
+ * Group-level transfer context: the single TransferContext value if every row in
+ * the group shares the same context, or 'mixed' when the group contains rows of
+ * different contexts (e.g. a standard GW that has both 'standard' and
+ * 'chip_reversal' rows).  'mixed' signals that the group cannot be treated as a
+ * uniform event and individual rows must be inspected.
+ */
+export type TransferGroupContext = TransferContext | 'mixed'
+
 export type ManagerTransferRow = {
   season: string
   gw: number
@@ -97,6 +106,34 @@ export type ManagerTransferRow = {
   transfer_group_id: string
   transfer_group_size: number
   transfer_group_index: number
+  // ── Group-level transfer analytics ───────────────────────────────────────
+  /**
+   * The uniform TransferContext of all rows in this transfer group, or 'mixed'
+   * when rows span more than one context (e.g. 'standard' and 'chip_reversal'
+   * in the same GW).  Use this field to classify a whole transfer window
+   * without aggregating per-row transfer_context values yourself.
+   * See TransferGroupContext for full value semantics.
+   */
+  transfer_group_context: TransferGroupContext
+  /**
+   * Net expenditure for this transfer group: total purchase_price minus total
+   * selling_price across all transfers in the group.  Positive means the
+   * manager spent more than received; negative means a net budget gain.
+   * Uses the same 0.1 M-unit scale as purchase_price and selling_price.
+   */
+  transfer_group_net_spend: number
+  /**
+   * True when one or more rows in this transfer group have
+   * transfer_context = 'unknown_provenance'.  Signals that the group's
+   * analysis may be incomplete and individual rows should be checked.
+   */
+  transfer_group_has_unknown_provenance: boolean
+  /**
+   * Count of rows in this transfer group where is_permanent_squad_change is
+   * true.  Together with transfer_group_size this gives the fraction of the
+   * window's changes that represent durable long-term squad decisions.
+   */
+  transfer_group_permanent_change_count: number
   element_in_pts_above5_last6: number | null
   element_out_pts_above5_last6: number | null
   element_in_avg_pts_last6: number | null
@@ -348,6 +385,18 @@ function deriveIsPermanentSquadChange(transferContext: TransferContext): boolean
 }
 
 /**
+ * Derive the group-level context for a set of transfer rows that share the same
+ * transfer_group_id.  Returns the single shared TransferContext value when all
+ * rows agree, or 'mixed' when the group contains more than one distinct context
+ * (e.g. a standard GW with both 'standard' and 'chip_reversal' rows).
+ */
+function deriveTransferGroupContext(contexts: TransferContext[]): TransferGroupContext {
+  if (contexts.length === 0) return 'standard'
+  const unique = new Set(contexts)
+  return unique.size === 1 ? (Array.from(unique)[0] as TransferGroupContext) : 'mixed'
+}
+
+/**
  * Within a group of transfers sharing the same GW, apply a topological sort so
  * that if row A buys element X and row B sells element X, row A is always
  * processed before row B.
@@ -460,6 +509,10 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
     'transfer_group_id',
     'transfer_group_size',
     'transfer_group_index',
+    'transfer_group_context',
+    'transfer_group_net_spend',
+    'transfer_group_has_unknown_provenance',
+    'transfer_group_permanent_change_count',
     'element_in_pts_above5_last6',
     'element_out_pts_above5_last6',
     'element_in_avg_pts_last6',
@@ -500,6 +553,10 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
       row.transfer_group_id,
       row.transfer_group_size,
       row.transfer_group_index,
+      row.transfer_group_context,
+      row.transfer_group_net_spend,
+      row.transfer_group_has_unknown_provenance,
+      row.transfer_group_permanent_change_count,
       row.element_in_pts_above5_last6,
       row.element_out_pts_above5_last6,
       row.element_in_avg_pts_last6,
@@ -761,7 +818,8 @@ export async function fetchManagerTransfersRows(
 
       const transfer_group_id = `${entryId}:${gw}`
       const transfer_group_size = gwRows.length
-      const gwOutputRows = gwRows
+      // ── Pass 1: build per-row data (group-level fields filled with placeholders) ──
+      const gwBaseRows = gwRows
         .map((row, rowIndex) => {
         const gw = Number(row?.event)
         const elementIn = Number(row?.element_in)
@@ -829,6 +887,11 @@ export async function fetchManagerTransfersRows(
           transfer_group_id,
           transfer_group_size,
           transfer_group_index: rowIndex + 1,
+          // Group-level analytics — placeholders filled in pass 2 below
+          transfer_group_context: transfer_context as TransferGroupContext,
+          transfer_group_net_spend: 0,
+          transfer_group_has_unknown_provenance: false,
+          transfer_group_permanent_change_count: 0,
           element_in_pts_above5_last6: inForm.above5,
           element_out_pts_above5_last6: outForm.above5,
           element_in_avg_pts_last6: inForm.avg,
@@ -855,6 +918,30 @@ export async function fetchManagerTransfersRows(
         return result
       })
       .filter((row): row is ManagerTransferRow => row !== null)
+
+      // ── Pass 2: compute group-level analytics from the finalised per-row data ──
+      const transfer_group_context = deriveTransferGroupContext(
+        gwBaseRows.map((r) => r.transfer_context)
+      )
+      const transfer_group_net_spend = gwBaseRows.reduce(
+        (sum, r) => sum + r.purchase_price - r.selling_price, 0
+      )
+      const transfer_group_has_unknown_provenance = gwBaseRows.some(
+        (r) => r.transfer_context === 'unknown_provenance'
+      )
+      const transfer_group_permanent_change_count = gwBaseRows.filter(
+        (r) => r.is_permanent_squad_change
+      ).length
+
+      // Merge group-level fields into each row
+      const gwOutputRows = gwBaseRows.map((r) => ({
+        ...r,
+        transfer_group_context,
+        transfer_group_net_spend,
+        transfer_group_has_unknown_provenance,
+        transfer_group_permanent_change_count,
+      }))
+
       outputRows.push(...gwOutputRows)
     }
 
