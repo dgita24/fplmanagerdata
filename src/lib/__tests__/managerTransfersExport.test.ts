@@ -288,7 +288,7 @@ describe('fetchManagerTransfersRows', () => {
       [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
       // GW1 picks endpoint returns 404 → not ok → no seeding
       [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: null,
-      // GW4 picks also unavailable, so provenance is truly unknown.
+      // GW4 post-transfer picks are unavailable too, so pre-GW ownership cannot be reconstructed.
       [`/api/fpl/entry/${ENTRY_ID}/event/4/picks`]: null,
       '/api/fpl/event/*/live': EMPTY_LIVE,
     }))

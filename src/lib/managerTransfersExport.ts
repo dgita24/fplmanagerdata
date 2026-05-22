@@ -83,7 +83,7 @@ function formStats(
 
 function picksElementSet(data: unknown): Set<number> {
   const picks = Array.isArray((data as FplPicksResponse | null | undefined)?.picks)
-    ? (data as FplPicksResponse).picks!
+    ? (data as FplPicksResponse).picks
     : []
   const result = new Set<number>()
   for (const pick of picks) {
@@ -92,6 +92,18 @@ function picksElementSet(data: unknown): Set<number> {
     result.add(elementId)
   }
   return result
+}
+
+function inferAcquisitionGw(
+  elementId: number,
+  startedEvent: number,
+  everBoughtByTransfer: Set<number>,
+  acquisitionGwByElement: Map<number, number>
+): number | null {
+  const knownAcquiredGw = acquisitionGwByElement.get(elementId)
+  if (knownAcquiredGw !== undefined) return knownAcquiredGw
+  if (everBoughtByTransfer.has(elementId)) return null
+  return startedEvent
 }
 
 /**
@@ -430,6 +442,8 @@ export async function fetchManagerTransfersRows(
       let preGwOwned: Set<number> | null = null
       if (postGwOwned) {
         preGwOwned = new Set(postGwOwned)
+        // Reverse replay each same-GW transfer against the post-transfer squad snapshot
+        // to reconstruct the squad that existed immediately before the GW transfer batch.
         for (let i = gwRows.length - 1; i >= 0; i--) {
           const row = gwRows[i]
           const elementIn = Number(row?.element_in)
@@ -444,14 +458,15 @@ export async function fetchManagerTransfersRows(
         }
         for (const elementId of preGwOwned) {
           if (lastBoughtGwByElement.has(elementId)) continue
-          const knownAcquiredGw = acquisitionGwByElement.get(elementId)
-          if (knownAcquiredGw !== undefined) {
-            lastBoughtGwByElement.set(elementId, knownAcquiredGw)
-          } else if (!everBoughtByTransfer.has(elementId)) {
-            // If transfer logs never show a buy for this player but pre-GW ownership is known,
-            // infer original-squad provenance from startedEvent.
-            lastBoughtGwByElement.set(elementId, startedEvent)
-            acquisitionGwByElement.set(elementId, startedEvent)
+          const inferredAcquiredGw = inferAcquisitionGw(
+            elementId,
+            startedEvent,
+            everBoughtByTransfer,
+            acquisitionGwByElement
+          )
+          if (inferredAcquiredGw !== null) {
+            lastBoughtGwByElement.set(elementId, inferredAcquiredGw)
+            acquisitionGwByElement.set(elementId, inferredAcquiredGw)
           }
         }
       }
@@ -465,16 +480,7 @@ export async function fetchManagerTransfersRows(
         if (!Number.isInteger(elementIn) || elementIn <= 0) return null
         if (!Number.isInteger(elementOut) || elementOut <= 0) return null
 
-          let priorBuyGw = lastBoughtGwByElement.get(elementOut) ?? null
-          if (
-            priorBuyGw === null &&
-            preGwOwned?.has(elementOut) &&
-            !everBoughtByTransfer.has(elementOut)
-          ) {
-            priorBuyGw = startedEvent
-            lastBoughtGwByElement.set(elementOut, startedEvent)
-            acquisitionGwByElement.set(elementOut, startedEvent)
-          }
+        let priorBuyGw = lastBoughtGwByElement.get(elementOut) ?? null
         const element_out_gws_held = priorBuyGw !== null ? gw - priorBuyGw : null
 
         const inForm = formStats(elementIn, gw, gwLiveMap)
