@@ -358,6 +358,87 @@ describe('fetchManagerTransfersRows', () => {
     expect(rows.every((r) => r.chip_played === 'WC')).toBe(true)
   })
 
+  // ---------------------------------------------------------------------------
+  // New test: same-GW different-timestamp transfers where buy has LATER timestamp
+  // than sell (i.e., sort-by-time alone would process sell before buy, causing blank).
+  //
+  // Scenario: WC session in GW6 where the FPL API assigns slightly different
+  // timestamps to logically-chained transfers:
+  //   Transfer A: Buy P99, Sell P16  (P16 in GW1 squad) — timestamp T2 = 10:00:01
+  //   Transfer B: Buy P100, Sell P99 (P99 just bought in A) — timestamp T1 = 10:00:00
+  //
+  // The FPL API returns them ordered [A, B] but T(A)=10:00:01 > T(B)=10:00:00.
+  // A plain time-sort would reorder to [B, A], so B (sell P99) would be processed
+  // before A (buy P99), yielding blank for P99 sell.
+  // The same-GW topological sort must detect the buy→sell chain and enforce A before B
+  // regardless of their individual timestamps.
+  // ---------------------------------------------------------------------------
+  it('same-GW different-timestamp: later-timestamp buy is processed before earlier-timestamp sell to avoid blank', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        // API returns A first but A has a LATER timestamp than B
+        { event: 6, time: '2024-10-15T10:00:01Z', element_in: 99,  element_out: 16, element_in_cost: 75, element_out_cost: 74 },
+        { event: 6, time: '2024-10-15T10:00:00Z', element_in: 100, element_out: 99, element_in_cost: 80, element_out_cost: 79 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 16 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+
+    expect(rows).toHaveLength(2)
+    // P16 was in GW1 squad, sold in GW6 → gws_held = 6 - 1 = 5
+    const sellP16 = rows.find((r) => r.element_out === 16)
+    expect(sellP16?.element_out_gws_held).toBe(5)
+    // P99 was bought in GW6 (same GW), sold in GW6 → gws_held = 0
+    const sellP99 = rows.find((r) => r.element_out === 99)
+    expect(sellP99?.element_out_gws_held).toBe(0)
+  })
+
+  // ---------------------------------------------------------------------------
+  // New test: mid-season joiner — started_event > 1
+  //
+  // A manager who joined in GW5 has no GW1 picks.  The code must use their
+  // actual first-GW picks (event/5/picks) and seed ownership at GW5 so that
+  // a player sold in GW8 produces gws_held = 8 - 5 = 3 (not null).
+  // ---------------------------------------------------------------------------
+  it('mid-season joiner (started_event=5): initial squad player sold later gives correct gws_held', async () => {
+    const MID_SEASON_ENTRY_BODY = {
+      ...ENTRY_BODY,
+      started_event: 5,
+    }
+    const PLAYER_300 = 300
+
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: MID_SEASON_ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 8, time: '2024-10-29T14:00:00Z', element_in: 99, element_out: PLAYER_300, element_in_cost: 80, element_out_cost: 85 },
+      ],
+      [`${BASE}/api/fpl/bootstrap-static`]: {
+        elements: [
+          { id: PLAYER_300, web_name: 'Mid-Season Player' },
+          { id: 99, web_name: 'Transfer In Player' },
+        ],
+      },
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: EMPTY_HISTORY,
+      // GW1 picks return 404 (manager wasn't registered at GW1)
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: null,
+      // GW5 picks contain the initial squad including PLAYER_300
+      [`/api/fpl/entry/${ENTRY_ID}/event/5/picks`]: { picks: [{ element: PLAYER_300 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.element_out).toBe(PLAYER_300)
+    // Player was in initial GW5 squad, sold in GW8 → gws_held = 8 - 5 = 3
+    expect(rows[0]?.element_out_gws_held).toBe(3)
+  })
+
   it('reuses provided bootstrap data and shared GW live promises across managers', async () => {
     const managerA = 123
     const managerB = 456
