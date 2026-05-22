@@ -246,13 +246,21 @@ async function fetchJsonWithRetry(
   url: string,
   retries = 2
 ): Promise<{ ok: true; data: unknown } | { ok: false }> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  for (let attemptIndex = 0; attemptIndex <= retries; attemptIndex++) {
     try {
       const res = await fetch(url, { cache: 'no-store' })
-      if (!res.ok) continue
+      if (!res.ok) {
+        // 429 is transient rate limiting, so keep retrying it alongside 5xx responses.
+        if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+          return { ok: false }
+        }
+        continue
+      }
       return { ok: true, data: await res.json() }
-    } catch {
-      // Retry transient network failures; the caller handles the final fallback.
+    } catch (error) {
+      if (attemptIndex === retries) {
+        console.error(`[managerTransfersExport] Request failed after retries: ${url}`, error)
+      }
     }
   }
 

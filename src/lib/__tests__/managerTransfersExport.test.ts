@@ -242,6 +242,9 @@ describe('fetchManagerTransfersRows', () => {
           json: async () => ({ elements: [] }),
         }
       }
+      if (/\/api\/fpl\/entry\/\d+\/event\/\d+\/picks$/.test(url)) {
+        return { ok: false, status: 404, json: async () => ({}) }
+      }
 
       throw new Error(`Unexpected fetch URL in test: ${url}`)
     })
@@ -661,6 +664,9 @@ describe('fetchManagerTransfersRows', () => {
       if (url === `${BASE}/api/fpl/bootstrap-static`) {
         throw new Error('bootstrap-static should not be fetched when bootstrapData option is provided')
       }
+      if (/\/api\/fpl\/entry\/\d+\/event\/\d+\/picks$/.test(url)) {
+        return { ok: false, status: 404, json: async () => ({}) }
+      }
 
       throw new Error(`Unexpected fetch URL in test: ${url}`)
     })
@@ -697,8 +703,11 @@ describe('fetchManagerTransfersRows', () => {
       const attempt = (attempts.get(url) ?? 0) + 1
       attempts.set(url, attempt)
 
-      if ((url === entryUrl || url === transfersUrl) && attempt === 1) {
-        return { ok: false, status: 503, json: async () => ({}) }
+      if (url === entryUrl && attempt === 1) {
+        return { ok: false, status: 503 }
+      }
+      if (url === transfersUrl && attempt === 1) {
+        throw new Error('temporary network failure')
       }
 
       if (url === entryUrl) {
@@ -730,6 +739,9 @@ describe('fetchManagerTransfersRows', () => {
       }
       if (/\/api\/fpl\/event\/\d+\/live$/.test(url)) {
         return { ok: true, json: async () => EMPTY_LIVE }
+      }
+      if (/\/api\/fpl\/entry\/\d+\/event\/\d+\/picks$/.test(url)) {
+        return { ok: false, status: 404, json: async () => ({}) }
       }
 
       throw new Error(`Unexpected fetch URL in test: ${url}`)
