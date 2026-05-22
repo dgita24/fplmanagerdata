@@ -78,19 +78,27 @@ function formStats(
 }
 
 /**
- * Within a group of transfers sharing the same GW and timestamp, apply a
- * topological sort so that if row A buys element X and row B sells element X,
- * row A is always processed before row B.
+ * Within a group of transfers sharing the same GW, apply a topological sort so
+ * that if row A buys element X and row B sells element X, row A is always
+ * processed before row B.
  *
  * This prevents false-blank `element_out_gws_held` values that arise when the
- * FPL API returns same-timestamp transfers in an order where the sell of a
- * player appears before the buy of that player in the same session (e.g. WC/FH
- * churn where a manager buys then immediately re-sells a player).
+ * FPL API returns same-GW transfers in an order where the sell of a player
+ * appears before the buy of that player in the same session (e.g. WC/FH churn
+ * where a manager buys then immediately re-sells a player, even when the FPL
+ * API records slightly different timestamps for each transfer).
  *
- * The original API index is used as a stable tie-break so the result is always
- * deterministic.
+ * Grouping by the whole GW (rather than only same-GW AND same-timestamp) is
+ * necessary because the FPL API sometimes assigns slightly different timestamps
+ * to logically-chained transfers within a single WC/FH session.  A purely
+ * time-based sort would then place a "sell X" row before the "buy X" row,
+ * producing a false blank.
+ *
+ * Within topologically-equivalent sets the stable tie-break is (timestamp,
+ * original API index) so the output is deterministic and chronologically
+ * sensible.
  */
-function topoSortSameTimestampGroup(
+function topoSortSameGwGroup(
   group: Array<{ row: FplTransferRow; origIdx: number }>
 ): FplTransferRow[] {
   const n = group.length
@@ -114,13 +122,23 @@ function topoSortSameTimestampGroup(
     }
   }
 
-  // Kahn's algorithm — stable tie-break by original API index keeps output deterministic
+  // Kahn's algorithm — stable tie-break by (timestamp, original API index)
+  const cmpEntry = (
+    a: { row: FplTransferRow; origIdx: number },
+    b: { row: FplTransferRow; origIdx: number }
+  ): number => {
+    const timeCmp = String(a.row?.time || '').localeCompare(String(b.row?.time || ''))
+    if (timeCmp !== 0) return timeCmp
+    return a.origIdx - b.origIdx
+  }
+  const cmp = (a: number, b: number): number => cmpEntry(group[a], group[b])
+
   const result: FplTransferRow[] = []
   const ready: number[] = []
   for (let i = 0; i < n; i++) {
     if (inDegree[i] === 0) ready.push(i)
   }
-  ready.sort((a, b) => group[a].origIdx - group[b].origIdx)
+  ready.sort(cmp)
 
   while (ready.length > 0) {
     const i = ready.shift()!
@@ -130,16 +148,16 @@ function topoSortSameTimestampGroup(
       inDegree[j]--
       if (inDegree[j] === 0) newReady.push(j)
     }
-    newReady.sort((a, b) => group[a].origIdx - group[b].origIdx)
+    newReady.sort(cmp)
     ready.push(...newReady)
   }
 
   // Safety net for cycles (should not occur with real FPL data) — append remaining
-  // rows in original-index order so output is still deterministic.
+  // rows in (timestamp, original-index) order so output is still deterministic.
   if (result.length < n) {
     const resultSet = new Set(result)
     const remaining = group.filter((g) => !resultSet.has(g.row))
-    remaining.sort((a, b) => a.origIdx - b.origIdx)
+    remaining.sort(cmpEntry)
     for (const { row } of remaining) result.push(row)
   }
 
@@ -298,15 +316,17 @@ export async function fetchManagerTransfersRows(
     // Track when each element was last bought by this manager (for gws_held calculation).
     // Sort transfers chronologically so lastBoughtGwByElement is populated in the right order.
     //
-    // For transfers that share the same GW and timestamp (common during WC/FH when a manager
-    // makes many changes in one session), a plain time-sort is insufficient: if the FPL API
-    // returns "sell P99" before "buy P99" in the same session, the sell sees null in the map
-    // and produces a false blank instead of the correct gws_held = 0.
+    // For transfers that share the same GW (common during WC/FH when a manager makes many
+    // changes in one session), a plain time-sort is insufficient because the FPL API sometimes
+    // assigns slightly different timestamps to logically-chained transfers in the same session.
+    // For example, "buy P99 at 10:00:01, sell P99 at 10:00:00" would be sorted as sell-before-buy
+    // by time, causing the sell to see null provenance and emit a false blank.
     //
     // We fix this by:
-    //   1. Sorting by (gw, time, original-index) for a fully deterministic order.
-    //   2. Within each same-GW/same-timestamp group, applying a topological sort so that a
-    //      row that buys element X is always processed before the row that sells element X.
+    //   1. Sorting by (gw, time, original-index) for a fully deterministic initial order.
+    //   2. Within each same-GW group (not just same-timestamp), applying a topological sort so
+    //      that a row that buys element X is always processed before the row that sells element X,
+    //      regardless of their individual timestamps.
     const indexedTransfers = transfers.map((row, origIdx) => ({ row, origIdx }))
     indexedTransfers.sort((a, b) => {
       const gwA = Number(a.row?.event) || 0
@@ -317,35 +337,49 @@ export async function fetchManagerTransfersRows(
       return a.origIdx - b.origIdx // stable tie-break preserves original API order for equal times
     })
 
-    // Apply topological sort within each same-GW/same-timestamp group
+    // Apply topological sort within each same-GW group
     const sortedTransfers: FplTransferRow[] = []
     let gi = 0
     while (gi < indexedTransfers.length) {
       const gwKey = Number(indexedTransfers[gi].row?.event) || 0
-      const timeKey = String(indexedTransfers[gi].row?.time || '')
       let gj = gi + 1
       while (
         gj < indexedTransfers.length &&
-        (Number(indexedTransfers[gj].row?.event) || 0) === gwKey &&
-        String(indexedTransfers[gj].row?.time || '') === timeKey
+        (Number(indexedTransfers[gj].row?.event) || 0) === gwKey
       ) {
         gj++
       }
-      sortedTransfers.push(...topoSortSameTimestampGroup(indexedTransfers.slice(gi, gj)))
+      sortedTransfers.push(...topoSortSameGwGroup(indexedTransfers.slice(gi, gj)))
       gi = gj
     }
+
+    // Determine the GW when this manager first participated (handles mid-season joiners).
+    // Default to 1 if the field is absent or unparseable.
+    const startedEvent = Math.max(1, Number(entryData?.started_event) || 1)
+
+    // Seed ownership from the manager's initial squad picks.  For GW-1 joiners we reuse the
+    // already-fetched picks; for mid-season joiners we fetch their actual first-GW picks so
+    // their initial squad players are correctly provenanced at `startedEvent` rather than 1.
+    let initialPicksRes: Response = gw1PicksRes
+    if (startedEvent > 1) {
+      initialPicksRes = await fetch(
+        `${origin}/api/fpl/entry/${entryId}/event/${startedEvent}/picks`,
+        { cache: 'no-store' }
+      )
+    }
+
     const lastBoughtGwByElement = new Map<number, number>()
-    if (gw1PicksRes.ok) {
+    if (initialPicksRes.ok) {
       try {
-        const gw1PicksData = await gw1PicksRes.json()
-        const picks = Array.isArray(gw1PicksData?.picks) ? gw1PicksData.picks : []
+        const initialPicksData = await initialPicksRes.json()
+        const picks = Array.isArray(initialPicksData?.picks) ? initialPicksData.picks : []
         for (const pick of picks) {
           const elementId = Number(pick?.element)
           if (!Number.isInteger(elementId) || elementId <= 0) continue
-          lastBoughtGwByElement.set(elementId, 1)
+          lastBoughtGwByElement.set(elementId, startedEvent)
         }
       } catch {
-        // Graceful fallback when GW1 picks are unavailable (e.g., season not started)
+        // Graceful fallback when initial picks are unavailable (e.g., season not started)
       }
     }
 
