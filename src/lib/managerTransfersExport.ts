@@ -123,11 +123,15 @@ function topoSortSameGwGroup(
   }
 
   // Kahn's algorithm — stable tie-break by (timestamp, original API index)
-  const cmp = (a: number, b: number): number => {
-    const timeCmp = String(group[a].row?.time || '').localeCompare(String(group[b].row?.time || ''))
+  const cmpEntry = (
+    a: { row: FplTransferRow; origIdx: number },
+    b: { row: FplTransferRow; origIdx: number }
+  ): number => {
+    const timeCmp = String(a.row?.time || '').localeCompare(String(b.row?.time || ''))
     if (timeCmp !== 0) return timeCmp
-    return group[a].origIdx - group[b].origIdx
+    return a.origIdx - b.origIdx
   }
+  const cmp = (a: number, b: number): number => cmpEntry(group[a], group[b])
 
   const result: FplTransferRow[] = []
   const ready: number[] = []
@@ -153,11 +157,7 @@ function topoSortSameGwGroup(
   if (result.length < n) {
     const resultSet = new Set(result)
     const remaining = group.filter((g) => !resultSet.has(g.row))
-    remaining.sort((a, b) => {
-      const timeCmp = String(a.row?.time || '').localeCompare(String(b.row?.time || ''))
-      if (timeCmp !== 0) return timeCmp
-      return a.origIdx - b.origIdx
-    })
+    remaining.sort(cmpEntry)
     for (const { row } of remaining) result.push(row)
   }
 
