@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { buildManagerTransfersCsv, fetchManagerTransfersRows, type ManagerTransferRow, type ExitReason, type EntryReason, type OwnershipChangeScope } from '../managerTransfersExport'
+import { buildManagerTransfersCsv, fetchManagerTransfersRows, type ManagerTransferRow, type ExitReason, type EntryReason, type OwnershipChangeScope, type CanonicalTransferInterpretation } from '../managerTransfersExport'
 
 // ---------------------------------------------------------------------------
 // Helper: build a minimal but complete fetch mock from a URL→response map.
@@ -92,6 +92,7 @@ describe('buildManagerTransfersCsv', () => {
         element_in_entry_reason: 'wildcard_add',
         ownership_change_scope: 'permanent',
         is_permanent_squad_change: true,
+        canonical_transfer_interpretation: 'permanent_team_change',
       },
     ]
 
@@ -100,11 +101,11 @@ describe('buildManagerTransfersCsv', () => {
     expect(header).toContain('element_out_gws_held,element_out_acquired_gw,element_out_acquired_via')
     expect(header).toContain('transfer_group_id,transfer_group_size,transfer_group_index')
     expect(header).toContain('transfer_context,is_chip_transfer,is_same_gw_churn,is_reliable_for_hold_analysis')
-    expect(header).toContain('element_out_exit_reason,element_in_entry_reason,ownership_change_scope,is_permanent_squad_change')
+    expect(header).toContain('element_out_exit_reason,element_in_entry_reason,ownership_change_scope,is_permanent_squad_change,canonical_transfer_interpretation')
     expect(row).toContain('Player In,WC,Player Out')
     expect(row).toContain(',3,transfer,true,false,true,123:6,2,1,')
     expect(row).toContain('wildcard,true,false,true')
-    expect(row).toContain('wildcard_reset,wildcard_add,permanent,true')
+    expect(row).toContain('wildcard_reset,wildcard_add,permanent,true,permanent_team_change')
   })
 })
 
@@ -853,6 +854,7 @@ describe('fetchManagerTransfersRows', () => {
     expect(row?.element_in_entry_reason).toBe<EntryReason>('standard_buy')
     expect(row?.ownership_change_scope).toBe<OwnershipChangeScope>('permanent')
     expect(row?.is_permanent_squad_change).toBe(true)
+    expect(row?.canonical_transfer_interpretation).toBe<CanonicalTransferInterpretation>('permanent_team_change')
   })
 
   // ---------------------------------------------------------------------------
@@ -901,6 +903,7 @@ describe('fetchManagerTransfersRows', () => {
     expect(row?.element_in_entry_reason).toBe<EntryReason>('free_hit_temp_in')
     expect(row?.ownership_change_scope).toBe<OwnershipChangeScope>('temporary')
     expect(row?.is_permanent_squad_change).toBe(false)
+    expect(row?.canonical_transfer_interpretation).toBe<CanonicalTransferInterpretation>('chip_temporary_move')
   })
 
   // ---------------------------------------------------------------------------
@@ -930,6 +933,7 @@ describe('fetchManagerTransfersRows', () => {
     expect(reversalRow?.ownership_change_scope).toBe<OwnershipChangeScope>('reversal')
     // chip_reversal is a durable squad change (the result persists), so is_permanent is true
     expect(reversalRow?.is_permanent_squad_change).toBe(true)
+    expect(reversalRow?.canonical_transfer_interpretation).toBe<CanonicalTransferInterpretation>('post_chip_reversal')
     // WC row itself: wildcard_reset / wildcard_add / permanent / true
     const wcRow = rows.find((r) => r.gw === 3)
     expect(wcRow?.element_out_exit_reason).toBe<ExitReason>('wildcard_reset')
@@ -971,6 +975,7 @@ describe('fetchManagerTransfersRows', () => {
     expect(churnRow?.element_in_entry_reason).toBe<EntryReason>('same_gw_churn_buy')
     expect(churnRow?.ownership_change_scope).toBe<OwnershipChangeScope>('unknown')
     expect(churnRow?.is_permanent_squad_change).toBe(false)
+    expect(churnRow?.canonical_transfer_interpretation).toBe<CanonicalTransferInterpretation>('same_gw_churn')
   })
 
   // ---------------------------------------------------------------------------
@@ -998,6 +1003,7 @@ describe('fetchManagerTransfersRows', () => {
     expect(row?.element_in_entry_reason).toBe<EntryReason>('unknown')
     expect(row?.ownership_change_scope).toBe<OwnershipChangeScope>('unknown')
     expect(row?.is_permanent_squad_change).toBe(false)
+    expect(row?.canonical_transfer_interpretation).toBe<CanonicalTransferInterpretation>('unresolved_provenance_gap')
   })
 
   // ---------------------------------------------------------------------------

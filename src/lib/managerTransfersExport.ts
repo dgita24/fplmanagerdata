@@ -72,6 +72,23 @@ export type EntryReason =
  */
 export type OwnershipChangeScope = 'permanent' | 'temporary' | 'reversal' | 'unknown'
 
+/**
+ * Canonical analyst/AI-focused transfer interpretation that normalizes the
+ * detailed transfer_context values into one high-level bucket.
+ *
+ *   permanent_team_change     – durable squad change (standard or wildcard)
+ *   chip_temporary_move       – temporary chip-only move (free hit)
+ *   post_chip_reversal        – durable post-chip unwind of prior chip-era pick
+ *   same_gw_churn             – bought and sold in same GW (net-zero churn)
+ *   unresolved_provenance_gap – ownership/provenance cannot be confirmed
+ */
+export type CanonicalTransferInterpretation =
+  | 'permanent_team_change'
+  | 'chip_temporary_move'
+  | 'post_chip_reversal'
+  | 'same_gw_churn'
+  | 'unresolved_provenance_gap'
+
 export type ManagerTransferRow = {
   season: string
   gw: number
@@ -157,6 +174,12 @@ export type ManagerTransferRow = {
    * decisions without having to inspect transfer_context manually.
    */
   is_permanent_squad_change: boolean
+  /**
+   * Canonical high-level interpretation of the transfer row for downstream AI
+   * and analytics workflows. Use this when you need one normalized category
+   * rather than combining transfer_context, scope, and permanence flags.
+   */
+  canonical_transfer_interpretation: CanonicalTransferInterpretation
 }
 
 export type FetchManagerTransfersOptions = {
@@ -347,6 +370,18 @@ function deriveIsPermanentSquadChange(transferContext: TransferContext): boolean
   )
 }
 
+function deriveCanonicalTransferInterpretation(
+  transferContext: TransferContext
+): CanonicalTransferInterpretation {
+  if (transferContext === 'standard' || transferContext === 'wildcard') {
+    return 'permanent_team_change'
+  }
+  if (transferContext === 'free_hit') return 'chip_temporary_move'
+  if (transferContext === 'chip_reversal') return 'post_chip_reversal'
+  if (transferContext === 'same_gw_churn') return 'same_gw_churn'
+  return 'unresolved_provenance_gap'
+}
+
 /**
  * Within a group of transfers sharing the same GW, apply a topological sort so
  * that if row A buys element X and row B sells element X, row A is always
@@ -472,6 +507,7 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
     'element_in_entry_reason',
     'ownership_change_scope',
     'is_permanent_squad_change',
+    'canonical_transfer_interpretation',
   ]
 
   const lines = rows.map((row) =>
@@ -512,6 +548,7 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
       row.element_in_entry_reason,
       row.ownership_change_scope,
       row.is_permanent_squad_change,
+      row.canonical_transfer_interpretation,
     ].map(csvCell).join(',')
   )
 
@@ -800,6 +837,7 @@ export async function fetchManagerTransfersRows(
         const element_in_entry_reason = deriveEntryReason(transfer_context)
         const ownership_change_scope = deriveOwnershipChangeScope(transfer_context)
         const is_permanent_squad_change = deriveIsPermanentSquadChange(transfer_context)
+        const canonical_transfer_interpretation = deriveCanonicalTransferInterpretation(transfer_context)
 
         const inForm = formStats(elementIn, gw, gwLiveMap)
         const outForm = formStats(elementOut, gw, gwLiveMap)
@@ -841,6 +879,7 @@ export async function fetchManagerTransfersRows(
           element_in_entry_reason,
           ownership_change_scope,
           is_permanent_squad_change,
+          canonical_transfer_interpretation,
         }
 
           // Update ownership state AFTER reading priorBuyGw.
