@@ -529,6 +529,8 @@ export async function fetchManagerTransfersRows(
 
       const transfer_group_id = `${entryId}:${gw}`
       const transfer_group_size = gwRows.length
+      const isCurrentlyOwned = (elementId: number): boolean =>
+        lastBoughtGwByElement.has(elementId) || unknownOwnedElements.has(elementId)
       const gwOutputRows = gwRows
         .map((row, rowIndex) => {
         const gw = Number(row?.event)
@@ -538,13 +540,13 @@ export async function fetchManagerTransfersRows(
         if (!Number.isInteger(elementIn) || elementIn <= 0) return null
         if (!Number.isInteger(elementOut) || elementOut <= 0) return null
 
-        const element_out_pre_transfer_owned =
-          lastBoughtGwByElement.has(elementOut) || unknownOwnedElements.has(elementOut)
-        const element_in_pre_transfer_owned =
-          lastBoughtGwByElement.has(elementIn) || unknownOwnedElements.has(elementIn)
+        const element_out_pre_transfer_owned = isCurrentlyOwned(elementOut)
+        const element_in_pre_transfer_owned = isCurrentlyOwned(elementIn)
         const element_in_is_new_ownership = !element_in_pre_transfer_owned
         const priorBuyGw = lastBoughtGwByElement.get(elementOut) ?? null
-        const element_out_acquired_via = acquisitionViaByElement.get(elementOut) ?? 'unknown'
+        const element_out_acquired_via = element_out_pre_transfer_owned
+          ? (acquisitionViaByElement.get(elementOut) ?? 'unknown')
+          : 'unknown'
         const element_out_gws_held = priorBuyGw !== null ? gw - priorBuyGw : null
 
         const inForm = formStats(elementIn, gw, gwLiveMap)
@@ -599,8 +601,6 @@ export async function fetchManagerTransfersRows(
     return outputRows.sort((a, b) => {
       const gwDelta = a.gw - b.gw
       if (gwDelta !== 0) return gwDelta
-      const groupDelta = a.transfer_group_id.localeCompare(b.transfer_group_id)
-      if (groupDelta !== 0) return groupDelta
       const indexDelta = a.transfer_group_index - b.transfer_group_index
       if (indexDelta !== 0) return indexDelta
       const timeDelta = a.time.localeCompare(b.time)
