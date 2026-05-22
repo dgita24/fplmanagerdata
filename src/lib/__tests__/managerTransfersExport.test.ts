@@ -810,10 +810,13 @@ describe('fetchManagerTransfersRows', () => {
     expect(rows).toHaveLength(2)
 
     const sellP99 = rows.find((r) => r.element_out === 99)
-    // gws_held === 0 but chip is WC, so context should be 'wildcard' not 'same_gw_churn'
+    // P99 was bought and sold within the same WC GW.
+    // is_same_gw_churn is a raw flag (gws_held===0) and is true regardless of chip.
+    // transfer_context is the authoritative categorization: chip takes priority,
+    // so it is 'wildcard' rather than 'same_gw_churn'.
     expect(sellP99?.element_out_gws_held).toBe(0)
-    expect(sellP99?.is_same_gw_churn).toBe(true) // is_same_gw_churn is raw gws_held===0 regardless of chip
-    expect(sellP99?.transfer_context).toBe('wildcard') // chip context takes priority
+    expect(sellP99?.is_same_gw_churn).toBe(true)   // raw flag: gws_held===0
+    expect(sellP99?.transfer_context).toBe('wildcard') // authoritative: chip overrides churn label
     expect(sellP99?.is_chip_transfer).toBe(true)
   })
 })

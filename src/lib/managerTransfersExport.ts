@@ -52,11 +52,22 @@ export type ManagerTransferRow = {
   element_in_avg_pts_last6: number | null
   element_out_avg_pts_last6: number | null
   // ── Transfer-context / analysis-confidence fields ─────────────────────────
-  /** See TransferContext for full value semantics. */
+  /**
+   * Authoritative transfer categorization. Use this field to separate transfer
+   * types in downstream analysis. See TransferContext for full value semantics.
+   * Note: `is_same_gw_churn` is a raw flag (gws_held === 0) that can be true
+   * even when transfer_context is 'wildcard' or 'free_hit'; use transfer_context
+   * for definitive categorization.
+   */
   transfer_context: TransferContext
   /** True when a chip (WC or FH) was active this GW. */
   is_chip_transfer: boolean
-  /** True when element_out was bought and sold within the same GW (gws_held === 0). */
+  /**
+   * True when element_out was bought and sold within the same GW (gws_held === 0).
+   * This is a raw data flag — use transfer_context for the authoritative
+   * categorization (e.g. same-GW churn inside a WC session has transfer_context
+   * 'wildcard', not 'same_gw_churn').
+   */
   is_same_gw_churn: boolean
   /**
    * True when this row is analytically reliable for hold-duration and
