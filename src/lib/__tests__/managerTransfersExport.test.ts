@@ -112,6 +112,59 @@ describe('buildManagerTransfersCsv', () => {
     expect(row).toContain('wildcard,true,false,true')
     expect(row).toContain('wildcard_reset,wildcard_add,permanent,true')
   })
+
+  it('prefixes the CSV with a UTF-8 BOM and preserves Unicode player names', () => {
+    const rows: ManagerTransferRow[] = [
+      {
+        season: 'current',
+        gw: 6,
+        entry_id: 123,
+        entry_name: 'Team A',
+        player_name: 'Manager A',
+        time: '2026-09-10T10:00:00Z',
+        element_in: 99,
+        element_out: 42,
+        purchase_price: 80,
+        selling_price: 75,
+        element_in_name: 'João Pedro',
+        chip_played: null,
+        element_out_name: 'Dúbravka',
+        element_in_prev_gw_points: 5,
+        element_out_prev_gw_points: 2,
+        element_out_gws_held: 3,
+        element_out_acquired_gw: 3,
+        element_out_acquired_via: 'transfer',
+        element_out_pre_transfer_owned: true,
+        element_in_pre_transfer_owned: false,
+        element_in_is_new_ownership: true,
+        transfer_group_id: '123:6',
+        transfer_group_size: 1,
+        transfer_group_index: 1,
+        transfer_group_context: 'standard',
+        transfer_group_net_spend: 5,
+        transfer_group_has_unknown_provenance: false,
+        transfer_group_permanent_change_count: 1,
+        element_in_pts_above5_last6: 1,
+        element_out_pts_above5_last6: 0,
+        element_in_avg_pts_last6: 4.2,
+        element_out_avg_pts_last6: 3.5,
+        transfer_context: 'standard',
+        is_chip_transfer: false,
+        is_same_gw_churn: false,
+        is_reliable_for_hold_analysis: true,
+        element_out_exit_reason: 'standard_sale',
+        element_in_entry_reason: 'standard_buy',
+        ownership_change_scope: 'permanent',
+        is_permanent_squad_change: true,
+      },
+    ]
+
+    const csv = buildManagerTransfersCsv(rows)
+
+    expect(csv.startsWith('\uFEFF')).toBe(true)
+    expect(csv).toContain('João Pedro')
+    expect(csv).toContain('Dúbravka')
+  })
 })
 
 describe('fetchManagerTransfersRows', () => {
@@ -632,6 +685,64 @@ describe('fetchManagerTransfersRows', () => {
     expect(liveFetchCount.get(2)).toBe(1)
     expect(rowsA[0]?.element_in_prev_gw_points).toBe(6)
     expect(rowsA[0]?.element_out_prev_gw_points).toBe(2)
+  })
+
+  it('retries transient manager fetch failures so export rows are not dropped', async () => {
+    const entryUrl = `${BASE}/api/fpl/entry/${ENTRY_ID}`
+    const transfersUrl = `${BASE}/api/fpl/entry/${ENTRY_ID}/transfers`
+    const attempts = new Map<string, number>()
+
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = String(input)
+      const attempt = (attempts.get(url) ?? 0) + 1
+      attempts.set(url, attempt)
+
+      if ((url === entryUrl || url === transfersUrl) && attempt === 1) {
+        return { ok: false, status: 503, json: async () => ({}) }
+      }
+
+      if (url === entryUrl) {
+        return { ok: true, json: async () => ENTRY_BODY }
+      }
+      if (url === transfersUrl) {
+        return {
+          ok: true,
+          json: async () => ([
+            {
+              event: 5,
+              time: '2024-10-08T09:00:00Z',
+              element_in: 99,
+              element_out: 200,
+              element_in_cost: 80,
+              element_out_cost: 85,
+            },
+          ]),
+        }
+      }
+      if (url === `${BASE}/api/fpl/bootstrap-static`) {
+        return { ok: true, json: async () => BOOTSTRAP_BODY }
+      }
+      if (url === `${BASE}/api/fpl/entry/${ENTRY_ID}/history`) {
+        return { ok: true, json: async () => EMPTY_HISTORY }
+      }
+      if (url === `${BASE}/api/fpl/entry/${ENTRY_ID}/event/1/picks`) {
+        return { ok: true, json: async () => ({ picks: [{ element: 200 }] }) }
+      }
+      if (/\/api\/fpl\/event\/\d+\/live$/.test(url)) {
+        return { ok: true, json: async () => EMPTY_LIVE }
+      }
+
+      throw new Error(`Unexpected fetch URL in test: ${url}`)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.element_out).toBe(200)
+    expect(attempts.get(entryUrl)).toBe(2)
+    expect(attempts.get(transfersUrl)).toBe(2)
   })
 
   // ============================================================================

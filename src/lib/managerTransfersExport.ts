@@ -242,6 +242,23 @@ function csvCell(value: string | number | boolean | null): string {
   return `"${str.replace(/"/g, '""')}"`
 }
 
+async function fetchJsonWithRetry(
+  url: string,
+  retries = 2
+): Promise<{ ok: true; data: unknown } | { ok: false }> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, { cache: 'no-store' })
+      if (!res.ok) continue
+      return { ok: true, data: await res.json() }
+    } catch {
+      // Retry transient network failures; the caller handles the final fallback.
+    }
+  }
+
+  return { ok: false }
+}
+
 function formStats(
   elementId: number,
   transferGw: number,
@@ -572,7 +589,7 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
     ].map(csvCell).join(',')
   )
 
-  return [header.join(','), ...lines].join('\n')
+  return `\uFEFF${[header.join(','), ...lines].join('\n')}`
 }
 
 export async function fetchManagerTransfersRows(
@@ -582,27 +599,31 @@ export async function fetchManagerTransfersRows(
   options?: FetchManagerTransfersOptions
 ): Promise<ManagerTransferRow[]> {
   try {
-    const [entryRes, transfersRes, historyRes, gw1PicksRes] = await Promise.all([
-      fetch(`${origin}/api/fpl/entry/${entryId}`, { cache: 'no-store' }),
-      fetch(`${origin}/api/fpl/entry/${entryId}/transfers`, { cache: 'no-store' }),
-      fetch(`${origin}/api/fpl/entry/${entryId}/history`, { cache: 'no-store' }),
-      fetch(`${origin}/api/fpl/entry/${entryId}/event/1/picks`, { cache: 'no-store' }),
+    const [entryResult, transfersResult, historyResult, gw1PicksResult] = await Promise.all([
+      fetchJsonWithRetry(`${origin}/api/fpl/entry/${entryId}`),
+      fetchJsonWithRetry(`${origin}/api/fpl/entry/${entryId}/transfers`),
+      fetchJsonWithRetry(`${origin}/api/fpl/entry/${entryId}/history`),
+      fetchJsonWithRetry(`${origin}/api/fpl/entry/${entryId}/event/1/picks`),
     ])
 
     let bootstrapData: unknown = options?.bootstrapData ?? null
     if (!bootstrapData) {
-      const bootstrapRes = await fetch(`${origin}/api/fpl/bootstrap-static`, { cache: 'no-store' })
-      if (!bootstrapRes.ok) return []
-      bootstrapData = await bootstrapRes.json()
+      const bootstrapResult = await fetchJsonWithRetry(`${origin}/api/fpl/bootstrap-static`)
+      if (!bootstrapResult.ok) {
+        console.error('[managerTransfersExport] Failed to load bootstrap-static for manager export')
+        return []
+      }
+      bootstrapData = bootstrapResult.data
     }
 
-    if (!entryRes.ok || !transfersRes.ok) return []
+    if (!entryResult.ok || !transfersResult.ok) {
+      console.error(`[managerTransfersExport] Failed to load manager ${entryId} entry or transfers data`)
+      return []
+    }
 
-    const [entryData, transfersData, historyData] = await Promise.all([
-      entryRes.json(),
-      transfersRes.json(),
-      historyRes.ok ? historyRes.json() : Promise.resolve(null),
-    ])
+    const entryData = entryResult.data
+    const transfersData = transfersResult.data
+    const historyData = historyResult.ok ? historyResult.data : null
 
     const entry_name = String(entryData?.name || '')
     const player_name = `${entryData?.player_first_name || ''} ${entryData?.player_last_name || ''}`.trim() || `Manager ${entryId}`
@@ -645,10 +666,10 @@ export async function fetchManagerTransfersRows(
           if (sharedGwLivePromises?.has(prevGw)) {
             promise = sharedGwLivePromises.get(prevGw)!
           } else {
-            promise = fetch(`${origin}/api/fpl/event/${prevGw}/live`, { cache: 'no-store' })
-              .then(async (liveRes) => {
-                if (!liveRes.ok) return new Map<number, number>()
-                const liveData = await liveRes.json()
+            promise = fetchJsonWithRetry(`${origin}/api/fpl/event/${prevGw}/live`)
+              .then((liveResult) => {
+                if (!liveResult.ok) return new Map<number, number>()
+                const liveData = liveResult.data
                 const elements = Array.isArray(liveData?.elements) ? liveData.elements as FplLiveElement[] : []
                 const elementPointsMap = new Map<number, number>()
                 for (const el of elements) {
@@ -719,12 +740,12 @@ export async function fetchManagerTransfersRows(
     // Seed ownership from the manager's initial squad picks.  For GW-1 joiners we reuse the
     // already-fetched picks; for mid-season joiners we fetch their actual first-GW picks so
     // their initial squad players are correctly provenanced at `startedEvent` rather than 1.
-    let initialPicksRes: Response = gw1PicksRes
+    let initialPicksData: unknown = gw1PicksResult.ok ? gw1PicksResult.data : null
     if (startedEvent > 1) {
-      initialPicksRes = await fetch(
-        `${origin}/api/fpl/entry/${entryId}/event/${startedEvent}/picks`,
-        { cache: 'no-store' }
+      const startedEventPicksResult = await fetchJsonWithRetry(
+        `${origin}/api/fpl/entry/${entryId}/event/${startedEvent}/picks`
       )
+      initialPicksData = startedEventPicksResult.ok ? startedEventPicksResult.data : null
     }
 
     const lastBoughtGwByElement = new Map<number, number>()
@@ -732,9 +753,9 @@ export async function fetchManagerTransfersRows(
     const acquisitionViaByElement = new Map<number, AcquisitionVia>()
     const unknownOwnedElements = new Set<number>()
     const everBoughtByTransfer = new Set<number>()
-    if (initialPicksRes.ok) {
+    if (initialPicksData) {
       try {
-        const initialOwned = picksElementSet(await initialPicksRes.json())
+        const initialOwned = picksElementSet(initialPicksData)
         for (const elementId of initialOwned) {
           lastBoughtGwByElement.set(elementId, startedEvent)
           acquisitionGwByElement.set(elementId, startedEvent)
@@ -757,9 +778,11 @@ export async function fetchManagerTransfersRows(
     await Promise.all(
       Array.from(transfersByGw.keys()).map(async (gw) => {
         try {
-          const picksRes = await fetch(`${origin}/api/fpl/entry/${entryId}/event/${gw}/picks`, { cache: 'no-store' })
-          if (!picksRes.ok) return
-          const owned = picksElementSet(await picksRes.json())
+          const picksResult = await fetchJsonWithRetry(
+            `${origin}/api/fpl/entry/${entryId}/event/${gw}/picks`
+          )
+          if (!picksResult.ok) return
+          const owned = picksElementSet(picksResult.data)
           postGwOwnedByGw.set(gw, owned)
         } catch {
           // Keep unavailable; we will fall back to transfer replay state.
@@ -956,7 +979,8 @@ export async function fetchManagerTransfersRows(
       if (outDelta !== 0) return outDelta
       return a.element_in - b.element_in
     })
-  } catch {
+  } catch (error) {
+    console.error(`[managerTransfersExport] Failed to fetch manager ${entryId} transfers`, error)
     return []
   }
 }
