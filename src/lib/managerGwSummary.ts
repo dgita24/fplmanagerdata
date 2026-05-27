@@ -77,9 +77,6 @@ function deriveFreeTransfersByGw(rows: FreeTransfersInputRow[]): Map<number, num
   const out = new Map<number, number>()
   if (rows.length === 0) return out
 
-  // Preserve existing FT derivation behavior from transfers.astro (calculateFTs):
-  // GW16 is treated as the first GW after the five-FT reset.
-  const FIVE_FREE_TRANSFERS_RESET_GW = 16
   const MAX_FREE_TRANSFERS = 5
 
   const byGW = new Map<number, FreeTransfersInputRow>()
@@ -90,9 +87,7 @@ function deriveFreeTransfersByGw(rows: FreeTransfersInputRow[]): Map<number, num
     let freeTransfersForGw = 1
     const previousGwRow = byGW.get(currentGw - 1)
 
-    if (currentGw === FIVE_FREE_TRANSFERS_RESET_GW) {
-      freeTransfersForGw = MAX_FREE_TRANSFERS
-    } else if (currentGw === 1) {
+    if (currentGw === 1) {
       freeTransfersForGw = 0
     } else if (!previousGwRow) {
       freeTransfersForGw = 1

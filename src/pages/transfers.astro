@@ -226,9 +226,7 @@ import Nav from "../components/Nav.astro";
       const prevRow = byGW.get(E - 1);
       const S = prevRow ? 1 : 0;
 
-      if (E === 16) {
-        Q = 5;
-      } else if (E === 1) {
+      if (E === 1) {
         Q = 0;
       } else if (S === 0) {
         Q = 1;
@@ -251,17 +249,11 @@ import Nav from "../components/Nav.astro";
     const maxGW = Math.max(...managerHistory.map(r => r.gw));
     managerHistory.forEach(row => {
       if (row.gw === maxGW) {
-        const E = Number(row.gw);
         const Q = Number(row.FTsStartOfGW);
         const M = Number(row.transfers);
         const F = row.chipPlayed || "";
-
-        if (E === 15) {
-          row.FTsForNextGW = 5;
-        } else {
-          const inc = (F === "WC" || F === "FH") ? 0 : 1;
-          row.FTsForNextGW = Math.min(Math.max(1, Q - M + inc), 5);
-        }
+        const inc = (F === "WC" || F === "FH") ? 0 : 1;
+        row.FTsForNextGW = Math.min(Math.max(1, Q - M + inc), 5);
       } else {
         row.FTsForNextGW = "";
       }
