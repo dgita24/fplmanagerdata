@@ -99,6 +99,7 @@ export type CanonicalTransferInterpretation =
   | 'unresolved_provenance_gap'
 
 export type ManagerTransferRow = {
+  transfer_points_cost: number
   season: string
   gw: number
   entry_id: number
@@ -243,6 +244,11 @@ type FplTransferRow = {
 type FplChipRow = {
   name?: string | null
   event?: number
+}
+
+type FplHistoryCurrentRow = {
+  event?: number
+  event_transfers_cost?: number
 }
 
 type FplPicksResponse = {
@@ -545,14 +551,12 @@ function topoSortSameGwGroup(
 
 export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
   const header = [
-    'season',
+    'transfer_points_cost',
     'gw',
     'entry_id',
     'entry_name',
     'player_name',
     'time',
-    'element_in',
-    'element_out',
     'purchase_price',
     'selling_price',
     'element_in_name',
@@ -570,7 +574,6 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
     'transfer_group_size',
     'transfer_group_index',
     'transfer_group_context',
-    'transfer_group_net_spend',
     'transfer_group_has_unknown_provenance',
     'transfer_group_permanent_change_count',
     'element_in_pts_above5_last6',
@@ -590,14 +593,12 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
 
   const lines = rows.map((row) =>
     [
-      row.season,
+      row.transfer_points_cost,
       row.gw,
       row.entry_id,
       row.entry_name,
       row.player_name,
       row.time,
-      row.element_in,
-      row.element_out,
       row.purchase_price,
       row.selling_price,
       row.element_in_name,
@@ -615,7 +616,6 @@ export function buildManagerTransfersCsv(rows: ManagerTransferRow[]): string {
       row.transfer_group_size,
       row.transfer_group_index,
       row.transfer_group_context,
-      row.transfer_group_net_spend,
       row.transfer_group_has_unknown_provenance,
       row.transfer_group_permanent_change_count,
       row.element_in_pts_above5_last6,
@@ -684,12 +684,23 @@ export async function fetchManagerTransfersRows(
     const transfers = Array.isArray(transfersData) ? transfersData as FplTransferRow[] : []
     const chipByGw = new Map<number, string>()
     const chips = Array.isArray(historyData?.chips) ? historyData.chips as FplChipRow[] : []
+    const transferHitsByGw = new Map<number, number>()
     for (const chip of chips) {
       const gw = Number(chip?.event)
       const normalized = normalizeChipCode(chip?.name ?? null)
       if (!Number.isInteger(gw) || gw <= 0) continue
       if (!normalized) continue
       chipByGw.set(gw, normalized)
+    }
+    const historyCurrentRows = Array.isArray(historyData?.current)
+      ? historyData.current as FplHistoryCurrentRow[]
+      : []
+    for (const historyRow of historyCurrentRows) {
+      const gw = Number(historyRow?.event)
+      if (!Number.isInteger(gw) || gw <= 0) continue
+      const eventTransfersCost = Number(historyRow?.event_transfers_cost)
+      if (!Number.isFinite(eventTransfersCost) || eventTransfersCost < 0) continue
+      transferHitsByGw.set(gw, Math.floor(eventTransfersCost / 4))
     }
 
     // Collect unique GWs needed for live data (gw-6 to gw-1) for all transfers
@@ -886,6 +897,8 @@ export async function fetchManagerTransfersRows(
 
       const transfer_group_id = `${entryId}:${gw}`
       const transfer_group_size = gwRows.length
+      const transfer_group_hit_count = Math.min(transfer_group_size, transferHitsByGw.get(gw) ?? 0)
+      const first_transfer_hit_index = transfer_group_size - transfer_group_hit_count + 1
       // ── Pass 1: build per-row data (group-level fields filled with placeholders) ──
       const gwBaseRows = gwRows
         .map((row, rowIndex) => {
@@ -930,8 +943,11 @@ export async function fetchManagerTransfersRows(
 
         const inForm = formStats(elementIn, gw, gwLiveMap)
         const outForm = formStats(elementOut, gw, gwLiveMap)
+        const transfer_group_index = rowIndex + 1
+        const transfer_points_cost = transfer_group_index >= first_transfer_hit_index ? -4 : 0
 
         const result = {
+          transfer_points_cost,
           season,
           gw,
           entry_id: entryId,
@@ -955,7 +971,7 @@ export async function fetchManagerTransfersRows(
           element_in_is_new_ownership,
           transfer_group_id,
           transfer_group_size,
-          transfer_group_index: rowIndex + 1,
+          transfer_group_index,
           // Group-level analytics — placeholders filled in pass 2 below
           transfer_group_context: 'mixed',
           transfer_group_net_spend: 0,

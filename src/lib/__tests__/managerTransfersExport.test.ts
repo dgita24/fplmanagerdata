@@ -56,6 +56,7 @@ describe('buildManagerTransfersCsv', () => {
   it('includes chip_played immediately after element_in_name in header and row output', () => {
     const rows: ManagerTransferRow[] = [
       {
+        transfer_points_cost: -4,
         season: 'current',
         gw: 6,
         entry_id: 123,
@@ -101,15 +102,24 @@ describe('buildManagerTransfersCsv', () => {
     ]
 
     const [header, row] = buildManagerTransfersCsv(rows).split('\n')
+    const columns = header.split(',')
+    expect(columns[0]).toBe('\uFEFFtransfer_points_cost')
+    expect(columns).not.toContain('season')
+    expect(columns).not.toContain('element_in')
+    expect(columns).not.toContain('element_out')
+    expect(columns).not.toContain('transfer_group_net_spend')
+    expect(columns).toContain('element_in_name')
+    expect(columns).toContain('element_out_name')
     expect(header).toContain('element_in_name,chip_played,element_out_name')
     expect(header).toContain('element_out_gws_held,element_out_acquired_gw,element_out_acquired_via')
     expect(header).toContain('transfer_group_id,transfer_group_size,transfer_group_index')
-    expect(header).toContain('transfer_group_context,transfer_group_net_spend,transfer_group_has_unknown_provenance,transfer_group_permanent_change_count')
+    expect(header).toContain('transfer_group_context,transfer_group_has_unknown_provenance,transfer_group_permanent_change_count')
     expect(header).toContain('transfer_context,is_chip_transfer,is_same_gw_churn,is_reliable_for_hold_analysis')
     expect(header).toContain('element_out_exit_reason,element_in_entry_reason,ownership_change_scope,is_permanent_squad_change,canonical_transfer_interpretation')
+    expect(row.startsWith('-4,')).toBe(true)
     expect(row).toContain('Player In,WC,Player Out')
     expect(row).toContain(',3,transfer,true,false,true,123:6,2,1,')
-    expect(row).toContain('wildcard,5,false,1,')
+    expect(row).toContain('wildcard,false,1,')
     expect(row).toContain('wildcard,true,false,true')
     expect(row).toContain('wildcard_reset,wildcard_add,permanent,true,permanent_team_change')
   })
@@ -117,6 +127,7 @@ describe('buildManagerTransfersCsv', () => {
   it('prefixes the CSV with a UTF-8 BOM and preserves Unicode player names', () => {
     const rows: ManagerTransferRow[] = [
       {
+        transfer_points_cost: 0,
         season: 'current',
         gw: 6,
         entry_id: 123,
@@ -270,6 +281,28 @@ describe('fetchManagerTransfersRows', () => {
     expect(rows[1]?.transfer_group_id).toBe(`${ENTRY_ID}:6`)
     expect(rows[1]?.transfer_group_size).toBe(2)
     expect(rows[1]?.transfer_group_index).toBe(2)
+  })
+
+  it('assigns -4 to each excess transfer row based on event_transfers_cost', async () => {
+    vi.stubGlobal('fetch', makeFetchMock({
+      [`${BASE}/api/fpl/entry/${ENTRY_ID}`]: ENTRY_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/transfers`]: [
+        { event: 6, time: '2026-09-10T10:00:00Z', element_in: 99, element_out: 42, element_in_cost: 80, element_out_cost: 75 },
+        { event: 6, time: '2026-09-10T10:05:00Z', element_in: 100, element_out: 16, element_in_cost: 81, element_out_cost: 74 },
+        { event: 6, time: '2026-09-10T10:10:00Z', element_in: 200, element_out: 99, element_in_cost: 82, element_out_cost: 80 },
+      ],
+      [`/api/fpl/entry/${ENTRY_ID}/history`]: {
+        chips: [],
+        current: [{ event: 6, event_transfers_cost: 8 }],
+      },
+      [`${BASE}/api/fpl/bootstrap-static`]: BOOTSTRAP_BODY,
+      [`/api/fpl/entry/${ENTRY_ID}/event/1/picks`]: { picks: [{ element: 42 }, { element: 16 }] },
+      '/api/fpl/event/*/live': EMPTY_LIVE,
+    }))
+
+    const rows = await fetchManagerTransfersRows(BASE, ENTRY_ID, 'current')
+    expect(rows).toHaveLength(3)
+    expect(rows.map((r) => r.transfer_points_cost)).toEqual([0, -4, -4])
   })
 
   // ---------------------------------------------------------------------------
