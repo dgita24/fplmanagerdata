@@ -2049,13 +2049,22 @@ function buildBreakdownRows(
 
         if (isSubbedIn) continue;
 
-        let rowClass = chipCode === "BB" ? "" : (isDnp ? "dnp-row" : "bench-inactive");
-
-        if (chipCode !== "BB" && !isDnp) {
-          if (p.status === "NS") rowClass += " not-started-row";
-          else if (p.status === "Live") rowClass += " match-live-row";
-          else if (p.status === "Fin") rowClass += " match-finished-row";
-        }        
+        let rowClass = "";
+  
+        if (chipCode === "BB") {
+          // BB active: treat bench like starters
+          if (p.status === "NS") rowClass = "not-started-row";
+          else if (p.status === "Live") rowClass = "match-live-row";
+          else if (p.status === "Fin") rowClass = "match-finished-row";
+        } else {
+          // BB not active: standard bench behavior
+          rowClass = isDnp ? "dnp-row" : "bench-inactive";
+          if (!isDnp) {
+            if (p.status === "NS") rowClass += " not-started-row";
+            else if (p.status === "Live") rowClass += " match-live-row";
+            else if (p.status === "Fin") rowClass += " match-finished-row";
+          }
+        } 
 
         let statusBadge = "";
         if (isDnp) statusBadge = `<span class="status-badge status-dnp">DNP</span>`;
