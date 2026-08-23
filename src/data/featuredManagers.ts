@@ -6,7 +6,7 @@ export type FeaturedManager = {
 
 export const featuredManagers: FeaturedManager[] = [
 // Update this each season:
-{ name: "Ben Crellin", note: "5yr #33" },
+{ name: "Ben Crellin", entryId: 53517, note: "5yr #33" },
 { name: "Fábio Borges", entryId: 3718868, note: "5yr #577" },
 { name: "Tom Dollimore", entryId: 179777, note: "5yr #2" },
 { name: "Jovan Popović", entryId: 77750, note: "5yr #94" },
@@ -22,6 +22,7 @@ export const featuredManagers: FeaturedManager[] = [
 { name: "Cameron Scott", entryId: 9267, note: "5yr #5" },
 { name: "Ola Eikill Veflen", entryId: 2721176, note: "5yr #6" },
 { name: "Harry Daniels", entryId: 3054, note: "5yr #7 [YouTube]" },
-{ name: "Andy LTFPL", entryId: 41, note: "5yr #392,AT #64" },
+{ name: "Andy LTFPL", entryId: 41, note: "5yr #392,AT #64" }
+
 
 ];
