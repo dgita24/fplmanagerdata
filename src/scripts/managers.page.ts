@@ -7,6 +7,7 @@
   // Single source of truth
   // =========================
   const MAX_MANAGERS = 50
+  const SHOW_FEATURED_MANAGER_IDS = false
 
   const authCheckDiv = document.getElementById('auth-check') as HTMLElement
   const loadingDiv = document.getElementById('loading') as HTMLElement
@@ -202,7 +203,11 @@
 
   const selectedFeaturedIds = new Set<number>()
   
-  const featuredEntryIds = new Set<number>(featuredManagers.map((m) => Number(m.entryId)))
+  const featuredEntryIds = new Set<number>(
+    featuredManagers
+      .map((m) => Number(m.entryId))
+      .filter((id) => Number.isFinite(id))
+  )
 
   function syncSelectedFeaturedIdsFromDom() {
     const next = new Set<number>()
@@ -529,11 +534,16 @@
       const safeName = escapeHtml(String(m.name ?? ''))
       const safeNote = m.note ? escapeHtml(String(m.note)) : ''
       const entryId = Number(m.entryId)
-      const checked = selectedFeaturedIds.has(entryId) ? 'checked' : ''
+      const hasEntryId = Number.isFinite(entryId)
+      const checked = hasEntryId && selectedFeaturedIds.has(entryId) ? 'checked' : ''
+      const entryIdHtml =
+        SHOW_FEATURED_MANAGER_IDS && hasEntryId
+          ? `<span class="featured-item__id">${safeNote ? `— ` : ``}<code>${entryId}</code></span>`
+          : ''
 
       return `
         <label class="featured-item">
-          <input type="checkbox" class="featured-check" data-id="${entryId}" ${checked} />
+          <input type="checkbox" class="featured-check" data-id="${entryId}" ${checked} ${hasEntryId ? '' : 'disabled'} />
           <button
             type="button"
             class="featured-item__name featured-item__name-button"
@@ -543,7 +553,7 @@
             ${safeName}
           </button>
           ${safeNote ? `<span class="featured-item__note">— ${safeNote}</span>` : ``}
-          <span class="featured-item__id">${safeNote ? `— ` : ``}<code>${entryId}</code></span>
+          ${entryIdHtml}
         </label>
       `
 
