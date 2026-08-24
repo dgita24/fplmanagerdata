@@ -534,16 +534,14 @@
       const safeName = escapeHtml(String(m.name ?? ''))
       const safeNote = m.note ? escapeHtml(String(m.note)) : ''
       const entryId = Number(m.entryId)
-      const hasEntryId = Number.isFinite(entryId)
-      const checked = hasEntryId && selectedFeaturedIds.has(entryId) ? 'checked' : ''
-      const entryIdHtml =
-        SHOW_FEATURED_MANAGER_IDS && hasEntryId
-          ? `<span class="featured-item__id">${safeNote ? `— ` : ``}<code>${entryId}</code></span>`
-          : ''
+      const checked = selectedFeaturedIds.has(entryId) ? 'checked' : ''
+      const idHtml = SHOW_FEATURED_MANAGER_IDS
+        ? `<span class="featured-item__id">${safeNote ? `— ` : ``}<code>${entryId}</code></span>`
+        : ''
 
       return `
         <label class="featured-item">
-          <input type="checkbox" class="featured-check" data-id="${entryId}" ${checked} ${hasEntryId ? '' : 'disabled'} />
+          <input type="checkbox" class="featured-check" data-id="${entryId}" ${checked} />
           <button
             type="button"
             class="featured-item__name featured-item__name-button"
@@ -553,7 +551,7 @@
             ${safeName}
           </button>
           ${safeNote ? `<span class="featured-item__note">— ${safeNote}</span>` : ``}
-          ${entryIdHtml}
+          ${idHtml}
         </label>
       `
 
