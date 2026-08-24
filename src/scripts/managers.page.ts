@@ -538,7 +538,7 @@
         : ''
 
       return `
-        <label class="featured-item">
+        <div class="featured-item">
           <input type="checkbox" class="featured-check" data-id="${entryId}" ${checked} />
           <button
             type="button"
@@ -550,7 +550,7 @@
           </button>
           ${safeNote ? `<span class="featured-item__note">— ${safeNote}</span>` : ``}
           ${idHtml}
-        </label>
+        </div>
       `
 
     }).join('')
