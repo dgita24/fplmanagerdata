@@ -204,9 +204,7 @@
   const selectedFeaturedIds = new Set<number>()
   
   const featuredEntryIds = new Set<number>(
-    featuredManagers
-      .map((m) => Number(m.entryId))
-      .filter((id) => Number.isFinite(id))
+    featuredManagers.map((m) => Number(m.entryId)).filter((id) => Number.isFinite(id))
   )
 
   function syncSelectedFeaturedIdsFromDom() {
