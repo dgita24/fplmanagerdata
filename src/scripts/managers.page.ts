@@ -259,7 +259,7 @@
   }
 
   async function loadManagerHistory(entryId: number, name: string) {
-    managerHistoryTitleEl.textContent = `${name} — Season history`
+    managerHistoryTitleEl.textContent = `${name} - ${entryId} — Season history`
     managerHistoryStatusEl.textContent = 'Loading history...'
     managerHistoryListEl.innerHTML = ''
     openManagerHistorySheet()
