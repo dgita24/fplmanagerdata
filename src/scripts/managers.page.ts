@@ -79,7 +79,7 @@
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching saved manager IDs:', error)
-        return parseTextareaIds()
+        return Array.from(savedManagerIdsState)
       }
 
       if (data?.manager_ids && Array.isArray(data.manager_ids)) {
@@ -91,7 +91,7 @@
       return []
     } catch (e) {
       console.error('Error fetching saved manager IDs:', e)
-      return parseTextareaIds()
+      return Array.from(savedManagerIdsState)
     }
   }
 
