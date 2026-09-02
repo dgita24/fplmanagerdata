@@ -1378,7 +1378,7 @@
       } else if (addedCount > 0) {
         msg = `✅ ${addedCount} manager(s) added to your list. Changes saved.`
       } else if (removedCount > 0) {
-        msg = `✅ ${removedCount} manager(s) removed from your list. Changes savded.`
+        msg = `✅ ${removedCount} manager(s) removed from your list. Changes saved.`
       } else {
         msg = `No changes to apply.`
       }
