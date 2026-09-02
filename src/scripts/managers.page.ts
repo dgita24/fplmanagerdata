@@ -21,6 +21,7 @@
 
   let currentUser: any = null
   let isEditing = false
+  let savedManagerIdsState = new Set<number>()
 
   async function checkAuth() {
     const { user } = await awaitAuthReady()
@@ -50,10 +51,16 @@
         return
       }
 
-      if (data && data.manager_ids) {
-        textarea.value = data.manager_ids.join('\n')
+      if (data && Array.isArray(data.manager_ids)) {
+        const cleaned = data.manager_ids
+          .map((id: any) => Number(id))
+          .filter((id: number) => Number.isFinite(id))
+
+        savedManagerIdsState = new Set<number>(cleaned)
+        textarea.value = cleaned.join('\n')
         updateCount()
       } else {
+        savedManagerIdsState = new Set<number>()
         textarea.value = ''
         updateCount()
       }
@@ -134,7 +141,8 @@
 
         if (cleanupError) throw cleanupError
       }
-
+      
+      savedManagerIdsState = new Set<number>(ids)
       return true
     } catch (e) {
       console.error('Error saving manager IDs:', e)
@@ -1011,7 +1019,7 @@
     }
 
     if (managerIdsToRemove.length > 0) {
-      const currentIds = parseTextareaIds()
+      const currentIds = Array.from(savedManagerIdsState)
       const updatedIds = currentIds.filter((id) => !managerIdsToRemove.includes(id))
       textarea.value = updatedIds.join('\n')
       updateCount()
@@ -1182,7 +1190,7 @@
 
   async function updateStandingsBannerAndWarnings() {
     syncActiveSelectedEntryIdsFromDom()
-    const currentManagerIds = new Set<number>(parseTextareaIds())
+    const currentManagerIds = new Set<number>(savedManagerIdsState)
 
     const selected = [...activeSelectedEntryIds]
     const selectedCount = selected.length
@@ -1264,7 +1272,7 @@
       const leagueEntryIdSet = new Set<number>(activeStandings.map((r) => r.entryId))
 
       // Your current saved managers (manual + featured + any previous imports)
-      const currentManagerIdSet = new Set<number>(parseTextareaIds())
+      const currentManagerIdSet = new Set<number>(savedManagerIdsState)
 
       // Find managers you already have that are in this league
       const matchesFromCurrentList = new Set<number>()
@@ -1305,7 +1313,7 @@
       applySuccessEl.textContent = ''
       syncActiveSelectedEntryIdsFromDom()
 
-      const current = new Set<number>(parseTextareaIds())
+      const current = new Set<number>(savedManagerIdsState)
 
       const leagueEntryIdSet = new Set<number>(activeStandings.map((r) => r.entryId))
       const toRemove = [...leagueEntryIdSet]
@@ -1427,7 +1435,7 @@
 
   applyBtn?.addEventListener('click', async () => {
     syncActiveSelectedEntryIdsFromDom()
-    const current = new Set<number>(parseTextareaIds())
+    const current = new Set<number>(savedManagerIdsState)
     const leagueEntryIdSet = new Set<number>(activeStandings.map((r) => r.entryId))
     const toRemove = [...leagueEntryIdSet]
       .filter((id) => current.has(id) && !activeSelectedEntryIds.has(id))
