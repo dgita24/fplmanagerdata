@@ -613,9 +613,9 @@
     void updateFeaturedActions()
   }
 
-  featuredOpenBtn?.addEventListener('click', () => {
+  featuredOpenBtn?.addEventListener('click', async () => {
     selectedFeaturedIds.clear()
-    const current = new Set(parseTextareaIds())
+    const current = new Set<number>(await fetchSavedManagerIds())
     featuredEntryIds.forEach((id) => {
       if (current.has(id)) selectedFeaturedIds.add(id)
     })
