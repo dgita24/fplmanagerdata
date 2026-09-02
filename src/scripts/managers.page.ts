@@ -62,6 +62,32 @@
     }
   }
 
+  async function fetchSavedManagerIds(): Promise<number[]> {
+    try {
+      const { data, error } = await supabase
+        .from('user_manager_lists')
+        .select('manager_ids')
+        .eq('user_id', currentUser.id)
+        .single()
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching saved manager IDs:', error)
+        return parseTextareaIds()
+      }
+
+      if (data?.manager_ids && Array.isArray(data.manager_ids)) {
+        return data.manager_ids
+          .map((id: any) => Number(id))
+          .filter((id: number) => Number.isFinite(id))
+      }
+
+      return []
+    } catch (e) {
+      console.error('Error fetching saved manager IDs:', e)
+      return parseTextareaIds()
+    }
+  }
+
   async function saveManagerIds(ids: number[]) {
     try {
       const { data: existing } = await supabase
@@ -502,8 +528,8 @@
     renderManagerSourcesList()
   })
 
-  function updateFeaturedActions() {
-    const current = new Set(parseTextareaIds())
+  async function updateFeaturedActions() {
+    const current = new Set<number>(await fetchSavedManagerIds())
     const toRemove = [...featuredEntryIds].filter((id) => current.has(id) && !selectedFeaturedIds.has(id))
     const toAdd = [...selectedFeaturedIds].filter((id) => !current.has(id))
     const hasDelta = toRemove.length > 0 || toAdd.length > 0
@@ -563,7 +589,7 @@
         if (cb.checked) selectedFeaturedIds.add(id)
         else selectedFeaturedIds.delete(id)
 
-        updateFeaturedActions()
+        void updateFeaturedActions()
       })
     })
 
@@ -584,7 +610,7 @@
   function clearFeaturedSelection() {
     selectedFeaturedIds.clear()
     featuredListEl.querySelectorAll<HTMLInputElement>('input.featured-check').forEach(cb => { cb.checked = false })
-    updateFeaturedActions()
+    void updateFeaturedActions()
   }
 
   featuredOpenBtn?.addEventListener('click', () => {
@@ -597,7 +623,7 @@
     renderFeaturedList()
     featuredStatusEl.textContent = ''
     openFeaturedSheet()
-    updateFeaturedActions()
+    void updateFeaturedActions()
   })
 
   featuredCloseBtn?.addEventListener('click', () => closeFeaturedSheet())
@@ -617,7 +643,8 @@
 
     if (!isEditing) setEditMode(true)
 
-    const current = new Set(parseTextareaIds())
+    const savedIds = await fetchSavedManagerIds()
+    const current = new Set<number>(savedIds)
     const toRemove = [...featuredEntryIds].filter((id) => current.has(id) && !selectedFeaturedIds.has(id))
     const toAdd = [...selectedFeaturedIds].filter((id) => !current.has(id))
 
@@ -660,9 +687,9 @@
     featuredStatusEl.textContent = msg
     status.innerHTML = `<p class='status ${msg.startsWith('✅') ? 'status--success' : 'status--warning'}'>${msg}</p>`
 
-    updateFeaturedActions()
+    void updateFeaturedActions()
   })
-  updateFeaturedActions()
+  void updateFeaturedActions()
 
   // =========================
   // League import
