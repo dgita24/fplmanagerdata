@@ -30,7 +30,7 @@
       currentUser = user
       loadingDiv.style.display = 'none'
       authCheckDiv.style.display = 'block'
-      loadManagerIds()
+      await loadManagerIds()
       setupManagerLeagueImport({ supabase, currentUser, loadSavedLeagues })
     } else {
       loadingDiv.style.display = 'none'
