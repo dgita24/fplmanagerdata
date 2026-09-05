@@ -272,17 +272,17 @@ export function initGWPointsModal(modalId = 'gw-points-modal') {
     `;
 
     sortedHistory.forEach(gw => {
-      const opponent = gw.opponent_team_short || gw.opponent_team || '—';
-      const wasHome = gw.was_home;
-      // Format: 3-letter code (H) or (A)
+      const round = Number(gw?.round) || 0;
+      const opponent = gw?.opponent_team_short || gw?.opponent_team || '—';
+      const wasHome = !!gw?.was_home;
       const opponentStr = `${opponent} ${wasHome ? '(H)' : '(A)'}`;
-      const minutes = gw.minutes || 0;
-      const points = gw.total_points || 0;
+      const minutes = Number(gw?.minutes) || 0;
+      const points = Number(gw?.total_points) || 0;
       const pointsClass = points > 0 ? 'points-positive' : (points < 0 ? 'points-negative' : '');
-      
+
       tableHTML += `
         <tr>
-          <td class="gw-col">${gw.round}</td>
+          <td class="gw-col">${round}</td>
           <td class="opp-col">${opponentStr}</td>
           <td class="mins-col">${minutes}</td>
           <td class="pts-col ${pointsClass}">${points}</td>
