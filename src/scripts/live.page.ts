@@ -907,6 +907,30 @@ const managerDataCache = new Map<string, any>();
     });
   }
 
+  async function getHistoricPlayerComputed(playerId: number, gw: number) {
+    const summaryRes = await fetch(`/api/fpl/element-summary/${playerId}/?v=${Date.now()}`, {
+      cache: "no-store"
+    });
+
+    if (!summaryRes.ok) {
+      throw new Error(`Failed to load historic points for player ${playerId}`);
+    }
+
+    const summary = await summaryRes.json();
+    const historyRows = Array.isArray(summary?.history) ? summary.history : [];
+
+    const gwRows = historyRows.filter((row: any) => Number(row?.round) === Number(gw));
+    const totalPoints = gwRows.reduce((sum: number, row: any) => sum + (Number(row?.total_points) || 0), 0);
+    const minutes = gwRows.reduce((sum: number, row: any) => sum + (Number(row?.minutes) || 0), 0);
+
+    return {
+      summary,
+      gwRows,
+      minutes,
+      status: "Fin",
+      liveTotal: totalPoints
+    };
+  }
   async function mapWithConcurrency<T, R>(
     items: T[],
     limit: number,
@@ -1045,20 +1069,10 @@ const managerDataCache = new Map<string, any>();
           liveTotal = computed.liveTotal;
         } else {
           try {
-            const summaryRes = await fetch(`/api/fpl/element-summary/${Number(p.element)}/?v=${Date.now()}`, {
-              cache: "no-store"
-            });
-            if (summaryRes.ok) {
-              const summary = await summaryRes.json();
-              const historyRows = Array.isArray(summary?.history) ? summary.history : [];
-              const gwRow = historyRows.find((row: any) => Number(row?.round) === Number(gw));
-
-              if (gwRow) {
-                minutes = Number(gwRow.minutes) || 0;
-                status = "Fin";
-                liveTotal = Number(gwRow.total_points) || 0;
-              }
-            }
+            const historic = await getHistoricPlayerComputed(Number(p.element), gw);
+            minutes = historic.minutes;
+            status = "Fin";
+            liveTotal = historic.liveTotal;
           } catch (e) {
             console.warn(`Failed to load historic points for player ${p.element} GW${gw}`, e);
           }
@@ -1643,10 +1657,28 @@ function buildBreakdownRows(
     }
 
     const teamInfo = teamCache.get(player.team);
-    const fixtures = getPlayerFixtures(player.team);
+    const fixtures =
+      Number(gw) === Number(latestGW)
+        ? getPlayerFixtures(player.team)
+        : [];
+
     const { started, finished, finishedProvisional } = getTeamGwStatusLocal(player.team, gw);
     const isFinished = finished || finishedProvisional;
-    const computed = getPlayerLiveComputedLocal(playerId, player.team, gw);
+    let computed = getPlayerLiveComputedLocal(playerId, player.team, gw);
+
+    if (Number(gw) !== Number(latestGW)) {
+      try {
+        const historic = await getHistoricPlayerComputed(playerId, gw);
+        computed = {
+          ...computed,
+          minutes: historic.minutes,
+          status: historic.status,
+          liveTotal: historic.liveTotal
+        };
+      } catch (e) {
+        console.warn(`Failed to load historic player modal summary for player ${playerId} GW${gw}`, e);
+      }
+    }
     const explainByFixtureId = new Map<number, any[]>();
     const historyStatsByKey = new Map<string, LiveStats>();
     try {
@@ -1725,42 +1757,65 @@ function buildBreakdownRows(
       </div>
     `;
 
-    const fixtureBlocks = fixtures.length ? fixtures : [null];
+    const historicFixtureBlocks =
+      Number(gw) === Number(latestGW)
+        ? []
+        : Array.from(historyStatsByKey.entries())
+            .filter(([key]) => key.startsWith(`${gw}:`))
+            .map(([key, stats]) => {
+              const [, opponentTeamIdStr, homeAway] = key.split(':');
+              return {
+                isHistoric: true,
+                opponentTeamId: Number(opponentTeamIdStr),
+                isHome: homeAway === 'H',
+                stats
+              };
+            });
 
-    for (const fx of fixtureBlocks) {
+    const fixtureBlocks =
+      Number(gw) === Number(latestGW)
+        ? (fixtures.length ? fixtures : [null])
+        : historicFixtureBlocks;
+
+    for (const fx of fixtureBlocks as any[]) {
       if (!fx) {
         continue;
       }
 
-      const isHome = fx.team_h === player.team;
-      const oppTeamId = isHome ? fx.team_a : fx.team_h;
+      const isHistoric = !!fx.isHistoric;
+
+      const isHome = isHistoric ? !!fx.isHome : fx.team_h === player.team;
+      const oppTeamId = isHistoric ? Number(fx.opponentTeamId) : (isHome ? fx.team_a : fx.team_h);
       const oppTeam = teamCache.get(oppTeamId);
       const opponentStr = isHome ? `vs ${oppTeam?.shortName || '???'}` : `@ ${oppTeam?.shortName || '???'}`;
 
-      const started = !!fx.started;
-      const finished = !!fx.finished;
-      const finishedProvisional = !!fx.finished_provisional;
+      const started = isHistoric ? true : !!fx.started;
+      const finished = isHistoric ? true : !!fx.finished;
+      const finishedProvisional = isHistoric ? false : !!fx.finished_provisional;
       const isFinished = finished || finishedProvisional;
 
       let scoreStr = "";
-      if (started) {
+      if (!isHistoric && started) {
         const homeScore = fx.team_h_score ?? 0;
         const awayScore = fx.team_a_score ?? 0;
         scoreStr = isHome ? `${homeScore} - ${awayScore}` : `${awayScore} - ${homeScore}`;
       }
 
-      const statusText = isFinished ? "Full Time" : (started ? "🔴 Live" : "Not Started");
-      const statusClass = isFinished ? "status-fin" : (started ? "status-live" : "status-ns");
+      const statusText = isHistoric ? "Full Time" : (isFinished ? "Full Time" : (started ? "🔴 Live" : "Not Started"));
+      const statusClass = isHistoric ? "status-fin" : (isFinished ? "status-fin" : (started ? "status-live" : "status-ns"));
 
-      const explainStatsRows = explainByFixtureId.get(Number(fx.id)) || [];
-      const fixtureKey = makeFixtureKey(Number(fx.event), Number(oppTeamId), isHome);
-      const historyStats = historyStatsByKey.get(fixtureKey);
+      const explainStatsRows = isHistoric ? [] : (explainByFixtureId.get(Number(fx.id)) || []);
+      const fixtureStats = isHistoric
+        ? (fx.stats || emptyStats)
+        : (() => {
+            const fixtureKey = makeFixtureKey(Number(fx.event), Number(oppTeamId), isHome);
+            const historyStats = historyStatsByKey.get(fixtureKey);
+            return historyStats
+              ? historyStats
+              : (explainStatsRows.length ? buildStatsFromExplain(explainStatsRows) : emptyStats);
+          })();
 
-      const fixtureStats = historyStats
-        ? historyStats
-        : (explainStatsRows.length ? buildStatsFromExplain(explainStatsRows) : emptyStats);
-
-      const fixtureProjBonus = getFixtureProjectedBonus(fx, playerId);
+      const fixtureProjBonus = isHistoric ? 0 : getFixtureProjectedBonus(fx, playerId);
 
       const breakdown = buildBreakdownRows(
         fixtureStats,
@@ -1806,7 +1861,7 @@ function buildBreakdownRows(
         `;
       }
 
-      if (!isFinished && !explainStatsRows.length && fixtureProjBonus > 0) {
+      if (!isHistoric && !isFinished && !explainStatsRows.length && fixtureProjBonus > 0) {
         html += `
           <div class="breakdown-row breakdown-row--projected">
             <span class="breakdown-label">Proj. Bonus</span>
@@ -1820,14 +1875,13 @@ function buildBreakdownRows(
           </div>
         </div>
 
-        ${renderFixtureBpsTable(fx)}
-        ${(() => {
+        ${isHistoric ? '' : renderFixtureBpsTable(fx)}
+        ${isHistoric ? '' : (() => {
           const ov = defconOverrides.get(fx.id);
           return renderFixtureDefconTable(fx, ov?.home, ov?.away);
         })()}
       `;
-    }
-
+    } 
     playerModalContent.innerHTML = html;
     const playerNameEl = playerModalContent.querySelector('.player-modal-name');
     if (playerNameEl && gwPointsModal) {
@@ -1889,12 +1943,30 @@ function buildBreakdownRows(
 
       const chipCode = chipPlayed || "None";
 
-      const picks = rawPicks.map((p: any) => {
+      const picks = await Promise.all(rawPicks.map(async (p: any) => {
         const player = playerCache.get(p.element) || { name: "Unknown", position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
         const teamInfo = teamCache.get(teamId) || { shortName: "???" as string };
 
-        const computed = getPlayerLiveComputedLocal(p.element, teamId, gw);
+        let minutes = 0;
+        let status = "NS";
+        let liveTotal = 0;
+
+        if (Number(gw) === Number(latestGW)) {
+          const computed = getPlayerLiveComputedLocal(p.element, teamId, gw);
+          minutes = computed.minutes;
+          status = computed.status;
+          liveTotal = computed.liveTotal;
+        } else {
+          try {
+          const historic = await getHistoricPlayerComputed(Number(p.element), gw);
+            minutes = historic.minutes;
+            status = "Fin";
+            liveTotal = historic.liveTotal;
+          } catch (e) {
+            console.warn(`Failed to load historic squad points for player ${p.element} GW${gw}`, e);
+          }
+        }
 
         return {
           playerId: Number(p.element),
@@ -1906,12 +1978,11 @@ function buildBreakdownRows(
           teamId,
           playingPosition: positionLabel(player.position),
           chanceOfPlayingThisRound: player.chanceOfPlayingThisRound ?? null,
-          minutes: computed.minutes,
-          status: computed.status,
-          liveTotal: computed.liveTotal
+          minutes,
+          status,
+          liveTotal
         };
-      });
-
+      }));
       const computedTeam = applyAutoSubsAndMultipliers(picks, chipCode);
  
       const finalTeam = computedTeam.map(p => ({
