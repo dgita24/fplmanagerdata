@@ -1029,31 +1029,56 @@ const managerDataCache = new Map<string, any>();
       const subOutIds = new Set<number>(rawAutoSubs.map((s: any) => Number(s.element_out)).filter(Boolean));
 
 
-      const picks = rawPicks.map((p: any) => {
-        const player = playerCache.get(p.element) || { name: "", position: 4, team: 0 };
+      const picks = await Promise.all(rawPicks.map(async (p: any) => {
+        const player = playerCache.get(p.element) || { name: "Unknown", position: 4, team: 0 };
         const teamId = Number(player.team) || 0;
+        const teamInfo = teamCache.get(teamId) || { shortName: "???" as string };
 
-        const computed = getPlayerLiveComputedLocal(p.element, teamId, gw);
+        let minutes = 0;
+        let status = "NS";
+        let liveTotal = 0;
+
+        if (Number(gw) === Number(latestGW)) {
+          const computed = getPlayerLiveComputedLocal(p.element, teamId, gw);
+          minutes = computed.minutes;
+          status = computed.status;
+          liveTotal = computed.liveTotal;
+        } else {
+          try {
+            const summaryRes = await fetch(`/api/fpl/element-summary/${Number(p.element)}/?v=${Date.now()}`, {
+              cache: "no-store"
+            });
+            if (summaryRes.ok) {
+              const summary = await summaryRes.json();
+              const historyRows = Array.isArray(summary?.history) ? summary.history : [];
+              const gwRow = historyRows.find((row: any) => Number(row?.round) === Number(gw));
+
+              if (gwRow) {
+                minutes = Number(gwRow.minutes) || 0;
+                status = "Fin";
+                liveTotal = Number(gwRow.total_points) || 0;
+              }
+            }
+          } catch (e) {
+            console.warn(`Failed to load historic points for player ${p.element} GW${gw}`, e);
+          }
+        }
 
         return {
           playerId: Number(p.element),
           position: Number(p.position),
           is_captain: !!(p.is_captain ?? p.iscaptain) || Number(p.multiplier) >= 2,
           is_vice_captain: !!(p.is_vice_captain ?? p.isvicecaptain),
-
-          web_name: player.name || "",
+          web_name: player.name || "Unknown",
+          teamShort: teamInfo.shortName,
           teamId,
           playingPosition: positionLabel(player.position),
-          availabilityStatus: player.availabilityStatus || "a",
           chanceOfPlayingThisRound: player.chanceOfPlayingThisRound ?? null,
-
-          minutes: computed.minutes,
-          status: computed.status,
-          lockedPoints: computed.locked,
-          projBonus: computed.projBonus,
-          liveTotal: computed.liveTotal
+          minutes,
+          status,
+          liveTotal
         };
-      });
+      }));
 
       const computedTeam = applyAutoSubsAndMultipliers(picks, chipCode);
 
