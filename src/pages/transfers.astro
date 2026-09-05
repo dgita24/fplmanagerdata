@@ -466,6 +466,36 @@ import Nav from "../components/Nav.astro";
       : "Select a specific GW to view the Transfer Summary";
   }
 
+  function getChipForManager(entryId, gw) {
+    const history = allHistories.find(h => String(h?.[0]?.entryId) === String(entryId));
+    if (!history) return "";
+    const row = history.find(r => Number(r.gw) === Number(gw));
+    return row?.chipPlayed || "";
+  }
+
+  async function getChipSquadDiff(managerId, gw) {
+    const picksRes = await fetch(`/api/fpl/entry/${managerId}/event/${gw}/picks`);
+    const picks = await picksRes.json();
+    const currentSquad = picks.picks?.map(p => p.element) || [];
+
+    const prevGW = Number(gw) - 1;
+    let prevSquad = [];
+    if (prevGW > 0) {
+      try {
+        const prevPicksRes = await fetch(`/api/fpl/entry/${managerId}/event/${prevGW}/picks`);
+        const prevPicks = await prevPicksRes.json();
+        prevSquad = prevPicks.picks?.map(p => p.element) || [];
+      } catch (e) {
+        console.warn("Couldn't fetch previous squad for chip diff");
+      }
+    }
+
+    return {
+      playersIn: currentSquad.filter(p => !prevSquad.includes(p)),
+      playersOut: prevSquad.filter(p => !currentSquad.includes(p)),
+    };
+  }
+
   async function showTransferSummaryModal() {
     const gw = Number(gwFilterSelect.value);
     if (!gw) return;
@@ -481,9 +511,19 @@ import Nav from "../components/Nav.astro";
         return;
       }
 
+      // Managers who played WC/FH this GW must be handled via squad-diff:
+      // their raw /transfers records reflect chip squad rebuilding
+      // (sell-everything/buy-everything), which can wrongly show a
+      // retained player (e.g. kept on FH) as sold and re-bought.
+      const chipManagerIds = ids.filter(id => {
+        const chip = getChipForManager(id, gw);
+        return chip === "WC" || chip === "FH";
+      });
+      const normalManagerIds = ids.filter(id => !chipManagerIds.includes(id));
+
       const allTransfers = [];
       await mapWithConcurrency(
-        ids,
+        normalManagerIds,
         DEFAULT_FETCH_CONCURRENCY,
         async (id) => {
           let data = transferDataCache.get(String(id));
@@ -501,7 +541,9 @@ import Nav from "../components/Nav.astro";
       );
 
       // Aggregate IN/OUT counts for the selected GW using the helper
-      const { transferredIn, transferredOut } = aggregateTransferSummary(allTransfers, gw);
+      const { transferredIn: baseIn, transferredOut: baseOut } = aggregateTransferSummary(allTransfers, gw);
+      const inCounts = new Map(baseIn.map(r => [r.playerId, r.count]));
+      const outCounts = new Map(baseOut.map(r => [r.playerId, r.count]));
 
       // Build manager name map from allHistories (array-of-arrays, one per manager)
       const managersMap = {};
@@ -519,6 +561,38 @@ import Nav from "../components/Nav.astro";
         currentPlayerManagerMap[t.element_in].in.push(mgrName);
         currentPlayerManagerMap[t.element_out].out.push(mgrName);
       }
+
+      // For WC/FH managers, compute the real transfers via squad diff
+      // instead of trusting the raw /transfers endpoint for this gameweek.
+      const chipDiffs = await mapWithConcurrency(
+        chipManagerIds,
+        DEFAULT_FETCH_CONCURRENCY,
+        async (id) => ({ id, ...(await getChipSquadDiff(id, gw)) }),
+        null
+      );
+
+      for (const diff of chipDiffs) {
+        if (!diff) continue;
+        const mgrName = managersMap[diff.id] || `Manager ${diff.id}`;
+        diff.playersIn.forEach(pid => {
+          inCounts.set(pid, (inCounts.get(pid) || 0) + 1);
+          if (!currentPlayerManagerMap[pid]) currentPlayerManagerMap[pid] = { in: [], out: [] };
+          currentPlayerManagerMap[pid].in.push(mgrName);
+        });
+        diff.playersOut.forEach(pid => {
+          outCounts.set(pid, (outCounts.get(pid) || 0) + 1);
+          if (!currentPlayerManagerMap[pid]) currentPlayerManagerMap[pid] = { in: [], out: [] };
+          currentPlayerManagerMap[pid].out.push(mgrName);
+        });
+      }
+
+      const toSortedRows = (map) =>
+        [...map.entries()]
+          .map(([playerId, count]) => ({ playerId, count }))
+          .sort((a, b) => b.count - a.count || a.playerId - b.playerId);
+
+      const transferredIn = toSortedRows(inCounts);
+      const transferredOut = toSortedRows(outCounts);
 
       function buildSummaryTable(label, rows, direction) {
         const count = rows.reduce((s, r) => s + r.count, 0);
