@@ -1159,6 +1159,7 @@ const managerDataCache = new Map<string, any>();
         managerName: `${summaryData.player_first_name || ""} ${summaryData.player_last_name || ""}`.trim(),
         teamName: summaryData.name || "",
         chipPlayed: chipCode === "None" ? "" : chipCode,
+        isTripleCaptain: chipCode === "TC",
         transferCost,
         livePointsBeforeHits,
         livePoints: liveNet,
@@ -2358,10 +2359,13 @@ function buildBreakdownRows(
     const captainRows = sorted.map(m => {
       const manager = esc(m.managerName);
       const captain = esc(m.captainName || '—');
+      const tcBadge = m.isTripleCaptain
+        ? ` <span class="badge" style="margin-left:6px;font-size:10px;padding:1px 5px;vertical-align:middle;">TC</span>`
+        : '';
       return `
       <tr>
         <td title="${manager}">${manager}</td>
-        <td title="${captain}">${captain}</td>
+        <td title="${captain}">${captain}${tcBadge}</td>
       </tr>
     `;
     }).join('');
