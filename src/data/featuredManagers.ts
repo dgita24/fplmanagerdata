@@ -268,5 +268,5 @@ export const featuredManagers: FeaturedManager[] = [
 { name: "Walter Randazzo (ITA)", entryId: 154167, note: "5yr Rank #9438 | All Time #183" },
 { name: "Joe Shanahan (IRL)", entryId: 2572, note: "5yr Rank #5841 | All Time #187" },
 { name: "Neivan Boroujerdi (SCO)", entryId: 4910419, note: "5yr Rank #1479 | All Time #98" },
-
+{ name: "FPL Raptor (ENG)", entryId: 199, note: "5yr Rank #1479 | All Time #98 | Youtube" },
 ];
