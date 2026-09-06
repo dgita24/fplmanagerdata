@@ -243,16 +243,15 @@
   )
 
   function syncSelectedFeaturedIdsFromDom() {
-    const next = new Set<number>()
     featuredListEl
       .querySelectorAll<HTMLInputElement>('input.featured-check')
       .forEach((cb) => {
         const entryId = Number(cb.dataset.id)
         if (!Number.isFinite(entryId)) return
-        if (cb.checked) next.add(entryId)
+
+        if (cb.checked) selectedFeaturedIds.add(entryId)
+        else selectedFeaturedIds.delete(entryId)
       })
-    selectedFeaturedIds.clear()
-    next.forEach((id) => selectedFeaturedIds.add(id))
   }
 
   function openFeaturedSheet() {
@@ -618,7 +617,7 @@
 
   function clearFeaturedSelection() {
     selectedFeaturedIds.clear()
-    featuredListEl.querySelectorAll<HTMLInputElement>('input.featured-check').forEach(cb => { cb.checked = false })
+    renderFeaturedList()
     void updateFeaturedActions()
   }
 
