@@ -749,17 +749,16 @@
   let standingsSearchQuery = ''
 
   function syncActiveSelectedEntryIdsFromDom() {
-    const next = new Set<number>()
     standingsListEl
       .querySelectorAll<HTMLInputElement>('input.league-check')
       .forEach((cb) => {
         const entryId = Number(cb.dataset.entryId)
         if (!Number.isFinite(entryId)) return
-        if (cb.checked) next.add(entryId)
-      })
-    activeSelectedEntryIds = next
-  }
 
+        if (cb.checked) activeSelectedEntryIds.add(entryId)
+        else activeSelectedEntryIds.delete(entryId)
+      })
+  }
   function openLeagueSheet() {
     leagueSheet.classList.add('is-open')
     leagueSheet.setAttribute('aria-hidden', 'false')
@@ -1434,7 +1433,7 @@
 
   selectNoneBtn?.addEventListener('click', async () => {
     activeSelectedEntryIds.clear()
-    standingsListEl.querySelectorAll<HTMLInputElement>('input.league-check').forEach((cb) => (cb.checked = false))
+    renderStandingsList()
     await updateStandingsBannerAndWarnings()
   })
 
