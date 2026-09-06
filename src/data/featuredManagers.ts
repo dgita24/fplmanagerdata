@@ -189,7 +189,7 @@ export const featuredManagers: FeaturedManager[] = [
 { name: "Simon T (ENG)", entryId: 79464, note: "5yr Rank #1376 | All Time #118" },
 { name: "Neivan Boroujerdi (SCO)", entryId: 4299060, note: "5yr Rank #1479 | All Time #98" },
 { name: "Sigurd Holen (NOR)", entryId: 262813, note: "5yr Rank #1529 | All Time #33" },
-{ name: "Pras United (ENG) The Wire Pod", entryId: 3315, note: "5yr Rank #1577 | All Time #60" },
+{ name: "Pras United (ENG) The FPL Wire Pod", entryId: 3315, note: "5yr Rank #1577 | All Time #60" },
 { name: "Daniel Lofts (ENG)", entryId: 11987, note: "5yr Rank #1613 | All Time #108" },
 { name: "Stephen Pritchard", entryId: 7776878, note: "5yr Rank #1633 | All Time #99" },
 { name: "James Moss (ENG)", entryId: 6532, note: "5yr Rank #1680 | All Time #165" },
