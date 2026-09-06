@@ -269,4 +269,5 @@ export const featuredManagers: FeaturedManager[] = [
 { name: "Joe Shanahan (IRL)", entryId: 2572, note: "5yr Rank #5841 | All Time #187" },
 { name: "Neivan Boroujerdi (SCO)", entryId: 4910419, note: "5yr Rank #1479 | All Time #98" },
 { name: "FPL Raptor (ENG) Youtube", entryId: 199, note: "5yr Rank #13391 | All Time #2860" },
+{ name: "FPL Matthew (ENG) Twitter", entryId: 18124 , note: "5yr Rank #1939 | All Time #29" },
 ];
