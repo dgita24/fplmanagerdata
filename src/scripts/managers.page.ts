@@ -236,7 +236,8 @@
   const managerHistorySummaryEl = document.getElementById('manager-history-summary') as HTMLElement
 
   const selectedFeaturedIds = new Set<number>()
-  
+  const featuredIdsAtSheetOpen = new Set<number>()  
+
   const featuredEntryIds = new Set<number>(
     featuredManagers.map((m) => Number(m.entryId)).filter((id) => Number.isFinite(id))
   )
@@ -538,7 +539,7 @@
 
   async function updateFeaturedActions() {
     const current = new Set<number>(await fetchSavedManagerIds())
-    const toRemove = [...featuredEntryIds].filter((id) => current.has(id) && !selectedFeaturedIds.has(id))
+    const toRemove = [...featuredIdsAtSheetOpen].filter((id) => !selectedFeaturedIds.has(id))
     const toAdd = [...selectedFeaturedIds].filter((id) => !current.has(id))
     const hasDelta = toRemove.length > 0 || toAdd.length > 0
 
@@ -623,9 +624,14 @@
 
   featuredOpenBtn?.addEventListener('click', async () => {
     selectedFeaturedIds.clear()
+    featuredIdsAtSheetOpen.clear()
+
     const current = new Set<number>(await fetchSavedManagerIds())
     featuredEntryIds.forEach((id) => {
-      if (current.has(id)) selectedFeaturedIds.add(id)
+      if (current.has(id)) {
+        selectedFeaturedIds.add(id)
+        featuredIdsAtSheetOpen.add(id)
+      }
     })
 
     renderFeaturedList()
@@ -653,7 +659,7 @@
 
     const savedIds = await fetchSavedManagerIds()
     const current = new Set<number>(savedIds)
-    const toRemove = [...featuredEntryIds].filter((id) => current.has(id) && !selectedFeaturedIds.has(id))
+    const toRemove = [...featuredIdsAtSheetOpen].filter((id) => !selectedFeaturedIds.has(id))
     const toAdd = [...selectedFeaturedIds].filter((id) => !current.has(id))
 
     const next = new Set<number>(current)
