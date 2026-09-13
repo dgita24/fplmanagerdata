@@ -284,8 +284,14 @@ const { inline = false } = Astro.props;
     sbAggError = false;
     body.innerHTML = '<div class="pe-status" id="pe-status">Loading GW stats…</div>';
     subtitle.textContent = "Loading…";
+
     try {
-      const rows = await fetchPlayerAggregates(filterVenue, filterWindow);
+      const elementTypeByPlayerId = new Map<number, number>();
+      (bootstrapData?.elements ?? []).forEach((el) => {
+        elementTypeByPlayerId.set(el.id, el.element_type);
+      });
+
+      const rows = await fetchPlayerAggregates(filterVenue, filterWindow, elementTypeByPlayerId);
       if (reqId !== sbAggReqId) return; // a newer request supersedes this one
       sbAggMap = new Map(rows.map(r => [r.player_id, r]));
     } catch (e) {
@@ -294,6 +300,7 @@ const { inline = false } = Astro.props;
       sbAggError = true;
       sbAggMap = new Map();
     }
+
     sbAggLoading = false;
     render();
   }
@@ -589,18 +596,7 @@ const { inline = false } = Astro.props;
   function getAggCols(): ColDef[] {
     const agg = (id: number) => sbAggMap.get(id);
 
-    // Compute DC window GW IDs from the Supabase aggregate window (min_gw..max_gw).
-    // This ensures DC scope matches the data window, including the current live GW.
-    const firstAggDc = sbAggMap.values().next().value as PlayerAggregate | undefined;
-    const dcWindowGWs: number[] = firstAggDc
-      ? Array.from({ length: firstAggDc.max_gw - firstAggDc.min_gw + 1 }, (_, i) => firstAggDc.min_gw + i)
-      : [];
-    const getDCForPlayer = (playerId: number): number => {
-      if (!defconLoaded) return 0;
-      let total = 0;
-      for (const gw of dcWindowGWs) total += defconByGW.get(gw)?.get(playerId) ?? 0;
-      return total;
-    };
+
 
     return [
       { key: "agg_price", label: "£",    title: "Price (£m)",
@@ -619,9 +615,9 @@ const { inline = false } = Astro.props;
       { key: "agg_a",     label: "A",    title: "Assists",
         fn: (el: BootstrapElement) => agg(el.id)?.assists ?? 0, numeric: true,
         highlight: (el: BootstrapElement) => (agg(el.id)?.assists ?? 0) > 0 },
-      { key: "agg_dc",    label: "DC",   title: `DEFCON points in window ${DEFCON_NOTE}`,
-        fn: (el: BootstrapElement) => getDCForPlayer(el.id), numeric: true,
-        highlight: (el: BootstrapElement) => getDCForPlayer(el.id) > 0 },
+      { key: "agg_dc",    label: "DC",   title: "DEFCON points in selected GW window",
+        fn: (el: BootstrapElement) => agg(el.id)?.defcon_points ?? 0, numeric: true,
+        highlight: (el: BootstrapElement) => (agg(el.id)?.defcon_points ?? 0) > 0 },
       { key: "agg_cs",    label: "CS",   title: "Clean sheets",
         fn: (el: BootstrapElement) => agg(el.id)?.clean_sheets ?? 0, numeric: true },
       { key: "agg_bon",   label: "Bon",  title: "Bonus points",
