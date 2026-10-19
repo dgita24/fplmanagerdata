@@ -104,6 +104,46 @@ import Layout from "../layouts/Layout.astro";
             </div>
             <div id="transfers-export-status" class="status" style="display: none; margin-top: var(--space-2);"></div>
           </div>
+
+          <div class="private-export-card">
+            <h3 class="private-export-title">Manager Player Group Ownership</h3>
+            <p class="auth-hint" style="margin-bottom: var(--space-2);">
+              Search and select players, then export managers who own all/any selected players.
+            </p>
+
+            <div class="control" style="margin-bottom: var(--space-2);">
+              <label class="label" for="owners-player-search">Search and add players</label>
+              <input
+                id="owners-player-search"
+                class="input"
+                type="text"
+                placeholder="Type player name (e.g. Palmer)"
+                autocomplete="off"
+              />
+              <div id="owners-player-results" class="player-search-results"></div>
+            </div>
+
+            <div class="control" style="margin-bottom: var(--space-2);">
+              <label class="label">Selected players</label>
+              <div id="owners-selected-players" class="selected-player-chips"></div>
+            </div>
+
+            <div class="control" style="margin-bottom: var(--space-2);">
+              <label class="label" for="owners-filter-mode">Match mode</label>
+              <select id="owners-filter-mode" class="input">
+                <option value="all" selected>Own ALL selected players (AND)</option>
+                <option value="any">Own ANY selected player (OR)</option>
+              </select>
+            </div>
+
+            <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+              <button type="button" id="owners-export-download" class="btn btn--primary">Download CSV</button>
+              <button type="button" id="owners-export-copy" class="btn btn--neutral">Copy JSON</button>
+              <button type="button" id="owners-export-preview-btn" class="btn btn--neutral">Refresh Preview</button>
+            </div>
+            <div id="owners-export-status" class="status" style="display: none; margin-top: var(--space-2);"></div>
+            <pre id="owners-export-preview" class="chips-export-preview"></pre>
+          </div>
         </div>
       </section>
 
@@ -241,6 +281,55 @@ import Layout from "../layouts/Layout.astro";
     font-size: var(--text-sm);
     color: var(--color-text);
   }
+
+  .player-search-results {
+    margin-top: 6px;
+    max-height: 180px;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+  }
+
+  .player-search-item {
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: transparent;
+    padding: 8px 10px;
+    cursor: pointer;
+    color: var(--color-text);
+  }
+
+  .player-search-item:hover {
+    background: var(--color-surface-alt);
+  }
+
+  .selected-player-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .selected-player-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    font-size: var(--text-xs);
+  }
+
+  .selected-player-chip button {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    padding: 0;
+    line-height: 1;
+  }
 </style>
 
 <script>
@@ -261,6 +350,16 @@ import Layout from "../layouts/Layout.astro";
   const transfersExportDownloadBtn = document.getElementById('transfers-export-download') as HTMLButtonElement
   const transfersExportCopyBtn = document.getElementById('transfers-export-copy') as HTMLButtonElement
   const transfersExportStatus = document.getElementById('transfers-export-status') as HTMLElement
+
+  const ownersPlayerSearchInput = document.getElementById('owners-player-search') as HTMLInputElement
+  const ownersPlayerResults = document.getElementById('owners-player-results') as HTMLElement
+  const ownersSelectedPlayersEl = document.getElementById('owners-selected-players') as HTMLElement
+  const ownersFilterModeSelect = document.getElementById('owners-filter-mode') as HTMLSelectElement
+  const ownersExportDownloadBtn = document.getElementById('owners-export-download') as HTMLButtonElement
+  const ownersExportCopyBtn = document.getElementById('owners-export-copy') as HTMLButtonElement
+  const ownersExportPreviewBtn = document.getElementById('owners-export-preview-btn') as HTMLButtonElement
+  const ownersExportStatus = document.getElementById('owners-export-status') as HTMLElement
+  const ownersExportPreview = document.getElementById('owners-export-preview') as HTMLElement
 
   type ChipExportManager = {
     entryId: number
@@ -285,15 +384,55 @@ import Layout from "../layouts/Layout.astro";
     rows?: unknown[]
   }
 
-  const PREVIEW_MANAGER_COUNT = 12
+  type OwnersResponse = {
+    generated_at: string
+    gameweek: number
+    filter_mode: 'all' | 'any'
+    manager_count_scanned: number
+    selected_players: Array<{ id: number; web_name: string; full_name: string }>
+    unresolved_names?: string[]
+    match_count: number
+    matching_managers: Array<{
+      entry_id: number
+      manager_name: string
+      team_name: string
+      owns_all_selected_players: boolean
+      matched_player_ids: number[]
+      matched_player_names: string[]
+    }>
+    owners_by_player: Array<{
+      player_id: number
+      player_name: string
+      owners: Array<{ entry_id: number; manager_name: string; team_name: string }>
+    }>
+  }
 
+  type BootstrapPlayer = {
+    id: number
+    web_name?: string
+    first_name?: string
+    second_name?: string
+    team?: number
+  }
+
+  const PREVIEW_MANAGER_COUNT = 12
   let chipExportPayload: ChipExportResponse | null = null
+  let ownersPayload: OwnersResponse | null = null
+  let bootstrapPlayers: BootstrapPlayer[] = []
+  const selectedPlayerMap = new Map<number, BootstrapPlayer>()
 
   function setChipExportStatus(message: string, type: 'success' | 'error' | 'warning') {
     if (!chipsExportStatus) return
     chipsExportStatus.className = `status status--${type}`
     chipsExportStatus.textContent = message
     chipsExportStatus.style.display = 'block'
+  }
+
+  function setOwnersStatus(message: string, type: 'success' | 'error' | 'warning') {
+    if (!ownersExportStatus) return
+    ownersExportStatus.className = `status status--${type}`
+    ownersExportStatus.textContent = message
+    ownersExportStatus.style.display = 'block'
   }
 
   async function getSessionToken(): Promise<string | null> {
@@ -324,6 +463,158 @@ import Layout from "../layouts/Layout.astro";
     el.style.display = 'block'
   }
 
+  function playerDisplayName(p: BootstrapPlayer): string {
+    const full = `${p.first_name || ''} ${p.second_name || ''}`.trim()
+    return full ? `${p.web_name || full} (${full})` : (p.web_name || `Player ${p.id}`)
+  }
+
+  async function loadPlayersForPicker() {
+    const res = await fetch('/api/fpl/bootstrap-static', { cache: 'no-store' })
+    if (!res.ok) throw new Error('Failed to load players')
+    const data = await res.json()
+    const els = Array.isArray(data?.elements) ? data.elements : []
+    bootstrapPlayers = els
+      .map((e: any) => ({
+        id: Number(e?.id),
+        web_name: e?.web_name,
+        first_name: e?.first_name,
+        second_name: e?.second_name,
+        team: Number(e?.team),
+      }))
+      .filter((p: BootstrapPlayer) => Number.isFinite(p.id))
+  }
+
+  function renderSelectedPlayers() {
+    if (!ownersSelectedPlayersEl) return
+    const selected = [...selectedPlayerMap.values()]
+    if (selected.length === 0) {
+      ownersSelectedPlayersEl.innerHTML = `<span class="auth-hint">No players selected.</span>`
+      return
+    }
+
+    ownersSelectedPlayersEl.innerHTML = selected.map((p) => `
+      <span class="selected-player-chip">
+        ${playerDisplayName(p)}
+        <button type="button" data-remove-player-id="${p.id}" aria-label="Remove ${playerDisplayName(p)}">✕</button>
+      </span>
+    `).join('')
+
+    ownersSelectedPlayersEl.querySelectorAll<HTMLButtonElement>('button[data-remove-player-id]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.dataset.removePlayerId)
+        selectedPlayerMap.delete(id)
+        renderSelectedPlayers()
+      })
+    })
+  }
+
+  function renderPlayerSearchResults(query: string) {
+    if (!ownersPlayerResults) return
+    const q = query.trim().toLowerCase()
+    if (!q) {
+      ownersPlayerResults.innerHTML = ''
+      return
+    }
+
+    const matches = bootstrapPlayers
+      .filter((p) => {
+        const full = `${p.first_name || ''} ${p.second_name || ''}`.trim().toLowerCase()
+        const web = (p.web_name || '').toLowerCase()
+        return web.includes(q) || full.includes(q)
+      })
+      .filter((p) => !selectedPlayerMap.has(p.id))
+      .slice(0, 20)
+
+    if (matches.length === 0) {
+      ownersPlayerResults.innerHTML = `<div class="auth-hint" style="padding:8px 10px;">No matches</div>`
+      return
+    }
+
+    ownersPlayerResults.innerHTML = matches.map((p) => `
+      <button type="button" class="player-search-item" data-player-id="${p.id}">
+        ${playerDisplayName(p)}
+      </button>
+    `).join('')
+
+    ownersPlayerResults.querySelectorAll<HTMLButtonElement>('button[data-player-id]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.dataset.playerId)
+        const player = bootstrapPlayers.find((x) => x.id === id)
+        if (!player) return
+        selectedPlayerMap.set(player.id, player)
+        ownersPlayerSearchInput.value = ''
+        ownersPlayerResults.innerHTML = ''
+        renderSelectedPlayers()
+      })
+    })
+  }
+
+  function buildOwnersQuery(): string | null {
+    const selectedIds = [...selectedPlayerMap.keys()]
+    if (selectedIds.length === 0) return null
+
+    const mode = ownersFilterModeSelect?.value === 'any' ? 'any' : 'all'
+    const params = new URLSearchParams()
+    params.set('player_ids', selectedIds.join(','))
+    params.set('mode', mode)
+    return params.toString()
+  }
+
+  async function fetchOwnersExport(format: 'json' | 'csv'): Promise<Response> {
+    const token = await getSessionToken()
+    if (!token) throw new Error('No session token')
+
+    const qs = buildOwnersQuery()
+    if (!qs) throw new Error('Please select at least one player.')
+
+    const extra = format === 'csv' ? '&format=csv' : ''
+    return fetch(`/api/private/manager-player-group-owners?${qs}${extra}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+  }
+
+  async function refreshOwnersPreview() {
+    try {
+      const qs = buildOwnersQuery()
+      if (!qs) {
+        setOwnersStatus('Select at least one player first.', 'warning')
+        ownersExportPreview.textContent = ''
+        ownersPayload = null
+        return
+      }
+
+      setOwnersStatus('Loading ownership matches...', 'warning')
+      const res = await fetchOwnersExport('json')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setOwnersStatus(err?.error || 'Failed to load ownership export.', 'error')
+        ownersExportPreview.textContent = ''
+        ownersPayload = null
+        return
+      }
+
+      ownersPayload = await res.json() as OwnersResponse
+      const preview = {
+        gameweek: ownersPayload.gameweek,
+        filter_mode: ownersPayload.filter_mode,
+        selected_players: ownersPayload.selected_players,
+        unresolved_names: ownersPayload.unresolved_names || [],
+        match_count: ownersPayload.match_count,
+        matching_managers_preview: ownersPayload.matching_managers.slice(0, PREVIEW_MANAGER_COUNT),
+      }
+
+      ownersExportPreview.textContent = JSON.stringify(preview, null, 2)
+      setOwnersStatus(`Loaded ${ownersPayload.match_count} matching managers.`, 'success')
+    } catch (error) {
+      console.error('[account] owners preview failed', error)
+      setOwnersStatus((error as Error)?.message || 'Failed to load ownership export.', 'error')
+      ownersExportPreview.textContent = ''
+      ownersPayload = null
+    }
+  }
+
   async function init() {
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -334,6 +625,14 @@ import Layout from "../layouts/Layout.astro";
 
     if (currentEmailEl) currentEmailEl.textContent = user.email ?? ''
     loggedIn.style.display = 'block'
+
+    try {
+      await loadPlayersForPicker()
+      renderSelectedPlayers()
+    } catch (e) {
+      console.error('[account] failed to load player picker data', e)
+      setOwnersStatus('Could not load player list for search.', 'error')
+    }
 
     try {
       const res = await fetchPrivateChipExport('json')
@@ -362,6 +661,17 @@ import Layout from "../layouts/Layout.astro";
   }
 
   init()
+
+  ownersPlayerSearchInput?.addEventListener('input', () => {
+    renderPlayerSearchResults(ownersPlayerSearchInput.value)
+  })
+
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement
+    if (!target.closest('#owners-player-search') && !target.closest('#owners-player-results')) {
+      if (ownersPlayerResults) ownersPlayerResults.innerHTML = ''
+    }
+  })
 
   // --- Update Email ---
   const emailForm = document.getElementById('email-form') as HTMLFormElement
@@ -566,5 +876,57 @@ import Layout from "../layouts/Layout.astro";
       transfersExportStatus,
       'No manager transfer rows found.'
     )
+  })
+
+  ownersExportPreviewBtn?.addEventListener('click', async () => {
+    await refreshOwnersPreview()
+  })
+
+  ownersExportCopyBtn?.addEventListener('click', async () => {
+    if (!ownersPayload) {
+      await refreshOwnersPreview()
+      if (!ownersPayload) return
+    }
+
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(ownersPayload, null, 2))
+      setOwnersStatus(`Copied JSON export (${ownersPayload.match_count} matches).`, 'success')
+    } catch (error) {
+      console.error('[account] owners JSON copy failed', error)
+      setOwnersStatus('Failed to copy JSON export.', 'error')
+    }
+  })
+
+  ownersExportDownloadBtn?.addEventListener('click', async () => {
+    try {
+      const qs = buildOwnersQuery()
+      if (!qs) {
+        setOwnersStatus('Select at least one player first.', 'warning')
+        return
+      }
+
+      setOwnersStatus('Preparing ownership CSV...', 'warning')
+      const res = await fetchOwnersExport('csv')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setOwnersStatus(err?.error || 'Failed to generate CSV export.', 'error')
+        return
+      }
+
+      const csv = await res.text()
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = 'manager-player-group-owners.csv'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+      setOwnersStatus('CSV download started.', 'success')
+    } catch (error) {
+      console.error('[account] owners CSV export failed', error)
+      setOwnersStatus((error as Error)?.message || 'Failed to generate CSV export.', 'error')
+    }
   })
 </script>
