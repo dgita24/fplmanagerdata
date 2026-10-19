@@ -144,6 +144,39 @@ import Layout from "../layouts/Layout.astro";
             <div id="owners-export-status" class="status" style="display: none; margin-top: var(--space-2);"></div>
             <pre id="owners-export-preview" class="chips-export-preview"></pre>
           </div>
+
+          <div class="private-export-card">
+            <h3 class="private-export-title">Managers by Club Player Count</h3>
+            <p class="auth-hint" style="margin-bottom: var(--space-2);">
+              Which managers own 1, 2 or 3 players from a chosen club?
+            </p>
+            <div class="control" style="margin-bottom: var(--space-2);">
+              <label class="label" for="club-select">Club</label>
+              <select id="club-select" class="input"></select>
+            </div>
+            <div class="control" style="margin-bottom: var(--space-2);">
+              <label class="label" for="club-count">Number of players</label>
+              <select id="club-count" class="input">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3" selected>3</option>
+              </select>
+            </div>
+            <div class="control" style="margin-bottom: var(--space-2);">
+              <label class="label" for="club-mode">Match</label>
+              <select id="club-mode" class="input">
+                <option value="exact" selected>Exactly this many</option>
+                <option value="atleast">At least this many</option>
+              </select>
+            </div>
+            <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+              <button type="button" id="club-export-download" class="btn btn--primary">Download CSV</button>
+              <button type="button" id="club-export-copy" class="btn btn--neutral">Copy JSON</button>
+              <button type="button" id="club-export-preview-btn" class="btn btn--neutral">Refresh Preview</button>
+            </div>
+            <div id="club-export-status" class="status" style="display: none; margin-top: var(--space-2);"></div>
+            <pre id="club-export-preview" class="chips-export-preview"></pre>
+          </div>
         </div>
       </section>
 
@@ -361,6 +394,16 @@ import Layout from "../layouts/Layout.astro";
   const ownersExportStatus = document.getElementById('owners-export-status') as HTMLElement
   const ownersExportPreview = document.getElementById('owners-export-preview') as HTMLElement
 
+  const clubSelect = document.getElementById('club-select') as HTMLSelectElement
+  const clubCountSelect = document.getElementById('club-count') as HTMLSelectElement
+  const clubModeSelect = document.getElementById('club-mode') as HTMLSelectElement
+  const clubDownloadBtn = document.getElementById('club-export-download') as HTMLButtonElement
+  const clubCopyBtn = document.getElementById('club-export-copy') as HTMLButtonElement
+  const clubPreviewBtn = document.getElementById('club-export-preview-btn') as HTMLButtonElement
+  const clubStatus = document.getElementById('club-export-status') as HTMLElement
+  const clubPreview = document.getElementById('club-export-preview') as HTMLElement
+  let clubPayload: any = null
+
   type ChipExportManager = {
     entryId: number
     managerName: string
@@ -472,6 +515,14 @@ import Layout from "../layouts/Layout.astro";
     const res = await fetch('/api/fpl/bootstrap-static', { cache: 'no-store' })
     if (!res.ok) throw new Error('Failed to load players')
     const data = await res.json()
+
+    const teams = Array.isArray(data?.teams) ? data.teams : []
+    clubSelect.innerHTML = teams
+      .slice()
+      .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)))
+      .map((t: any) => `<option value="${t.id}">${t.name}</option>`)
+      .join('')
+
     const els = Array.isArray(data?.elements) ? data.elements : []
     bootstrapPlayers = els
       .map((e: any) => ({
@@ -927,6 +978,72 @@ import Layout from "../layouts/Layout.astro";
     } catch (error) {
       console.error('[account] owners CSV export failed', error)
       setOwnersStatus((error as Error)?.message || 'Failed to generate CSV export.', 'error')
+    }
+  })
+
+  // --- Club player count export ---
+  function clubQuery(extra = ''): string {
+    const p = new URLSearchParams({
+      team_id: clubSelect.value,
+      count: clubCountSelect.value,
+      mode: clubModeSelect.value,
+    })
+    return `/api/private/manager-club-ownership?${p.toString()}${extra}`
+  }
+
+  async function fetchClub(extra = ''): Promise<Response> {
+    const token = await getSessionToken()
+    if (!token) throw new Error('No session token')
+    return fetch(clubQuery(extra), { headers: { Authorization: `Bearer ${token}` } })
+  }
+
+  async function refreshClubPreview() {
+    try {
+      setExportStatus(clubStatus, 'Loading...', 'warning')
+      const res = await fetchClub()
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setExportStatus(clubStatus, err?.error || 'Failed to load export.', 'error')
+        return
+      }
+      clubPayload = await res.json()
+      clubPreview.textContent = JSON.stringify(clubPayload.rows.slice(0, 12), null, 2)
+      setExportStatus(clubStatus, `${clubPayload.match_count} matching managers.`, 'success')
+    } catch (e) {
+      console.error('[account] club preview failed', e)
+      setExportStatus(clubStatus, 'Failed to load export.', 'error')
+    }
+  }
+
+  clubPreviewBtn?.addEventListener('click', refreshClubPreview)
+
+  clubCopyBtn?.addEventListener('click', async () => {
+    await refreshClubPreview()
+    if (!clubPayload) return
+    await navigator.clipboard.writeText(JSON.stringify(clubPayload, null, 2))
+    setExportStatus(clubStatus, `Copied JSON (${clubPayload.match_count} managers).`, 'success')
+  })
+
+  clubDownloadBtn?.addEventListener('click', async () => {
+    try {
+      setExportStatus(clubStatus, 'Preparing CSV...', 'warning')
+      const res = await fetchClub('&format=csv')
+      if (!res.ok) {
+        setExportStatus(clubStatus, 'Failed to generate CSV.', 'error')
+        return
+      }
+      const blob = new Blob([await res.text()], { type: 'text/csv;charset=utf-8' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = 'manager-club-ownership.csv'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(link.href)
+      setExportStatus(clubStatus, 'CSV download started.', 'success')
+    } catch (e) {
+      console.error('[account] club CSV failed', e)
+      setExportStatus(clubStatus, 'Failed to generate CSV.', 'error')
     }
   })
 </script>
