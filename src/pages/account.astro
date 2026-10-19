@@ -108,7 +108,7 @@ import Layout from "../layouts/Layout.astro";
           <div class="private-export-card">
             <h3 class="private-export-title">Manager Player Group Ownership</h3>
             <p class="auth-hint" style="margin-bottom: var(--space-2);">
-              Search and select players, then export managers who own all/any selected players.
+              Search and select players to see which managers own all/any of them this gameweek.
             </p>
 
             <div class="control" style="margin-bottom: var(--space-2);">
@@ -139,10 +139,10 @@ import Layout from "../layouts/Layout.astro";
             <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
               <button type="button" id="owners-export-download" class="btn btn--primary">Download CSV</button>
               <button type="button" id="owners-export-copy" class="btn btn--neutral">Copy JSON</button>
-              <button type="button" id="owners-export-preview-btn" class="btn btn--neutral">Refresh Preview</button>
+              <button type="button" id="owners-export-preview-btn" class="btn btn--neutral">Refresh Squads</button>
             </div>
             <div id="owners-export-status" class="status" style="display: none; margin-top: var(--space-2);"></div>
-            <pre id="owners-export-preview" class="chips-export-preview"></pre>
+            <div id="owners-export-table" class="table-scroll"></div>
           </div>
 
           <div class="private-export-card">
@@ -172,10 +172,10 @@ import Layout from "../layouts/Layout.astro";
             <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
               <button type="button" id="club-export-download" class="btn btn--primary">Download CSV</button>
               <button type="button" id="club-export-copy" class="btn btn--neutral">Copy JSON</button>
-              <button type="button" id="club-export-preview-btn" class="btn btn--neutral">Refresh Preview</button>
+              <button type="button" id="club-export-preview-btn" class="btn btn--neutral">Show / Refresh</button>
             </div>
             <div id="club-export-status" class="status" style="display: none; margin-top: var(--space-2);"></div>
-            <pre id="club-export-preview" class="chips-export-preview"></pre>
+            <div id="club-export-table" class="table-scroll"></div>
           </div>
         </div>
       </section>
@@ -363,10 +363,57 @@ import Layout from "../layouts/Layout.astro";
     padding: 0;
     line-height: 1;
   }
+
+  .table-scroll {
+    margin-top: var(--space-3);
+    max-height: 360px;
+    overflow: auto;
+  }
+
+  .table-scroll:empty {
+    display: none;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-xs);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+  }
+
+  .data-table th,
+  .data-table td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: top;
+  }
+
+  .data-table th {
+    position: sticky;
+    top: 0;
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    font-weight: 600;
+  }
+
+  .data-table td {
+    color: var(--color-text-secondary);
+  }
 </style>
 
 <script>
   import { supabase } from '../lib/supabase.ts'
+  import {
+    loadSquads,
+    matchOwners,
+    matchClub,
+    toCsv,
+    escapeHtml,
+    type LoadResult,
+    type TableRow,
+  } from '../lib/managerSquads.ts'
 
   const notLoggedIn = document.getElementById('not-logged-in') as HTMLElement
   const loggedIn = document.getElementById('logged-in') as HTMLElement
@@ -392,7 +439,7 @@ import Layout from "../layouts/Layout.astro";
   const ownersExportCopyBtn = document.getElementById('owners-export-copy') as HTMLButtonElement
   const ownersExportPreviewBtn = document.getElementById('owners-export-preview-btn') as HTMLButtonElement
   const ownersExportStatus = document.getElementById('owners-export-status') as HTMLElement
-  const ownersExportPreview = document.getElementById('owners-export-preview') as HTMLElement
+  const ownersExportTable = document.getElementById('owners-export-table') as HTMLElement
 
   const clubSelect = document.getElementById('club-select') as HTMLSelectElement
   const clubCountSelect = document.getElementById('club-count') as HTMLSelectElement
@@ -401,8 +448,7 @@ import Layout from "../layouts/Layout.astro";
   const clubCopyBtn = document.getElementById('club-export-copy') as HTMLButtonElement
   const clubPreviewBtn = document.getElementById('club-export-preview-btn') as HTMLButtonElement
   const clubStatus = document.getElementById('club-export-status') as HTMLElement
-  const clubPreview = document.getElementById('club-export-preview') as HTMLElement
-  let clubPayload: any = null
+  const clubTable = document.getElementById('club-export-table') as HTMLElement
 
   type ChipExportManager = {
     entryId: number
@@ -427,29 +473,6 @@ import Layout from "../layouts/Layout.astro";
     rows?: unknown[]
   }
 
-  type OwnersResponse = {
-    generated_at: string
-    gameweek: number
-    filter_mode: 'all' | 'any'
-    manager_count_scanned: number
-    selected_players: Array<{ id: number; web_name: string; full_name: string }>
-    unresolved_names?: string[]
-    match_count: number
-    matching_managers: Array<{
-      entry_id: number
-      manager_name: string
-      team_name: string
-      owns_all_selected_players: boolean
-      matched_player_ids: number[]
-      matched_player_names: string[]
-    }>
-    owners_by_player: Array<{
-      player_id: number
-      player_name: string
-      owners: Array<{ entry_id: number; manager_name: string; team_name: string }>
-    }>
-  }
-
   type BootstrapPlayer = {
     id: number
     web_name?: string
@@ -459,23 +482,43 @@ import Layout from "../layouts/Layout.astro";
   }
 
   const PREVIEW_MANAGER_COUNT = 12
+  const SQUADS_MAX_AGE_MS = 5 * 60 * 1000
+
   let chipExportPayload: ChipExportResponse | null = null
-  let ownersPayload: OwnersResponse | null = null
   let bootstrapPlayers: BootstrapPlayer[] = []
+  let teamNameById = new Map<number, string>()
+  let currentGw = 0
   const selectedPlayerMap = new Map<number, BootstrapPlayer>()
 
-  function setChipExportStatus(message: string, type: 'success' | 'error' | 'warning') {
+  // Client-side squads cache (shared by the owners + club tools)
+  let squadsCache: LoadResult | null = null
+  let squadsLoading: Promise<LoadResult> | null = null
+
+  // Latest computed result rows (used for table, CSV and JSON copy)
+  let ownersRows: TableRow[] = []
+  let clubRows: TableRow[] = []
+
+  type StatusType = 'success' | 'error' | 'warning'
+
+  function setChipExportStatus(message: string, type: StatusType) {
     if (!chipsExportStatus) return
     chipsExportStatus.className = `status status--${type}`
     chipsExportStatus.textContent = message
     chipsExportStatus.style.display = 'block'
   }
 
-  function setOwnersStatus(message: string, type: 'success' | 'error' | 'warning') {
+  function setOwnersStatus(message: string, type: StatusType) {
     if (!ownersExportStatus) return
     ownersExportStatus.className = `status status--${type}`
     ownersExportStatus.textContent = message
     ownersExportStatus.style.display = 'block'
+  }
+
+  function setExportStatus(el: HTMLElement | null, message: string, type: StatusType) {
+    if (!el) return
+    el.className = `status status--${type}`
+    el.textContent = message
+    el.style.display = 'block'
   }
 
   async function getSessionToken(): Promise<string | null> {
@@ -499,11 +542,33 @@ import Layout from "../layouts/Layout.astro";
     })
   }
 
-  function setExportStatus(el: HTMLElement | null, message: string, type: 'success' | 'error' | 'warning') {
-    if (!el) return
-    el.className = `status status--${type}`
-    el.textContent = message
-    el.style.display = 'block'
+  function downloadCsv(csv: string, filename: string) {
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const objectUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(objectUrl)
+  }
+
+  function renderTable(container: HTMLElement, columns: Array<{ key: string; label: string }>, rows: TableRow[]) {
+    if (rows.length === 0) {
+      container.innerHTML = `<div class="auth-hint">No matching managers.</div>`
+      return
+    }
+    container.innerHTML = `
+      <table class="data-table">
+        <thead><tr>${columns.map((c) => `<th>${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${rows
+            .map((r) => `<tr>${columns.map((c) => `<td>${escapeHtml(r[c.key] ?? '')}</td>`).join('')}</tr>`)
+            .join('')}
+        </tbody>
+      </table>
+    `
   }
 
   function playerDisplayName(p: BootstrapPlayer): string {
@@ -517,11 +582,16 @@ import Layout from "../layouts/Layout.astro";
     const data = await res.json()
 
     const teams = Array.isArray(data?.teams) ? data.teams : []
+    teamNameById = new Map<number, string>(teams.map((t: any) => [Number(t.id), String(t.name)]))
     clubSelect.innerHTML = teams
       .slice()
       .sort((a: any, b: any) => String(a.name).localeCompare(String(b.name)))
-      .map((t: any) => `<option value="${t.id}">${t.name}</option>`)
+      .map((t: any) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`)
       .join('')
+
+    const events = Array.isArray(data?.events) ? data.events : []
+    const ev = events.find((e: any) => e?.is_current) || events.find((e: any) => e?.is_next)
+    currentGw = Number(ev?.id) || 0
 
     const els = Array.isArray(data?.elements) ? data.elements : []
     bootstrapPlayers = els
@@ -535,6 +605,121 @@ import Layout from "../layouts/Layout.astro";
       .filter((p: BootstrapPlayer) => Number.isFinite(p.id))
   }
 
+  // ---------------------------------------------------------------------------
+  // Shared squads loader (runs in the browser: no Cloudflare subrequest cap)
+  // ---------------------------------------------------------------------------
+  async function getManagerIds(): Promise<number[]> {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Not logged in.')
+
+    const { data, error } = await supabase
+      .from('user_manager_lists')
+      .select('manager_ids')
+      .eq('user_id', user.id)
+      .single()
+
+    if (error && error.code !== 'PGRST116') throw new Error('Could not load your manager list.')
+
+    return (Array.isArray(data?.manager_ids) ? data.manager_ids : [])
+      .map((id: unknown) => Number(id))
+      .filter((id: number) => Number.isInteger(id) && id > 0)
+  }
+
+  async function ensureSquads(
+    statusFn: (message: string, type: StatusType) => void,
+    force = false
+  ): Promise<LoadResult> {
+    if (!currentGw) throw new Error('Current gameweek is unknown. Reload the page.')
+
+    const fresh = squadsCache && Date.now() - squadsCache.loadedAt < SQUADS_MAX_AGE_MS && squadsCache.gw === currentGw
+    if (squadsCache && fresh && !force) return squadsCache
+
+    if (!squadsLoading) {
+      const ids = await getManagerIds()
+      if (ids.length === 0) throw new Error('Your manager list is empty.')
+
+      squadsLoading = loadSquads(ids, currentGw, {
+        onProgress: (done, total) => statusFn(`Loading squads ${done}/${total}...`, 'warning'),
+      }).finally(() => {
+        squadsLoading = null
+      })
+    }
+
+    squadsCache = await squadsLoading
+    return squadsCache
+  }
+
+  function failureSuffix(res: LoadResult): string {
+    return res.failed.length
+      ? ` WARNING: ${res.failed.length} manager(s) failed to load (IDs: ${res.failed.join(', ')}). Click refresh to retry.`
+      : ''
+  }
+
+  // ---------------------------------------------------------------------------
+  // Player group ownership
+  // ---------------------------------------------------------------------------
+  function clearOwnersResults() {
+    ownersRows = []
+    ownersExportTable.innerHTML = ''
+  }
+
+  function computeOwners(res: LoadResult) {
+    const selectedIds = [...selectedPlayerMap.keys()]
+    const mode = ownersFilterModeSelect?.value === 'any' ? 'any' : 'all'
+    const names = new Map(bootstrapPlayers.map((p) => [p.id, p.web_name || `Player ${p.id}`]))
+
+    ownersRows = matchOwners(res.squads, selectedIds, mode).map((m) => ({
+      entry_id: m.entryId,
+      manager_name: m.managerName,
+      team_name: m.teamName,
+      matched_players: m.matched.map((id) => names.get(id) || `Player ${id}`).join('; '),
+      selected_players: selectedIds.map((id) => names.get(id) || `Player ${id}`).join('; '),
+    }))
+
+    renderTable(
+      ownersExportTable,
+      [
+        { key: 'manager_name', label: 'Manager' },
+        { key: 'team_name', label: 'Team' },
+        { key: 'matched_players', label: 'Matched' },
+      ],
+      ownersRows
+    )
+
+    setOwnersStatus(
+      `GW${res.gw}: ${ownersRows.length} of ${res.squads.length} loaded managers match (${mode === 'any' ? 'ANY' : 'ALL'}).` +
+        failureSuffix(res),
+      res.failed.length ? 'warning' : 'success'
+    )
+  }
+
+  async function refreshOwners(force = false): Promise<boolean> {
+    if (selectedPlayerMap.size === 0) {
+      clearOwnersResults()
+      setOwnersStatus('Select at least one player first.', 'warning')
+      return false
+    }
+    try {
+      setOwnersStatus('Loading squads...', 'warning')
+      const res = await ensureSquads(setOwnersStatus, force)
+      computeOwners(res)
+      return true
+    } catch (error) {
+      console.error('[account] owners refresh failed', error)
+      setOwnersStatus((error as Error)?.message || 'Failed to load ownership data.', 'error')
+      return false
+    }
+  }
+
+  // Re-match instantly from the cache when the selection or mode changes
+  function recomputeOwnersFromCache() {
+    if (selectedPlayerMap.size === 0) {
+      clearOwnersResults()
+      return
+    }
+    if (squadsCache) computeOwners(squadsCache)
+  }
+
   function renderSelectedPlayers() {
     if (!ownersSelectedPlayersEl) return
     const selected = [...selectedPlayerMap.values()]
@@ -545,8 +730,8 @@ import Layout from "../layouts/Layout.astro";
 
     ownersSelectedPlayersEl.innerHTML = selected.map((p) => `
       <span class="selected-player-chip">
-        ${playerDisplayName(p)}
-        <button type="button" data-remove-player-id="${p.id}" aria-label="Remove ${playerDisplayName(p)}">✕</button>
+        ${escapeHtml(playerDisplayName(p))}
+        <button type="button" data-remove-player-id="${p.id}" aria-label="Remove ${escapeHtml(playerDisplayName(p))}">✕</button>
       </span>
     `).join('')
 
@@ -555,6 +740,7 @@ import Layout from "../layouts/Layout.astro";
         const id = Number(btn.dataset.removePlayerId)
         selectedPlayerMap.delete(id)
         renderSelectedPlayers()
+        recomputeOwnersFromCache()
       })
     })
   }
@@ -583,12 +769,12 @@ import Layout from "../layouts/Layout.astro";
 
     ownersPlayerResults.innerHTML = matches.map((p) => `
       <button type="button" class="player-search-item" data-player-id="${p.id}">
-        ${playerDisplayName(p)}
+        ${escapeHtml(playerDisplayName(p))}
       </button>
     `).join('')
 
     ownersPlayerResults.querySelectorAll<HTMLButtonElement>('button[data-player-id]').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const id = Number(btn.dataset.playerId)
         const player = bootstrapPlayers.find((x) => x.id === id)
         if (!player) return
@@ -596,76 +782,77 @@ import Layout from "../layouts/Layout.astro";
         ownersPlayerSearchInput.value = ''
         ownersPlayerResults.innerHTML = ''
         renderSelectedPlayers()
+        // First selection triggers the squads load; later ones are instant.
+        await refreshOwners(false)
       })
     })
   }
 
-  function buildOwnersQuery(): string | null {
-    const selectedIds = [...selectedPlayerMap.keys()]
-    if (selectedIds.length === 0) return null
+  // ---------------------------------------------------------------------------
+  // Club player count
+  // ---------------------------------------------------------------------------
+  function computeClub(res: LoadResult) {
+    const teamId = Number(clubSelect.value)
+    const count = Number(clubCountSelect.value)
+    const mode = clubModeSelect.value === 'atleast' ? 'atleast' : 'exact'
+    const clubName = teamNameById.get(teamId) || `Team ${teamId}`
+    const webNames = new Map(bootstrapPlayers.map((p) => [p.id, p.web_name || `Player ${p.id}`]))
+    const clubPlayerIds = new Set(bootstrapPlayers.filter((p) => p.team === teamId).map((p) => p.id))
 
-    const mode = ownersFilterModeSelect?.value === 'any' ? 'any' : 'all'
-    const params = new URLSearchParams()
-    params.set('player_ids', selectedIds.join(','))
-    params.set('mode', mode)
-    return params.toString()
+    clubRows = matchClub(res.squads, clubPlayerIds, count, mode)
+      .map((m) => ({
+        entry_id: m.entryId,
+        manager_name: m.managerName,
+        team_name: m.teamName,
+        club: clubName,
+        club_player_count: m.matched.length,
+        players: m.matched.map((id) => webNames.get(id) || `Player ${id}`).sort().join('; '),
+      }))
+      .sort(
+        (a, b) =>
+          (b.club_player_count as number) - (a.club_player_count as number) ||
+          String(a.manager_name).localeCompare(String(b.manager_name))
+      )
+
+    renderTable(
+      clubTable,
+      [
+        { key: 'manager_name', label: 'Manager' },
+        { key: 'team_name', label: 'Team' },
+        { key: 'club_player_count', label: '#' },
+        { key: 'players', label: 'Players' },
+      ],
+      clubRows
+    )
+
+    setExportStatus(
+      clubStatus,
+      `GW${res.gw}: ${clubRows.length} of ${res.squads.length} loaded managers match (${clubName}, ${mode === 'atleast' ? 'at least' : 'exactly'} ${count}).` +
+        failureSuffix(res),
+      res.failed.length ? 'warning' : 'success'
+    )
   }
 
-  async function fetchOwnersExport(format: 'json' | 'csv'): Promise<Response> {
-    const token = await getSessionToken()
-    if (!token) throw new Error('No session token')
-
-    const qs = buildOwnersQuery()
-    if (!qs) throw new Error('Please select at least one player.')
-
-    const extra = format === 'csv' ? '&format=csv' : ''
-    return fetch(`/api/private/manager-player-group-owners?${qs}${extra}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-  }
-
-  async function refreshOwnersPreview() {
+  async function refreshClub(force = false): Promise<boolean> {
     try {
-      const qs = buildOwnersQuery()
-      if (!qs) {
-        setOwnersStatus('Select at least one player first.', 'warning')
-        ownersExportPreview.textContent = ''
-        ownersPayload = null
-        return
-      }
-
-      setOwnersStatus('Loading ownership matches...', 'warning')
-      const res = await fetchOwnersExport('json')
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        setOwnersStatus(err?.error || 'Failed to load ownership export.', 'error')
-        ownersExportPreview.textContent = ''
-        ownersPayload = null
-        return
-      }
-
-      ownersPayload = await res.json() as OwnersResponse
-      const preview = {
-        gameweek: ownersPayload.gameweek,
-        filter_mode: ownersPayload.filter_mode,
-        selected_players: ownersPayload.selected_players,
-        unresolved_names: ownersPayload.unresolved_names || [],
-        match_count: ownersPayload.match_count,
-        matching_managers_preview: ownersPayload.matching_managers.slice(0, PREVIEW_MANAGER_COUNT),
-      }
-
-      ownersExportPreview.textContent = JSON.stringify(preview, null, 2)
-      setOwnersStatus(`Loaded ${ownersPayload.match_count} matching managers.`, 'success')
+      setExportStatus(clubStatus, 'Loading squads...', 'warning')
+      const res = await ensureSquads((m, t) => setExportStatus(clubStatus, m, t), force)
+      computeClub(res)
+      return true
     } catch (error) {
-      console.error('[account] owners preview failed', error)
-      setOwnersStatus((error as Error)?.message || 'Failed to load ownership export.', 'error')
-      ownersExportPreview.textContent = ''
-      ownersPayload = null
+      console.error('[account] club refresh failed', error)
+      setExportStatus(clubStatus, (error as Error)?.message || 'Failed to load club data.', 'error')
+      return false
     }
   }
 
+  function recomputeClubFromCache() {
+    if (squadsCache && clubTable.innerHTML) computeClub(squadsCache)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------------
   async function init() {
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -816,16 +1003,7 @@ import Layout from "../layouts/Layout.astro";
         return
       }
 
-      const csv = await res.text()
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-      const objectUrl = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = objectUrl
-      link.download = 'chip-gameweeks-current-season.csv'
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(objectUrl)
+      downloadCsv(await res.text(), 'chip-gameweeks-current-season.csv')
       setChipExportStatus('CSV download started.', 'success')
     } catch (error) {
       console.error('[account] chip CSV export failed', error)
@@ -856,16 +1034,7 @@ import Layout from "../layouts/Layout.astro";
         return
       }
 
-      const csv = await res.text()
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-      const objectUrl = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = objectUrl
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(objectUrl)
+      downloadCsv(await res.text(), filename)
       setExportStatus(statusEl, 'CSV download started.', 'success')
     } catch (error) {
       console.error('[account] CSV export failed', error)
@@ -929,19 +1098,19 @@ import Layout from "../layouts/Layout.astro";
     )
   })
 
+  // --- Owners buttons (all client-side) ---
+  ownersFilterModeSelect?.addEventListener('change', recomputeOwnersFromCache)
+
   ownersExportPreviewBtn?.addEventListener('click', async () => {
-    await refreshOwnersPreview()
+    // Force a fresh fetch of every manager's squad
+    await refreshOwners(true)
   })
 
   ownersExportCopyBtn?.addEventListener('click', async () => {
-    if (!ownersPayload) {
-      await refreshOwnersPreview()
-      if (!ownersPayload) return
-    }
-
+    if (!(await refreshOwners(false))) return
     try {
-      await navigator.clipboard.writeText(JSON.stringify(ownersPayload, null, 2))
-      setOwnersStatus(`Copied JSON export (${ownersPayload.match_count} matches).`, 'success')
+      await navigator.clipboard.writeText(JSON.stringify(ownersRows, null, 2))
+      setOwnersStatus(`Copied JSON export (${ownersRows.length} matches).`, 'success')
     } catch (error) {
       console.error('[account] owners JSON copy failed', error)
       setOwnersStatus('Failed to copy JSON export.', 'error')
@@ -949,101 +1118,42 @@ import Layout from "../layouts/Layout.astro";
   })
 
   ownersExportDownloadBtn?.addEventListener('click', async () => {
-    try {
-      const qs = buildOwnersQuery()
-      if (!qs) {
-        setOwnersStatus('Select at least one player first.', 'warning')
-        return
-      }
-
-      setOwnersStatus('Preparing ownership CSV...', 'warning')
-      const res = await fetchOwnersExport('csv')
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        setOwnersStatus(err?.error || 'Failed to generate CSV export.', 'error')
-        return
-      }
-
-      const csv = await res.text()
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-      const objectUrl = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = objectUrl
-      link.download = 'manager-player-group-owners.csv'
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(objectUrl)
-      setOwnersStatus('CSV download started.', 'success')
-    } catch (error) {
-      console.error('[account] owners CSV export failed', error)
-      setOwnersStatus((error as Error)?.message || 'Failed to generate CSV export.', 'error')
+    if (!(await refreshOwners(false))) return
+    if (ownersRows.length === 0) {
+      setOwnersStatus('No matching managers to export.', 'warning')
+      return
     }
+    downloadCsv(toCsv(ownersRows), 'manager-player-group-owners.csv')
+    setOwnersStatus(`CSV download started (${ownersRows.length} managers).`, 'success')
   })
 
-  // --- Club player count export ---
-  function clubQuery(extra = ''): string {
-    const p = new URLSearchParams({
-      team_id: clubSelect.value,
-      count: clubCountSelect.value,
-      mode: clubModeSelect.value,
-    })
-    return `/api/private/manager-club-ownership?${p.toString()}${extra}`
-  }
+  // --- Club buttons (all client-side) ---
+  clubSelect?.addEventListener('change', recomputeClubFromCache)
+  clubCountSelect?.addEventListener('change', recomputeClubFromCache)
+  clubModeSelect?.addEventListener('change', recomputeClubFromCache)
 
-  async function fetchClub(extra = ''): Promise<Response> {
-    const token = await getSessionToken()
-    if (!token) throw new Error('No session token')
-    return fetch(clubQuery(extra), { headers: { Authorization: `Bearer ${token}` } })
-  }
-
-  async function refreshClubPreview() {
-    try {
-      setExportStatus(clubStatus, 'Loading...', 'warning')
-      const res = await fetchClub()
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        setExportStatus(clubStatus, err?.error || 'Failed to load export.', 'error')
-        return
-      }
-      clubPayload = await res.json()
-      clubPreview.textContent = JSON.stringify(clubPayload.rows.slice(0, 12), null, 2)
-      setExportStatus(clubStatus, `${clubPayload.match_count} matching managers.`, 'success')
-    } catch (e) {
-      console.error('[account] club preview failed', e)
-      setExportStatus(clubStatus, 'Failed to load export.', 'error')
-    }
-  }
-
-  clubPreviewBtn?.addEventListener('click', refreshClubPreview)
+  clubPreviewBtn?.addEventListener('click', async () => {
+    await refreshClub(true)
+  })
 
   clubCopyBtn?.addEventListener('click', async () => {
-    await refreshClubPreview()
-    if (!clubPayload) return
-    await navigator.clipboard.writeText(JSON.stringify(clubPayload, null, 2))
-    setExportStatus(clubStatus, `Copied JSON (${clubPayload.match_count} managers).`, 'success')
+    if (!(await refreshClub(false))) return
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(clubRows, null, 2))
+      setExportStatus(clubStatus, `Copied JSON (${clubRows.length} managers).`, 'success')
+    } catch (e) {
+      console.error('[account] club JSON copy failed', e)
+      setExportStatus(clubStatus, 'Failed to copy JSON.', 'error')
+    }
   })
 
   clubDownloadBtn?.addEventListener('click', async () => {
-    try {
-      setExportStatus(clubStatus, 'Preparing CSV...', 'warning')
-      const res = await fetchClub('&format=csv')
-      if (!res.ok) {
-        setExportStatus(clubStatus, 'Failed to generate CSV.', 'error')
-        return
-      }
-      const blob = new Blob([await res.text()], { type: 'text/csv;charset=utf-8' })
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = 'manager-club-ownership.csv'
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(link.href)
-      setExportStatus(clubStatus, 'CSV download started.', 'success')
-    } catch (e) {
-      console.error('[account] club CSV failed', e)
-      setExportStatus(clubStatus, 'Failed to generate CSV.', 'error')
+    if (!(await refreshClub(false))) return
+    if (clubRows.length === 0) {
+      setExportStatus(clubStatus, 'No matching managers to export.', 'warning')
+      return
     }
+    downloadCsv(toCsv(clubRows), 'manager-club-ownership.csv')
+    setExportStatus(clubStatus, `CSV download started (${clubRows.length} managers).`, 'success')
   })
 </script>
