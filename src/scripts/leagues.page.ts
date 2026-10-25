@@ -291,6 +291,73 @@ async function mapWithConcurrency<T, R>(
 }
 
 // ==============================
+// Favourites
+// ==============================
+
+let myManagerIds = new Set<number>();
+let favouriteIds = new Set<number>();
+
+async function loadManagerLists(): Promise<void> {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supabase
+      .from('user_manager_lists')
+      .select('manager_ids, favourite_manager_ids')
+      .eq('user_id', currentUser.id)
+      .single();
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error loading manager lists:', error);
+      return;
+    }
+    myManagerIds = new Set<number>((data?.manager_ids || []).map(Number).filter(Number.isFinite));
+    favouriteIds = new Set<number>((data?.favourite_manager_ids || []).map(Number).filter(Number.isFinite));
+  } catch (e) {
+    console.error('loadManagerLists error:', e);
+  }
+}
+
+async function saveFavouritesToSupabase(ids: number[]) {
+  if (!currentUser) return;
+  const { error } = await supabase
+    .from('user_manager_lists')
+    .update({ favourite_manager_ids: ids, updated_at: new Date().toISOString() })
+    .eq('user_id', currentUser.id);
+  if (error) console.error('Error saving favourites:', error);
+}
+
+function showNotInManagersListPopup(managerName: string) {
+  const goToManagers = window.confirm(
+    `${managerName} isn't in your Managers list yet.\n\n` +
+    `Add them on the Managers page first, then you can make them a favourite.\n\n` +
+    `Go to the Managers page now?`
+  );
+  if (goToManagers) window.location.href = '/managers';
+}
+
+async function toggleFavouriteFromModal(entryId: number, managerName: string, btn: HTMLElement) {
+  // Re-read the lists so a manager just added on the Managers page is picked up
+  await loadManagerLists();
+
+  const isFav = favouriteIds.has(entryId);
+
+  // Removing is always allowed. Adding requires the manager to be in the list.
+  if (!isFav && !myManagerIds.has(entryId)) {
+    showNotInManagersListPopup(managerName);
+    return;
+  }
+
+  if (isFav) favouriteIds.delete(entryId);
+  else favouriteIds.add(entryId);
+
+  const nowFav = favouriteIds.has(entryId);
+  btn.textContent = nowFav ? '⭐' : '☆';
+  btn.classList.toggle('fav-toggle-btn--active', nowFav);
+  btn.title = nowFav ? 'Remove from favourites' : 'Add to favourites';
+
+  await saveFavouritesToSupabase([...favouriteIds]);
+}
+
+// ==============================
 // Squad modal
 // ==============================
 
@@ -392,13 +459,20 @@ async function showSquadModal(entryId: number, managerName: string, teamName: st
       return h;
     };
 
+    const isFav = favouriteIds.has(entryId);
+
     let html = `
-      <div style="padding-right:40px;">
-        <h2 class="modal-title">
+      <div style="display:flex;align-items:center;gap:var(--space-2);padding-right:40px;">
+        <h2 class="modal-title" style="flex:1;min-width:0;">
           ${escapeHtml(managerName)}
           ${chipPlayed ? `<span class="badge" style="margin-left:8px;">${chipEmoji} ${escapeHtml(chipPlayed)}</span>` : ''}
           <div class="squad-modal-entryid">ID ${entryId}</div>
         </h2>
+        <button type="button" class="fav-toggle-btn ${isFav ? 'fav-toggle-btn--active' : ''}"
+          data-entry-id="${entryId}"
+          title="${isFav ? 'Remove from favourites' : 'Add to favourites'}">
+          ${isFav ? '⭐' : '☆'}
+        </button>
       </div>
       <p class="text-muted" style="margin-bottom:var(--space-3);">
         ${escapeHtml(teamName)} · GW${gw} · <span class="text-success font-bold">${totalPts} pts</span>
@@ -501,6 +575,12 @@ async function showSquadModal(entryId: number, managerName: string, teamName: st
     `;
 
     squadModalContent.innerHTML = html;
+
+    const favBtn = squadModalContent.querySelector<HTMLElement>('.fav-toggle-btn');
+    favBtn?.addEventListener('click', () => {
+      const id = parseInt(favBtn.dataset.entryId || '0');
+      if (id) void toggleFavouriteFromModal(id, managerName, favBtn);
+    });
 
     squadModalContent.querySelectorAll<HTMLElement>('.player-name-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1394,6 +1474,7 @@ async function checkAuth() {
   leaguesLoadingEl.style.display = 'none';
   if (user) {
     currentUser = user;
+    await loadManagerLists();
     leaguesAuthContentEl.style.display = 'flex';
     // Restore previously saved entry ID and auto-load
     const savedId = await loadSavedEntryId();
