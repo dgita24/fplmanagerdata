@@ -202,6 +202,19 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     color: var(--color-primary);
   }
 
+  :global(.ownership-player-heading) {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  :global(.starting-xi-count) {
+    color: var(--color-success);
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+
 </style>
 
 <script>
@@ -797,6 +810,9 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     const totalManagers = managersForModal.length;
     const notOwnedBy = managersForModal.filter(m => !filteredOwnedByList.includes(m.id)).sort((a, b) => a.name.localeCompare(b.name));
     const ownedBySorted = managersForModal.filter(m => filteredOwnedByList.includes(m.id)).sort((a, b) => a.name.localeCompare(b.name));
+    const startingXiCount = managersForModal.filter(m =>
+      (managerPicks[m.id] || []).some(p => p.id === playerId && p.pos <= 11)
+    ).length;
     const ownershipPct = ((filteredOwnedByList.length / totalManagers) * 100).toFixed(0);
 
     const allOwn = filteredOwnedByList.length === totalManagers;
@@ -814,6 +830,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     let html = `
       <h2 class="modal-title" style="padding-right:40px;">
         <button type="button" class="player-name-modal-btn" data-player-id="${playerId}">${playerName}</button>
+        <span class="starting-xi-count" title="Managers who start this player">${startingXiCount} in starting XI</span>
       </h2>
       <p class="text-muted" style="margin-bottom:var(--space-4);">
         ${position} · ${teamName} · <span class="text-success font-bold">${ownershipPct}%</span> ownership
