@@ -263,6 +263,8 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
   let allManagers = [];
   // IDs of managers who played Free Hit in the currently selected GW.
   let freeHitManagers = new Set();
+  let managerPicks: Record<number, any[]> = {};
+  let managerBB = new Set<number>();
   let showFavouritesOnly = false;
   let favouriteIds = new Set<number>();
   const managerCountEl = document.getElementById("manager-count");
@@ -320,6 +322,8 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
       ownershipData,
       allManagers,
       freeHitManagers: Array.from(freeHitManagers),
+      managerPicks,
+      managerBB: Array.from(managerBB),
       ui: {
         gwFilter: gwFilterSelect.value || "",
         positionFilter: positionFilter.value || "",
@@ -559,7 +563,14 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
         entryId,
         managerName,
         isFreeHit,
-        picks: picksData.picks.map(p => p.element)
+        isBB: picksData.active_chip === 'bboost',
+        picks: picksData.picks.map(p => p.element),
+        squad: picksData.picks.map(p => ({
+          id: p.element,
+          pos: p.position,
+          c: p.is_captain,
+          v: p.is_vice_captain
+        }))
       };
     } catch (e) {
       console.error(`Error fetching squad for ${entryId}:`, e);
@@ -757,6 +768,29 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     playerModal.classList.add("is-open");
   }
 
+  const isStarter = (managerId: number, pid: number) => {
+    const pick = (managerPicks[managerId] || []).find(p => p.id === pid);
+    return !!pick && (pick.pos <= 11 || managerBB.has(managerId));
+  };
+
+  function renderSquadHtml(managerId: number, highlightPid: number) {
+    const squad = [...(managerPicks[managerId] || [])].sort((a, b) => a.pos - b.pos);
+    if (!squad.length) return `<p class="text-muted">Squad not available. Reload the page.</p>`;
+    const row = (p) => {
+      const info = playerCache.get(p.id) || { name: "Unknown", position: "?", team: 0 };
+      const t: any = teamCache.get(info.team) || {};
+      const badge = p.c ? " (C)" : p.v ? " (V)" : "";
+      const hl = p.id === highlightPid ? " squad-row--highlight" : "";
+      return `<li class="ownership-list-item squad-row${hl}"><span>${info.name}${badge}</span><span class="text-muted">${info.position} · ${t.short ?? ""}</span></li>`;
+    };
+    return `
+      <div class="ownership-section"><div class="ownership-section-header"><span class="ownership-section-title">Starting XI</span></div>
+        <ul class="ownership-list">${squad.filter(p => p.pos <= 11).map(row).join('')}</ul></div>
+      <div class="ownership-section"><div class="ownership-section-header"><span class="ownership-section-title">Subs</span></div>
+        <ul class="ownership-list">${squad.filter(p => p.pos > 11).map(row).join('')}</ul></div>`;
+  }
+
+
   function showOwnershipModal(playerName: string, position: string, teamName: string, ownedByList: number[], playerId: number) {
     const managersForModal = showFavouritesOnly ? allManagers.filter(m => favouriteIds.has(m.id)) : allManagers;
     const filteredOwnedByList = showFavouritesOnly ? ownedByList.filter(id => favouriteIds.has(id)) : ownedByList;
@@ -813,7 +847,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
             <span class="ownership-section-count">${ownedBySorted.length}/${totalManagers}</span>
           </div>
           <ul class="ownership-list">
-            ${ownedBySorted.map(m => `<li class="ownership-list-item ownership-list-item--owned">${nameWithFH(m)}</li>`).join('')}
+           ${ownedBySorted.map(m => `<li class="ownership-list-item ownership-list-item--owned"><button type="button" class="owner-btn ${isStarter(m.id, playerId) ? 'owner-btn--starter' : ''}" data-manager-id="${m.id}">${nameWithFH(m)}</button></li>`).join('')}
           </ul>
         </div>
 
@@ -839,6 +873,19 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
         if (pid) showPlayerModal(pid);
       });
     }
+    
+    ownershipModalContent.querySelectorAll('.owner-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mid = Number((btn as HTMLElement).dataset.managerId);
+        const mgr = allManagers.find(m => m.id === mid);
+        ownershipModalContent.innerHTML = `
+          <button type="button" class="owner-back-btn">← Back</button>
+          <h2 class="modal-title" style="padding-right:40px;">${mgr?.name ?? ''}</h2>
+          ${renderSquadHtml(mid, playerId)}`;
+        ownershipModalContent.querySelector('.owner-back-btn')?.addEventListener('click', () =>
+          showOwnershipModal(playerName, position, teamName, ownedByList, playerId));
+      });
+    });
   }
 
   function makeOwnershipTable(ownership, positionFilterValue = "", teamFilterValue = "", totalManagersOverride?: number) {
@@ -946,6 +993,8 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
 
     allManagers = [];
     freeHitManagers = new Set();
+    managerPicks = {};
+    managerBB = new Set();
     out.innerHTML = "";
     loadingStatus.textContent = `Fetching latest data...`;
 
@@ -979,6 +1028,8 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     const managerSquads = squadResults.filter((data) => data !== null);
     allManagers = managerSquads.map((data) => ({ id: Number(data.entryId), name: data.managerName }));
     freeHitManagers = new Set(managerSquads.filter((data) => data.isFreeHit).map((data) => Number(data.entryId)));
+    managerPicks = Object.fromEntries(managerSquads.map(d => [Number(d.entryId), d.squad]));
+    managerBB = new Set(managerSquads.filter(d => d.isBB).map(d => Number(d.entryId)));
 
     // Calculate ownership and render table once at the end
     ownershipData = calculateOwnership(managerSquads);
@@ -1020,6 +1071,8 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
       ownershipData = snap.ownershipData || [];
       allManagers = snap.allManagers || [];
       freeHitManagers = new Set(snap.freeHitManagers || []);
+      managerPicks = snap.managerPicks || {};
+      managerBB = new Set(snap.managerBB || []);
       latestGW = snap.latestGW || latestGW;
 
       if (typeof snap.ui?.showFavouritesOnly === "boolean") {
@@ -1075,6 +1128,8 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
       ownershipData = snap.ownershipData || [];
       allManagers = snap.allManagers || [];
       freeHitManagers = new Set(snap.freeHitManagers || []);
+      managerPicks = snap.managerPicks || {};
+      managerBB = new Set(snap.managerBB || []);
       populateClubFilter();
       renderOwnershipFromState();
       loadingStatus.textContent = "";
