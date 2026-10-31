@@ -830,7 +830,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
     let html = `
       <h2 class="modal-title" style="padding-right:40px;">
         <button type="button" class="player-name-modal-btn" data-player-id="${playerId}">${playerName}</button>
-        <span class="starting-xi-count" title="Managers who start this player">${startingXiCount} in starting XI</span>
+        <span class="starting-xi-count" title="Managers who start this player">In ${startingXiCount} Starting ${startingXiCount === 1 ? 'XI' : 'XIs'}</span>
       </h2>
       <p class="text-muted" style="margin-bottom:var(--space-4);">
         ${position} · ${teamName} · <span class="text-success font-bold">${ownershipPct}%</span> ownership
