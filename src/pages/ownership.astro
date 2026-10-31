@@ -323,6 +323,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
       allManagers,
       freeHitManagers: Array.from(freeHitManagers),
       managerPicks,
+      managerBB: Array.from(managerBB),
       ui: {
         gwFilter: gwFilterSelect.value || "",
         positionFilter: positionFilter.value || "",
@@ -571,6 +572,9 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
           v: p.is_vice_captain
         }))
       };
+    } catch (e) {
+      console.error(`Error fetching squad for ${entryId}:`, e);
+      return null;
     }
   }
 
@@ -989,6 +993,8 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
 
     allManagers = [];
     freeHitManagers = new Set();
+    managerPicks = {};
+    managerBB = new Set();
     out.innerHTML = "";
     loadingStatus.textContent = `Fetching latest data...`;
 
@@ -1018,13 +1024,12 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
       return;
     }
 
-    managerPicks = Object.fromEntries(managerSquads.map(d => [Number(d.entryId), d.squad]));
-    managerBB = new Set(managerSquads.filter(d => d.isBB).map(d => Number(d.entryId)));
-
     // Filter out nulls and update data
     const managerSquads = squadResults.filter((data) => data !== null);
     allManagers = managerSquads.map((data) => ({ id: Number(data.entryId), name: data.managerName }));
     freeHitManagers = new Set(managerSquads.filter((data) => data.isFreeHit).map((data) => Number(data.entryId)));
+    managerPicks = Object.fromEntries(managerSquads.map(d => [Number(d.entryId), d.squad]));
+    managerBB = new Set(managerSquads.filter(d => d.isBB).map(d => Number(d.entryId)));
 
     // Calculate ownership and render table once at the end
     ownershipData = calculateOwnership(managerSquads);
@@ -1067,6 +1072,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
       allManagers = snap.allManagers || [];
       freeHitManagers = new Set(snap.freeHitManagers || []);
       managerPicks = snap.managerPicks || {};
+      managerBB = new Set(snap.managerBB || []);
       latestGW = snap.latestGW || latestGW;
 
       if (typeof snap.ui?.showFavouritesOnly === "boolean") {
@@ -1123,6 +1129,7 @@ import GWPointsModal from "../components/modals/GWPointsModal.astro";
       allManagers = snap.allManagers || [];
       freeHitManagers = new Set(snap.freeHitManagers || []);
       managerPicks = snap.managerPicks || {};
+      managerBB = new Set(snap.managerBB || []);
       populateClubFilter();
       renderOwnershipFromState();
       loadingStatus.textContent = "";
