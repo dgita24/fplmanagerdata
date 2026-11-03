@@ -28,29 +28,30 @@ export interface MatchHistoryRow {
 }
 
 /**
+ * Raw defensive contribution total for a single match row.
+ *   GK (1):        0
+ *   DEF (2):       CBIT  = clearances_blocks_interceptions + tackles
+ *   MID/FWD (3,4): CBITR = CBIT + recoveries
+ */
+export function computeMatchDCRaw(row: MatchHistoryRow, elementType: number): number {
+  if (elementType === 1) return 0;
+
+  const cbit = (row.clearances_blocks_interceptions ?? 0) + (row.tackles ?? 0);
+
+  if (elementType === 2) return cbit;
+
+  return cbit + (row.recoveries ?? 0);
+}
+
+/**
  * Compute DC (DEFCON) points for a single match row.
- *
- * Rules (per fixture):
- *   GK (1):       always 0
- *   DEF (2):      CBIT = clearances_blocks_interceptions + tackles; +2 if CBIT >= 10
- *   MID/FWD (3,4): CBITR = CBIT + recoveries; +2 if CBITR >= 12
+ * +2 if raw total >= 10 (DEF) or >= 12 (MID/FWD); GK always 0.
  */
 export function computeMatchDC(row: MatchHistoryRow, elementType: number): number {
   if (elementType === 1) return 0;
 
-  const cbi = row.clearances_blocks_interceptions ?? 0;
-  const tackles = row.tackles ?? 0;
-  const recoveries = row.recoveries ?? 0;
-
-  const cbit = cbi + tackles;
-
-  if (elementType === 2) {
-    return cbit >= 10 ? 2 : 0;
-  }
-
-  // MID (3) or FWD (4)
-  const cbitr = cbit + recoveries;
-  return cbitr >= 12 ? 2 : 0;
+  const threshold = elementType === 2 ? 10 : 12;
+  return computeMatchDCRaw(row, elementType) >= threshold ? 2 : 0;
 }
 
 /**

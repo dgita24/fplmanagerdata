@@ -46,6 +46,7 @@
   import type { BootstrapTeam } from "../lib/fpl/bootstrapCache";
   import {
     computeMatchDC,
+    computeMatchDCRaw,
     filterHistoryRows,
     formatMatchDate,
     formatOpponentVenue,
@@ -363,7 +364,8 @@
           <th title="Total Points">Pts</th>
           <th title="Goals Scored">G</th>
           <th title="Assists">A</th>
-          <th title="DC Points">DC</th>
+          <th title="DEFCON points awarded">DC</th>
+          <th title="Raw defensive contribution total: CBIT for DEF, CBITR for MID/FWD">CBITr</th>
           <th title="Bonus Points">Bon</th>
           ${hasXG ? "<th>xG</th><th>xA</th>" : ""}
           <th title="Goals Conceded">GC</th>
@@ -379,6 +381,7 @@
       const score = formatScore(r.was_home, r.team_h_score, r.team_a_score);
       const date  = formatMatchDate(r.kickoff_time);
       const dc    = computeMatchDC(r, currentElementType);
+      const rawDc = computeMatchDCRaw(r, currentElementType);
 
       const gcVal  = r.goals_conceded ?? 0;
       const xgcVal = parseFloat(String(r.expected_goals_conceded ?? "0")).toFixed(2);
@@ -408,6 +411,7 @@
            <td>${gBadge}</td>
            <td>${aBadge}</td>
            <td>${dc > 0 ? `<span class="pmh-dc">${dc}</span>` : "0"}</td>
+           <td>${rawDc}</td>
            <td>${r.bonus}</td>
            ${hasXG ? `<td>${parseFloat(String(r.expected_goals ?? "0")).toFixed(2)}</td><td>${parseFloat(String(r.expected_assists ?? "0")).toFixed(2)}</td>` : ""}
            <td>${gcVal}</td>
