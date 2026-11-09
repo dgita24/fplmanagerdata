@@ -20,6 +20,7 @@ import Nav from "../components/Nav.astro";
     <div class="meta-row-wide">
       <button id="manager-count" class="badge badge-wide badge-toggle" type="button">⭐ Toggle Favourites</button>
       <button id="chips-overview-btn" class="badge badge-wide badge-toggle" type="button">🪙 Chips</button>
+      <button id="squad-value-btn" class="badge badge-wide badge-toggle" type="button">💰 Squad Value</button>
     </div>
 
     <div class="controls-inline">
@@ -111,19 +112,32 @@ import Nav from "../components/Nav.astro";
       <div id="chips-overview-modal-content"></div>
     </div>
   </div>
-</Layout>
+
+  <!-- Squad Value Modal -->
+  <div id="squad-value-modal" class="modal">
+    <div class="modal-panel modal-panel--chips-overview">
+      <button id="close-squad-value-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="squad-value-modal-content"></div>
+    </div>
+  </div>
+  </Layout>
 
 <style>
   .meta-row-wide {
     display: flex;
     gap: var(--space-2);
+    width: 100%;
   }
 
   .badge-wide {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
     justify-content: center;
     padding: var(--space-2) var(--space-3);
     text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
   }
 
   .badge-toggle {
@@ -845,6 +859,9 @@ import Nav from "../components/Nav.astro";
   const chipsOverviewModal = document.getElementById("chips-overview-modal")!;
   const chipsOverviewModalContent = document.getElementById("chips-overview-modal-content")!;
   const closeChipsOverviewModal = document.getElementById("close-chips-overview-modal")!;
+  const squadValueModal = document.getElementById("squad-value-modal")!;
+  const squadValueModalContent = document.getElementById("squad-value-modal-content")!;
+  const closeSquadValueModal = document.getElementById("close-squad-value-modal")!;
   function updateManagerCountButton() {
     if (!managerCountEl) return;
 
@@ -929,6 +946,14 @@ import Nav from "../components/Nav.astro";
 
   document.getElementById("chips-overview-btn")?.addEventListener("click", () => {
     showChipsOverviewModal();
+  });
+
+  closeSquadValueModal.addEventListener("click", () => {
+    squadValueModal.classList.remove("is-open");
+  });
+
+  document.getElementById("squad-value-btn")?.addEventListener("click", () => {
+    showSquadValueModal();
   });
 
   function populateGWSelector(currentGW: number) {
@@ -2316,6 +2341,40 @@ import Nav from "../components/Nav.astro";
 
     html += `</tbody></table></div>`;
     return html;
+  }
+
+  function showSquadValueModal() {
+    const managers = [...allManagerData].sort((a, b) =>
+      a.managerName.localeCompare(b.managerName)
+    );
+
+    const rows = managers.map((manager) => `
+      <tr>
+        <td class="col-manager">${escHtml(manager.managerName)}</td>
+        <td>${formatValue(manager.teamValue)}</td>
+        <td>${formatValue(manager.bank)}</td>
+      </tr>
+    `).join("");
+
+    squadValueModalContent.innerHTML = `
+      <h2 class="modal-title">Squad Value</h2>
+      <div class="chips-overview-wrap">
+        <table class="chips-overview-table" aria-label="Manager squad value and money in the bank">
+          <thead>
+            <tr>
+              <th class="col-manager">Manager</th>
+              <th>Squad Value</th>
+              <th>ITB</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows || `<tr><td colspan="3">No manager data loaded yet.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    squadValueModal.classList.add("is-open");
   }
 
   function showChipsOverviewModal() {
