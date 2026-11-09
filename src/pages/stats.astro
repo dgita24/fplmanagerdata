@@ -2345,7 +2345,7 @@ import Nav from "../components/Nav.astro";
 
   function showSquadValueModal() {
     const managers = [...allManagerData].sort((a, b) =>
-      a.managerName.localeCompare(b.managerName)
+      (b.teamValue + b.bank) - (a.teamValue + a.bank)
     );
 
     const rows = managers.map((manager) => `
