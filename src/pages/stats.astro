@@ -2348,7 +2348,7 @@ import Nav from "../components/Nav.astro";
       : "";
     const indicator = isSorted
       ? (chipsOverviewSortDirection === "asc" ? " ▲" : " ▼")
-      : "";
+      : " ↕";
 
     return `<th title="${title}"${ariaSort}><button type="button" class="chips-overview-sort" data-chip-sort="${key}" aria-label="Sort by ${title}">${label}${indicator}</button></th>`;
   }
