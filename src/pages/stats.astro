@@ -540,6 +540,26 @@ import Nav from "../components/Nav.astro";
     width: 45%;
   }
 
+  :global(.chips-overview-sort) {
+    background: none;
+    border: 0;
+    padding: var(--space-1);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  :global(.chips-overview-sort:hover),
+  :global(.chips-overview-sort:focus-visible) {
+    color: var(--color-text);
+  }
+
+  :global(.chips-overview-sort:focus-visible) {
+    outline: 2px solid currentColor;
+    outline-offset: 1px;
+  }
+
   :global(.chips-overview-table td) {
     padding: var(--space-1) 2px;
     border-bottom: 1px solid var(--color-border);
@@ -2273,6 +2293,66 @@ import Nav from "../components/Nav.astro";
 
   let chipsOverviewFavsOnly = false;
 
+  type ChipsOverviewSortKey = "wildcard" | "bboost" | "3xc" | "freehit";
+
+  let chipsOverviewSortKey: ChipsOverviewSortKey | null = null;
+  let chipsOverviewSortDirection: "asc" | "desc" = "desc";
+
+  function isChipsOverviewSortKey(
+    value: string | undefined
+  ): value is ChipsOverviewSortKey {
+    return value === "wildcard" ||
+      value === "bboost" ||
+      value === "3xc" ||
+      value === "freehit";
+  }
+
+  function getChipsOverviewManagers(): ManagerData[] {
+    const sortKey = chipsOverviewSortKey;
+    const direction = chipsOverviewSortDirection;
+
+    return allManagerData
+      .filter((manager) =>
+        !chipsOverviewFavsOnly || favouriteIds.has(manager.entryId)
+      )
+      .sort((a, b) => {
+        if (sortKey) {
+          const aChips = Array.isArray(a.historyData?.chips)
+            ? a.historyData.chips
+            : [];
+          const bChips = Array.isArray(b.historyData?.chips)
+            ? b.historyData.chips
+            : [];
+
+          const aUsed = aChips.some((chip) => chip.name === sortKey);
+          const bUsed = bChips.some((chip) => chip.name === sortKey);
+          const difference = Number(aUsed) - Number(bUsed);
+
+          if (difference !== 0) {
+            return direction === "asc" ? difference : -difference;
+          }
+        }
+
+        return a.managerName.localeCompare(b.managerName);
+      });
+  }
+
+  function renderChipsOverviewHeader(
+    label: string,
+    title: string,
+    key: ChipsOverviewSortKey
+  ): string {
+    const isSorted = chipsOverviewSortKey === key;
+    const ariaSort = isSorted
+      ? ` aria-sort="${chipsOverviewSortDirection === "asc" ? "ascending" : "descending"}"`
+      : "";
+    const indicator = isSorted
+      ? (chipsOverviewSortDirection === "asc" ? " ▲" : " ▼")
+      : "";
+
+    return `<th title="${title}"${ariaSort}><button type="button" class="chips-overview-sort" data-chip-sort="${key}" aria-label="Sort by ${title}">${label}${indicator}</button></th>`;
+  }
+
   function renderChipsOverviewTable(managers: typeof allManagerData) {
     let html = `
       <button type="button" class="badge badge-wide badge-toggle chips-overview-fav-toggle${chipsOverviewFavsOnly ? ' badge-toggle--active' : ''}" id="chips-overview-fav-toggle">⭐ Toggle Favourites</button>
@@ -2281,10 +2361,10 @@ import Nav from "../components/Nav.astro";
           <thead>
             <tr>
               <th class="col-manager">Manager</th>
-              <th title="Wildcard (×2 per season)">WC</th>
-              <th title="Bench Boost (×2 per season)">BB</th>
-              <th title="Triple Captain (×2 per season)">TC</th>
-              <th title="Free Hit (×2 per season)">FH</th>
+              ${renderChipsOverviewHeader("WC", "Wildcard", "wildcard")}
+              ${renderChipsOverviewHeader("BB", "Bench Boost", "bboost")}
+              ${renderChipsOverviewHeader("TC", "Triple Captain", "3xc")}
+              ${renderChipsOverviewHeader("FH", "Free Hit", "freehit")}
             </tr>
           </thead>
           <tbody>
@@ -2386,29 +2466,50 @@ import Nav from "../components/Nav.astro";
     }
 
     chipsOverviewFavsOnly = false;
+    chipsOverviewSortKey = null;
+    chipsOverviewSortDirection = "desc";
 
-    const sorted = [...allManagerData].sort((a, b) =>
-      a.managerName.localeCompare(b.managerName)
-    );
-
-    chipsOverviewModalContent.innerHTML = renderChipsOverviewTable(sorted);
+    chipsOverviewModalContent.innerHTML =
+      renderChipsOverviewTable(getChipsOverviewManagers());
     chipsOverviewModal.classList.add("is-open");
 
     if (!(chipsOverviewModalContent as any).__chipsFavToggleAttached) {
       (chipsOverviewModalContent as any).__chipsFavToggleAttached = true;
       chipsOverviewModalContent.addEventListener("click", (e) => {
         const target = e.target as HTMLElement;
+        const sortButton = target.closest<HTMLButtonElement>(
+          "button[data-chip-sort]"
+        );
+
+        if (sortButton) {
+          const key = sortButton.dataset.chipSort;
+
+          if (isChipsOverviewSortKey(key)) {
+            if (chipsOverviewSortKey === key) {
+              chipsOverviewSortDirection =
+                chipsOverviewSortDirection === "desc" ? "asc" : "desc";
+            } else {
+              chipsOverviewSortKey = key;
+              chipsOverviewSortDirection = "desc";
+            }
+
+            chipsOverviewModalContent.innerHTML =
+              renderChipsOverviewTable(getChipsOverviewManagers());
+
+            chipsOverviewModalContent
+              .querySelector<HTMLButtonElement>(
+                `button[data-chip-sort="${key}"]`
+              )
+              ?.focus();
+          }
+
+          return;
+        }
 
         if (target?.id === "chips-overview-fav-toggle") {
           chipsOverviewFavsOnly = !chipsOverviewFavsOnly;
-          const current = chipsOverviewFavsOnly
-            ? [...allManagerData]
-                .sort((a, b) => a.managerName.localeCompare(b.managerName))
-                .filter((m) => favouriteIds.has(m.entryId))
-            : [...allManagerData].sort((a, b) =>
-                a.managerName.localeCompare(b.managerName)
-              );
-          chipsOverviewModalContent.innerHTML = renderChipsOverviewTable(current);
+          chipsOverviewModalContent.innerHTML =
+            renderChipsOverviewTable(getChipsOverviewManagers());
           return;
         }
 
