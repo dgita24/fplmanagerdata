@@ -120,8 +120,10 @@ export async function GET(ctx: any) {
     return markProxy(await fetcher());
   }
 
-  // Determine current GW dynamically (fail-safe)
+  // Determine the current GW and season dynamically before using the cache.
   let currentGW: number | null = null;
+  let seasonKey: string | null = null;
+
   try {
     const bootstrapRes = await fetch('https://fantasy.premierleague.com/api/bootstrap-static/', {
       headers: { "User-Agent": "fpl-site/1.0", "Accept": "application/json" },
@@ -130,18 +132,29 @@ export async function GET(ctx: any) {
     if (bootstrapRes.ok) {
       const bootstrap = await bootstrapRes.json();
       currentGW = getCurrentGWFromBootstrap(bootstrap);
+
+      const firstEvent = Array.isArray(bootstrap?.events)
+        ? bootstrap.events.find((event: any) => event?.id === 1)
+        : null;
+      const deadline = firstEvent?.deadline_time;
+
+      if (typeof deadline === "string") {
+        const year = deadline.slice(0, 4);
+        if (/^\d{4}$/.test(year)) seasonKey = year;
+      }
     }
   } catch {
     currentGW = null;
+    seasonKey = null;
   }
 
-  if (currentGW === null) {
+  if (currentGW === null || seasonKey === null) {
     const res = await fetcher();
-    res.headers.set('X-Cache-Status', 'BYPASS_NO_GW');
+    res.headers.set('X-Cache-Status', 'BYPASS_NO_GW_OR_SEASON');
     return markProxy(res);
   }
 
-  const cacheKey = computeCacheKey(fplPath, url.search);
+  const cacheKey = `${computeCacheKey(fplPath, url.search)}:season:${seasonKey}`;
   const ttl = getTTLForPath(fplPath, url.search, currentGW);
 
   const res = await getOrSet(cacheKey, ttl, fetcher, env);
