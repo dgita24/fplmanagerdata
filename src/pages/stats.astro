@@ -1922,6 +1922,20 @@ import Nav from "../components/Nav.astro";
         throw new Error("Invalid gameweek or manager history data");
       }
 
+      if (!Array.isArray(bootstrap.elements)) {
+        throw new Error("Invalid player data");
+      }
+
+      const playerPositions = new Map<number, number>();
+      for (const player of bootstrap.elements) {
+        if (
+          typeof player.id === "number" &&
+          typeof player.element_type === "number"
+        ) {
+          playerPositions.set(player.id, player.element_type);
+        }
+      }
+
       const finalizedGameweeks = new Set<number>(
         bootstrap.events
           .filter((event: any) => event.data_checked === true)
@@ -1970,24 +1984,10 @@ import Nav from "../components/Nav.astro";
             throw new Error(`Invalid GW${gw} picks data`);
           }
 
-          // Bench Boost points count toward the manager's score.
+          // With Bench Boost, all 15 players' points already count.
           if (picksData.active_chip === "bboost") {
             return { gw, points: 0 };
           }
-
-          const subbedIn = new Set<number>(
-            picksData.automatic_subs.map((sub: any) => sub.element_in)
-          );
-          const subbedOut = new Set<number>(
-            picksData.automatic_subs.map((sub: any) => sub.element_out)
-          );
-
-          const unusedBench = picksData.picks.filter((pick: any) =>
-            pick.position > 11 &&
-            pick.multiplier === 0 &&
-            !subbedIn.has(pick.element) &&
-            !subbedOut.has(pick.element)
-          );
 
           const liveRes = await fetch(`/api/fpl/event/${gw}/live`, {
             cache: "no-store"
@@ -2003,22 +2003,124 @@ import Nav from "../components/Nav.astro";
           for (const player of liveData.elements) {
             if (
               typeof player.id === "number" &&
-              typeof player.stats?.total_points === "number"
+              typeof player.stats?.total_points === "number" &&
+              Number.isFinite(player.stats.total_points)
             ) {
               pointsByPlayer.set(player.id, player.stats.total_points);
             }
           }
 
-          let points = 0;
-          for (const pick of unusedBench) {
+          type SquadPlayer = {
+            id: number;
+            position: number;
+            points: number;
+            multiplier: number;
+          };
+
+          const squad: SquadPlayer[] = picksData.picks.map((pick: any) => {
+            const position = playerPositions.get(pick.element);
             const playerPoints = pointsByPlayer.get(pick.element);
-            if (playerPoints === undefined) {
-              throw new Error(`Missing GW${gw} points for player ${pick.element}`);
+
+            if (
+              typeof pick.element !== "number" ||
+              position === undefined ||
+              position < 1 ||
+              position > 4 ||
+              playerPoints === undefined ||
+              !Number.isInteger(pick.multiplier) ||
+              pick.multiplier < 0 ||
+              pick.multiplier > 3
+            ) {
+              throw new Error(`Invalid GW${gw} data for player ${pick.element}`);
             }
-            points += playerPoints;
+
+            return {
+              id: pick.element,
+              position,
+              points: playerPoints,
+              multiplier: pick.multiplier
+            };
+          });
+
+          if (
+            squad.length !== 15 ||
+            new Set(squad.map((player) => player.id)).size !== 15
+          ) {
+            throw new Error(`Expected 15 unique players in GW${gw}`);
           }
 
-          return { gw, points };
+          // Finalized multipliers already reflect FPL's auto-subs.
+          const actualBasePoints = squad.reduce(
+            (sum, player) => sum + (player.multiplier > 0 ? player.points : 0),
+            0
+          );
+
+          const scoringCaptains = squad.filter((player) => player.multiplier > 1);
+          if (scoringCaptains.length > 1) {
+            throw new Error(`Multiple scoring captains in GW${gw}`);
+          }
+
+          const captainId = scoringCaptains[0]?.id ?? null;
+          let bestBasePoints = -Infinity;
+
+          function chooseBestXI(
+            index: number,
+            selected: number,
+            goalkeepers: number,
+            defenders: number,
+            forwards: number,
+            sum: number,
+            hasCaptain: boolean
+          ) {
+            if (selected === 11) {
+              if (
+                goalkeepers === 1 &&
+                defenders >= 3 &&
+                forwards >= 1 &&
+                (captainId === null || hasCaptain)
+              ) {
+                bestBasePoints = Math.max(bestBasePoints, sum);
+              }
+              return;
+            }
+
+            if (
+              index === squad.length ||
+              squad.length - index < 11 - selected
+            ) {
+              return;
+            }
+
+            const player = squad[index];
+
+            chooseBestXI(
+              index + 1,
+              selected + 1,
+              goalkeepers + (player.position === 1 ? 1 : 0),
+              defenders + (player.position === 2 ? 1 : 0),
+              forwards + (player.position === 4 ? 1 : 0),
+              sum + player.points,
+              hasCaptain || player.id === captainId
+            );
+
+            chooseBestXI(
+              index + 1,
+              selected,
+              goalkeepers,
+              defenders,
+              forwards,
+              sum,
+              hasCaptain
+            );
+          }
+
+          chooseBestXI(0, 0, 0, 0, 0, 0, false);
+
+          if (!Number.isFinite(bestBasePoints)) {
+            throw new Error(`Could not find a valid best XI for GW${gw}`);
+          }
+
+          return { gw, points: bestBasePoints - actualBasePoints };
         }
       );
 
@@ -2036,16 +2138,18 @@ import Nav from "../components/Nav.astro";
       benchHistoryModalContent.innerHTML = `
         <h2 class="modal-title"></h2>
         <p class="text-muted" style="margin-bottom:1rem;">
-          Left on Bench<br>
-          <span class="text-success">Total: ${total} pts</span><br>
-          <span style="font-size:11px;">Finalized gameweeks only</span>
+          Best XI comparison<br>
+          <span class="text-success">Total difference: ${total} pts</span><br>
+          <span style="font-size:11px;">
+            Finalized gameweeks only · Actual scoring captain retained
+          </span>
         </p>
         <div class="table-container" style="max-height:50vh;overflow-y:auto;">
           <table class="data-table">
             <thead>
               <tr>
                 <th style="text-align:left;">Gameweek</th>
-                <th style="text-align:center;">Points left</th>
+                <th style="text-align:center;">Best XI difference</th>
               </tr>
             </thead>
             <tbody>
