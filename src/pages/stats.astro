@@ -2062,24 +2062,30 @@ import Nav from "../components/Nav.astro";
 
           const captainId = scoringCaptains[0]?.id ?? null;
           let bestBasePoints = -Infinity;
+          let bestXIIds: number[] = [];
 
           function chooseBestXI(
             index: number,
             selected: number,
             goalkeepers: number,
             defenders: number,
+            midfielders: number,
             forwards: number,
             sum: number,
-            hasCaptain: boolean
+            hasCaptain: boolean,
+            selectedIds: number[]
           ) {
             if (selected === 11) {
               if (
                 goalkeepers === 1 &&
                 defenders >= 3 &&
+                midfielders >= 2 &&
                 forwards >= 1 &&
-                (captainId === null || hasCaptain)
+                (captainId === null || hasCaptain) &&
+                sum > bestBasePoints
               ) {
-                bestBasePoints = Math.max(bestBasePoints, sum);
+                bestBasePoints = sum;
+                bestXIIds = [...selectedIds];
               }
               return;
             }
@@ -2098,9 +2104,11 @@ import Nav from "../components/Nav.astro";
               selected + 1,
               goalkeepers + (player.position === 1 ? 1 : 0),
               defenders + (player.position === 2 ? 1 : 0),
+              midfielders + (player.position === 3 ? 1 : 0),
               forwards + (player.position === 4 ? 1 : 0),
               sum + player.points,
-              hasCaptain || player.id === captainId
+              hasCaptain || player.id === captainId,
+              [...selectedIds, player.id]
             );
 
             chooseBestXI(
@@ -2108,19 +2116,43 @@ import Nav from "../components/Nav.astro";
               selected,
               goalkeepers,
               defenders,
+              midfielders,
               forwards,
               sum,
-              hasCaptain
+              hasCaptain,
+              selectedIds
             );
           }
 
-          chooseBestXI(0, 0, 0, 0, 0, 0, false);
+          chooseBestXI(0, 0, 0, 0, 0, 0, 0, false, []);
 
           if (!Number.isFinite(bestBasePoints)) {
             throw new Error(`Could not find a valid best XI for GW${gw}`);
           }
 
-          return { gw, points: bestBasePoints - actualBasePoints };
+          const difference = bestBasePoints - actualBasePoints;
+
+          console.groupCollapsed(`Best XI calculation: GW${gw}`);
+          console.table(
+            squad.map((player) => ({
+              name: playerCache.get(player.id)?.name ?? String(player.id),
+              position: player.position,
+              points: player.points,
+              multiplier: player.multiplier,
+              inActualXI: player.multiplier > 0,
+              inBestXI: bestXIIds.includes(player.id)
+            }))
+          );
+          console.log({
+            actualBasePoints,
+            bestBasePoints,
+            difference,
+            captainId,
+            automaticSubs: picksData.automatic_subs
+          });
+          console.groupEnd();
+
+          return { gw, points: difference };
         }
       );
 
