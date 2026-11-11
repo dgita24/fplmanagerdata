@@ -2132,26 +2132,6 @@ import Nav from "../components/Nav.astro";
 
           const difference = bestBasePoints - actualBasePoints;
 
-          console.groupCollapsed(`Best XI calculation: GW${gw}`);
-          console.table(
-            squad.map((player) => ({
-              name: playerCache.get(player.id)?.name ?? String(player.id),
-              position: player.position,
-              points: player.points,
-              multiplier: player.multiplier,
-              inActualXI: player.multiplier > 0,
-              inBestXI: bestXIIds.includes(player.id)
-            }))
-          );
-          console.log({
-            actualBasePoints,
-            bestBasePoints,
-            difference,
-            captainId,
-            automaticSubs: picksData.automatic_subs
-          });
-          console.groupEnd();
-
           return { gw, points: difference };
         }
       );
