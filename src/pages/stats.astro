@@ -105,6 +105,14 @@ import Nav from "../components/Nav.astro";
     </div>
   </div>
 
+  <!-- Left on Bench Modal -->
+  <div id="bench-history-modal" class="modal modal--nested" style="z-index:10002;">
+    <div class="modal-panel">
+      <button id="close-bench-history-modal" class="btn btn--danger btn--small modal-close" type="button">✕</button>
+      <div id="bench-history-modal-content"></div>
+    </div>
+  </div>
+
   <!-- Chips Overview Modal (opened from Chips button in meta-row-wide) -->
   <div id="chips-overview-modal" class="modal">
     <div class="modal-panel modal-panel--chips-overview">
@@ -876,6 +884,10 @@ import Nav from "../components/Nav.astro";
   const historyModal = document.getElementById("history-modal")!;
   const historyModalContent = document.getElementById("history-modal-content")!;
   const closeHistoryModal = document.getElementById("close-history-modal")!;
+  const benchHistoryModal = document.getElementById("bench-history-modal")!;
+  const benchHistoryModalContent = document.getElementById("bench-history-modal-content")!;
+  const closeBenchHistoryModal = document.getElementById("close-bench-history-modal")!;
+  let benchHistoryRequest = 0;
   const chipsOverviewModal = document.getElementById("chips-overview-modal")!;
   const chipsOverviewModalContent = document.getElementById("chips-overview-modal-content")!;
   const closeChipsOverviewModal = document.getElementById("close-chips-overview-modal")!;
@@ -958,6 +970,11 @@ import Nav from "../components/Nav.astro";
 
   closeHistoryModal.addEventListener("click", () => {
     historyModal.classList.remove("is-open");
+  });
+
+  closeBenchHistoryModal.addEventListener("click", () => {
+    benchHistoryRequest++;
+    benchHistoryModal.classList.remove("is-open");
   });
 
   closeChipsOverviewModal.addEventListener("click", () => {
@@ -1660,9 +1677,10 @@ import Nav from "../components/Nav.astro";
         </div>
       </div>
 
-      <!-- Contribution History -->
-      <div class="stats-section">
-        <button type="button" class="btn-contribution-history" data-entry-id="${manager.entryId}">📊 Contribution History</button>
+      <!-- Contribution History and Left on Bench -->
+      <div class="stats-section" style="display:flex;gap:var(--space-2);">
+        <button type="button" class="btn-contribution-history" style="flex:1 1 0;min-width:0;" data-entry-id="${manager.entryId}">📊 Contribution History</button>
+        <button type="button" class="btn-contribution-history btn-left-on-bench" style="flex:1 1 0;min-width:0;" data-entry-id="${manager.entryId}">🪑 Left on Bench</button>
       </div>
 
       <!-- Captaincy -->
@@ -1729,6 +1747,13 @@ import Nav from "../components/Nav.astro";
       histBtn.addEventListener('click', () => {
         const id = parseInt((histBtn as HTMLElement).dataset.entryId || '0');
         if (id) showManagerHistoryModal(id, manager.managerName);
+      });
+    }
+
+    const benchBtn = statsModalContent.querySelector('.btn-left-on-bench');
+    if (benchBtn) {
+      benchBtn.addEventListener('click', () => {
+        showBenchHistoryModal(manager.entryId, manager.managerName);
       });
     }
   }
@@ -1867,6 +1892,183 @@ import Nav from "../components/Nav.astro";
       chipModalContent.innerHTML = "<p class='status status--error'>Error loading squad data.</p>";
     }
   }
+
+  async function showBenchHistoryModal(managerId: number, managerName: string) {
+    const request = ++benchHistoryRequest;
+
+    benchHistoryModalContent.innerHTML = `
+      <h2 class="modal-title"></h2>
+      <p class="text-muted">Calculating points left on the bench...</p>
+    `;
+    benchHistoryModalContent.querySelector("h2")!.textContent = managerName;
+    benchHistoryModal.classList.add("is-open");
+
+    try {
+      const [bootstrapRes, historyRes] = await Promise.all([
+        fetch("/api/fpl/bootstrap-static", { cache: "no-store" }),
+        fetch(`/api/fpl/entry/${managerId}/history`, { cache: "no-store" })
+      ]);
+
+      if (!bootstrapRes.ok || !historyRes.ok) {
+        throw new Error("Failed to fetch gameweek or manager history");
+      }
+
+      const [bootstrap, history] = await Promise.all([
+        bootstrapRes.json(),
+        historyRes.json()
+      ]);
+
+      if (!Array.isArray(bootstrap.events) || !Array.isArray(history.current)) {
+        throw new Error("Invalid gameweek or manager history data");
+      }
+
+      const finalizedGameweeks = new Set<number>(
+        bootstrap.events
+          .filter((event: any) => event.data_checked === true)
+          .map((event: any) => event.id)
+      );
+
+      const gameweeks = Array.from(
+        new Set<number>(
+          history.current
+            .map((row: any) => row.event)
+            .filter((gw: unknown): gw is number =>
+              typeof gw === "number" &&
+              Number.isInteger(gw) &&
+              finalizedGameweeks.has(gw)
+            )
+        )
+      ).sort((a, b) => a - b);
+
+      if (gameweeks.length === 0) {
+        if (request === benchHistoryRequest) {
+          benchHistoryModalContent.innerHTML = `
+            <h2 class="modal-title"></h2>
+            <p class="text-muted">No finalized gameweeks are available yet.</p>
+          `;
+          benchHistoryModalContent.querySelector("h2")!.textContent = managerName;
+        }
+        return;
+      }
+
+      const results = await mapWithConcurrency<number, { gw: number; points: number }>(
+        gameweeks,
+        DEFAULT_FETCH_CONCURRENCY,
+        async (gw) => {
+          const picksRes = await fetch(
+            `/api/fpl/entry/${managerId}/event/${gw}/picks`,
+            { cache: "no-store" }
+          );
+          if (!picksRes.ok) throw new Error(`Failed to fetch GW${gw} picks`);
+
+          const picksData = await picksRes.json();
+          if (
+            !Array.isArray(picksData.picks) ||
+            picksData.picks.length === 0 ||
+            !Array.isArray(picksData.automatic_subs)
+          ) {
+            throw new Error(`Invalid GW${gw} picks data`);
+          }
+
+          // Bench Boost points count toward the manager's score.
+          if (picksData.active_chip === "bboost") {
+            return { gw, points: 0 };
+          }
+
+          const subbedIn = new Set<number>(
+            picksData.automatic_subs.map((sub: any) => sub.element_in)
+          );
+          const subbedOut = new Set<number>(
+            picksData.automatic_subs.map((sub: any) => sub.element_out)
+          );
+
+          const unusedBench = picksData.picks.filter((pick: any) =>
+            pick.position > 11 &&
+            pick.multiplier === 0 &&
+            !subbedIn.has(pick.element) &&
+            !subbedOut.has(pick.element)
+          );
+
+          const liveRes = await fetch(`/api/fpl/event/${gw}/live`, {
+            cache: "no-store"
+          });
+          if (!liveRes.ok) throw new Error(`Failed to fetch GW${gw} points`);
+
+          const liveData = await liveRes.json();
+          if (!Array.isArray(liveData.elements)) {
+            throw new Error(`Invalid GW${gw} points data`);
+          }
+
+          const pointsByPlayer = new Map<number, number>();
+          for (const player of liveData.elements) {
+            if (
+              typeof player.id === "number" &&
+              typeof player.stats?.total_points === "number"
+            ) {
+              pointsByPlayer.set(player.id, player.stats.total_points);
+            }
+          }
+
+          let points = 0;
+          for (const pick of unusedBench) {
+            const playerPoints = pointsByPlayer.get(pick.element);
+            if (playerPoints === undefined) {
+              throw new Error(`Missing GW${gw} points for player ${pick.element}`);
+            }
+            points += playerPoints;
+          }
+
+          return { gw, points };
+        }
+      );
+
+      if (results.some((result) => result === null)) {
+        throw new Error("Could not calculate every gameweek");
+      }
+
+      if (request !== benchHistoryRequest) return;
+
+      const rows = results.filter(
+        (result): result is { gw: number; points: number } => result !== null
+      );
+      const total = rows.reduce((sum, row) => sum + row.points, 0);
+
+      benchHistoryModalContent.innerHTML = `
+        <h2 class="modal-title"></h2>
+        <p class="text-muted" style="margin-bottom:1rem;">
+          Left on Bench<br>
+          <span class="text-success">Total: ${total} pts</span><br>
+          <span style="font-size:11px;">Finalized gameweeks only</span>
+        </p>
+        <div class="table-container" style="max-height:50vh;overflow-y:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="text-align:left;">Gameweek</th>
+                <th style="text-align:center;">Points left</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map((row) => `
+                <tr>
+                  <td>GW${row.gw}</td>
+                  <td style="text-align:center;">${row.points}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+      benchHistoryModalContent.querySelector("h2")!.textContent = managerName;
+    } catch (error) {
+      console.error("Error calculating points left on bench:", error);
+      if (request === benchHistoryRequest) {
+        benchHistoryModalContent.innerHTML =
+          `<p class="status status--error">Error calculating points left on the bench.</p>`;
+      }
+    }
+  }
+
 
   async function showManagerHistoryModal(managerId: number, managerName: string) {
     historyModalContent.innerHTML = `
