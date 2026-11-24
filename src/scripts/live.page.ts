@@ -450,6 +450,11 @@ const managerDataCache = new Map<string, any>();
     finished: boolean;
     finished_provisional: boolean;
     kickoff_time?: string;
+    stats?: Array<{
+      identifier: string;
+      h?: Array<{ element: number; value: number }>;
+      a?: Array<{ element: number; value: number }>;
+    }>;
   }
 
   interface LivePlayerEntry {
@@ -548,6 +553,8 @@ const managerDataCache = new Map<string, any>();
       if (!liveRes.ok) throw new Error("Failed to fetch live data");
       const data = await liveRes.json();
       const gwFixtures: FixtureRaw[] = fixturesRes.ok ? await fixturesRes.json() : [fixture];
+      const currentFixture = gwFixtures.find((fx) => fx.id === fixture.id) || fixture;
+      const fixtureSavesStat = currentFixture.stats?.find((stat) => stat.identifier === "saves");
       const elements: LivePlayerEntry[] = data.elements || [];
 
       const homeTeamName = teamCache.get(fixture.team_h)?.name || `Team ${fixture.team_h}`;
@@ -641,7 +648,12 @@ const managerDataCache = new Map<string, any>();
         addStat(side, "assists", name, statsMap.assists ?? 0);
         addStat(side, "yellow_cards", name, statsMap.yellow_cards ?? 0);
         addStat(side, "red_cards", name, statsMap.red_cards ?? 0);
-        addStat(side, "saves", name, statsMap.saves ?? 0);
+
+        const fixtureSaveRows = isHome ? fixtureSavesStat?.h : fixtureSavesStat?.a;
+        const fixtureSaves =
+          fixtureSaveRows?.find((row) => row.element === el.id)?.value ?? 0;
+        addStat(side, "saves", name, fixtureSaves);
+
         addStat(side, "bps", name, bps);
 
         // DEFCON: non-GK players only
