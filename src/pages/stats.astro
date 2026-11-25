@@ -894,6 +894,7 @@ import Nav from "../components/Nav.astro";
   const squadValueModal = document.getElementById("squad-value-modal")!;
   const squadValueModalContent = document.getElementById("squad-value-modal-content")!;
   const closeSquadValueModal = document.getElementById("close-squad-value-modal")!;
+  let squadValueRequest = 0;
   function updateManagerCountButton() {
     if (!managerCountEl) return;
 
@@ -986,6 +987,7 @@ import Nav from "../components/Nav.astro";
   });
 
   closeSquadValueModal.addEventListener("click", () => {
+    squadValueRequest++;
     squadValueModal.classList.remove("is-open");
   });
 
@@ -2747,39 +2749,207 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
-  function showSquadValueModal() {
-    const managers = [...allManagerData].sort((a, b) =>
-      (b.teamValue + b.bank) - (a.teamValue + a.bank)
-    );
+    async function showSquadValueModal() {
+      const request = ++squadValueRequest;
+      const ids = [...managerIds];
 
-    const rows = managers.map((manager) => `
-      <tr>
-        <td class="col-manager">${escHtml(manager.managerName)}</td>
-        <td>${formatValue(manager.teamValue)}</td>
-        <td>${formatValue(manager.bank)}</td>
-      </tr>
-    `).join("");
+      squadValueModalContent.innerHTML = `
+        <h2 class="modal-title">Squad Value</h2>
+        <p class="text-muted">Loading latest public deadline values...</p>
+      `;
+      squadValueModal.classList.add("is-open");
+      let gameweek: number;
+      let prices: Map<number, number>;
 
-    squadValueModalContent.innerHTML = `
-      <h2 class="modal-title">Squad Value</h2>
-      <div class="chips-overview-wrap">
-        <table class="chips-overview-table" aria-label="Manager squad value and money in the bank">
-          <thead>
-            <tr>
-              <th class="col-manager">Manager</th>
-              <th>Squad Value</th>
-              <th>ITB</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows || `<tr><td colspan="3">No manager data loaded yet.</td></tr>`}
-          </tbody>
-        </table>
-      </div>
-    `;
+      try {
+        const response = await fetch(`/api/fpl/bootstrap-static?v=${Date.now()}`, {
+          cache: "no-store"
+        });
 
-    squadValueModal.classList.add("is-open");
-  }
+        if (!response.ok) {
+          throw new Error(`FPL bootstrap request failed: ${response.status}`);
+        }
+
+        const data = await response.json() as {
+          events?: { id: number; is_current: boolean }[];
+          elements?: { id: number; now_cost: number }[];
+        };
+
+        const currentEvent = data.events?.find((event) => event.is_current);
+
+        if (
+          !currentEvent ||
+          !Number.isInteger(currentEvent.id) ||
+          currentEvent.id <= 0 ||
+          !Array.isArray(data.elements)
+        ) {
+          throw new Error("FPL returned invalid gameweek or player data");
+        }
+
+        gameweek = currentEvent.id;
+        prices = new Map(
+          data.elements
+            .filter((player) =>
+              Number.isInteger(player.id) &&
+              Number.isInteger(player.now_cost) &&
+              player.now_cost > 0
+            )
+            .map((player) => [player.id, player.now_cost])
+        );
+      } catch (error) {
+        console.error("Could not load player prices:", error);
+
+        if (request === squadValueRequest) {
+          squadValueModalContent.innerHTML = `
+            <h2 class="modal-title">Squad Value</h2>
+            <p class="text-muted">Could not load player prices. Close and reopen to retry.</p>
+          `;
+        }
+
+        return;
+      }
+
+      if (request !== squadValueRequest) return;
+
+      type SquadValueRow = {
+        managerName: string;
+        squadValue: number;
+        bank: number;
+        totalValue: number;
+      };
+
+      const results = await mapWithConcurrency<number, SquadValueRow>(
+        ids,
+        DEFAULT_FETCH_CONCURRENCY,
+        async (id) => {
+          try {
+              const [summaryResponse, picksResponse] = await Promise.all([
+              fetch(`/api/fpl/entry/${id}?v=${Date.now()}`, {
+                cache: "no-store"
+              }),
+              fetch(`/api/fpl/entry/${id}/event/${gameweek}/picks?v=${Date.now()}`, {
+                cache: "no-store"
+              })
+            ]);
+
+            if (!summaryResponse.ok || !picksResponse.ok) {
+              throw new Error(
+                `FPL request failed: summary ${summaryResponse.status}, picks ${picksResponse.status}`
+              );
+            }
+
+            const summary = await summaryResponse.json() as {
+              player_first_name?: string;
+              player_last_name?: string;
+            };
+
+            const data = await picksResponse.json() as {
+              picks?: { element: number }[];
+              entry_history?: { bank?: number };
+            };
+
+            const bank = data.entry_history?.bank;
+
+            if (
+              typeof bank !== "number" ||
+              !Number.isInteger(bank) ||
+              bank < 0 ||
+              !Array.isArray(data.picks) ||
+              data.picks.length !== 15
+            ) {
+              throw new Error("FPL returned an invalid squad or bank");
+            }
+
+            const playerIds = data.picks.map((pick) => pick.element);
+
+            if (new Set(playerIds).size !== 15) {
+              throw new Error("FPL returned duplicate squad players");
+            }
+
+            let squadValue = 0;
+
+            for (const playerId of playerIds) {
+              const price = prices.get(playerId);
+
+              if (price === undefined) {
+                throw new Error(`Missing price for player ${playerId}`);
+              }
+
+              squadValue += price;
+            }
+
+            const managerName = [summary.player_first_name, summary.player_last_name]
+              .filter((name): name is string =>
+                typeof name === "string" && name.length > 0
+              )
+              .join(" ").trim() || `Manager ${id}`;
+
+            return {
+              managerName,
+              squadValue,
+              bank,
+              totalValue: squadValue + bank
+            };
+          } catch (error) {
+            console.error(`Could not load squad value for manager ${id}:`, error);
+            return null;
+          }
+        }
+      );
+
+      if (request !== squadValueRequest) return;
+
+      const managers = results
+        .filter((result): result is SquadValueRow => result !== null)
+        .sort((a, b) => b.totalValue - a.totalValue);
+
+      const rows = managers.map((manager) => `
+        <tr>
+          <td class="col-manager">${escHtml(manager.managerName)}</td>
+          <td>${formatValue(manager.squadValue)}</td>
+          <td>${formatValue(manager.bank)}</td>
+        </tr>
+      `).join("");
+
+      const unavailableRows = ids.map((id, index) => {
+        if (results[index] !== null) return "";
+
+        const name = allManagerData.find((manager) => manager.entryId === id)?.managerName
+          || `Manager ${id}`;
+
+        return `
+          <tr>
+            <td class="col-manager">${escHtml(name)}</td>
+            <td colspan="2">Unavailable</td>
+          </tr>
+        `;
+      }).join("");
+
+      squadValueModalContent.innerHTML = `
+        <h2 class="modal-title">Squad Value</h2>
+        <p class="text-muted">
+          GW${gameweek} public squads at current player prices; bank is from the GW${gameweek}
+          deadline. Sorted by squad value plus bank. Price changes since the deadline are included;
+          transfers made since then are not.
+        </p>
+        <div class="chips-overview-wrap">
+          <table class="chips-overview-table" aria-label="Manager squad value and money in the bank">
+            <thead>
+              <tr>
+                <th class="col-manager">Manager</th>
+                <th>Squad Value</th>
+                <th>ITB</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || unavailableRows
+                ? rows + unavailableRows
+                : `<tr><td colspan="3">No manager IDs configured.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
 
   function showChipsOverviewModal() {
     if (allManagerData.length === 0) {
