@@ -2758,6 +2758,58 @@ import Nav from "../components/Nav.astro";
         <p class="text-muted">Loading latest public deadline values...</p>
       `;
       squadValueModal.classList.add("is-open");
+      let gameweek: number;
+      let prices: Map<number, number>;
+
+      try {
+        const response = await fetch(`/api/fpl/bootstrap-static?v=${Date.now()}`, {
+          cache: "no-store"
+        });
+
+        if (!response.ok) {
+          throw new Error(`FPL bootstrap request failed: ${response.status}`);
+        }
+
+        const data = await response.json() as {
+          events?: { id: number; is_current: boolean }[];
+          elements?: { id: number; now_cost: number }[];
+        };
+
+        const currentEvent = data.events?.find((event) => event.is_current);
+
+        if (
+          !currentEvent ||
+          !Number.isInteger(currentEvent.id) ||
+          currentEvent.id <= 0 ||
+          !Array.isArray(data.elements)
+        ) {
+          throw new Error("FPL returned invalid gameweek or player data");
+        }
+
+        gameweek = currentEvent.id;
+        prices = new Map(
+          data.elements
+            .filter((player) =>
+              Number.isInteger(player.id) &&
+              Number.isInteger(player.now_cost) &&
+              player.now_cost > 0
+            )
+            .map((player) => [player.id, player.now_cost])
+        );
+      } catch (error) {
+        console.error("Could not load player prices:", error);
+
+        if (request === squadValueRequest) {
+          squadValueModalContent.innerHTML = `
+            <h2 class="modal-title">Squad Value</h2>
+            <p class="text-muted">Could not load player prices. Close and reopen to retry.</p>
+          `;
+        }
+
+        return;
+      }
+
+      if (request !== squadValueRequest) return;
 
       type SquadValueRow = {
         managerName: string;
@@ -2771,37 +2823,62 @@ import Nav from "../components/Nav.astro";
         DEFAULT_FETCH_CONCURRENCY,
         async (id) => {
           try {
-            const response = await fetch(`/api/fpl/entry/${id}?v=${Date.now()}`, {
-              cache: "no-store"
-            });
+              const [summaryResponse, picksResponse] = await Promise.all([
+              fetch(`/api/fpl/entry/${id}?v=${Date.now()}`, {
+                cache: "no-store"
+              }),
+              fetch(`/api/fpl/entry/${id}/event/${gameweek}/picks?v=${Date.now()}`, {
+                cache: "no-store"
+              })
+            ]);
 
-            if (!response.ok) {
-              throw new Error(`FPL request failed: ${response.status}`);
+            if (!summaryResponse.ok || !picksResponse.ok) {
+              throw new Error(
+                `FPL request failed: summary ${summaryResponse.status}, picks ${picksResponse.status}`
+              );
             }
 
-            const data = await response.json() as {
+            const summary = await summaryResponse.json() as {
               player_first_name?: string;
               player_last_name?: string;
-              last_deadline_value?: number;
-              last_deadline_bank?: number;
             };
 
-            const totalValue = data.last_deadline_value;
-            const bank = data.last_deadline_bank;
+            const data = await picksResponse.json() as {
+              picks?: { element: number }[];
+              entry_history?: { bank?: number };
+            };
+
+            const bank = data.entry_history?.bank;
 
             if (
-              typeof totalValue !== "number" ||
               typeof bank !== "number" ||
-              !Number.isInteger(totalValue) ||
               !Number.isInteger(bank) ||
-              totalValue <= 0 ||
               bank < 0 ||
-              bank > totalValue
+              !Array.isArray(data.picks) ||
+              data.picks.length !== 15
             ) {
-              throw new Error("FPL returned an invalid deadline value or bank");
+              throw new Error("FPL returned an invalid squad or bank");
             }
 
-            const managerName = [data.player_first_name, data.player_last_name]
+            const playerIds = data.picks.map((pick) => pick.element);
+
+            if (new Set(playerIds).size !== 15) {
+              throw new Error("FPL returned duplicate squad players");
+            }
+
+            let squadValue = 0;
+
+            for (const playerId of playerIds) {
+              const price = prices.get(playerId);
+
+              if (price === undefined) {
+                throw new Error(`Missing price for player ${playerId}`);
+              }
+
+              squadValue += price;
+            }
+
+            const managerName = [summary.player_first_name, summary.player_last_name]
               .filter((name): name is string =>
                 typeof name === "string" && name.length > 0
               )
@@ -2809,9 +2886,9 @@ import Nav from "../components/Nav.astro";
 
             return {
               managerName,
-              squadValue: totalValue - bank,
+              squadValue,
               bank,
-              totalValue
+              totalValue: squadValue + bank
             };
           } catch (error) {
             console.error(`Could not load squad value for manager ${id}:`, error);
@@ -2851,8 +2928,9 @@ import Nav from "../components/Nav.astro";
       squadValueModalContent.innerHTML = `
         <h2 class="modal-title">Squad Value</h2>
         <p class="text-muted">
-          Values and bank at the latest public FPL deadline.
-          Sorted by squad value plus bank. Changes since that deadline are not included.
+          GW${gameweek} public squads at current player prices; bank is from the GW${gameweek}
+          deadline. Sorted by squad value plus bank. Price changes since the deadline are included;
+          transfers made since then are not.
         </p>
         <div class="chips-overview-wrap">
           <table class="chips-overview-table" aria-label="Manager squad value and money in the bank">
