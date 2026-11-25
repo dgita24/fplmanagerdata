@@ -894,6 +894,7 @@ import Nav from "../components/Nav.astro";
   const squadValueModal = document.getElementById("squad-value-modal")!;
   const squadValueModalContent = document.getElementById("squad-value-modal-content")!;
   const closeSquadValueModal = document.getElementById("close-squad-value-modal")!;
+  let squadValueRequest = 0;
   function updateManagerCountButton() {
     if (!managerCountEl) return;
 
@@ -986,6 +987,7 @@ import Nav from "../components/Nav.astro";
   });
 
   closeSquadValueModal.addEventListener("click", () => {
+    squadValueRequest++;
     squadValueModal.classList.remove("is-open");
   });
 
@@ -2747,39 +2749,129 @@ import Nav from "../components/Nav.astro";
     return html;
   }
 
-  function showSquadValueModal() {
-    const managers = [...allManagerData].sort((a, b) =>
-      (b.teamValue + b.bank) - (a.teamValue + a.bank)
-    );
+    async function showSquadValueModal() {
+      const request = ++squadValueRequest;
+      const ids = [...managerIds];
 
-    const rows = managers.map((manager) => `
-      <tr>
-        <td class="col-manager">${escHtml(manager.managerName)}</td>
-        <td>${formatValue(manager.teamValue)}</td>
-        <td>${formatValue(manager.bank)}</td>
-      </tr>
-    `).join("");
+      squadValueModalContent.innerHTML = `
+        <h2 class="modal-title">Squad Value</h2>
+        <p class="text-muted">Loading latest public deadline values...</p>
+      `;
+      squadValueModal.classList.add("is-open");
 
-    squadValueModalContent.innerHTML = `
-      <h2 class="modal-title">Squad Value</h2>
-      <div class="chips-overview-wrap">
-        <table class="chips-overview-table" aria-label="Manager squad value and money in the bank">
-          <thead>
-            <tr>
-              <th class="col-manager">Manager</th>
-              <th>Squad Value</th>
-              <th>ITB</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows || `<tr><td colspan="3">No manager data loaded yet.</td></tr>`}
-          </tbody>
-        </table>
-      </div>
-    `;
+      type SquadValueRow = {
+        managerName: string;
+        squadValue: number;
+        bank: number;
+        totalValue: number;
+      };
 
-    squadValueModal.classList.add("is-open");
-  }
+      const results = await mapWithConcurrency<number, SquadValueRow>(
+        ids,
+        DEFAULT_FETCH_CONCURRENCY,
+        async (id) => {
+          try {
+            const response = await fetch(`/api/fpl/entry/${id}?v=${Date.now()}`, {
+              cache: "no-store"
+            });
+
+            if (!response.ok) {
+              throw new Error(`FPL request failed: ${response.status}`);
+            }
+
+            const data = await response.json() as {
+              player_first_name?: string;
+              player_last_name?: string;
+              last_deadline_value?: number;
+              last_deadline_bank?: number;
+            };
+
+            const totalValue = data.last_deadline_value;
+            const bank = data.last_deadline_bank;
+
+            if (
+              typeof totalValue !== "number" ||
+              typeof bank !== "number" ||
+              !Number.isInteger(totalValue) ||
+              !Number.isInteger(bank) ||
+              totalValue <= 0 ||
+              bank < 0 ||
+              bank > totalValue
+            ) {
+              throw new Error("FPL returned an invalid deadline value or bank");
+            }
+
+            const managerName = [data.player_first_name, data.player_last_name]
+              .filter((name): name is string =>
+                typeof name === "string" && name.length > 0
+              )
+              .join(" ").trim() || `Manager ${id}`;
+
+            return {
+              managerName,
+              squadValue: totalValue - bank,
+              bank,
+              totalValue
+            };
+          } catch (error) {
+            console.error(`Could not load squad value for manager ${id}:`, error);
+            return null;
+          }
+        }
+      );
+
+      if (request !== squadValueRequest) return;
+
+      const managers = results
+        .filter((result): result is SquadValueRow => result !== null)
+        .sort((a, b) => b.totalValue - a.totalValue);
+
+      const rows = managers.map((manager) => `
+        <tr>
+          <td class="col-manager">${escHtml(manager.managerName)}</td>
+          <td>${formatValue(manager.squadValue)}</td>
+          <td>${formatValue(manager.bank)}</td>
+        </tr>
+      `).join("");
+
+      const unavailableRows = ids.map((id, index) => {
+        if (results[index] !== null) return "";
+
+        const name = allManagerData.find((manager) => manager.entryId === id)?.managerName
+          || `Manager ${id}`;
+
+        return `
+          <tr>
+            <td class="col-manager">${escHtml(name)}</td>
+            <td colspan="2">Unavailable</td>
+          </tr>
+        `;
+      }).join("");
+
+      squadValueModalContent.innerHTML = `
+        <h2 class="modal-title">Squad Value</h2>
+        <p class="text-muted">
+          Values and bank at the latest public FPL deadline.
+          Sorted by squad value plus bank. Changes since that deadline are not included.
+        </p>
+        <div class="chips-overview-wrap">
+          <table class="chips-overview-table" aria-label="Manager squad value and money in the bank">
+            <thead>
+              <tr>
+                <th class="col-manager">Manager</th>
+                <th>Squad Value</th>
+                <th>ITB</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || unavailableRows
+                ? rows + unavailableRows
+                : `<tr><td colspan="3">No manager IDs configured.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
 
   function showChipsOverviewModal() {
     if (allManagerData.length === 0) {
