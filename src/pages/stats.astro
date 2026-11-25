@@ -895,6 +895,7 @@ import Nav from "../components/Nav.astro";
   const squadValueModalContent = document.getElementById("squad-value-modal-content")!;
   const closeSquadValueModal = document.getElementById("close-squad-value-modal")!;
   let squadValueRequest = 0;
+  let statsModalRequest = 0;
   function updateManagerCountButton() {
     if (!managerCountEl) return;
 
@@ -933,6 +934,7 @@ import Nav from "../components/Nav.astro";
   }
 
   closeStatsModal.addEventListener("click", () => {
+    statsModalRequest++;
     statsModal.classList.remove("is-open");
   });
 
@@ -1200,6 +1202,39 @@ import Nav from "../components/Nav.astro";
 
   function formatValue(value: number): string {
     return `£${(value / 10).toFixed(1)}m`;
+  }
+
+  type DeadlinePricePlayer = {
+    id: number;
+    now_cost: number;
+    cost_change_event: number;
+  };
+
+  function getDeadlinePrices(players: DeadlinePricePlayer[]): Map<number, number> {
+    return new Map(
+      players
+        .filter((player) =>
+          Number.isInteger(player.id) &&
+          Number.isInteger(player.now_cost) &&
+          Number.isInteger(player.cost_change_event) &&
+          player.now_cost - player.cost_change_event > 0
+        )
+        .map((player) => [player.id, player.now_cost - player.cost_change_event])
+    );
+  }
+
+  function calculateDeadlineSquadValue(ids: number[], prices: Map<number, number>): number {
+    if (ids.length !== 15 || new Set(ids).size !== 15) {
+      throw new Error("FPL returned an invalid squad");
+    }
+
+    let total = 0;
+    for (const id of ids) {
+      const price = prices.get(id);
+      if (price === undefined) throw new Error(`Missing deadline price for player ${id}`);
+      total += price;
+    }
+    return total;
   }
 
   // ==============================
@@ -1564,6 +1599,7 @@ import Nav from "../components/Nav.astro";
   async function showManagerModal(entryId: number) {
     const manager = allManagerData.find(m => m.entryId === entryId);
     if (!manager) return;
+    const request = ++statsModalRequest;
 
     const gw = parseInt(gwFilterSelect.value) || latestGW;
 
@@ -1577,6 +1613,59 @@ import Nav from "../components/Nav.astro";
     const stats = calculateSeasonStats(manager.historyData, gw);
     const captainCounts = await fetchCaptainData(entryId, gw);
     const captainHtml = formatCaptainList(captainCounts);
+
+    let squadValueText = "Unavailable";
+    let bankText = "Unavailable";
+    let deadlineLabel = "Deadline";
+
+    try {
+      const bootstrapResponse = await fetch(`/api/fpl/bootstrap-static?v=${Date.now()}`, {
+        cache: "no-store"
+      });
+      if (!bootstrapResponse.ok) throw new Error("Could not load player prices");
+
+      const bootstrap = await bootstrapResponse.json() as {
+        events?: { id: number; is_current: boolean }[];
+        elements?: DeadlinePricePlayer[];
+      };
+
+      const event = bootstrap.events?.find((item) => item.is_current);
+      if (!event || !Number.isInteger(event.id) || event.id <= 0 ||
+          !Array.isArray(bootstrap.elements)) {
+        throw new Error("Invalid gameweek or player data");
+      }
+
+      const response = await fetch(
+        `/api/fpl/entry/${entryId}/event/${event.id}/picks?v=${Date.now()}`,
+        { cache: "no-store" }
+      );
+      if (!response.ok) throw new Error("Could not load public squad");
+
+      const data = await response.json() as {
+        picks?: { element: number }[];
+        entry_history?: { bank?: number };
+      };
+
+      const bank = data.entry_history?.bank;
+      if (!Array.isArray(data.picks) || typeof bank !== "number" ||
+          !Number.isInteger(bank) || bank < 0) {
+        throw new Error("Invalid squad or bank");
+      }
+
+      const prices = getDeadlinePrices(bootstrap.elements);
+      const value = calculateDeadlineSquadValue(
+        data.picks.map((pick) => pick.element),
+        prices
+      );
+
+      squadValueText = formatValue(value);
+      bankText = formatValue(bank);
+      deadlineLabel = `GW${event.id} deadline`;
+    } catch (error) {
+      console.error(`Could not load deadline value for manager ${entryId}:`, error);
+    }
+
+    if (request !== statsModalRequest) return;
 
     let html = `
       <div style="display:flex;align-items:center;gap:var(--space-2);padding-right:40px;margin-bottom:var(--space-1);">
@@ -1605,12 +1694,11 @@ import Nav from "../components/Nav.astro";
             <span class="stat-label">OR</span>
           </div>
           <div class="stat-item stat-item--compact">
-            <span class="stat-value">${formatValue(manager.teamValue)}</span>
-            <span class="stat-label">Value</span>
-          </div>
+            <span class="stat-value">${squadValueText}</span>
+            <span class="stat-label">Value (${deadlineLabel})</span>
           <div class="stat-item stat-item--compact">
-            <span class="stat-value">${formatValue(manager.bank)}</span>
-            <span class="stat-label">Bank</span>
+            <span class="stat-value">${bankText}</span>
+            <span class="stat-label">Bank (${deadlineLabel})</span>
           </div>
         </div>
       </div>
@@ -2772,7 +2860,7 @@ import Nav from "../components/Nav.astro";
 
         const data = await response.json() as {
           events?: { id: number; is_current: boolean }[];
-          elements?: { id: number; now_cost: number }[];
+          elements?: DeadlinePricePlayer[];
         };
 
         const currentEvent = data.events?.find((event) => event.is_current);
@@ -2787,15 +2875,7 @@ import Nav from "../components/Nav.astro";
         }
 
         gameweek = currentEvent.id;
-        prices = new Map(
-          data.elements
-            .filter((player) =>
-              Number.isInteger(player.id) &&
-              Number.isInteger(player.now_cost) &&
-              player.now_cost > 0
-            )
-            .map((player) => [player.id, player.now_cost])
-        );
+        prices = getDeadlinePrices(data.elements);
       } catch (error) {
         console.error("Could not load player prices:", error);
 
@@ -2866,17 +2946,7 @@ import Nav from "../components/Nav.astro";
               throw new Error("FPL returned duplicate squad players");
             }
 
-            let squadValue = 0;
-
-            for (const playerId of playerIds) {
-              const price = prices.get(playerId);
-
-              if (price === undefined) {
-                throw new Error(`Missing price for player ${playerId}`);
-              }
-
-              squadValue += price;
-            }
+            const squadValue = calculateDeadlineSquadValue(playerIds, prices);
 
             const managerName = [summary.player_first_name, summary.player_last_name]
               .filter((name): name is string =>
@@ -2928,9 +2998,8 @@ import Nav from "../components/Nav.astro";
       squadValueModalContent.innerHTML = `
         <h2 class="modal-title">Squad Value</h2>
         <p class="text-muted">
-          GW${gameweek} public squads at current player prices; bank is from the GW${gameweek}
-          deadline. Sorted by squad value plus bank. Price changes since the deadline are included;
-          transfers made since then are not.
+          GW${gameweek} public squads and bank at the last deadline.
+          Sorted by squad value plus bank.
         </p>
         <div class="chips-overview-wrap">
           <table class="chips-overview-table" aria-label="Manager squad value and money in the bank">
