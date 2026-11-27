@@ -2367,6 +2367,12 @@ function buildBreakdownRows(
     const sorted = [...data].sort((a, b) => a.managerName.localeCompare(b.managerName));
 
     const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const captainCounts = new Map<number, number>();
+    for (const manager of data) {
+      if (manager.captainId) {
+        captainCounts.set(manager.captainId, (captainCounts.get(manager.captainId) ?? 0) + 1);
+      }
+    }
 
     const captainRows = sorted.map(m => {
       const manager = esc(m.managerName);
@@ -2377,7 +2383,7 @@ function buildBreakdownRows(
       return `
       <tr>
         <td title="${manager}">${manager}</td>
-        <td title="${captain}">${captain}${tcBadge}</td>
+        <td title="${captain}">${captain}${m.captainId ? ` (${captainCounts.get(m.captainId)})` : ''}${tcBadge}</td>
       </tr>
     `;
     }).join('');
