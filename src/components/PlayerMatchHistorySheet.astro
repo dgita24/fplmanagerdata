@@ -73,57 +73,11 @@
   let allRows: MatchHistoryRow[] = [];
   let teamMap: Map<number, BootstrapTeam> = new Map();
 
-  // In-memory caches: playerId → data
-  const historyCache = new Map<number, MatchHistoryRow[]>();
-  const fixturesCache = new Map<number, ElementFixture[]>();
-
-  // Next 5 upcoming GW ids (set once per session from bootstrap events)
   let upcomingGWs: number[] = [];
+  let historyRefreshTimer: number | undefined;
+  let historyRequestVersion = 0;
+  const HISTORY_REFRESH_MS = 60 * 1000;
 
-  // localStorage cache
-  const PMH_LS_KEY = "fpl_pmh_cache_v1";
-  const PMH_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
-
-  interface PMHCacheEntry {
-    rows: MatchHistoryRow[];
-    fixtures?: ElementFixture[];
-    fetchedAt: number;
-  }
-
-  function loadHistoryFromStorage(playerId: number): MatchHistoryRow[] | null {
-    try {
-      const raw = localStorage.getItem(`${PMH_LS_KEY}_${playerId}`);
-      if (!raw) return null;
-      const p: PMHCacheEntry = JSON.parse(raw);
-      if (!Array.isArray(p?.rows) || typeof p.fetchedAt !== "number") return null;
-      if (Date.now() - p.fetchedAt > PMH_TTL_MS) return null;
-      return p.rows;
-    } catch {
-      return null;
-    }
-  }
-
-  function loadFixturesFromStorage(playerId: number): ElementFixture[] {
-    try {
-      const raw = localStorage.getItem(`${PMH_LS_KEY}_${playerId}`);
-      if (!raw) return [];
-      const p: PMHCacheEntry = JSON.parse(raw);
-      return Array.isArray(p?.fixtures) ? p.fixtures : [];
-    } catch {
-      return [];
-    }
-  }
-
-  function saveHistoryToStorage(playerId: number, rows: MatchHistoryRow[], fixtures: ElementFixture[]): void {
-    try {
-      localStorage.setItem(
-        `${PMH_LS_KEY}_${playerId}`,
-        JSON.stringify({ rows, fixtures, fetchedAt: Date.now() }),
-      );
-    } catch {
-      /* ignore */
-    }
-  }
 
   // ----------------------------------------------------------------
   // DOM refs
@@ -175,6 +129,9 @@
     sheet.setAttribute("aria-hidden", "true");
     backdrop.setAttribute("aria-hidden", "true");
     document.body.style.overflow = "";
+    historyRequestVersion++;
+    window.clearTimeout(historyRefreshTimer);
+    historyRefreshTimer = undefined;
   }
 
   closeBtn.addEventListener("click", closeSheet);
@@ -186,67 +143,66 @@
   // ----------------------------------------------------------------
   // Load history for a player
   // ----------------------------------------------------------------
-  async function loadHistory(playerId: number): Promise<void> {
-    body.innerHTML = '<div class="pmh-status">Loading match history…</div>';
+  function startHistoryUpdates(playerId: number): void {
+    window.clearTimeout(historyRefreshTimer);
+    historyRefreshTimer = undefined;
+    const requestVersion = ++historyRequestVersion;
+    void loadHistory(playerId, requestVersion, true);
+  }
+
+  async function loadHistory(
+    playerId: number,
+    requestVersion: number,
+    showLoading: boolean,
+  ): Promise<void> {
+    if (showLoading) {
+      body.innerHTML = '<div class="pmh-status">Loading match history…</div>';
+    }
 
     try {
-      // Ensure team map is populated
       if (teamMap.size === 0) {
         const bootstrap = await getBootstrapData();
-        teamMap = new Map(bootstrap.teams.map((t) => [t.id, t]));
+        if (requestVersion !== historyRequestVersion) return;
 
-        // All remaining GW ids for the fixture strip (excludes finished & current)
+        teamMap = new Map(bootstrap.teams.map((t) => [t.id, t]));
         upcomingGWs = bootstrap.events
           .filter((ev) => !ev.finished && !ev.is_current)
           .sort((a, b) => a.id - b.id)
           .map((ev) => ev.id);
-
-        // Also grab element type for the current player
-        const el = bootstrap.elements.find((e) => e.id === playerId);
-        if (el) currentElementType = el.element_type;
       }
 
-      // Check in-memory cache
-      let rows = historyCache.get(playerId);
-      let fixtures = fixturesCache.get(playerId);
+      const res = await fetch(`/api/fpl/element-summary/${playerId}/`, {
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      if (!rows) {
-        // Check localStorage cache
-        const stored = loadHistoryFromStorage(playerId);
-        if (stored) {
-          rows = stored;
-          historyCache.set(playerId, rows);
-          if (!fixtures) {
-            const storedFx = loadFixturesFromStorage(playerId);
-            fixturesCache.set(playerId, storedFx);
-            fixtures = storedFx;
-          }
-        } else {
-          // Fetch from API
-          const res = await fetch(`/api/fpl/element-summary/${playerId}/`);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const json = await res.json();
-          rows = (json.history ?? []) as MatchHistoryRow[];
-          fixtures = (json.fixtures ?? []) as ElementFixture[];
-          historyCache.set(playerId, rows);
-          fixturesCache.set(playerId, fixtures);
-          saveHistoryToStorage(playerId, rows, fixtures);
-        }
+      const json = await res.json();
+      if (!Array.isArray(json.history) || !Array.isArray(json.fixtures)) {
+        throw new Error("Invalid element-summary response");
       }
+      if (requestVersion !== historyRequestVersion) return;
 
+      const rows = json.history as MatchHistoryRow[];
+      const fixtures = json.fixtures as ElementFixture[];
       allRows = rows;
-      renderFixtures(fixtures ?? []);
+      renderFixtures(fixtures);
       renderHistory(rows);
     } catch (err) {
+      if (requestVersion !== historyRequestVersion) return;
+
+      console.error("Failed to load player match history:", err);
       body.innerHTML = `<div class="pmh-status">❌ Failed to load match history. <button id="pmh-retry" style="margin-left:8px;cursor:pointer;text-decoration:underline;background:none;border:none;color:var(--color-primary);">Retry</button></div>`;
       document.getElementById("pmh-retry")?.addEventListener("click", () => {
-        historyCache.delete(playerId);
-        fixturesCache.delete(playerId);
-        loadHistory(playerId);
+        startHistoryUpdates(playerId);
       });
+    } finally {
+      if (requestVersion === historyRequestVersion) {
+        historyRefreshTimer = window.setTimeout(() => {
+          void loadHistory(playerId, requestVersion, false);
+        }, HISTORY_REFRESH_MS);
+      }
     }
   }
-
   // ----------------------------------------------------------------
   // Render next-5-GW fixtures strip
   // ----------------------------------------------------------------
@@ -318,6 +274,7 @@
 
   function renderHistory(rows: MatchHistoryRow[]): void {
     if (!rows.length) {
+      subtitleEl.textContent = "0 fixtures";
       body.innerHTML = '<div class="pmh-status">No match history available yet.</div>';
       return;
     }
@@ -434,7 +391,7 @@
   // ----------------------------------------------------------------
   // Event: open history for a player
   // ----------------------------------------------------------------
-  document.addEventListener("pe:open-history", async (e: Event) => {
+  document.addEventListener("pe:open-history", (e: Event) => {
     const { playerId, playerName, elementType } = (e as CustomEvent).detail as {
       playerId: number;
       playerName: string;
@@ -451,6 +408,6 @@
 
     setFilter("all");
     openSheet();
-    await loadHistory(playerId);
+    startHistoryUpdates(playerId);
   });
 </script>
